@@ -12,6 +12,15 @@ class ComEnforcementIdentifierEffect < ComPrincipalRecord
   belongs_to :enforcement_case, class_name: "ComEnforcementCase", foreign_key: :com_enforcement_case_id,
                                 inverse_of: :identifier_effects
 
+  validates :identifier_kind, presence: true, inclusion: { in: KINDS }
+  validates :lookup_digest, presence: true
+  validates :key_version, :digest_version, :normalization_version, presence: true
+  validates :effective_at, presence: true
+  # The columns are NOT NULL; a blank or unparseable flag is refused as invalid input instead of
+  # reaching the database as a constraint violation.
+  validates :registration_blocked, :attachment_blocked, :recovery_blocked, inclusion: { in: [true, false] }
+  validate :kind_permits_identifier_effect
+
   scope :in_force, lambda {
     where(ended_at: nil)
       .where(com_enforcement_identifier_effects: { effective_at: ..Time.current })
@@ -36,12 +45,6 @@ class ComEnforcementIdentifierEffect < ComPrincipalRecord
       new(**digest, **attrs)
     end
   end
-
-  validates :identifier_kind, presence: true, inclusion: { in: KINDS }
-  validates :lookup_digest, presence: true
-  validates :key_version, :digest_version, :normalization_version, presence: true
-  validates :effective_at, presence: true
-  validate :kind_permits_identifier_effect
 
   private
 

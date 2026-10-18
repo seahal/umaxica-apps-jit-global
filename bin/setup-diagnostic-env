@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Appends the diagnostic-surface variables to .env.example and
+# .env.devcontainer.example.
+#
+# This exists because the env files are agent-inaccessible by design: a global
+# permission rule denies reading every `.env*` path, so the session that added
+# the three diagnostic surfaces
+# (adr/diagnostic-surfaces-performance-coverband-swagger.md) could not edit the
+# examples itself and wrote this instead of working around the rule.
+#
+# Idempotent: it appends nothing to a file that already declares
+# PUBLIC_PERFORMANCE_URL, so re-running it after a partial edit is safe.
+#
+# It deliberately touches only the *.example templates, never a real .env --
+# those hold credentials and belong to whoever owns the machine.
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "${repo_root}"
+
+sentinel="PUBLIC_PERFORMANCE_URL"
+targets=(.env.example .env.devcontainer.example)
+
+read -r -d '' block <<'BLOCK' || true
+
+# --- Diagnostic surfaces -----------------------------------------------------
+# Three development-only dashboards, each on its own dedicated host behind HTTP
+# Basic Auth. See adr/diagnostic-surfaces-performance-coverband-swagger.md.
+#
+# PUBLIC_* is the name a browser sees; PRIVATE_* is the network-side ingress the
+# Cloudflare Tunnel connector reaches. Both are exact FQDNs -- no wildcard is
+# admitted anywhere, so a spoofed Host cannot reach one dashboard through
+# another's name.
+PUBLIC_PERFORMANCE_URL=performance.umaxica.dev
+PRIVATE_PERFORMANCE_URL=performance.core.dev.localhost
+PUBLIC_COVERBAND_URL=coverband.umaxica.dev
+PRIVATE_COVERBAND_URL=coverband.core.dev.localhost
+PUBLIC_SWAGGER_URL=swagger.umaxica.dev
+PRIVATE_SWAGGER_URL=swagger.core.dev.localhost
+
+# Dedicated logical databases on the existing Valkey service (see the allocation
+# table in compose.yaml). Required: both gems fall back to
+# redis://127.0.0.1:6379/0 -- the application cache -- when handed no URL, so
+# the boot fails naming the missing variable rather than quietly writing
+# observability data into Rails.cache. A wrong index also fails, loudly.
+PERFORMANCE_REDIS_URL=redis://valkey:6379/12
+COVERBAND_REDIS_URL=redis://valkey:6379/13
+
+# Read through Rails.app.creds.option, which checks ENV first and then Rails
+# credentials. Left unset, each surface answers 401 -- the guards fail closed.
+RAILS_PERFORMANCE_USERNAME=
+RAILS_PERFORMANCE_PASSWORD=
+COVERBAND_USERNAME=
+COVERBAND_PASSWORD=
+SWAGGER_USERNAME=
+SWAGGER_PASSWORD=
+
+# Optional per-surface switches. Both default to on. Only the exact string
+# "false" disables, so a typo cannot silently turn observability off.
+# Swagger has no toggle of its own: unset its PUBLIC_/PRIVATE_ pair above and
+# the host drops out of both the route constraint and Host Authorization.
+RAILS_PERFORMANCE_ENABLED=true
+COVERBAND_ENABLED=true
+BLOCK
+
+status=0
+for target in "${targets[@]}"; do
+  if [[ ! -f "${target}" ]]; then
+    echo "skip: ${target} does not exist" >&2
+    status=1
+    continue
+  fi
+
+  if grep -q "^${sentinel}=" "${target}"; then
+    echo "skip: ${target} already declares ${sentinel}"
+    continue
+  fi
+
+  printf '%s\n' "${block}" >>"${target}"
+  echo "appended: ${target}"
+done
+
+exit "${status}"

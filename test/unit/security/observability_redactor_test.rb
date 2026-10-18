@@ -27,6 +27,37 @@ class ObservabilityRedactorTest < ActiveSupport::TestCase
     assert_equal "https://example.com/path", ObservabilityRedactor.scrub("https://example.com/path?jwt=abc")
   end
 
+  test "scrubs admission confirmation references embedded in URL paths" do
+    reference = SecureRandom.uuid
+
+    assert_equal "https://example.com/ceremony_bindings/[FILTERED]/confirmation",
+                 ObservabilityRedactor.scrub_url("https://example.com/ceremony_bindings/#{reference}/confirmation?ri=jp")
+  end
+
+  test "path redaction preserves missing and empty sentinels and unrelated neighboring routes" do
+    assert_nil ObservabilityRedactor.scrub_path(nil)
+    ["", "/", "/ceremony_bindings//confirmation", "/ceremony_bindings/fixture/confirmation-extra"].each do |path|
+      assert_equal path, ObservabilityRedactor.scrub_path(path)
+    end
+
+    assert_equal "/ceremony_bindings/[FILTERED]/confirmation",
+                 ObservabilityRedactor.scrub_path("/ceremony_bindings/fixture/confirmation")
+  end
+
+  test "scrubs token-shaped values inside free-form diagnostic strings" do
+    raw_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWNyZXQifQ.signature-value"
+
+    value = ObservabilityRedactor.scrub("verification failed: #{raw_jwt}; Bearer access-token-value")
+
+    assert_equal "verification failed: [FILTERED]; [FILTERED]", value
+  end
+
+  test "scrubs named credential values inside free-form diagnostic strings" do
+    value = ObservabilityRedactor.scrub("failure token=secret-value access_token: another-secret")
+
+    assert_equal "failure [FILTERED] [FILTERED]", value
+  end
+
   test "scrub_url returns REDACTED for an unparseable URI" do
     assert_equal ObservabilityRedactor::REDACTED, ObservabilityRedactor.scrub_url("https://[invalid")
 

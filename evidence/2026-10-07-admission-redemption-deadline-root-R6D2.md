@@ -1,0 +1,10 @@
+# Admission redemption deadline and revoked root
+
+- Checkout: `6fa6867d44b5499632079775cb0fb22cbfddd339`; inherited and task-related uncommitted changes affect results.
+- Environment: isolated `codex_integrity_20261006fresh1_*` test fleet, PostgreSQL 17.7. No other Rails test process was live before each run.
+- `bin/rails test test/controllers/auth/ceremony_admission_boundary_test.rb -i /redemption_at_deadline/`: nine runs / 141 assertions / zero failures, errors or skips; seed 50216.
+- `bin/rails test test/controllers/auth/ceremony_admission_boundary_test.rb -i /revoked_Base_device/`: three runs / 36 assertions / zero failures, errors or skips; seed 64971.
+- `bin/rails test test/controllers/auth/ceremony_admission_boundary_test.rb test/services/auth_admission_binding_concurrency_test.rb test/controllers/auth/admission_csrf_transport_test.rb`: 86 runs / 1537 assertions / zero failures, errors or skips; seed 19805. The preceding deadline-only increment passed the same targets with 83 runs / 1501 assertions; seed 19176.
+- New real-forgery HTTP cases exercise all three realms. Confirmed local sign-in entries redeem only at one microsecond before their original database deadline; equality and one microsecond after it refuse without allocating or rotating Auth continuity or changing confirmation/deadline/parent facts. Confirmed verification entries refuse after Base device-session revocation without admitting or rotating Auth continuity, changing binding facts or granting freshness.
+- Tests use the public Base confirmation transition to isolate redemption. Independent existing HTTP cases cover Base confirmation; these additions are not a complete all-purpose authenticated multi-browser attack matrix. Database clock control is limited to the external clock boundary. No application behavior, Social callback, COM distribution, migration or shared data changed.
+- Scoped RuboCop passed after a line-wrapping correction. No complete Task 16 acceptance or Final Verification is claimed; task checkboxes remain open.

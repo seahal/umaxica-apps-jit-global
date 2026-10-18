@@ -15,10 +15,21 @@ class AppleOnlyCredentialStatusTest < ActiveSupport::TestCase
     assert AppleOnlyCredentialStatus.call(client)
   end
 
-  test "does not warn when Google is also an active AAL1 credential" do
+  test "Google replaces a released Apple binding and two effective social bindings are rejected" do
     client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "n#{SecureRandom.hex(8)}")
-    create_active_external_identity(client: client, provider: "apple")
+    apple = create_active_external_identity(client: client, provider: "apple")
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      ClientExternalIdentity.transaction(requires_new: true) do
+        create_active_external_identity(client: client, provider: "google")
+      end
+    end
+    assert_predicate apple.reload, :active?
+    assert AppleOnlyCredentialStatus.call(client)
+    apple.release!
     create_active_external_identity(client: client, provider: "google")
+
+    assert_equal 1, client.client_external_identities.effective_binding.count
+    assert_not_predicate apple.reload, :active?
 
     assert_not AppleOnlyCredentialStatus.call(client)
   end

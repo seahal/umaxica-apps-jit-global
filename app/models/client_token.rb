@@ -4,15 +4,15 @@
 # == Schema Information
 #
 # Table name: client_tokens
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
-#  last_step_up_aal                   :string
+#  last_step_up_aal                   :string           # @deprecated label only; remove after AAL ledger retirement
 #  last_step_up_at                    :datetime
 #  last_step_up_audience              :string
 #  last_step_up_method                :string
@@ -22,16 +22,22 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
 #  selected_at                        :datetime
 #  created_at                         :datetime         not null
+#  authentication_event_at            :datetime
 #  updated_at                         :datetime         not null
 #  dbsc_session_id                    :string
 #  device_session_id                  :bigint
 #  last_step_up_session_public_id     :string
+#  last_step_up_user_verified         :boolean
+#  last_step_up_credential_ref        :string
+#  last_step_up_full_reauthentication :boolean
+#  last_step_up_resource_ref          :string
+#  last_step_up_tenant_ref            :string
 #  oidc_client_id                     :string(64)
 #  oidc_connection_id                 :bigint
 #  public_id                          :string(21)       default(""), not null
@@ -51,12 +57,12 @@
 #  index_client_tokens_on_created_at                     (created_at)
 #  index_client_tokens_on_dbsc_session_id                (dbsc_session_id) UNIQUE
 #  index_client_tokens_on_device_session_id              (device_session_id)
-#  index_client_tokens_on_discarded_at                   (discarded_at)
+#  index_client_tokens_on_discard_at                   (discard_at)
 #  index_client_tokens_on_oidc_connection_id             (oidc_connection_id)
 #  index_client_tokens_on_oidc_jti                       (oidc_jti)
 #  index_client_tokens_on_oidc_sid                       (oidc_sid)
 #  index_client_tokens_on_public_id                      (public_id) UNIQUE
-#  index_client_tokens_on_purged_at                      (purged_at)
+#  index_client_tokens_on_purge_eligible_at                      (purge_eligible_at)
 #  index_client_tokens_on_refresh_token_digest           (refresh_token_digest) UNIQUE
 #  index_client_tokens_on_refresh_token_family_id        (refresh_token_family_id)
 #  index_client_tokens_on_rotated_at                     (rotated_at)
@@ -80,7 +86,7 @@
 
 # Refresh tokens are persisted as digests only.
 # OIDC sid/jti are protocol identifiers; public_id remains the token row identifier.
-class ClientToken < AppTicketRecord
+class ClientToken < OpBaseAppRecord
   self.belongs_to_required_by_default = false
 
   include ::PublicId
@@ -92,12 +98,22 @@ class ClientToken < AppTicketRecord
   include ::SessionOidcConnection
   include ::SelectedActorContext
 
+  SELECTED_ACTOR_CONTEXT_COLUMNS = %i(
+    selected_account_public_id selected_collective_public_id selected_collective_unit_public_id
+    selected_avatar_public_id selected_at
+  ).freeze
+
   DBSC_BINDING_METHOD_CLASS = ClientTokenBindingMethod
   DBSC_STATUS_CLASS = ClientTokenDbscStatus
 
   MAX_SESSIONS_PER_USER = 2
   MAX_TOTAL_SESSIONS_PER_USER = 3
   session_oidc_connection_config actor_name: :user, connection_class: ClientOidcConnection
+
+  attribute :user_token_status_id, default: ClientTokenStatus::ACTIVE
+  attribute :user_token_kind_id, default: ClientTokenKind::BROWSER_WEB
+  attribute :user_token_binding_method_id, default: ClientTokenBindingMethod::NOTHING
+  attribute :user_token_dbsc_status_id, default: ClientTokenDbscStatus::NOTHING
 
   belongs_to :user, class_name: "Client", inverse_of: :client_tokens
   belongs_to :user_token_status, class_name: "ClientTokenStatus"
@@ -106,23 +122,28 @@ class ClientToken < AppTicketRecord
   belongs_to :user_token_dbsc_status, class_name: "ClientTokenDbscStatus"
   belongs_to :oidc_connection, class_name: "ClientOidcConnection"
   belongs_to :device_session, class_name: "ClientDeviceSession", inverse_of: :client_tokens
-  has_many :client_token_usages, inverse_of: :client_token, dependent: :delete_all
+  has_many :client_sign_up_flows,
+           foreign_key: :token_id,
+           inverse_of: :token,
+           dependent: :restrict_with_exception
+  has_many :op_app_grants, inverse_of: :client_token, dependent: :restrict_with_exception
   has_many :client_verifications, dependent: :delete_all, inverse_of: :user_token
   has_one :step_up_session,
           class_name: "ClientStepUpSession",
           inverse_of: :user_token,
           strict_loading: false,
           dependent: :destroy
-  attribute :user_token_status_id, default: ClientTokenStatus::ACTIVE
-  attribute :user_token_kind_id, default: ClientTokenKind::BROWSER_WEB
-  attribute :user_token_binding_method_id, default: ClientTokenBindingMethod::NOTHING
-  attribute :user_token_dbsc_status_id, default: ClientTokenDbscStatus::NOTHING
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
 
   validate :enforce_concurrent_session_limit, on: :create
 
   private
+
+  def step_up_authority_binding
+    [ClientStepUpSession, ClientStepUpCeremonyTransaction, ClientAuthCeremonySession, :user_token_id]
+  end
 
   attr_accessor :skip_session_limit_check
 
@@ -131,13 +152,13 @@ class ClientToken < AppTicketRecord
   # The primary enforcement of the session limit is done by a database trigger,
   # which is more reliable and avoids race conditions.
   #
-  # Note: We now allow up to 3 total sessions (2 active + 1 restricted),
-  # but the Auth concern handles restricting the 3rd session.
+  # The row ceiling protects the root issuer when active-capacity admission and row creation race.
+  # Historical RESTRICTED rows do not authenticate and therefore do not consume root capacity.
   def enforce_concurrent_session_limit
     return if skip_session_limit_check
     return unless user_id
 
-    operation = -> { self.class.not_revoked.where(user_id: user_id, rotated_at: nil).count }
+    operation = -> { self.class.active_status.where(user_id: user_id, rotated_at: nil).count }
     count = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
 
     return if count < MAX_TOTAL_SESSIONS_PER_USER

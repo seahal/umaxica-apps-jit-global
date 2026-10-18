@@ -1,0 +1,30 @@
+# typed: false
+# frozen_string_literal: true
+
+class RpWarpComIdentityBinding < RpWarpComRecord
+  self.table_name = "rp_identity_bindings"
+
+  CELL = RpCellBinding.fetch("rp_warp_com")
+  REALM = CELL.realm
+  CLIENT_ID = CELL.client_id
+
+  belongs_to :principal, class_name: "RpWarpComPrincipal", inverse_of: :identity_bindings
+  has_many :op_session_bindings, class_name: "RpWarpComOpSessionBinding", foreign_key: :identity_binding_id,
+                                 inverse_of: :identity_binding,
+                                 dependent: :restrict_with_error
+
+  validates :issuer, :realm, :client_id, :subject, presence: true
+  validates :realm, inclusion: { in: [REALM] }
+  validates :client_id, inclusion: { in: [CLIENT_ID] }
+  validate :identity_attributes_are_immutable
+
+  private
+
+  def identity_attributes_are_immutable
+    return unless persisted?
+
+    %i(issuer realm client_id subject principal_id).each do |attribute|
+      errors.add(attribute, "cannot be changed after creation") if will_save_change_to_attribute?(attribute)
+    end
+  end
+end

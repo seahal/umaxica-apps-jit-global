@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class Base::Org::Edge::V0::Token::ChecksController < Base::Org::ApplicationController
+class Base::Org::Edge::V0::Token::ChecksController < Base::Org::AuthorityController
   include SignEdgeV0JsonApi
 
   AUTHENTICATION_MODE = :deny_all

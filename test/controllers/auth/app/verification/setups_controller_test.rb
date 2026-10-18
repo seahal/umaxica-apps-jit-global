@@ -2,184 +2,220 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
-require "base64"
 
 class Auth::App::Verification::SetupsControllerTest < ActionDispatch::IntegrationTest
-  test "new shows current registration methods when pt is present" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    user = Client.create!
-    headers = as_user_headers(user, host: host)
-    pt = Base64.urlsafe_encode64("/settings/telephones?ri=jp")
+  self.fixture_table_names = []
 
-    get new_auth_app_verification_setup_url(ri: "jp", pt: pt), headers: headers
+  fixtures :client_statuses
+
+  test "an admitted bootstrap shows the registration methods and cancellation, never a back link" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: StepUpRequirement.new(
+            scope: "settings_telephone", purpose: "bootstrap", step_up_required: false,
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil,
+            allowed_methods: %i(passkey totp), audience: "step_up:app", session_binding: token.public_id,
+            token_binding: token.public_id, require_session_binding: true, ttl: 15.minutes,
+          ),
+          return_to: "/identity/telephones",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        store_raw_cookies(
+          cookies,
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    get new_auth_app_verification_setup_path(ri: "jp", entry_ref: issuance.reference)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf }
+
+    assert_response :see_other
+    assert_equal new_auth_app_verification_setup_path(ri: "jp"), URI.parse(response.location).request_uri
+
+    get new_auth_app_verification_setup_path(ri: "jp")
 
     assert_response :success
-    assert_equal "auth/app/verification/setups/new", inertia_component
-    hrefs = inertia_props.fetch("methods").map { |method| method.fetch("href") }
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+    methods = props.fetch("methods").to_h { |method| [method.fetch("key"), method.fetch("href")] }
 
-    assert_equal 1, hrefs.count(new_auth_app_settings_passkey_path(ri: "jp", pt: pt))
-    assert_equal 1, hrefs.count { |href| href.include?("/identity/emails/registration/new") }
-    assert_equal 1, hrefs.count(new_auth_app_settings_totp_path(ri: "jp", pt: pt))
-  end
-  private
-
-  def host_headers(host = nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || ENV["DEFAULT_URL_HOST"]
-    headers = {
-      "Client-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    }
-    headers["Host"] = host_value if host_value.present?
-    headers
-  end
-
-  def browser_headers
-    csrf_token = "test_csrf_token"
-    headers = {
-      "Client-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "X-CSRF-Token" => csrf_token,
-    }
-
-    if respond_to?(:cookies, true)
-      cookies["csrf_token"] = csrf_token
-    else
-      headers["Cookie"] = "csrf_token=#{csrf_token}"
-    end
-
-    headers
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-
-    if user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-      token =
-        if session_public_id.present?
-          ClientToken.find_by(public_id: session_public_id)
-        else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-        end
-      token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-
-    if staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-      token =
-        if session_public_id.present?
-          OperatorToken.find_by(public_id: session_public_id)
-        else
-          OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    VisitorTokenBindingMethod.ensure_defaults! if defined?(VisitorTokenBindingMethod)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB) if defined?(VisitorTokenKind)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-
-    if visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-      token =
-        if session_public_id.present?
-          VisitorToken.find_by(public_id: session_public_id)
-        else
-          VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= VisitorToken.create!(visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def bearer_headers(token, host: nil, headers: {})
-    host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-end
-
-# DAMP auth header helpers for this test class.
-class Auth::App::Verification::SetupsControllerTest
-  private
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
+    assert_equal %w(email passkey totp), methods.keys.sort
+    assert_equal new_auth_app_verification_registration_passkey_path(ri: "jp"), methods.fetch("passkey")
+    assert_equal new_auth_app_settings_totp_path(ri: "jp"), methods.fetch("totp")
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), URI.parse(methods.fetch("email")).host
+    assert_equal "/identity/emails/registration/new", URI.parse(methods.fetch("email")).path
+    assert_not props.key?("back")
+    assert_equal(
+      { "label" => I18n.t("actions.cancel"),
+        "action" => auth_app_verification_cancellation_path(ri: "jp"),
+        "method" => "post", },
+      props.fetch("cancel"),
     )
+    assert_equal "pending", issuance.transaction.reload.status
+    assert_nil token.reload.last_step_up_at
   end
 
-  def jwt_issuer_id_for_test_host(host, resource_type)
-    normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
-    surface =
-      if service == "SIGN"
-        case resource_type
-        when "operator" then "ORG"
-        when "visitor" then "COM"
-        else "APP"
-        end
-      elsif normalized.include?(".org") || normalized.include?("org.")
-        "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
-      else
-        "APP"
+  test "the setup page is refused without an admitted bootstrap and never redirects to sign-in" do
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+
+    get new_auth_app_verification_setup_path(ri: "jp")
+
+    assert_response :bad_request
+    assert_equal I18n.t("errors.messages.invalid_request"), response.body
+    assert_nil response.headers["Location"]
+  end
+
+  test "a step-up admission is not accepted by the setup entry" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: StepUpRequirement.new(
+            step_up_required: true, scope: "settings_birthdate", allowed_methods: %i(email_otp totp passkey),
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, ttl: 15.minutes, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil, purpose: "step_up",
+            audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
+            require_session_binding: true,
+          ),
+          return_to: "/identity/birthdate",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        store_raw_cookies(
+          cookies,
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
       end
-    "surface:#{service}_#{surface}"
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference }
+
+    assert_response :bad_request
+    assert_equal 0, ClientAuthCeremonySession.where(
+      step_up_ceremony_transaction_ref: issuance.transaction.transaction_id,
+    ).count
+  end
+
+  test "the admitted bootstrap opens the Auth passkey registration ceremony" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    issuance =
+      begin
+        admission_issuance = BaseStepUpAdmissionIssuer.call!(
+          actor: actor,
+          token: token,
+          requirement: StepUpRequirement.new(
+            scope: "settings_telephone", purpose: "bootstrap", step_up_required: false,
+            phishing_resistant_required: false, user_verification_required: false,
+            full_reauthentication_required: false, actor_ref: actor.public_id,
+            resource_ref: nil, tenant_ref: nil,
+            allowed_methods: %i(passkey totp), audience: "step_up:app", session_binding: token.public_id,
+            token_binding: token.public_id, require_session_binding: true, ttl: 15.minutes,
+          ),
+          return_to: "/identity/telephones",
+          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          base_token: token,
+        )
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_issuance.transaction.surface, reference: admission_issuance.reference,
+        )
+        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
+        admission_binding.attach_auth_session!(
+          auth_session: admission_session,
+          confirmation_ref: SecureRandom.uuid,
+        )
+        admission_binding.confirm_base!(
+          base_token: token,
+          browser_digest: AuthAdmissionBinding.browser_digest(
+            surface: admission_issuance.transaction.surface,
+            entry_ref: admission_issuance.reference,
+            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+          ),
+        )
+        admission_auth_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_issuance.transaction.surface)
+        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+        # Rack::Test::CookieJar#merge mutates the jar and has no merge! counterpart.
+        store_raw_cookies(
+          cookies,
+          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_raw_sid)}",
+          URI.parse("https://#{admission_auth_host}/"),
+        )
+        admission_issuance
+      end
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    post auth_app_verification_setup_path(ri: "jp"), params: { entry_ref: issuance.reference }
+
+    get new_auth_app_verification_registration_passkey_path(ri: "jp")
+
+    assert_response :success
+    assert_not_includes response.body, "jump.umaxica.net"
+    assert_not_includes response.body, "/sign"
+    assert_equal "pending", issuance.transaction.reload.status
   end
 end

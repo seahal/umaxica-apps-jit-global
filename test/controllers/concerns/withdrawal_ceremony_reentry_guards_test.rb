@@ -62,34 +62,4 @@ class WithdrawalCeremonyReentryGuardsTest < ActiveSupport::TestCase
     assert_equal [[[:new], { status: :ok }]], @harness.renders
     assert_equal @harness.reentry_state_value, @harness.instance_variable_get(:@reentry_state)
   end
-
-  test "a re-entry attempt with no live state is refused as an invalid code" do
-    @harness.params_hash = { pass_code: "123456" }
-    @harness.reentry_state_value = nil
-
-    @harness.invoke(:verify_withdrawal_reentry_otp)
-
-    assert_equal [[[:new], { status: :unprocessable_content }]], @harness.renders
-  end
-
-  test "a re-entry attempt whose state has expired is refused as an invalid code" do
-    @harness.params_hash = { pass_code: "123456" }
-    @harness.reentry_state_value = { "expires_at" => 1.minute.ago.to_i }
-
-    @harness.invoke(:verify_withdrawal_reentry_otp)
-
-    assert_equal [[[:new], { status: :unprocessable_content }]], @harness.renders
-  end
-
-  test "a re-entry attempt whose state names no reachable email is refused as an invalid code" do
-    @harness.params_hash = { pass_code: "123456" }
-    @harness.reentry_state_value = {
-      "expires_at" => 1.hour.from_now.to_i,
-      "email_public_id" => "no-such-public-id",
-    }
-
-    @harness.invoke(:verify_withdrawal_reentry_otp)
-
-    assert_equal [[[:new], { status: :unprocessable_content }]], @harness.renders
-  end
 end

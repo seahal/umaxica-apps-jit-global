@@ -14,22 +14,21 @@ class Auth::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
   end
 
-  test "permanently redirects the jp region to the sign in entry point" do
+  test "renders the ceremony-service root for the jp region" do
     get auth_com_root_url(ri: "jp")
 
-    assert_response :moved_permanently
-    assert_equal auth_com_sign_in_url(ri: "jp", host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")),
-                 response.location
-    assert_includes response.location, "/sign/in?ri=jp"
+    assert_response :success
+    assert_equal "auth/com/roots/index", inertia_component
+    assert_equal "Sign Com", inertia_props.fetch("heading")
+    assert_equal base_sign_entry_url(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
   end
 
-  test "permanently redirects the us region to the sign in entry point" do
+  test "renders the ceremony-service root for the us region" do
     get auth_com_root_url(ri: "us")
 
-    assert_response :moved_permanently
-    assert_equal auth_com_sign_in_url(ri: "us", host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")),
-                 response.location
-    assert_includes response.location, "/sign/in?ri=us"
+    assert_response :success
+    assert_equal "auth/com/roots/index", inertia_component
+    assert_equal base_sign_entry_url(ri: "us"), inertia_props.fetch("sign_in").fetch("href")
   end
 
   test "an unrecognized region falls through to the shared region normalization" do
@@ -39,18 +38,15 @@ class Auth::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal auth_com_root_url(ri: "jp"), response.location
   end
 
-  test "the sign in entry point terminates the redirect chain for both regions" do
+  test "the ceremony-service root terminates the redirect chain for both regions" do
     %w(jp us).each do |region|
       get auth_com_root_url(ri: region)
 
-      assert_response :moved_permanently
-      follow_redirect!
-
-      assert_response :success, "the #{region} sign in entry point must not redirect again"
+      assert_response :success, "the #{region} ceremony-service root must not redirect again"
     end
   end
 
-  test "the root redirect takes precedence over the logged in dashboard redirect" do
+  test "an auth ceremony cookie does not turn Root into a dashboard" do
     visitor = create_verified_visitor_with_email(email_address: "com-root-logged-in@example.com")
     visitor.visitor_telephones.create!(
       number: "+15550002223",
@@ -60,10 +56,31 @@ class Auth::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     get auth_com_root_url(ri: "jp"),
         headers: as_visitor_headers(visitor, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
 
-    assert_response :moved_permanently
-    assert_includes response.location, "/sign/in?ri=jp"
+    assert_response :success
+    assert_equal "auth/com/roots/index", inertia_component
   end
+
+  test "a verified visitor without a telephone can reach the com ceremony root" do
+    visitor = create_verified_visitor_with_email(email_address: "com-root-no-telephone@example.com")
+
+    assert_not visitor.verified_telephone?
+
+    get auth_com_root_url(ri: "us"),
+        headers: as_visitor_headers(visitor, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"))
+
+    assert_response :success
+    assert_equal "auth/com/roots/index", inertia_component
+  end
+
   private
+
+  # The landing link leaves Auth for the Base neutral GET /sign entry; Auth's own /sign/in refuses a
+  # request that carries no Base-issued admission.
+  def base_sign_entry_url(ri:)
+    base_com_sign_show_url(
+      ri: ri, host: Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host, protocol: "https",
+    )
+  end
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
@@ -103,31 +120,11 @@ class Auth::Com::RootsControllerTest
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -187,10 +184,8 @@ class Auth::Com::RootsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -202,10 +197,8 @@ class Auth::Com::RootsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -426,75 +419,6 @@ class Auth::Com::RootsControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-    )
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-    )
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -510,10 +434,8 @@ class Auth::Com::RootsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -533,12 +455,12 @@ class Auth::Com::RootsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

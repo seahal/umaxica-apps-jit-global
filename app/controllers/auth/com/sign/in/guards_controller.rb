@@ -24,15 +24,16 @@ module Auth
           end
 
           def route_guard_cycle(cycle)
-            return redirect_to(auth_com_sign_in_session_path(ri: current_region_identifier, pt: guard_pt_for(cycle))) if
-              cycle.sign_in_session_limit_pending?
             return route_pending_guard(cycle) if cycle.sign_in_guardrail_pending?
             return redirect_to_guard_check(cycle) if cycle.sign_in_checkpoint_pending?
-            return redirect_to(sign_in_selector_path(pt: guard_return_to(cycle))) if cycle.sign_in_selector_pending?
-            return redirect_to(sign_in_welcome_path(pt: guard_return_to(cycle))) if
+            return redirect_to(
+              sign_in_selector_path(
+                pt: guard_return_to(cycle),
+                cycle: cycle,
+              ),
+            ) if cycle.sign_in_selector_pending?
+            return redirect_to(sign_in_welcome_path(pt: guard_return_to(cycle), cycle: cycle)) if
               cycle.sign_in_session_issuance_pending? ||
-                cycle.sign_in_dashboard_pending? ||
-                cycle.sign_in_return_pending? ||
                 cycle.sign_in_completed?
 
             redirect_to_guard_entry
@@ -46,7 +47,11 @@ module Auth
           end
 
           def redirect_to_guard_check(cycle)
-            redirect_to(auth_com_sign_in_check_path(ri: current_region_identifier, pt: guard_pt_for(cycle)))
+            redirect_to(
+              auth_com_sign_in_check_path(
+                ri: current_region_identifier, pt: guard_pt_for(cycle), **sign_in_flow_binding_params(cycle),
+              ),
+            )
           end
 
           def validated_guard_cycle

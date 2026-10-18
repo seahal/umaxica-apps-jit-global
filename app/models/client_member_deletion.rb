@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema name: client_member_deletions
 #
 # Table name: client_member_deletions
@@ -20,8 +22,6 @@
 #  fk_rails_...  (member_id => members.id)
 #  fk_rails_...  (user_id => users.id)
 #
-
-# frozen_string_literal: true
 
 # == Schema Information
 #

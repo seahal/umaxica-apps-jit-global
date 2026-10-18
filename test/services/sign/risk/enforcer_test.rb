@@ -40,7 +40,13 @@ module Sign
         SignRiskEngine.stub(:score, 100) do
           # SignRiskEnforcer.revoke! should be called
           called = false
-          SignRiskEnforcer.stub(:revoke!, ->(u) { called = true; assert_equal @user, u }) do
+          SignRiskEnforcer.stub(
+            :revoke!, ->(u) {
+                        called = true
+
+                        assert_equal @user, u
+                      },
+          ) do
             SignRiskEnforcer.call(@user)
           end
 
@@ -53,7 +59,7 @@ module Sign
 
         token = ClientToken.create!(
           user: @user,
-          discarded_at: 1.day.from_now,
+          discard_at: 1.day.from_now,
           public_id: "test_step_up_#{SecureRandom.hex(4)}",
           last_step_up_at: 1.minute.ago,
           last_step_up_scope: "settings_email",
@@ -75,7 +81,7 @@ module Sign
 
         token = OperatorToken.create!(
           staff: staff,
-          discarded_at: 1.day.from_now,
+          discard_at: 1.day.from_now,
           public_id: "stf_#{SecureRandom.hex(4)}",
           last_step_up_at: 1.minute.ago,
           last_step_up_scope: "settings_passkey",
@@ -109,7 +115,7 @@ module Sign
         # Create token with valid public_id and expiry
         token = ClientToken.create!(
           user: @user,
-          discarded_at: 1.day.from_now,
+          discard_at: 1.day.from_now,
           public_id: "test_#{SecureRandom.hex(4)}",
           # Default status/kind should trigger if FKs exist.
           # If FK check fails, we might need to assume fixtures loaded statuses.
@@ -124,7 +130,7 @@ module Sign
         # 3. Check revocation
         token.reload
 
-        assert_not_nil token.discarded_at
+        assert_not_nil token.discard_at
       end
     end
   end

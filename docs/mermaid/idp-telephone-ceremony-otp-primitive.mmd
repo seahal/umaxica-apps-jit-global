@@ -1,0 +1,28 @@
+stateDiagram-v2
+    [*] --> Unissued
+    Unissued --> Issued: issue_telephone_otp! / pending parent, candidate and purpose bound
+    Issued --> Issued: reissue_telephone_otp! / new generation and verifier; original deadlines
+    Issued --> Issued: deliver_telephone_otp! / locked current generation and authentic code
+    Issued --> Consumed: verify_telephone_otp! / exact bindings and code; locked single consume
+    Unissued --> Cancelled: cancel_telephone_otp!
+    Issued --> Cancelled: cancel_telephone_otp! / erase verifier
+    Issued --> Expired: database deadline reached
+    Consumed --> Consumed: telephone_otp_verified_evidence? / original binding and fixed live receipt; no mutation
+    Consumed --> [*]
+    Cancelled --> [*]
+    Expired --> [*]
+    note right of Issued
+        Separate telephone policy on Client, Visitor and Operator ceremony models.
+        Stored HMAC binds realm, channel, transaction, purpose, actor,
+        session, operation, candidate, destination digest, generation and OTP deadline.
+        Wrong binding/code never consumes.
+        Transport and verification require finite parent and OTP deadlines.
+        Signup and APP/COM/ORG registration integrate independent destination and candidate budgets.
+        Shared legacy Source proof retirement remains incomplete.
+    end note
+    note right of Consumed
+        Challenge verifier is erased; normal verification and transport refuse replay.
+        A separate domain-keyed receipt binds original proof and both result timestamps.
+        Result deadline is min(verification plus 60 seconds, original transaction expiry).
+        SQL timestamp replacement cannot authenticate a longer result window.
+    end note

@@ -1,0 +1,59 @@
+<% page_title(title) %>
+<div class="mx-auto flex w-full max-w-2xl flex-col gap-8">
+  <%= link_to "← Back to entry", show_href, class: "text-base text-fg-muted underline underline-offset-4 hover:underline" %>
+  <div>
+    <h1 class="text-2xl leading-snug font-semibold text-fg sm:text-3xl"><%= title %></h1>
+    <p class="text-base text-fg-muted"><%= description %></p>
+  </div>
+
+  <%= form_with url: form[:action], method: form[:method], class: "flex flex-col gap-4" do %>
+    <%= hidden_field_tag "entry[lock_version]", form[:lock_version] %>
+
+    <p class="text-base text-fg-muted">
+      Locale <%= form[:locale] %><%= " · slug #{form[:canonical_slug]}" if form[:canonical_slug] %>
+    </p>
+
+    <div class="flex flex-col gap-2 text-base">
+      <%= label_tag "entry_title", "Title" %>
+      <%= text_field_tag "entry[title]", form[:title], autocomplete: "off",
+            aria: { invalid: errors["title"].present?, describedby: ("entry_title-error" if errors["title"].present?) },
+            class: "w-full rounded-md min-h-12 border border-control bg-surface px-3 py-2 text-base text-fg" %>
+      <% if errors["title"] %>
+        <span id="entry_title-error" class="text-error"><%= errors["title"] %></span>
+      <% end %>
+    </div>
+
+    <div class="flex flex-col gap-2 text-base">
+      <%= label_tag "entry_summary", "Summary" %>
+      <%= text_area_tag "entry[summary]", form[:summary], rows: 3,
+            aria: { invalid: errors["summary"].present?, describedby: ("entry_summary-error" if errors["summary"].present?) },
+            class: "w-full rounded-md min-h-12 border border-control bg-surface px-3 py-2 text-base text-fg" %>
+      <% if errors["summary"] %>
+        <span id="entry_summary-error" class="text-error"><%= errors["summary"] %></span>
+      <% end %>
+    </div>
+
+    <div class="flex flex-col gap-2 text-base">
+      <%= label_tag "entry_body", "Body (JSON)" %>
+      <%= tag.p t("ui_presentation.body_json"), id: "entry_body-description", class: "text-base text-fg-muted" %>
+      <%= text_area_tag "entry[body]", form[:body], rows: 16,
+            aria: { invalid: errors["body"].present?, describedby: ["entry_body-description", ("entry_body-error" if errors["body"].present?)].compact.join(" ") },
+            class: "w-full rounded-md min-h-12 border border-control bg-surface px-3 py-2 font-mono text-base text-fg" %>
+      <% if errors["body"] %>
+        <span id="entry_body-error" class="text-error"><%= errors["body"] %></span>
+      <% end %>
+    </div>
+
+    <% if errors["lock_version"] %>
+      <p role="alert" class="text-base text-error"><%= errors["lock_version"] %></p>
+    <% end %>
+    <% if errors["base"] %>
+      <p role="alert" class="text-base text-error"><%= errors["base"] %></p>
+    <% end %>
+
+    <div class="flex items-center gap-3">
+      <%= submit_tag "Save revision", class: "min-h-12 rounded-md bg-accent px-3 py-2 text-base font-medium text-accent-fg" %>
+      <%= link_to "All entries", index_href, class: "text-base text-fg-muted underline underline-offset-4 hover:underline" %>
+    </div>
+  <% end %>
+</div>

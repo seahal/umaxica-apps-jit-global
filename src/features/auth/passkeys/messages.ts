@@ -1,12 +1,9 @@
-// User-facing strings carried over verbatim from the Stimulus passkey controllers
-// (`src/controllers/passkey_authentication_controller.js`,
-// `passkey_registration_controller.js` and `step_up_passkey_controller.js`).
+// User-facing strings shared by the React passkey ceremonies.
 //
 // They were string literals in the controllers rather than i18n lookups, so the React port keeps
 // them literal: inventing translation keys here would change what an operator reads mid-ceremony.
 export const PASSKEY_MESSAGES = {
   unsupported: "このブラウザはPasskeyに対応していません",
-  identifierRequired: "メールアドレスまたはIDを入力してください",
   fetchingOptions: "認証オプションを取得中...",
   optionsFailed: "オプションの取得に失敗しました",
   optionsMissing: "認証オプションの取得に失敗しました",

@@ -5,7 +5,7 @@ require "test_helper"
 
 # RFC 6749 section 4.1.2.1 expects spec-level descriptions for a malformed authorization request,
 # and the controller deliberately answers RecordNotFound with a fixed description so a bad
-# login_challenge cannot be used to probe stored data. Both halves are asserted here.
+# result code cannot be used to probe stored data. Both halves are asserted here.
 class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = configured_host(:base_corporate)
@@ -60,11 +60,34 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
     assert_equal "invalid_request", response.parsed_body["error"]
   end
 
-  # The login_challenge branch resolves a stored transaction. An unknown one must not echo the
+  # The result branch resolves a stored transaction. An unknown one must not echo the
   # model or primary key that was looked up.
-  test "an unknown login challenge is refused with a fixed description" do
-    get base_com_oauth_authorization_url(host: @host, login_challenge: SecureRandom.uuid),
-        headers: host_headers(@host)
+  test "a region identifier on the request is ignored rather than treated as unpermitted" do
+    assert_no_difference -> { VisitorOidcAuthorizationTransaction.pending.count } do
+      get base_com_oauth_authorization_url(host: @host, **authorize_params),
+          params: { ri: "jp" }, headers: host_headers(@host)
+    end
+
+    assert_response :success
+    fields = response.parsed_body.css("form input[name]").to_h { |input| [input["name"], input["value"]] }
+    assert_difference -> { VisitorOidcAuthorizationTransaction.pending.count }, +1 do
+      post base_com_oauth_authorization_url(host: @host), params: fields,
+                                                          headers: host_headers(@host).merge(
+                                                            "Origin" => "https://#{@host}",
+                                                            "Sec-Fetch-Site" => "same-origin",
+                                                          )
+    end
+
+    assert_response :see_other
+  end
+
+  test "an unknown result code is refused with a fixed description" do
+    post base_com_oauth_authorization_url(host: @host),
+         params: { result: SecureRandom.uuid },
+         headers: host_headers(@host).merge(
+           "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}",
+           "Sec-Fetch-Site" => "same-site",
+         )
 
     assert_response :bad_request
     assert_equal "invalid_request", response.parsed_body["error"]
@@ -76,8 +99,8 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   def authorize_params(**overrides)
     {
       response_type: "code",
-      client_id: "base-rails-rp",
-      redirect_uri: "https://#{@host}/oidc/callback",
+      client_id: "core-com-jp",
+      redirect_uri: OidcClientRegistry.find!("core-com-jp").redirect_uris_by_realm.fetch("visitor").first,
       code_challenge: "a" * 43,
       code_challenge_method: "S256",
       scope: "openid",

@@ -1,0 +1,19 @@
+# RuboCop offense cleanup
+
+Verified on 2026-10-03 against commit `b74017b518986b2dd9caca1ad411204176f62079`, with pre-existing and task-local uncommitted changes affecting the result.
+
+- `bin/rubocop --format simple`: 4,959 files inspected, no offenses; the initial run reproduced all 63 reported offenses.
+- `ruby -c` on all 40 affected files: passed.
+- `git diff --check`: passed.
+- `bin/rails test test/operations/avatar_ownership_transfers_test.rb test/policies/group_avatar_membership_policy_test.rb test/services/group_avatar_memberships_test.rb test/services/palm_logout_coordinator_failure_test.rb test/controllers/palm/app/sign/outs_controller_test.rb test/models/avatar_test.rb test/models/avatar_moniker_test.rb test/services/valkey/auth_state/authorization_code_store_test.rb`: 70 runs, 348 assertions, zero failures, errors, or skips (seed 2153).
+- `bin/rails test test/controllers/base/app/identity/mfa/resets_controller_test.rb test/controllers/base/com/identity/mfa/resets_controller_test.rb test/controllers/base/org/identity/mfa/resets_controller_test.rb test/controllers/base/app/identity/recovery_secrets_controller_test.rb test/controllers/base/com/identity/recovery_secrets_controller_test.rb test/controllers/base/app/sign_outs_controller_test.rb test/controllers/base/com/sign_outs_controller_test.rb test/controllers/base/org/sign_outs_controller_test.rb test/controllers/base/app/welcome_dashboard_authority_slice_1c_test.rb test/controllers/auth/app/settings/passkeys_controller_test.rb test/integration/preference_rotation_adoption_test.rb test/integration/recovery_secret_parallel_get_test.rb test/jobs/enforcement_reconciliation_job_test.rb test/jobs/sign_up_expiry_job_test.rb test/operations/avatar_moniker_writer_operation_test.rb test/operations/avatar_ownership_transfers_concurrency_test.rb test/services/acme/selector_authority_test.rb test/controllers/base/app/switchers_controller_test.rb test/controllers/base/com/switcher_controller_test.rb test/controllers/base/org/switcher_controller_test.rb test/tooling/architecture_baseline_test.rb`: 131 runs, 3,783 assertions, zero failures, errors, or skips (seed 46107).
+- Standalone `active_support/core_ext/string/filters` loading and SQL `squish`: passed.
+- Executed the original and updated approval-register scripts with an empty catalog in a temporary directory: generated Markdown was byte-for-byte identical; no database connection was made.
+
+The first sandboxed Rails test attempt failed to connect to host `primary` before any tests ran. The same focused command passed with approved expanded permissions, as did the remaining related tests. The full Rails suite was not run. Database audit, race-check, restore, and structure-normalization scripts were syntax checked; their live database workflows were not executed.
+
+Complexity fixes preserve authorization checks, lock ordering, and transaction boundaries. Current-row associations explicitly use `dependent: nil` because their complete history associations already own destruction or retention. The two flagged Valkey tests now reside outside the private helper section. Thread creation is retained only with localized cop exceptions at the three concurrent verification workers; fixed fixture prose, parameterized SQL, and English operator register text have localized I18n exceptions. No RuboCop configuration or baseline was changed by this task.
+
+## Full Rails suite follow-up
+
+On 2026-10-03, against the same commit `b74017b518986b2dd9caca1ad411204176f62079` with uncommitted changes, `bin/rails test` completed with exit code 0: 12,586 runs, 85,428 assertions, zero failures, zero errors, and two skips (seed 8605; 132.20 seconds). The command ran with approved expanded permissions for database connectivity. Skip details were not emitted by this non-verbose run.

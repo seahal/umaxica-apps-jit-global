@@ -112,8 +112,8 @@ The new tier system replaces the existing flags:
 
 ## Migration
 
-Phase 1: introduce `PublicController` and migrate machine endpoints. Already in flight per
-`plans/active/public-controller-base-plan.md`. Independent of the rest of this doctrine.
+Phase 1: introduce `PublicController` and migrate machine endpoints. Independent of the rest of this
+doctrine.
 
 Phase 2: introduce `OpenController` per boundary and migrate controllers that currently rely on
 `public_strict!`. Requires an inventory of every site where `public_strict!` is declared today. The

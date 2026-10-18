@@ -2,18 +2,10 @@
 # frozen_string_literal: true
 
 class PublishingPublishedEntriesQuery
+  PAGE_SIZE = 20
+
   def self.call(...)
     new(...).call
-  end
-
-  DEFAULT_LIMIT = 20
-  MIN_LIMIT = 1
-  MAX_LIMIT = 100
-
-  Page = Data.define(:entries, :next_cursor, :has_more)
-
-  def self.clamp_limit(value)
-    value.clamp(MIN_LIMIT, MAX_LIMIT)
   end
 
   def initialize(entry_class:, locale:, category: nil, tag: nil)
@@ -29,29 +21,14 @@ class PublishingPublishedEntriesQuery
     scope = published_scope
     scope = filter_by(scope, key: "category", slug: category) if category
     scope = filter_by(scope, key: "tag", slug: tag) if tag
+    publication_class = entry_class.reflect_on_association(:publications).klass
     scope
       .preload(
         :canonical_slug,
         active_publication: { entry_version: %i(single_taxonomy_assignments multiple_taxonomy_assignments) },
       )
       .strict_loading
-      .order(Arel.sql(order_sql))
-  end
-
-  def page(limit: DEFAULT_LIMIT, cursor: nil)
-    limit = self.class.clamp_limit(limit)
-    scope = call
-    scope = scope.where(Arel.sql(after_cursor_sql), cursor.effective_from, cursor.entry_public_id) if cursor
-
-    rows = scope.limit(limit + 1).to_a
-    has_more = rows.length > limit
-    entries = rows.first(limit)
-
-    Page.new(
-      entries:,
-      next_cursor: has_more ? PublishingEntriesCursor.encode(entries.last) : nil,
-      has_more:,
-    )
+      .order(publication_class.arel_table[:effective_from].desc, entry_class.arel_table[:public_id].desc)
   end
 
   def find_published(public_id:)
@@ -75,24 +52,6 @@ class PublishingPublishedEntriesQuery
   private
 
   attr_reader :entry_class, :locale, :category, :tag
-
-  def entries_table = entry_class.table_name
-
-  def publications_table = entry_class.reflect_on_association(:publications).klass.table_name
-
-  def versions_table = entry_class.reflect_on_association(:versions).klass.table_name
-
-  def order_sql
-    "#{quote(publications_table)}.effective_from DESC, #{quote(entries_table)}.public_id DESC"
-  end
-
-  def after_cursor_sql
-    "(#{quote(publications_table)}.effective_from, #{quote(entries_table)}.public_id) < (?, ?)"
-  end
-
-  def quote(name)
-    entry_class.lease_connection.quote_table_name(name)
-  end
 
   def published_scope
     publication_class = entry_class.reflect_on_association(:publications).klass

@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_oauth_callback_states
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id           :bigint           not null, primary key
 #  consumed_at  :datetime
@@ -21,6 +21,6 @@
 #  index_operator_oauth_callback_states_on_expires_at    (expires_at)
 #  index_operator_oauth_callback_states_on_state_digest  (state_digest) UNIQUE
 #
-class OperatorOauthCallbackState < OrgTicketRecord
+class OperatorOauthCallbackState < OpBaseOrgRecord
   include OauthCallbackStateable
 end

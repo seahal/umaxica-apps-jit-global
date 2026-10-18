@@ -20,35 +20,42 @@ class SocialAuthLinkHandlerDiagnosticsTest < ActiveSupport::TestCase
     Rails.logger.level = @previous_level
   end
 
-  def repository_returning(identity_for_user:, identity_for_uid:)
-    repository = Object.new
-    repository.define_singleton_method(:find_for_user) { |*, **| identity_for_user }
-    repository.define_singleton_method(:find_by_subject) { |*, **| identity_for_uid }
-    repository
-  end
-
-  def handler(repository:)
-    SocialAuthLinkHandler.new(
-      principal: nil,
-      credential_candidate: nil,
-      current_client: @client,
-      repository: repository,
-      provider: "google",
-      uid: "uid-1",
-    )
-  end
-
   test "an account that already has this provider linked to a different uid is refused" do
-    other_identity = Struct.new(:user_id, :uid, :provider).new(@client.id, "uid-2", "google")
-    subject = handler(repository: repository_returning(identity_for_user: other_identity, identity_for_uid: nil))
+    identity = ClientExternalIdentity.create!(
+      client: @client, provider: "google", issuer: "https://accounts.google.com", subject: "uid-2",
+      audience: "test-client", verification_authority: "google_oidc", verified_at: ClientExternalIdentity.database_now,
+    )
+    subject = SocialAuthLinkHandler.new(
+      principal: ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google", subject: "uid-1", issuer: "https://accounts.google.com",
+        audience: "test-client", verified_at: Time.current, verification_authority: "google_oidc",
+      ), credential_candidate: nil, current_client: @client,
+      repository: ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider: "google"),
+      provider: "google", uid: "uid-1", ceremony_started_at: Time.current,
+    )
 
     assert_raises(SocialAuth::ConflictError) { subject.call }
+    assert_nil identity.reload.released_at
+    assert_predicate identity, :active?
   end
 
   test "an identity that belongs to another account is refused" do
-    foreign_identity = Struct.new(:user_id, :uid, :provider).new(@client.id + 1, "uid-1", "google")
-    subject = handler(repository: repository_returning(identity_for_user: nil, identity_for_uid: foreign_identity))
+    foreign = Client.create!(status_id: ClientStatus::ACTIVE)
+    identity = ClientExternalIdentity.create!(
+      client: foreign, provider: "google", issuer: "https://accounts.google.com", subject: "uid-1",
+      audience: "test-client", verification_authority: "google_oidc", verified_at: ClientExternalIdentity.database_now,
+    )
+    subject = SocialAuthLinkHandler.new(
+      principal: ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google", subject: "uid-1", issuer: "https://accounts.google.com",
+        audience: "test-client", verified_at: Time.current, verification_authority: "google_oidc",
+      ), credential_candidate: nil, current_client: @client,
+      repository: ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider: "google"),
+      provider: "google", uid: "uid-1", ceremony_started_at: Time.current,
+    )
 
     assert_raises(SocialAuth::ConflictError) { subject.call }
+    assert_nil identity.reload.released_at
+    assert_predicate identity, :active?
   end
 end

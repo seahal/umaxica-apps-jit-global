@@ -7,7 +7,9 @@ module Auth
       module In
         module Challenge
           class TotpsController < ::Auth::App::ApplicationController
+            include ::AuthenticationModeSwitchGuard
             include ::SurfaceInertiaPage
+            include ::SignInPhaseBindingControllerSupport
 
             include ::TurnstilePageProps
 
@@ -41,8 +43,11 @@ module Auth
             )
             # Per-account limit. The two rules above are keyed by source IP, so a
             # distributed attacker gets unbounded guesses against one account's
-            # 6-digit TOTP. The email and SMS OTP channels already have a
-            # per-account lock (OtpLockable); this is its equivalent for TOTP.
+            # 6-digit TOTP. This rule is an auxiliary throttle only: it lives in the
+            # rate-limit store, which fails open when Valkey is unreachable. The
+            # authoritative per-account lockout is the PostgreSQL state that
+            # TotpWindowConsumer maintains on ClientTotpCredential, the TOTP
+            # equivalent of the email/SMS OTP lock (OtpLockable).
             rate_limit(
               to: 10,
               within: 15.minutes,
@@ -62,7 +67,7 @@ module Auth
             class TotpChallengeForm
               include ActiveModel::Model
 
-              attr_accessor :token
+              attr_accessor :token, :credential_public_id
 
               validates :token, presence: true, length: { is: 6 }
 
@@ -71,6 +76,7 @@ module Auth
               end
             end
 
+            before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
             before_action :ensure_pending_mfa!
 
             def new
@@ -92,14 +98,17 @@ module Auth
               end
 
               user = pending_mfa_user
-              result = consume_totp_for(user, @totp_form.token)
+              result = consume_totp_for(user, @totp_form.token, @totp_form.credential_public_id)
 
               if result.accepted?
                 handle_totp_success(user)
               else
                 reason = result.replay? ? "totp_replay" : "totp_mismatch"
                 SignRiskEmitter.emit("auth_failed", user_id: user&.id, ip: request.remote_ip, reason: reason)
-                @totp_form.errors.add(:token, t("sign.app.in.mfa.verification_failed"))
+                message =
+                  result.credential_required? ? t("messages.totp_credential_required") :
+                                   t("sign.app.in.mfa.verification_failed")
+                @totp_form.errors.add(:base, message)
                 render_totp_new(status: :unprocessable_content)
               end
             end
@@ -118,7 +127,7 @@ module Auth
                 title: page_t("#{scope}.title"),
                 description: page_t("#{scope}.description"),
                 form: {
-                  action: auth_app_sign_in_challenge_totp_path,
+                  action: auth_app_sign_in_challenge_totp_path(**sign_in_mfa_binding_params),
                   method: "post",
                   token_field: {
                     scope: "totp_challenge_form",
@@ -130,12 +139,21 @@ module Auth
                     inputmode: "numeric",
                     help: page_t("#{scope}.help"),
                   },
+                  credential_selector: totp_credential_selector_props(pending_mfa_user),
                   submit_label: page_t("#{scope}.submit"),
                 },
                 error_heading: t("errors.messages.validation_failed"),
                 form_errors: @totp_form.errors.full_messages,
                 turnstile: turnstile_stealth_props,
-                back_link: { label: page_t("#{scope}.back"), href: auth_app_sign_in_challenge_path },
+                back_link: {
+                  label: page_t("#{scope}.back"),
+                  href: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+                },
+                cancel: {
+                  label: t("actions.cancel"),
+                  action: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+                  method: "delete",
+                },
               }
             end
 
@@ -149,23 +167,48 @@ module Auth
               )
             end
 
-            def consume_totp_for(user, token)
+            def consume_totp_for(user, token, credential_public_id)
               TotpWindowConsumer.call(
                 credentials: user.client_totp_credentials
                   .where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
                   .order(created_at: :desc),
                 token: token,
+                credential_public_id: credential_public_id,
               )
+            end
+
+            def totp_credential_selector_props(user)
+              credentials = user.client_totp_credentials
+                .where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+                .order(created_at: :asc)
+                .to_a
+              return unless credentials.length > 1
+
+              {
+                name: "totp_challenge_form[credential_public_id]",
+                field: "credential_public_id",
+                scope: "totp_challenge_form",
+                label: t("messages.totp_credential_label"),
+                options: credentials.each_with_index.map do |credential, index|
+                  {
+                    value: credential.public_id,
+                    label: credential.title.presence || t("messages.totp_credential_default_label", count: index + 1),
+                  }
+                end,
+              }
             end
 
             def handle_totp_success(user)
               result = finalize_mfa_login!(user)
               case result[:status]
-              when :session_limit_hard_reject
-                render_session_limit_hard_reject(message: result[:message], http_status: result[:http_status])
-              when :restricted
+              when :session_limit_conflict
+                render_sign_in_refusal(
+                  message: result[:message], http_status: result[:http_status],
+                  error_code: "session_limit_conflict",
+                )
+              when :session_limit_pending
                 redirect_to(result[:redirect_path])
-              when :success
+              when :success, :authentication_evidence_recorded
                 redirect_to_sign_in_sequence!(
                   pt: result[:redirect_path],
                 )
@@ -178,7 +221,7 @@ module Auth
             end
 
             def totp_params
-              params.fetch(:totp_challenge_form, {}).permit(:token)
+              params.fetch(:totp_challenge_form, {}).permit(:token, :credential_public_id)
             end
           end
         end

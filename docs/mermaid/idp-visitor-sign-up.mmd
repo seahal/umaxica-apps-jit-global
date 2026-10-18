@@ -1,0 +1,82 @@
+stateDiagram-v2
+    %% Terminal absorption precedes TTL and requested source validation.
+    %% Where the lifecycle has expires_at, overdue requests persist EXPIRED first.
+    %% The owning transaction returns an expiry refusal; callers unwrap only after commit.
+    %% A refused locked operation rolls back its savepoint before persisting expiry.
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "STARTED id=10" as STARTED
+    state "CONTACT_PENDING id=20" as CONTACT_PENDING
+    state "CREDENTIAL_PENDING id=30" as CREDENTIAL_PENDING
+    state "CONTACT_VERIFIED id=35" as CONTACT_VERIFIED
+    state "GUARDRAIL_PENDING id=38" as GUARDRAIL_PENDING
+    state "CHECKPOINT_PENDING id=40" as CHECKPOINT_PENDING
+    state "FINALIZING id=60" as FINALIZING
+    state "COMPLETED id=100" as COMPLETED
+    state "FAILED id=900 (tombstone)" as FAILED
+    state "FINALIZED id=70 (tombstone)" as FINALIZED
+    state "SIGN_IN_HANDOFF_PENDING id=80 (tombstone)" as SIGN_IN_HANDOFF_PENDING
+    state "EXPIRED id=910" as EXPIRED
+    state "CANCELLED id=920" as CANCELLED
+    state "HALTED id=930" as HALTED
+    [*] --> STARTED
+    STARTED --> CONTACT_PENDING: submit_contact
+    STARTED --> CREDENTIAL_PENDING: advance_sign_up_to_credential! / model map
+    STARTED --> EXPIRED: expire
+    STARTED --> CANCELLED: cancel
+    STARTED --> HALTED: halt
+    CONTACT_PENDING --> CREDENTIAL_PENDING: advance_sign_up_to_credential! / model map
+    CONTACT_PENDING --> CONTACT_VERIFIED: verify_contact
+    CONTACT_PENDING --> EXPIRED: expire
+    CONTACT_PENDING --> CANCELLED: cancel
+    CONTACT_PENDING --> HALTED: halt / entry POST supersedes previous flow
+    CREDENTIAL_PENDING --> CONTACT_VERIFIED: verify_contact
+    CREDENTIAL_PENDING --> EXPIRED: expire
+    CREDENTIAL_PENDING --> CANCELLED: cancel
+    CREDENTIAL_PENDING --> HALTED: halt
+    CONTACT_VERIFIED --> GUARDRAIL_PENDING: enter_guardrail
+    CONTACT_VERIFIED --> EXPIRED: expire
+    CONTACT_VERIFIED --> CANCELLED: cancel
+    CONTACT_VERIFIED --> HALTED: halt
+    GUARDRAIL_PENDING --> CHECKPOINT_PENDING: enter_checkpoint
+    GUARDRAIL_PENDING --> EXPIRED: expire
+    GUARDRAIL_PENDING --> CANCELLED: cancel
+    GUARDRAIL_PENDING --> HALTED: halt
+    CHECKPOINT_PENDING --> FINALIZING: finalize accepted
+    CHECKPOINT_PENDING --> EXPIRED: expire
+    CHECKPOINT_PENDING --> CANCELLED: cancel
+    CHECKPOINT_PENDING --> HALTED: halt
+    FINALIZING --> COMPLETED: complete_sign_up!
+    FINALIZING --> EXPIRED: expire
+    FINALIZING --> CANCELLED: cancel_sign_up! / model map only
+    FINALIZING --> HALTED: halt
+    CHECKPOINT_PENDING --> CHECKPOINT_PENDING: clear_requirement
+    note right of CHECKPOINT_PENDING
+        Email finalization locks Source owner before contact.
+        Binding and audit intent commit together.
+        Signup policies compare expiry against the owning Ticket database clock.
+        At the exact deadline, finalization authorization is refused.
+        The controller rebuilds context and revalidates policy under the Ticket lock.
+        After Source commit and Ticket failure, the same bound email birthdate POST
+        reconciles one original Source intent without rewriting binding or birthdate.
+        Released binding, duplicate intent, unavailable owner and expired flow refuse.
+    end note
+    COMPLETED --> [*]
+    FAILED --> [*]
+    FINALIZED --> [*]
+    SIGN_IN_HANDOFF_PENDING --> [*]
+    EXPIRED --> [*]
+    CANCELLED --> [*]
+    HALTED --> [*]
+    note right of STARTED
+        OTP issuance and consumption lock this parent first.
+        Existing terminal and discarded parents reject without OTP mutation.
+        Overdue nonterminal parents use the named expiry and terminal cleanup before refusal.
+        Issuance and verification recheck the Ticket database clock after Contact locking.
+        Source OTP consumption and bounded immutable verification proof commit together.
+        Post-OTP verification, guardrail, checkpoint and requirement clearing share one Ticket transaction.
+        The separate signup OTP proof axis does not authorize an HTTP phase regression.
+        Telephone OTP success retains the signed flow binding into the guard checkpoint.
+        Durable account completion ends the sign-up flow.
+        The caller then enters ordinary sign-in admission.
+        IDs 70, 80 and 900 are historical tombstones.
+    end note

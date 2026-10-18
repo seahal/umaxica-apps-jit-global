@@ -10,7 +10,7 @@ class OrgOperatorLifecycleInvitationAcceptanceTest < ActiveSupport::TestCase
   setup do
     @invitation = OrganizationInvitation.create!(
       organization_id: 123,
-      email: "invitee@example.com",
+      email: "invitee-#{SecureRandom.hex(8)}@example.com",
       invited_by: operators(:one),
       role_id: 7,
     )
@@ -39,10 +39,10 @@ class OrgOperatorLifecycleInvitationAcceptanceTest < ActiveSupport::TestCase
     assert_predicate @invitation.reload, :consumed?
     assert_equal OperatorStatus::ACTIVE, @result.operator.status_id
     assert_equal OperatorVisibility::STAFF, @result.operator.visibility_id
-    assert_equal "invitee@example.com", @result.email.address
+    assert_equal @invitation.email, @result.email.address
     assert_equal OperatorEmailStatus::VERIFIED, @result.email.staff_email_status_id
     assert_predicate @result.email, :undeletable?
-    assert_predicate @result.operator.rp_account, :present?
+    assert_predicate OperatorAccount.find_by(staff_id: @result.operator.id), :present?
     assert_equal 1, OperatorIdentity.where(source_record_id: @result.operator.id).count
   end
 
@@ -96,7 +96,12 @@ class OrgOperatorLifecycleInvitationAcceptanceTest < ActiveSupport::TestCase
     assert_includes results.filter_map { |result| result[:error] }, "Invitation has already been used"
 
     assert_equal 1, OrganizationInvitation.where(id: invitation.id).where.not(consumed_at: nil).count
-    email_scope = OperatorEmail.where(address_digest: IdentifierBlindIndex.bidx_for_email(invitation.email))
+    email_scope = OperatorEmail.where(
+      address_digest: IdentifierBlindIndex.bidx_for_email(
+        invitation.email,
+        realm: :org,
+      ),
+    )
 
     assert_equal 1, email_scope.count
     operator_ids = email_scope.pluck(:staff_id)
@@ -205,7 +210,7 @@ class OrgOperatorLifecycleInvitationAcceptanceTest < ActiveSupport::TestCase
 
     threads =
       2.times.map do
-        Thread.new do # rubocop:disable ThreadSafety/NewThread
+        Thread.new do
           OrganizationInvitation.connection_pool.with_connection do
             ready << true
             release.pop

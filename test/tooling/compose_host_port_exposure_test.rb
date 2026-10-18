@@ -8,30 +8,32 @@ require "yaml"
 # A `ports:` entry with no host address makes Podman bind 0.0.0.0, which places a development
 # service on every host interface (LAN, Wi-Fi, Ethernet, Tailscale). This test reads the Compose
 # files as text rather than running `podman compose config`, so it needs no container engine and
-# runs in CI.
+# runs in CI. It is a contract test over committed configuration, not a test of environment
+# construction (.agents/harnesses/rules/project/no-environment-tests.mdc).
 class ComposeHostPortExposureTest < Minitest::Test
   REPOSITORY_ROOT = File.expand_path("../..", __dir__)
 
-  # Every tracked Compose file that participates in a development `up`, plus the opt-in
-  # overlays. `.devcontainer/compose.yaml` defines `core`, whose publications the
-  # Dev Container relies on, so it belongs here too. The gitignored `compose.override.yaml` is
-  # deliberately absent: it is optional, per-machine, and not present on a fresh clone.
+  # Every tracked Compose file that participates in a development `up`. The gitignored
+  # `compose.override.yaml` is deliberately absent: it is optional, per-machine, and not present
+  # on a fresh clone.
   COMPOSE_FILES = %w(
     compose.yaml
     .devcontainer/compose.yaml
-    compose.override.yaml.example
-    compose.remote-access.yaml
-    .devcontainer/compose.yaml
-    podman/fdw-poc/compose.fdw-poc.yml
-    docker/fdw-poc/compose.fdw-poc.yml
   ).freeze
 
   # Services that must never be reachable from the host, at any bind address. Each is consumed
-  # only over a Compose network, by service name.
-  DATASTORE_SERVICES = %w(primary replica valkey-cache valkey-rate-limit).freeze
+  # only over a Compose network, by service name. Tempo, Prometheus and Loki are backends of the
+  # Alloy gateway: Grafana queries them over `observability`, and nothing on the host dials them.
+  CONTAINER_ONLY_SERVICES = %w(tempo prometheus loki).freeze
 
   # An IPv4 or IPv6 loopback host address is the only accepted publication target.
   LOOPBACK_HOST_ADDRESSES = ["127.0.0.1", "::1"].freeze
+
+  # The two host-visible observability listeners, and the only ones. Grafana is a browser UI for
+  # the development machine itself; Alloy's 4318 is the OTLP/HTTP ingress that host-native Rails
+  # exports to. Alloy's management UI (12345) and OTLP/gRPC (4317) stay container-only.
+  GRAFANA_DEFAULT_HOST_PORT = "13000"
+  ALLOY_OTLP_HTTP_DEFAULT_HOST_PORT = "4318"
 
   def test_every_published_port_binds_loopback
     offenders = each_published_port.reject { |entry| loopback?(entry.fetch(:published)) }
@@ -42,14 +44,45 @@ class ComposeHostPortExposureTest < Minitest::Test
                  "service to the LAN."
   end
 
-  def test_datastore_publications_are_loopback_only
+  def test_backend_observability_services_have_no_host_publication
     offenders =
-      each_published_port.select do |entry|
-        DATASTORE_SERVICES.include?(entry.fetch(:service)) && !loopback?(entry.fetch(:published))
-      end
+      each_published_port.select { |entry| CONTAINER_ONLY_SERVICES.include?(entry.fetch(:service)) }
 
     assert_empty offenders.map { |entry| describe(entry) },
-                 "Host-native Rails may use PostgreSQL and Valkey only through explicit loopback publications."
+                 "Tempo, Prometheus and Loki are reached only by Alloy and Grafana over the " \
+                 "`observability` network. Publishing one to the host adds an ingestion path " \
+                 "that bypasses the single Alloy gateway."
+  end
+
+  def test_grafana_publishes_only_loopback_13000
+    entries = published_ports_for("grafana")
+
+    assert_equal 1, entries.length, "Grafana publishes exactly one host port; found #{entries.inspect}"
+
+    entry = entries.first
+
+    assert_equal "127.0.0.1", entry.fetch(:published),
+                 "The Grafana UI is for the development machine only and must not reach the LAN, " \
+                 "Cloudflare, or Tailscale."
+    assert_equal GRAFANA_DEFAULT_HOST_PORT, default_host_port(entry),
+                 "Host 3000/3001 belong to host-native and Dev Container Rails; Grafana takes 13000."
+    assert_equal "3000", container_port(entry), "Grafana's container port stays the upstream default."
+  end
+
+  def test_alloy_publishes_only_the_loopback_otlp_http_receiver
+    entries = published_ports_for("alloy")
+
+    assert_equal 1, entries.length, "Alloy publishes exactly one host port; found #{entries.inspect}"
+
+    entry = entries.first
+
+    assert_equal "127.0.0.1", entry.fetch(:published),
+                 "The OTLP ingress accepts host-native Rails only; a LAN-reachable receiver would " \
+                 "accept telemetry from any machine on the network."
+    assert_equal ALLOY_OTLP_HTTP_DEFAULT_HOST_PORT, default_host_port(entry)
+    assert_equal "4318", container_port(entry),
+                 "Only OTLP/HTTP is published. The management UI (12345) and OTLP/gRPC (4317) " \
+                 "stay on the `observability` network."
   end
 
   def test_no_service_uses_host_networking
@@ -64,10 +97,10 @@ class ComposeHostPortExposureTest < Minitest::Test
   end
 
   # fakecloud is the one AWS-facing service that is published, and only to loopback so OpenTofu
-  # and the AWS CLI can run from the host. It must never gain a container socket mount: that
+  # and the AWS CLI can run from the host. No service may gain a container socket mount: that
   # would hand it full container-management rights under the invoking user, which is a far
-  # larger grant than any port publication. See docs/operations/local-aws-fakecloud.md.
-  def test_fakecloud_mounts_no_container_socket
+  # larger grant than any port publication.
+  def test_no_service_mounts_a_container_socket
     offenders =
       each_service.flat_map do |file, service, definition|
         Array(definition["volumes"]).filter_map do |mount|
@@ -76,10 +109,7 @@ class ComposeHostPortExposureTest < Minitest::Test
         end
       end
 
-    assert_empty offenders,
-                 "No Compose service may mount a container runtime socket. fakecloud serves the " \
-                 "MSK control plane without one; handing it a socket to gain a real Kafka broker " \
-                 "would grant it the invoking user's full container-management rights."
+    assert_empty offenders, "No Compose service may mount a container runtime socket."
   end
 
   private
@@ -99,6 +129,10 @@ class ComposeHostPortExposureTest < Minitest::Test
     end
   end
 
+  def published_ports_for(service)
+    each_published_port.select { |entry| entry.fetch(:service) == service }
+  end
+
   # Compose accepts both the short string form ("127.0.0.1:3000:3000") and the long mapping form
   # ({"target" => 3000, "published" => "3000", "host_ip" => "127.0.0.1"}). Anything this method
   # cannot resolve to a host address is reported rather than assumed safe.
@@ -110,6 +144,28 @@ class ComposeHostPortExposureTest < Minitest::Test
 
     segments = text.split(":")
     (segments.length >= 3) ? segments.first : ""
+  end
+
+  # The host side of a mapping, with any `${VAR:-default}` resolved to its default. The default is
+  # what a fresh clone gets, so it is the value this contract pins.
+  def default_host_port(entry)
+    port = entry.fetch(:entry)
+    return interpolate(port["published"].to_s) if port.is_a?(Hash)
+
+    # Interpolate first: `${GRAFANA_HOST_PORT:-13000}` carries a colon of its own,
+    # so splitting the raw string cuts the mapping in the wrong place.
+    interpolate(port.to_s).split(":")[-2].to_s
+  end
+
+  def container_port(entry)
+    port = entry.fetch(:entry)
+    return port["target"].to_s if port.is_a?(Hash)
+
+    interpolate(port.to_s).split(":").last
+  end
+
+  def interpolate(text)
+    text.gsub(/\$\{[A-Z0-9_]+:-([^}]*)\}/, '\1')
   end
 
   def loopback?(address)

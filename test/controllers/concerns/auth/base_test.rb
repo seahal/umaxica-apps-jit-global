@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable I18n/RailsI18n/DecorateString
-
 require "test_helper"
 # require "helpers/global_test_support"
 
@@ -30,7 +28,10 @@ module Auth
 
       include AuthenticationBase
 
-      attr_accessor :actor_type, :checkpoint_participant, :dashboard_participant
+      include SessionLimitGate
+
+      attr_accessor :actor_type, :checkpoint_participant, :dashboard_participant,
+                    :oidc_authorization_login_challenge
       attr_writer :resource, :logged_in, :current_session_record, :allowed_policy
 
       def resource_type
@@ -131,7 +132,27 @@ module Auth
         :app
       end
 
-      def sign_app_dashboard_path(ri: nil, pt: nil)
+      # The harness stands in for an app sign-in controller. Its class name carries no surface
+      # namespace, so it declares the surface a real Auth::App controller resolves from its name.
+      def sign_in_surface
+        :app
+      end
+
+      # Relative like the other route stubs here, so the harness never needs a Jump issuer.
+      def base_app_welcome_url(host:, protocol:, **attrs)
+        _ = [host, protocol]
+        query = attrs.compact.to_query
+        "/welcome#{"?#{query}" if query.present?}"
+      end
+
+      # Relative like the other route stubs here, so the harness never needs a Jump issuer.
+      def base_app_dashboard_url(host:, protocol:, **attrs)
+        _ = [host, protocol]
+        query = attrs.compact.to_query
+        "/dashboard#{"?#{query}" if query.present?}"
+      end
+
+      def auth_app_root_path(ri: nil, pt: nil)
         path = "/dashboard"
         query = []
         query << "ri=#{ri}" if ri.present?
@@ -151,11 +172,12 @@ module Auth
         ri.present? ? "/settings?ri=#{ri}" : "/settings"
       end
 
-      def auth_app_sign_in_check_path(ri: nil, pt: nil)
+      def auth_app_sign_in_check_path(ri: nil, pt: nil, fb: nil)
         path = "/sign/in/check"
         query = []
         query << "ri=#{ri}" if ri.present?
         query << "pt=#{pt}" if pt.present?
+        query << "fb=#{fb}" if fb.present?
         query.any? ? "#{path}?#{query.join("&")}" : path
       end
 
@@ -169,16 +191,18 @@ module Auth
         @allowed_policy
       end
 
+      def authorize!(_record, to:)
+        raise ActionPolicy::Unauthorized unless allowed_to?(to)
+
+        true
+      end
+
       def sign_in_checkpoint_participant(cycle)
         checkpoint_participant || super
       end
 
       def sign_in_dashboard_participant(cycle)
         dashboard_participant || super
-      end
-
-      def jump_to_generated_url(url, fallback:)
-        @jumped = [url, fallback]
       end
 
       def jumped
@@ -201,7 +225,7 @@ module Auth
           SignInParticipantResult.new(
             participant: :checkpoint,
             stack: [SignInParticipantItem.new(key: :blocked_for_test, blocking: true, cleared: false)],
-            next_status: "DASHBOARD_PENDING",
+            next_status: "SELECTOR_PENDING",
           )
         end
       end
@@ -247,55 +271,20 @@ module Auth
       assert_equal %w(client operator visitor), AuthenticationBase::VALID_ACTOR_TYPES
     end
 
-    test "Token.extract_act returns nil for nil payload" do
-      assert_nil AuthenticationToken.extract_act(nil)
-    end
-
-    test "begin_sign_in_sequence stores only safe encoded return paths" do
-      harness = HeaderKeyHarness.new
-      harness.resource = ResourceStub.new(42)
-      Actor.tld = :app
-      Actor.install_context!(authn: Actor::Authentication.new(amr: ["email_otp"]))
-
-      unsafe_result = harness.send(
-        :begin_sign_in_sequence!,
-        pt: "https://evil.example/phish",
-        checkpoint_required: true,
-      )
-
-      assert_equal :success, unsafe_result.status
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("pt")
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("safe_return_path")
-
-      safe_result = harness.send(:begin_sign_in_sequence!, pt: "/settings", checkpoint_required: true)
-
-      assert_equal :success, safe_result.status
-      stored_rt = harness.session.fetch(:app_sign_in_sequence).fetch("pt")
-      stored_safe_return_path = harness.session.fetch(:app_sign_in_sequence).fetch("safe_return_path")
-
-      assert_equal "/settings", harness.path_from_signed_pt(stored_rt)
-      assert_equal "/settings", harness.path_from_signed_pt(stored_safe_return_path)
-
-      welcome_rt = "/welcome?ri=jp"
-      welcome_result = harness.send(:begin_sign_in_sequence!, pt: welcome_rt, checkpoint_required: true)
-
-      assert_equal :success, welcome_result.status
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("pt")
-      assert_nil harness.session.fetch(:app_sign_in_sequence).fetch("safe_return_path")
-    ensure
-      Actor.reset
+    test "Token.extract_resource_type returns nil for nil payload" do
+      assert_nil AuthenticationToken.extract_resource_type(nil)
     end
 
     test "checkpoint continuation uses db-backed sign-in cycle when locator is present" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
       harness.send(:continue_checkpoint_sequence_without_content!)
 
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
       redirected = URI.parse(harness.redirected.first)
 
       assert_equal "/welcome", redirected.path
@@ -307,7 +296,7 @@ module Auth
     test "checkpoint continuation advances db-backed cycle while request is readonly" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -315,32 +304,32 @@ module Auth
         harness.send(:continue_checkpoint_sequence_without_content!)
       end
 
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
       assert_equal "/welcome", URI.parse(harness.redirected.first).path
     end
 
     test "checkpoint continuation can carry dashboard as pt" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
-      cycle.update!(return_to: "/dashboard?ri=jp")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
+      cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
       harness.send(:continue_checkpoint_sequence_without_content!)
 
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
       redirected = URI.parse(harness.redirected.first)
 
       assert_equal "/welcome", redirected.path
-      assert_equal "/dashboard?ri=jp",
+      assert_equal "/?ri=jp",
                    harness.path_from_signed_pt(Rack::Utils.parse_query(redirected.query).fetch("pt"))
     end
 
     test "checkpoint continuation keeps blocking db-backed cycle at checkpoint" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       harness.checkpoint_participant = BlockingParticipant.new(cycle)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -352,31 +341,28 @@ module Auth
       assert_predicate cycle.reload, :sign_in_checkpoint_pending?
     end
 
-    test "dashboard continuation consumes db-backed return path before rendering welcome page" do
+    test "completed continuation redirects through the stored return path without rewriting it" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
-      harness = db_sequence_harness(user, token)
-      SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
-      harness.send(:issue_welcome_gate_and_path, pt: "/after", sequence_id: cycle.public_id)
+      cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
+      cycle.update!(return_to: "/after")
+      before = cycle.reload.attributes
+      root_before = token.reload.attributes
 
-      harness.send(:continue_dashboard_sequence_without_content!)
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
 
-      assert_nil harness.redirected
-      assert_equal "/after", harness.instance_variable_get(:@welcome_next_path)
-      assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
-      assert_nil harness.session[:app_sign_in_welcome]
-      assert_nil harness.session[:app_sign_in_flow_locator]
+      assert_equal "/after", decision.target
+      assert_equal :signed_return, decision.kind
+      assert_equal before, cycle.reload.attributes
+      assert_equal root_before, token.reload.attributes
     end
 
-    test "dashboard continuation binds current session before dashboard policy" do
+    test "selector continuation redirects without issuing or binding a Root session" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
       cycle = ClientSignInFlow.create!(
         principal_id: user.id,
-        status_id: ClientSignInFlow.status_id_for("DASHBOARD_PENDING"),
-        step: "dashboard",
+        state_id: ClientSignInFlow.state_id_for("SELECTOR_PENDING"),
         return_to: "/after",
         nonce_digest: ClientSignInFlow.digest_nonce("nonce"),
         issued_at: Time.current,
@@ -388,50 +374,48 @@ module Auth
 
       harness.send(:continue_dashboard_sequence_without_content!)
 
-      assert_nil harness.redirected
-      assert_equal token.id, cycle.reload.token_id
-      assert_predicate cycle, :sign_in_completed?
-      assert_equal "/after", harness.instance_variable_get(:@welcome_next_path)
+      assert_equal "/selector", URI.parse(harness.redirected.first).path
+      assert_nil cycle.reload.token_id
+      assert_predicate cycle, :sign_in_selector_pending?
+      assert_equal "/after", cycle.return_to
     end
 
     test "dashboard continuation falls back when persisted return path points to dashboard" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
-      cycle.update!(return_to: "/dashboard?ri=jp")
-      harness = db_sequence_harness(user, token)
-      SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
-      harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
+      cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
+      cycle.update!(return_to: "/?ri=jp")
+      before = cycle.reload.attributes
+      root_before = token.reload.attributes
 
-      harness.send(:continue_dashboard_sequence_without_content!)
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
 
-      assert_nil harness.redirected
-      assert_equal "/dashboard?ri=jp", harness.instance_variable_get(:@welcome_next_path)
-      assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
+      assert_equal "/?ri=jp", decision.target
+      assert_equal :signed_return, decision.kind
+      assert_equal before, cycle.reload.attributes
+      assert_equal root_before, token.reload.attributes
     end
 
-    test "dashboard continuation falls back when resolved return path is welcome" do
+    test "completed continuation preserves a validated stored welcome return path" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
       cycle.update!(return_to: "/welcome?ri=jp")
-      harness = db_sequence_harness(user, token)
-      SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
-      harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
+      before = cycle.reload.attributes
+      root_before = token.reload.attributes
 
-      harness.send(:continue_dashboard_sequence_without_content!)
+      decision = PostAuthenticationRoutingResolver.call(flow: cycle, default_path: "/dashboard")
 
-      assert_nil harness.redirected
-      assert_equal "/dashboard", harness.instance_variable_get(:@welcome_next_path)
-      assert_predicate cycle.reload, :sign_in_completed?
-      assert_nil cycle.return_to
+      assert_equal "/welcome?ri=jp", decision.target
+      assert_equal :signed_return, decision.kind
+      assert_equal before, cycle.reload.attributes
+      assert_equal root_before, token.reload.attributes
     end
 
     test "dashboard continuation redirects checkpoint-pending cycle back to checkpoint" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING", step: "checkpoint")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
@@ -445,33 +429,33 @@ module Auth
       assert_predicate cycle.reload, :sign_in_checkpoint_pending?
     end
 
-    test "dashboard continuation requires dashboard policy before advancing" do
+    test "checkpoint continuation requires checkpoint policy before advancing" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
-      harness.allowed_policy = { show_dashboard?: false }
+      harness.allowed_policy = { show_checkpoint?: false }
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
       harness.send(:issue_welcome_gate_and_path, pt: cycle.return_to, sequence_id: cycle.public_id)
 
-      assert_not harness.send(:continue_dashboard_sequence_without_content!)
+      assert_not harness.send(:continue_checkpoint_sequence_without_content!)
 
       assert_equal({ plain: I18n.t("errors.messages.not_authorized"), status: :bad_request }, harness.rendered)
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_checkpoint_pending?
       assert_equal "/after", cycle.return_to
     end
 
     test "db-backed sequence rejects wrong participant without advancing" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)
-      cycle = db_sign_in_flow(user, token, status_name: "DASHBOARD_PENDING", step: "dashboard")
+      cycle = db_sign_in_flow(user, token, status_name: "SELECTOR_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
 
       assert_not harness.send(:continue_checkpoint_sequence_without_content!)
 
       assert_equal({ plain: I18n.t("errors.messages.not_authorized"), status: :bad_request }, harness.rendered)
-      assert_predicate cycle.reload, :sign_in_dashboard_pending?
+      assert_predicate cycle.reload, :sign_in_selector_pending?
     end
 
     test "checkpoint sequence participant rejects stale bulletin without sequence state" do
@@ -491,10 +475,6 @@ module Auth
       )
 
       assert_equal({ plain: I18n.t("errors.messages.not_authorized"), status: :bad_request }, harness.rendered)
-    end
-
-    test "Token.extract_type returns nil for nil payload" do
-      assert_nil AuthenticationToken.extract_type(nil)
     end
 
     test "Token.extract_session_id returns nil for nil payload" do
@@ -529,44 +509,6 @@ module Auth
 
     test "SkipNotAllowedError is a StandardError" do
       assert_operator AuthenticationBase::SkipNotAllowedError, :<, StandardError
-    end
-
-    test "request guard helpers render or redirect when already logged in" do
-      harness = HeaderKeyHarness.new
-      harness.logged_in = true
-
-      harness.ensure_not_logged_in
-
-      assert_equal "この操作を行う権限がありません。", harness.rendered[:plain]
-      assert_equal :unauthorized, harness.rendered[:status]
-
-      harness.ensure_not_logged_in(message_key: "auth.denied")
-
-      assert_equal "translated:auth.denied", harness.rendered[:plain]
-
-      assert harness.reject_if_logged_in("auth.bad_request")
-      assert_equal "translated:auth.bad_request", harness.rendered[:plain]
-      assert_equal :bad_request, harness.rendered[:status]
-
-      harness.json_request!
-      harness.ensure_not_logged_in_for_registration(redirect_path: "/dashboard", message_key: "auth.denied")
-
-      assert_equal :unauthorized, harness.rendered[:status]
-
-      harness.html_request!
-      harness.ensure_not_logged_in_for_registration(redirect_path: "/dashboard", message_key: "auth.denied")
-
-      assert_equal ["/dashboard", { alert: "translated:auth.denied" }], harness.redirected
-    end
-
-    test "request guard helpers no-op when not logged in" do
-      harness = HeaderKeyHarness.new
-
-      assert_nil harness.ensure_not_logged_in
-      assert_not harness.reject_if_logged_in("auth.bad_request")
-      assert_nil harness.ensure_not_logged_in_for_registration
-      assert_nil harness.rendered
-      assert_nil harness.redirected
     end
 
     test "redirect parameter helpers preserve peek retrieve and build params" do
@@ -611,10 +553,8 @@ module Auth
       assert_equal ["/default", {}], harness.redirected
     end
 
-    test "JwtConfiguration.issuer respects resource_type" do
-      assert_equal "urn:umaxica:test:auth:client", AuthenticationJwtConfiguration.issuer("client")
-      assert_equal "urn:umaxica:test:auth:operator", AuthenticationJwtConfiguration.issuer("operator")
-      assert_equal "urn:umaxica:test:auth", AuthenticationJwtConfiguration.issuer("invalid")
+    test "JwtConfiguration.issuer is the test-environment authorization-server identity" do
+      assert_equal "urn:umaxica:test:auth", AuthenticationJwtConfiguration.issuer
     end
 
     test "JwtConfiguration.audiences requires distinct resource-specific env" do
@@ -642,12 +582,6 @@ module Auth
       ) do
         assert_raises(ArgumentError) { AuthenticationJwtConfiguration.audiences("client") }
       end
-    end
-
-    test "JwtConfiguration.token_type returns correct format" do
-      assert_equal "auth-access-token;client", AuthenticationJwtConfiguration.token_type("client")
-      assert_equal "auth-access-token;operator", AuthenticationJwtConfiguration.token_type("operator")
-      assert_raises(ArgumentError) { AuthenticationJwtConfiguration.token_type("invalid") }
     end
 
     private
@@ -679,12 +613,12 @@ module Auth
       end
     end
 
-    def db_sign_in_flow(user, token, status_name:, step:)
+    def db_sign_in_flow(user, token, status_name:)
       ClientSignInFlow.create!(
         principal_id: user.id,
         token: token,
-        status_id: ClientSignInFlow.status_id_for(status_name),
-        step: step,
+        state_id: ClientSignInFlow.state_id_for(status_name),
+        completed_at: (status_name == "COMPLETED") ? ClientSignInFlow.database_now : nil,
         return_to: "/after",
         nonce_digest: ClientSignInFlow.digest_nonce("nonce"),
         issued_at: Time.current,
@@ -701,8 +635,6 @@ module Auth
     end
   end
 end
-
-# rubocop:enable I18n/RailsI18n/DecorateString
 
 # DAMP local route helper aliases for former shared test support.
 class Auth::BaseTest

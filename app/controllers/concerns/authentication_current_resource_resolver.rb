@@ -18,7 +18,7 @@ class AuthenticationCurrentResourceResolver
 
   def initialize(access_token:, request_host:, resource_type:, resource_class:, token_class:,
                  authorization_scheme: nil, dpop_proof: nil, request_method: nil, request_uri: nil,
-                 jwt_issuer_id: nil)
+                 jwt_issuer_id: nil, track_session_activity: true)
     @access_token = access_token
     @request_host = request_host
     @resource_type = resource_type
@@ -29,6 +29,7 @@ class AuthenticationCurrentResourceResolver
     @request_method = request_method
     @request_uri = request_uri
     @jwt_issuer_id = jwt_issuer_id
+    @track_session_activity = track_session_activity
   end
 
   def call
@@ -53,7 +54,7 @@ class AuthenticationCurrentResourceResolver
     end
     return failure(:dpop_verification_failed, payload: payload) unless dpop_valid?(payload)
 
-    unless AuthenticationToken.validate_actor_claim!(payload, @resource_type)
+    unless AuthenticationToken.resource_type_scope_matches?(payload, @resource_type)
       return failure(:actor_mismatch, payload: payload)
     end
 
@@ -62,6 +63,7 @@ class AuthenticationCurrentResourceResolver
 
     token_record = token_record_for_session_identifier(sid)
     return failure(:token_session_not_found, payload: payload) unless token_record
+    return failure(:token_session_not_found, payload: payload) if bound_device_session_unusable?(token_record)
     return failure(:dpop_binding_mismatch, payload: payload) unless token_dpop_binding_current?(token_record, payload)
     return failure(:token_jti_mismatch, payload: payload) unless token_jti_current?(token_record, payload)
 
@@ -86,6 +88,7 @@ class AuthenticationCurrentResourceResolver
   # write to the session row on every hit. update_columns keeps this off the
   # validation/callback path; the write uses the primary (writing) connection.
   def touch_session_activity!(token_record)
+    return unless @track_session_activity
     return unless token_record.respond_to?(:has_attribute?) && token_record.has_attribute?(:last_used_at)
 
     now = Time.current
@@ -126,13 +129,10 @@ class AuthenticationCurrentResourceResolver
   def token_record_for_session_identifier(session_identifier)
     check_logic =
       lambda do
-        base_scope =
-          if @token_class.respond_to?(:currently_usable_at)
-            @token_class.currently_usable_at
-          else
-            @token_class.where(nil)
-          end
-        usable_tokens = base_scope.includes(:device_session)
+        # Only an ACTIVE, unexpired session authenticates. RESTRICTED (the
+        # retired session-limit placeholder), EXPIRED, REVOKED, and unknown
+        # statuses are not a weaker login; they are no login.
+        usable_tokens = @token_class.active_status.includes(:device_session)
         device_session = token_column?("device_session_id") ? device_session_for(session_identifier) : nil
         if device_session
           token = usable_tokens.where(device_session_id: device_session.id).order(created_at: :desc).first
@@ -183,6 +183,13 @@ class AuthenticationCurrentResourceResolver
     token_record.public_send(attribute)
   end
 
+  def bound_device_session_unusable?(token_record)
+    return false if token_record_attribute(token_record, :device_session_id).blank?
+
+    session = token_record.try(:device_session)
+    session.blank? || session.status_id != DeviceSessionable::STATUS_ACTIVE || session.revoked_at.present?
+  end
+
   def token_column?(column_name)
     return false unless @token_class.respond_to?(:column_names)
 
@@ -212,7 +219,7 @@ class AuthenticationCurrentResourceResolver
 
   def token_connection_owner
     klass = @token_class
-    return OrgTicketRecord unless klass.respond_to?(:connection_class?)
+    return OpBaseOrgRecord unless klass.respond_to?(:connection_class?)
 
     klass = klass.superclass until klass.connection_class?
     klass
@@ -220,41 +227,20 @@ class AuthenticationCurrentResourceResolver
 
   def resolve_and_build_result!(token_record, payload, sid)
     if session_idle_expired?(token_record)
-      return failure(
-        :idle_timeout, payload: payload,
-                       session_public_id: current_session_public_id(token_record, sid),
-      )
+      return resource_failure(:idle_timeout, payload, token_record, sid, include_token: false)
     end
 
-    resource =
-      ActiveRecord::Base.connected_to(role: :writing) do
-        @resource_class.find_by(id: AuthenticationToken.extract_subject(payload))
-      end
-    return failure(
-      :resource_not_found, payload: payload,
-                           session_public_id: current_session_public_id(token_record, sid),
-                           token_public_id: token_record_public_id(token_record),
-    ) if resource.blank?
+    resource = find_resource_from_payload(payload)
+    return resource_failure(:resource_not_found, payload, token_record, sid) if resource.blank?
+    return failure(:actor_mismatch, payload: payload) unless token_actor_matches?(token_record, resource)
     if withdrawal_required?(resource)
-      return failure(
-        :withdrawal_required, payload: payload,
-                              session_public_id: current_session_public_id(token_record, sid),
-                              token_public_id: token_record_public_id(token_record),
-      )
+      return resource_failure(:withdrawal_required, payload, token_record, sid)
     end
     if administratively_locked?(resource)
-      return failure(
-        :administrative_access_locked, payload: payload,
-                                       session_public_id: current_session_public_id(token_record, sid),
-                                       token_public_id: token_record_public_id(token_record),
-      )
+      return resource_failure(:administrative_access_locked, payload, token_record, sid)
     end
     if token_stale_for_administrative_lock?(resource, payload)
-      return failure(
-        :administrative_access_token_stale, payload: payload,
-                                            session_public_id: current_session_public_id(token_record, sid),
-                                            token_public_id: token_record_public_id(token_record),
-      )
+      return resource_failure(:administrative_access_token_stale, payload, token_record, sid)
     end
 
     touch_session_activity!(token_record)
@@ -265,6 +251,45 @@ class AuthenticationCurrentResourceResolver
       token_public_id: token_record_public_id(token_record),
       payload: payload,
       failure_reason: nil,
+    )
+  end
+
+  def find_resource_from_payload(payload)
+    ActiveRecord::Base.connected_to(role: :writing) do
+      subject = AuthenticationToken.extract_subject(payload)
+      next unless subject.is_a?(String)
+      next unless subject.match?(/\A\d+\z/)
+
+      @resource_class.find_by(id: Integer(subject, 10))
+    end
+  end
+
+  def token_actor_matches?(token_record, resource)
+    token_actor_id =
+      case @resource_type.to_s
+      when "client" then token_record_attribute(token_record, :user_id)
+      when "visitor" then token_record_attribute(token_record, :visitor_id)
+      when "operator" then token_record_attribute(token_record, :staff_id)
+      else raise FlowConfigurationError, "unsupported authentication resource type"
+      end
+    return false unless token_actor_id == resource.id
+    return true if token_record_attribute(token_record, :device_session_id).blank?
+
+    device_session = token_record.device_session_record
+    case [@resource_type.to_s, device_session]
+    in ["client", ClientDeviceSession] then device_session.user_id == resource.id
+    in ["visitor", VisitorDeviceSession] then device_session.visitor_id == resource.id
+    in ["operator", OperatorDeviceSession] then device_session.staff_id == resource.id
+    else false
+    end
+  end
+
+  def resource_failure(reason, payload, token_record, sid, include_token: true)
+    failure(
+      reason,
+      payload: payload,
+      session_public_id: current_session_public_id(token_record, sid),
+      token_public_id: include_token ? token_record_public_id(token_record) : nil,
     )
   end
 

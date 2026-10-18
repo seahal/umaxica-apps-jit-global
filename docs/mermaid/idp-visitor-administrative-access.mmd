@@ -1,0 +1,9 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "enabled" as enabled
+    state "admin_locked" as admin_locked
+    [*] --> enabled
+    enabled --> enabled: unlock!
+    enabled --> admin_locked: lock!
+    admin_locked --> enabled: unlock!
+    admin_locked --> admin_locked: lock!

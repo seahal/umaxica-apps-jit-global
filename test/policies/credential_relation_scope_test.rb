@@ -12,7 +12,7 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
 
   CLIENT_SCOPED = {
     ClientPasskeyPolicy => [ClientPasskey, :user_id],
-    ClientSecretCredentialPolicy => [ClientSecretCredential, :user_id],
+    ClientSecretCredentialPolicy => [ClientSecretCredential, :client_id],
     ClientTotpCredentialPolicy => [ClientTotpCredential, :user_id],
   }.freeze
 
@@ -32,25 +32,15 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
     end
 
     test "#{policy_class} scopes the list to the actor's own #{foreign_key}" do
-      actor = Struct.new(:id).new(4_242)
+      actor =
+        case model.name
+        when /\AClient/ then clients(:one)
+        when /\AOperator/ then operators(:one)
+        when /\AVisitor/ then Visitor.create!(status_id: VisitorStatus::ACTIVE)
+        end
 
       assert_includes scoped(policy_class, model.all, user: actor).to_sql, foreign_key.to_s
-      assert_includes scoped(policy_class, model.all, user: actor).to_sql, "4242"
+      assert_includes scoped(policy_class, model.all, user: actor).to_sql, actor.id.to_s
     end
-  end
-
-  # The avatar scope is narrower still: it is not merely "has an actor" but
-  # "is a Client", because the other surfaces reach avatars through a different
-  # assignment table entirely.
-  test "the avatar scope lists nothing for an actor that is not a client" do
-    assert_empty scoped(AvatarPolicy, Avatar.all, user: nil).to_a
-    assert_empty scoped(AvatarPolicy, Avatar.all, user: operators(:one)).to_a
-  end
-
-  test "the avatar scope reaches a client's avatars through their own assignments" do
-    sql = scoped(AvatarPolicy, Avatar.all, user: clients(:one)).to_sql
-
-    assert_includes sql, "avatar_assignments"
-    assert_includes sql, clients(:one).id.to_s
   end
 end

@@ -71,7 +71,7 @@ class AuthStaffTest < ActiveSupport::TestCase
         super(key, actual_value)
         @options[key] = opts
       else
-        super(key, value)
+        super
       end
     end
 
@@ -97,7 +97,7 @@ class AuthStaffTest < ActiveSupport::TestCase
   test "log_in sets access token in cookie" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @staff)
+    @obj.send(:log_in, @staff, establishment: :root_login)
 
     assert @obj.cookies[::AuthenticationOperator::ACCESS_COOKIE_KEY]
     assert_predicate @obj, :logged_in?
@@ -107,7 +107,7 @@ class AuthStaffTest < ActiveSupport::TestCase
   test "log_in sets cookie expirations" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @staff)
+    @obj.send(:log_in, @staff, establishment: :root_login)
 
     access_opts = @obj.cookies.options_for(::AuthenticationOperator::ACCESS_COOKIE_KEY)
     refresh_opts = @obj.cookies.options_for(::AuthenticationOperator::REFRESH_COOKIE_KEY)
@@ -121,7 +121,7 @@ class AuthStaffTest < ActiveSupport::TestCase
   test "log_out clears session and current_operator" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @staff)
+    @obj.send(:log_in, @staff, establishment: :root_login)
     @obj.send(:log_out)
 
     assert_not_predicate @obj, :logged_in?
@@ -130,7 +130,7 @@ class AuthStaffTest < ActiveSupport::TestCase
 
   test "log_out revokes refresh token and removes cookies" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
-    @obj.send(:log_in, @staff)
+    @obj.send(:log_in, @staff, establishment: :root_login)
 
     assert_no_difference("OperatorToken.count") { @obj.send(:log_out) }
     assert_nil @obj.cookies[::AuthenticationOperator::ACCESS_COOKIE_KEY]
@@ -141,7 +141,7 @@ class AuthStaffTest < ActiveSupport::TestCase
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
     @obj.request.host = "id.org.localhost"
 
-    @obj.send(:log_in, @staff)
+    @obj.send(:log_in, @staff, establishment: :root_login)
 
     assert_not @obj.cookies.options_for(::AuthenticationOperator::ACCESS_COOKIE_KEY).key?(:domain)
     assert_not @obj.cookies.options_for(::AuthenticationOperator::REFRESH_COOKIE_KEY).key?(:domain)
@@ -151,7 +151,7 @@ class AuthStaffTest < ActiveSupport::TestCase
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
     freeze_time do
-      tokens = @obj.send(:log_in, @staff)
+      tokens = @obj.send(:log_in, @staff, establishment: :root_login)
 
       assert_kind_of Hash, tokens
       assert tokens[:access_token]
@@ -165,32 +165,12 @@ class AuthStaffTest < ActiveSupport::TestCase
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
     freeze_time do
-      @obj.send(:log_in, @staff)
+      @obj.send(:log_in, @staff, establishment: :root_login)
       token = OperatorToken.where(staff_id: @staff.id).order(created_at: :desc).first
 
-      assert_in_delta 8.hours.from_now.to_i, token.discarded_at.to_i, 1
-      assert_in_delta 32.hours.from_now.to_i, token.purged_at.to_i, 1
+      assert_in_delta 8.hours.from_now.to_i, token.discard_at.to_i, 1
+      assert_in_delta 32.hours.from_now.to_i, token.purge_eligible_at.to_i, 1
     end
-  end
-
-  test "current_operator works with Bearer token" do
-    @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
-
-    token_record =
-      OrgTicketRecord.connected_to(role: :writing) do
-        OperatorToken.create!(staff: @staff)
-      end
-
-    # Generate access token using AuthenticationToken
-    access_token = AuthenticationToken.encode(
-      @staff,
-      host: @obj.request.host,
-      session_public_id: token_record.public_id,
-      resource_type: "operator",
-    )
-    @obj.request.headers["Authorization"] = "Bearer #{access_token}"
-
-    assert_equal @staff.id, @obj.current_operator.id
   end
 end
 

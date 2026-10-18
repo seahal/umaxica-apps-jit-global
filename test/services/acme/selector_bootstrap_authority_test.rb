@@ -5,6 +5,8 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
+  self.fixture_table_names = []
+
   setup do
     ensure_reference_rows!
   end
@@ -15,7 +17,7 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
 
     assert_difference -> { ClientAccount.count }, 1 do
       assert_difference -> { ClientIdentity.count }, 1 do
-        assert_difference -> { Persona.count }, 1 do
+        assert_difference -> { ClientPersona.count }, 1 do
           assert_difference -> { PersonaAssignment.count }, 1 do
             assert_difference -> { Enterprise.count }, 1 do
               assert_difference -> { Avatar.count }, 1 do
@@ -28,7 +30,7 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     end
 
     assert_no_difference -> {
-      ClientAccount.count + Persona.count + PersonaAssignment.count +
+      ClientAccount.count + ClientPersona.count + PersonaAssignment.count +
         Enterprise.count + Avatar.count
     } do
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
@@ -36,13 +38,41 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal "Persona01", result.account.title
     assert_equal "Org01", result.collective.title
     assert_equal 1, AvatarPersonaBinding.where(persona_id: result.account.id).count
-    assert_equal 1, AvatarAssignment.where(user_id: user.id, role: "owner").count
+    assert_equal 0, AvatarAssignment.where(user_id: user.id, role: "owner").count
+    assert_equal 1, AvatarOwnershipPeriod.current.where(avatar_id: result.avatar.id).count
     assert_equal 1, result.account.current_memberships.count
+    assert_equal user.id, result.account.reload.ownership.client_id
+    assert_equal "active", result.account.lifecycle.state
+    assert_equal user.id, result.collective.reload.ownership.client_id
+    assert_equal "active", result.collective.lifecycle.state
     assert_predicate result.avatar, :present?
     assert_equal "active", result.avatar.lifecycle_state.key
-    assert_equal user.id, result.avatar.client_id
+    assert_nil result.avatar.client_id
     assert_equal result.account, result.avatar.current_persona
     assert_equal result.avatar, result.account.current_avatar
+  end
+
+  test "post-cutover app bootstrap creates its default Avatar with concrete ownership only" do
+    user = create_client!
+
+    AvatarRecord.transaction(joinable: false) do
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      result = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+      avatar = result.avatar
+      period = avatar.enterprise_ownership_periods.current.sole
+
+      assert_predicate avatar, :persisted?
+      assert_equal 0, AvatarOwnershipPeriod.where(avatar_id: avatar.id).count
+      assert_equal result.collective.public_id, period.enterprise_public_id
+      assert_equal avatar.created_at, period.valid_from
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
   end
 
   test "app bootstrap delegates avatar creation to AvatarProvisioning Create" do
@@ -66,7 +96,8 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal user, observed_arguments.fetch(:actor)
     assert_equal :persona, observed_arguments.fetch(:subject_type)
     assert_equal "Default Avatar", observed_arguments.fetch(:avatar_params).fetch(:moniker)
-    assert_equal result.collective.public_id, observed_arguments.fetch(:organization_public_id)
+    assert_equal "app", observed_arguments.fetch(:owner_surface)
+    assert_equal result.collective.public_id, observed_arguments.fetch(:owner_collective_public_id)
   end
 
   test "app bootstrap leaves no partial avatar graph when provisioning fails" do
@@ -103,6 +134,14 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
     assert_equal "Agent01", org_result.account.title
     assert_equal "Org01", com_result.collective.title
     assert_equal "Org01", org_result.collective.title
+    assert_equal visitor.id, com_result.account.reload.ownership.visitor_id
+    assert_equal "active", com_result.account.lifecycle.state
+    assert_equal visitor.id, com_result.collective.reload.ownership.visitor_id
+    assert_equal "active", com_result.collective.lifecycle.state
+    assert_equal operator.id, org_result.account.reload.ownership.operator_id
+    assert_equal "active", org_result.account.lifecycle.state
+    assert_equal operator.id, org_result.collective.reload.ownership.operator_id
+    assert_equal "active", org_result.collective.lifecycle.state
     assert_nil com_result.avatar
     assert_nil org_result.avatar
     assert_equal 1, IndividualAssignment.count
@@ -124,6 +163,17 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
 
     assert_nil ClientIdentity.find_by(source_record_id: user.id)
     assert_nil ClientAccount.find_by(user_id: user.id)
+  end
+
+  test "rejects an ineligible new account after its authority family has cut over" do
+    ClientPersonaAuthorityCutover.create!(id: ClientPersonaAuthorityCutover::CUTOVER_ID)
+    user = Client.create!(status_id: ClientStatus::INACTIVE, visibility_id: ClientVisibility::USER)
+
+    assert_raises(BaseSelectorBootstrapAuthority::PostCutoverBootstrapRejected) do
+      BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
+    end
+
+    assert_nil ClientIdentity.find_by(source_record_id: user.id)
   end
 
   private

@@ -7,10 +7,12 @@
 module EnforcementRecoveryCeremonyFlow
   extend ActiveSupport::Concern
 
-  include CommonOtp
+  include EmailOtpResponseTiming
   include EmailValidation
 
   REENTRY_SESSION_KEY = :enforcement_recovery_reentry
+
+  public
 
   def new
     @email_record = identity_email_model.new
@@ -30,17 +32,23 @@ module EnforcementRecoveryCeremonyFlow
     normalized_address = validate_and_normalize_email(recovery_reentry_address)
     email = normalized_address.present? ? find_email_with_timing_protection(normalized_address) : nil
     subject = recovery_subject_from_email(email)
+    cancel_previous_recovery_reentry_otp
 
     if recovery_subject_eligible?(subject) && recovery_email_verified?(email) && !email.locked?
       && !otp_request_rate_limited?(email)
-      otp_code = generate_otp_for(email)
-      OtpAdapter.for(surface: recovery_surface, channel: :email).deliver(record: email, otp_code: otp_code)
+      browser_ref = SecureRandom.uuid
+      transaction = EmailReentryOtpIssuer.call(email: email, operation: "recovery", session_ref: browser_ref)
+    end
+
+    if transaction
       session[REENTRY_SESSION_KEY] = { "email_public_id" => email.public_id,
+                                       "otp_transaction_ref" => transaction.transaction_id,
+                                       "session_ref" => browser_ref,
                                        "dummy" => false,
-                                       "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i, }
+                                       "expires_at" => transaction.otp_expires_at.to_i, }
     else
       perform_dummy_otp_generation
-      session[REENTRY_SESSION_KEY] = { "dummy" => true, "expires_at" => CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i }
+      session[REENTRY_SESSION_KEY] = { "dummy" => true, "expires_at" => EmailCeremonyOtp::OTP_TTL.from_now.to_i }
     end
 
     @email_record = identity_email_model.new(address: recovery_reentry_address)
@@ -65,13 +73,14 @@ module EnforcementRecoveryCeremonyFlow
     return render_invalid_recovery_otp(started_at) \
       unless recovery_subject_eligible?(subject) && recovery_email_verified?(email)
 
-    result = verify_otp_code(email, params[:pass_code])
-    unless result[:success]
-      increment_otp_attempts!(email)
+    verified = EmailReentryOtpVerificationCommitter.call(
+      email: email, code: params[:pass_code], operation: "recovery",
+      transaction_ref: state["otp_transaction_ref"], session_ref: state["session_ref"],
+    )
+    unless verified
       return render_invalid_recovery_otp(started_at)
     end
 
-    clear_otp(email)
     session.delete(REENTRY_SESSION_KEY)
     ensure_min_elapsed(started_at)
     ceremony = recovery_ceremony_class.issue!(subject: subject, request: request)
@@ -90,7 +99,11 @@ module EnforcementRecoveryCeremonyFlow
   def recovery_reentry_state
     data = session[REENTRY_SESSION_KEY]
     return nil unless data.is_a?(Hash)
-    return session.delete(REENTRY_SESSION_KEY) if data["expires_at"].to_i <= Time.current.to_i
+
+    if data["expires_at"].to_i <= Time.current.to_i
+      session.delete(REENTRY_SESSION_KEY)
+      return nil
+    end
 
     data
   end
@@ -108,5 +121,16 @@ module EnforcementRecoveryCeremonyFlow
     email.present? && recovery_verified_email_status_ids.include?(email.public_send(recovery_email_status_column))
   end
 
-  def otp_request_rate_limited?(email) = email.respond_to?(:otp_cooldown_active?) && email.otp_cooldown_active?
+  def otp_request_rate_limited?(email) = email.otp_cooldown_active?
+
+  def cancel_previous_recovery_reentry_otp
+    state = session[REENTRY_SESSION_KEY]
+    return unless state.is_a?(Hash) && !state["dummy"]
+
+    transaction = recovery_email_ceremony_model.find_by(transaction_id: state["otp_transaction_ref"])
+    return unless transaction && transaction.session_ref == state["session_ref"] &&
+      transaction.email_candidate_ref == state["email_public_id"] && transaction.operation == "recovery"
+
+    transaction.cancel_email_otp!
+  end
 end

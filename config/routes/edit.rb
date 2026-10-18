@@ -1,0 +1,163 @@
+# typed: false
+# frozen_string_literal: true
+
+# Edit owns the staff Publishing management surface.
+# Public canonical host: edit.umaxica.org. Development host: edit.org.localhost.
+scope module: :edit, as: :edit do
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).edit_staff.host,
+                     ENV["PUBLIC_EDIT_STAFF_URL"], ENV["PRIVATE_EDIT_STAFF_URL"],
+                     "edit.umaxica.org", "edit.org.localhost",].compact do
+    scope module: :org, as: :org do
+      root to: "roots#index"
+
+      resource :dashboard, only: :show
+
+      resource :revision, only: :show, format: false
+
+      resource :health, only: :show, format: false
+      namespace :health do
+        resource :liveness, only: :show, format: false
+        resource :readiness, only: :show, format: false
+        resource :startup, only: :show, format: false
+      end
+
+      resource :csp_violation_report, only: :create, path: "csp-violation-report"
+
+      namespace :api do
+        namespace :v0 do
+          resource :health, only: :show, path: "health.json", format: false
+          resource :revision, only: :show, path: "revision.json", format: false
+        end
+      end
+
+      # Independent edit-org-ww first-party RP. Browser entry is the neutral /sign contract.
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
+      namespace :oidc do
+        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
+        resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
+      end
+
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
+
+      namespace :sign do
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+      end
+
+      # Staff Publishing CMS. Twelve explicit surface/audience cells (no route loops).
+      # Locale is not a path segment; each cell maps Editions for that surface+audience.
+      resource :publishing, only: [], module: :publishing do
+        resource :info, only: [], module: :info do
+          resource :app, only: [], module: :app do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :com, only: [], module: :com do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :org, only: [], module: :org do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+        end
+        resource :docs, only: [], module: :docs do
+          resource :app, only: [], module: :app do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :com, only: [], module: :com do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :org, only: [], module: :org do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+        end
+        resource :news, only: [], module: :news do
+          resource :app, only: [], module: :app do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :com, only: [], module: :com do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :org, only: [], module: :org do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+        end
+        resource :help, only: [], module: :help do
+          resource :app, only: [], module: :app do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :com, only: [], module: :com do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+          resource :org, only: [], module: :org do
+            resources :entries, only: %i(index new create show edit update) do
+              scope module: :entries do
+                resources :publications, only: %i(create destroy)
+                resource :archive, only: %i(create destroy)
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end

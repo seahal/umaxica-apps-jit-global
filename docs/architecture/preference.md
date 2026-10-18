@@ -38,8 +38,16 @@ the authenticated subject for an RP. An auth access token may carry authenticati
 the Rails authorization boundary. Neither token turns identity, avatar, organization, or group rows
 into JWT-owned source-of-truth state.
 
-Preference setting writes are exposed through the `sign` surfaces. `acme` and `jump` consume
-preference state as read-only runtime context through `Actor.preferences`.
+Preference authority and preference transport are separate. Base is the preference HTML
+authority: it owns the preference screens and the durable preference records they edit. The
+display-preference transport for page chrome (theme and cookie consent) is host-local: Base, Auth,
+Core, and Warp each serve `/api/v0/preferences/{theme,cookie}` on their own host, because the
+preference credentials are host-only cookies. Serving that transport grants no preference authority;
+the read and update logic is the shared `PreferenceWebThemeEndpoint` / `PreferenceWebCookieEndpoint`
+behavior, and Auth serves it only for its ceremony pages
+(`adr/preference-browser-transport-family-capability.md`). Other runtime code consumes preference
+state as read-only context through `Actor.preferences`. (The historical statement that preference
+writes are exposed through the `sign` surfaces predates that split and no longer applies.)
 
 ## URL Role Boundary
 
@@ -249,7 +257,12 @@ normal required-`ri` lifecycle to add the default region context.
 Preference data flows in one direction for Rails runtime reads:
 
 ```text
-Preference JWT payload (*_preference_access) -> Actor.preferences
+Preference JWT payload (`preference_access` / `__Host-preference_access`) -> Actor.preferences
+
+The Preference JWT is an RFC 9068 `at+jwt` access token. Protocol claims (`iss`, `exp`, `aud`,
+`sub`, `client_id`, `iat`, `jti`, `scope`) sit in the JWT Claims Set. Application preference data
+remains in the private `preferences` object. `sub` is the preference record `public_id`. See
+`adr/rfc9068-access-token-profile.md`.
 ```
 
 The database is the durable storage boundary (SSoT) used by explicit preference write and
@@ -268,7 +281,8 @@ In a normal request, `Actor.preferences` is built in two stages:
 
 1. Build the base preference from the Preference JWT payload (`preference_payload_preferences`), via
    `Actor::Preference.from_jwt`. When no Preference JWT cookie exists (Bearer/OIDC APIs and
-   endpoints that skip `set_preferences_cookie`), fall back to `Actor::Preference::NULL`.
+   endpoints that skip `set_preferences_cookie`), fall back to the default preference values (theme
+   `sy`). `Actor::Preference::NULL` is the unbound-context snapshot, not the guest default.
 2. Overlay valid request-local `lx`, `ct`, and `tz` values when they were explicitly present in the
    request.
 
@@ -298,6 +312,20 @@ Actor.preferences: language=en, theme=sy, timezone=Asia/Tokyo
 The page renders in English for that request. The database and Preference JWT remain Japanese until
 an explicit preference write path changes them and reissues a token.
 
+### Region is a regional-bundle reset
+
+A `/preference/region` write is not a single-field write. It rewrites the region-owned locale
+defaults to the region's values in one transaction and marks each one explicit:
+
+| Region | language | date format        | clock | currency |
+| ------ | -------- | ------------------ | ----- | -------- |
+| `jp`   | `ja`     | `iso` (YYYY-MM-DD) | 24h   | `jpy`    |
+| `us`   | `en`     | `us` (MM/DD/YYYY)  | 12h   | `usd`    |
+
+The individual language / calendar / clock / currency screens still let a person override any of
+these afterwards; the override is then explicit and survives a later `?ri` change. If any of the
+five child writes fails, the whole change rolls back — a half-applied bundle is never persisted.
+
 Do not reverse this flow.
 
 - Do not issue preference JWTs from `Actor.preferences`.
@@ -319,8 +347,9 @@ Database reads and writes are allowed only in bounded flows:
 - new preference creation
 - valid refresh-token rotation that intentionally reissues the preference JWT
 - logged-in HTML preference edit entry refresh
-- explicit `sign` preference update endpoints
-- explicit `sign` preference reset or delete endpoints
+- explicit preference update endpoints (Base preference screens and the host-local
+  `/api/v0/preferences/{theme,cookie}` transport)
+- explicit Base preference reset or delete endpoints
 - login-time adoption or sync
 - repair, admin, or maintenance tasks
 
@@ -382,9 +411,10 @@ to the database or JWT.
   preference prefix: `App`/`User`, `Org`/`Staff`, and `Com`/`Visitor`. The `User` and `Staff`
   prefixes are storage compatibility names for the current app and org local preference tables;
   runtime actors are `Client` and `Operator`.
-- Core's `/api/v0/preferences/theme` and `/api/v0/preferences/cookie` JSON endpoints, and the
-  remaining non-Core `/web/v0/theme` and `/web/v0/cookie` endpoints, provide the no-full-page-reload
-  update path for dark mode and cookie consent. They update the matching preference record when a
+- The `/api/v0/preferences/theme` and `/api/v0/preferences/cookie` JSON endpoints on Base, Auth,
+  Core, and Warp provide the no-full-page-reload update path for dark mode and cookie consent. The
+  page chrome receives the endpoint path from the server (`PreferenceBrowserControlsRegistry`), and
+  Palm and Edit render no controls and serve no such endpoint. They update the matching preference record when a
   valid preference access token identifies it, then issue a fresh preference access token.
 - Shared preference credential cookie names are scoped by surface (`app_preference_*`,
   `com_preference_*`, `org_preference_*`) only as legacy compatibility names. The current credential
@@ -407,8 +437,7 @@ to the database or JWT.
 - Should shared preference keep a full history, or only the latest state?
 - ~~Should logout clear the local copy, or only stop writing to it?~~ Resolved 2026-07-02:
   keep-values (do not clear or downgrade on logout). See
-  `docs/architecture/preference-behavior-contract.md`'s State Transitions table and
-  `memos/2026-07-02-preference-audit.md`.
+  `docs/architecture/preference-behavior-contract.md`'s State Transitions table.
 - Should `App`, `Org`, and `Com` use the same shared schema forever, or should each surface keep a
   separate shape?
 - Should activity records stay near the `com_setting` database, or move to a separate audit surface

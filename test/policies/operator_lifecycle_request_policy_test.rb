@@ -2,50 +2,29 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
+# The lifecycle policy is closed until operator-to-operator capabilities are specified; an Operator
+# acting on another Operator's request, the case the previous type-only rule allowed, is denied.
 class OperatorLifecycleRequestPolicyTest < ActiveSupport::TestCase
-  def policy_for(user:, record:)
-    OperatorLifecycleRequestPolicy.new(record, user: user)
-  end
-
-  test "show? is true for an operator actor" do
-    policy = policy_for(user: Operator.new(id: 1), record: OperatorLifecycleRequest.new)
-
-    assert_predicate policy, :show?
-  end
-
-  test "show? is false for a non-operator actor" do
-    policy = policy_for(user: Client.new, record: OperatorLifecycleRequest.new)
-
-    assert_not policy.show?
-  end
-
-  test "reject? is true when an operator reviews a pending request from a different operator" do
+  test "every rule denies an operator reviewing another operator's pending request" do
     record = OperatorLifecycleRequest.new(
       status: OperatorLifecycleRequest::STATUS_PENDING,
       requested_by_operator_id: 999,
     )
+    policy = OperatorLifecycleRequestPolicy.new(record, user: Operator.new(id: 1))
 
-    assert_predicate policy_for(user: Operator.new(id: 1), record: record), :reject?
+    %i(index? show? create? approve? reject? execute?).each do |rule|
+      assert_not policy.public_send(rule), "expected #{rule} to deny"
+    end
   end
 
-  test "reject? is false when the requester is the same operator" do
-    operator = Operator.new(id: 7)
-    record = OperatorLifecycleRequest.new(
-      status: OperatorLifecycleRequest::STATUS_PENDING,
-      requested_by_operator_id: 7,
-    )
-
-    assert_not policy_for(user: operator, record: record).reject?
-  end
-
-  test "reject? is false when the request is not pending" do
+  test "every rule denies an operator even on an approved request they did not file" do
     record = OperatorLifecycleRequest.new(
       status: OperatorLifecycleRequest::STATUS_APPROVED,
       requested_by_operator_id: 999,
     )
+    policy = OperatorLifecycleRequestPolicy.new(record, user: Operator.new(id: 1))
 
-    assert_not policy_for(user: Operator.new(id: 1), record: record).reject?
+    assert_not policy.execute?
   end
 end

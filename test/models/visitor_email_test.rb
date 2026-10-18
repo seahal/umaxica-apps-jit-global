@@ -9,16 +9,13 @@
 #  id                        :bigint           not null, primary key
 #  address                   :string           default(""), not null
 #  address_digest            :string
-#  discarded_at              :datetime         default(Infinity), not null
+#  discard_at              :datetime         default(Infinity), not null
 #  locked_at                 :datetime         default(Infinity), not null
 #  notifiable                :boolean          default(TRUE), not null
 #  otp_attempts_count        :integer          default(0), not null
-#  otp_counter               :text             default(""), not null
-#  otp_expires_at            :datetime         default(-Infinity), not null
 #  otp_last_sent_at          :datetime         default(-Infinity), not null
-#  otp_private_key           :string           default(""), not null
 #  promotional               :boolean          default(TRUE), not null
-#  purged_at                 :datetime         default(Infinity), not null
+#  purge_eligible_at                 :datetime         default(Infinity), not null
 #  subscribable              :boolean          default(TRUE), not null
 #  undeletable               :boolean          default(FALSE), not null
 #  verification_token_digest :binary
@@ -31,10 +28,10 @@
 # Indexes
 #
 #  index_visitor_emails_on_active_address_digest    (address_digest) UNIQUE WHERE ((address_digest IS NOT NULL) AND (visitor_email_status_id <> 4))
-#  index_visitor_emails_on_discarded_at             (discarded_at)
+#  index_visitor_emails_on_discard_at             (discard_at)
 #  index_visitor_emails_on_otp_last_sent_at         (otp_last_sent_at)
 #  index_visitor_emails_on_public_id                (public_id) UNIQUE
-#  index_visitor_emails_on_purged_at                (purged_at)
+#  index_visitor_emails_on_purge_eligible_at                (purge_eligible_at)
 #  index_visitor_emails_on_visitor_email_status_id  (visitor_email_status_id)
 #  index_visitor_emails_on_visitor_id               (visitor_id)
 #
@@ -96,7 +93,7 @@ class VisitorEmailTest < ActiveSupport::TestCase
       @valid_attributes.merge(address: "VISITOR-DIGEST@example.com"),
     )
 
-    expected = IdentifierBlindIndex.bidx_for_email("visitor-digest@example.com")
+    expected = IdentifierBlindIndex.bidx_for_email("visitor-digest@example.com", realm: :com)
 
     assert_equal expected, visitor_email.address_digest
   end
@@ -106,8 +103,8 @@ class VisitorEmailTest < ActiveSupport::TestCase
       @valid_attributes.merge(
         address: "visitor-cancelled-retry@example.com",
         visitor_email_status_id: VisitorEmailStatus::DELETED,
-        discarded_at: 1.minute.ago,
-        purged_at: 29.minutes.from_now,
+        discard_at: 1.minute.ago,
+        purge_eligible_at: 29.minutes.from_now,
       ),
     )
     retry_email = VisitorEmail.new(@valid_attributes.merge(address: "visitor-cancelled-retry@example.com"))
@@ -118,29 +115,39 @@ class VisitorEmailTest < ActiveSupport::TestCase
     end
   end
 
-  test "rejects creating more than the maximum emails per visitor" do
-    VisitorEmail.where(visitor: @visitor).delete_all
-    status = VisitorEmailStatus.find(VisitorEmailStatus::UNVERIFIED)
+  test "pending email rows do not reserve capacity and the database permits only one effective binding" do
+    owner = Visitor.create!
 
-    VisitorEmail::MAX_EMAILS_PER_VISITOR.times do
-      VisitorEmail.create!(
-        @valid_attributes.merge(
-          address: "limit-#{SecureRandom.hex(4)}@example.com",
-          visitor_email_status: status,
-        ),
-      )
+    assert_equal 0, owner.visitor_emails.effective_binding.count
+    candidates =
+      5.times.map do |index|
+        VisitorEmail.create!(
+          visitor: owner, address: "contact-limit-#{SecureRandom.hex(4)}-#{index}@example.test",
+          confirm_policy: "1",
+        )
+      end
+
+    assert candidates.none?(&:binding_effective?)
+    first, second = candidates
+    first.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+    assert_difference -> { VisitorEmail.effective_binding.where(visitor_id: owner.id).count }, 1 do
+      first.finalize_binding!
     end
+    second.update!(visitor_email_status_id: VisitorEmailStatus::VERIFIED)
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      VisitorEmail.transaction(requires_new: true) { second.finalize_binding! }
+    end
+    assert_predicate first.reload, :binding_effective?
+    assert_not_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorEmail.effective_binding.where(visitor_id: owner.id).count
+    first.release_binding!
+    second.finalize_binding!
 
-    extra = VisitorEmail.new(
-      @valid_attributes.merge(
-        address: "limit-extra-#{SecureRandom.hex(4)}@example.com",
-        visitor_email_status: status,
-      ),
-    )
-
-    assert_not extra.valid?
-    assert_not_empty extra.errors[:base]
+    assert_predicate first.reload, :binding_released?
+    assert_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorEmail.effective_binding.where(visitor_id: owner.id).count
   end
+
   private
 end
 
@@ -161,31 +168,11 @@ class VisitorEmailTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -245,10 +232,8 @@ class VisitorEmailTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -260,10 +245,8 @@ class VisitorEmailTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -484,63 +467,6 @@ class VisitorEmailTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -556,10 +482,8 @@ class VisitorEmailTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -579,12 +503,12 @@ class VisitorEmailTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

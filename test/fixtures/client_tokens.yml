@@ -1,13 +1,13 @@
 # == Schema Information
 #
 # Table name: client_tokens
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
 #  last_step_up_aal                   :string
 #  last_step_up_at                    :datetime
@@ -19,7 +19,7 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
@@ -27,7 +27,7 @@
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
 #  dbsc_session_id                    :string
-#  device_session_id                  :bigint
+#  device_session_id                  :bigint           not null
 #  last_step_up_session_public_id     :string
 #  oidc_client_id                     :string(64)
 #  oidc_connection_id                 :bigint
@@ -48,12 +48,12 @@
 #  index_client_tokens_on_created_at                     (created_at)
 #  index_client_tokens_on_dbsc_session_id                (dbsc_session_id) UNIQUE
 #  index_client_tokens_on_device_session_id              (device_session_id)
-#  index_client_tokens_on_discarded_at                   (discarded_at)
+#  index_client_tokens_on_discard_at                   (discard_at)
 #  index_client_tokens_on_oidc_connection_id             (oidc_connection_id)
 #  index_client_tokens_on_oidc_jti                       (oidc_jti)
 #  index_client_tokens_on_oidc_sid                       (oidc_sid)
 #  index_client_tokens_on_public_id                      (public_id) UNIQUE
-#  index_client_tokens_on_purged_at                      (purged_at)
+#  index_client_tokens_on_purge_eligible_at                      (purge_eligible_at)
 #  index_client_tokens_on_refresh_token_digest           (refresh_token_digest) UNIQUE
 #  index_client_tokens_on_refresh_token_family_id        (refresh_token_family_id)
 #  index_client_tokens_on_rotated_at                     (rotated_at)
@@ -77,22 +77,24 @@
 one:
   public_id: 651 # was one_user_token_000001
   user: one
+  device_session_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
   user_token_binding_method_id: <%= ClientTokenBindingMethod::NOTHING %>
   user_token_dbsc_status_id: <%= ClientTokenDbscStatus::NOTHING %>
   user_token_kind_id: <%= ClientTokenKind::BROWSER_WEB %>
-  user_token_status_id: <%= ClientTokenStatus::NOTHING %>
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 1.day.from_now %>
+  user_token_status_id: <%= ClientTokenStatus::ACTIVE %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 1.day.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 two:
   public_id: 615 # was two_user_token_000001
   user: two
+  device_session_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
   user_token_binding_method_id: <%= ClientTokenBindingMethod::NOTHING %>
   user_token_dbsc_status_id: <%= ClientTokenDbscStatus::NOTHING %>
   user_token_kind_id: <%= ClientTokenKind::BROWSER_WEB %>
-  user_token_status_id: <%= ClientTokenStatus::NOTHING %>
-  discarded_at: <%= 1.day.from_now %>
-  purged_at: <%= 1.day.from_now %>
+  user_token_status_id: <%= ClientTokenStatus::ACTIVE %>
+  discard_at: <%= 1.day.from_now %>
+  purge_eligible_at: <%= 1.day.from_now %>
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>

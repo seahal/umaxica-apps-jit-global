@@ -16,7 +16,12 @@ Rails.application.configure do
   # Do not eager load code on boot.
   config.eager_load = false
 
-  # Show full error reports.
+  # Detailed error pages and `/rails/info` are served to every request, including requests that
+  # arrive through Cloudflare Tunnel. This is an accepted exposure, chosen on 2026-10-07 so errors
+  # can be read in the browser on the tunnel hosts: an unmatched path answers a remote scanner
+  # with the debug page and the full route table, as recorded in
+  # evidence/2026-10-05-dev-detailed-errors-tunnel-exposure-Q4T8.md. Set this to `false` to close
+  # it, or put the public hosts behind Cloudflare Access.
   config.consider_all_requests_local = true
 
   # Enable server timing.
@@ -32,61 +37,29 @@ Rails.application.configure do
     config.action_controller.perform_caching = false
   end
 
-  # Two physically separate Valkey services back two unrelated responsibilities.
-  # Cache and rate-limit state have different lifetimes and different blast
-  # radiuses, and either one has to be independently flushable without touching
-  # the other, so the isolation boundary is the service -- not a logical Redis
-  # database index on a shared one. Development runs the same shape as
-  # production so the split is exercised rather than assumed.
-  #
+  # Cache lives on valkey-cache; rate-limit and auth-state live on valkey-kvs.
+  # Logical DB indexes and hosts come from config/valkey.yml via Settings.
   # Neither store is authoritative. Losing the cache costs a refetch; losing the
-  # rate-limit counters resets the current windows. Neither can corrupt
-  # application state, which is what makes Valkey the right substrate for both
-  # and the wrong one for anything in PostgreSQL.
+  # rate-limit counters resets the current windows.
+  require_relative "../../lib/umaxica/valkey/settings"
+  require_relative "../../lib/umaxica/valkey/store_error_handler"
 
-  # `RedisCacheStore` swallows a connection error and returns nil. For the cache
-  # that is correct -- a miss reconstructs from source. For rate limiting it is
-  # not: Rails' `rate_limit` reads `count = store.increment(...)` and acts only
-  # `if count && count > to`, so a nil turns every limit off. A Valkey outage
-  # therefore drops abuse protection fleet-wide and, without this, does it
-  # silently -- indistinguishable from ordinary traffic under the limit.
-  #
-  # Whether rate limiting should instead fail closed is a real question, but it
-  # is an availability decision and not one to make implicitly here. What is not
-  # in question is that the degradation must be visible. The exception message is
-  # omitted on purpose: it can carry the store URL, and these URLs may embed
-  # credentials.
-  valkey_store_error_handler =
-    lambda do |store|
-      lambda do |method:, exception:, returning:|
-        Rails.logger.error(
-          JitLogEvent.format(
-            "valkey.store.unavailable",
-            store: store,
-            op: method.to_s,
-            error_class: exception.class.name,
-            degraded_to: returning.inspect,
-          ),
-        )
-      end
-    end
-
-  cache_namespace = ["cache", Rails.env, ENV["CACHE_NAMESPACE_SUFFIX"].presence].compact.join(":")
+  valkey = Umaxica::Valkey::Settings.load
+  cache_namespace = [valkey.cache.namespace, ENV["CACHE_NAMESPACE_SUFFIX"].presence].compact.join(":")
   config.cache_store = :redis_cache_store, {
-    url: ENV.fetch("CACHE_REDIS_URL"),
+    url: valkey.cache.url,
     namespace: cache_namespace,
-    error_handler: valkey_store_error_handler.call("cache"),
+    error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("cache"),
   }
   rate_limit_namespace = [
-    "rate_limit",
-    Rails.env,
+    valkey.rate_limit.namespace,
     ENV["RATE_LIMIT_NAMESPACE_SUFFIX"].presence,
   ].compact.join(":")
   config.x.rate_limit.store =
     ActiveSupport::Cache::RedisCacheStore.new(
-      url: ENV.fetch("RATE_LIMIT_REDIS_URL"),
+      url: valkey.rate_limit.url,
       namespace: rate_limit_namespace,
-      error_handler: valkey_store_error_handler.call("rate_limit"),
+      error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("rate_limit"),
     )
 
   # Store uploaded files on the local file system (see config/storage.yml for options).
@@ -98,15 +71,14 @@ Rails.application.configure do
   # Make template changes take effect immediately.
   config.action_mailer.perform_caching = false
 
-  ## Letter Opener => https://github.com/ryanb/letter_opener
-  #  config.action_mailer.delivery_method = :letter_opener
-  # config.action_mailer.perform_deliveries = true
-
   # Raise on deprecation warnings to catch issues early.
   config.active_support.deprecation = :raise
 
   # Raise an error on page load if there are pending migrations.
-  config.active_record.migration_error = :page_load
+  # The pending-migration page check connects to every configured database. A role process
+  # (R5-WU03A) may CONNECT only to its own, so only the shared maintenance role runs the check;
+  # migrations are applied with the maintenance login, never from a role process.
+  config.active_record.migration_error = RuntimeRole.shared? ? :page_load : false
 
   # Raise on SQL warnings from PostgreSQL (overrides :log in application.rb).
   config.active_record.db_warnings_action = :raise
@@ -134,6 +106,12 @@ Rails.application.configure do
 
   # Raise error for missing translations in controllers, views, and models.
   config.i18n.raise_on_missing_translations = :strict
+
+  # Keep the en <-> ja fallback chain, but raise the moment it is used, so a key missing from one
+  # language stops the request instead of rendering the other language. Read by
+  # config/initializers/locale.rb.
+  config.x.locale.fallbacks_enabled = true
+  config.x.locale.raise_on_fallback = true
 
   # Annotate rendered view with file names.
   config.action_view.annotate_rendered_view_with_filenames = true
@@ -173,7 +151,10 @@ Rails.application.configure do
 
   # Use Solid Queue in Development.
   config.active_job.queue_adapter = :solid_queue
-  config.solid_queue.connects_to = { database: { writing: :queue } }
+  # `reading` is mapped to the same `queue` database, not a replica: the queue database has no
+  # replica entry in config/database.yml, and Mission Control Jobs reads the queue through the
+  # reading role, which raises ConnectionNotDefined when only `writing` is declared.
+  config.solid_queue.connects_to = { database: { writing: :queue, reading: :queue } }
 
   # Enable Gzip compression
   config.middleware.use(Rack::Deflater)
@@ -183,10 +164,15 @@ Rails.application.configure do
   boot_config_hosts = [
     boot_hosts.sign_origins,
     boot_hosts.core_origins,
+    boot_hosts.tech_staff,
     boot_hosts.base_origins,
-    boot_hosts.palm_origins,
+    boot_hosts.palm_service,
+    boot_hosts.docs_origins,
+    boot_hosts.news_origins,
     [boot_hosts.help_service, boot_hosts.help_corporate, boot_hosts.help_staff],
     boot_hosts.info_origins,
+    boot_hosts.guid_service,
+    boot_hosts.edit_staff,
   ].flatten
   boot_config_hosts.map!(&:host)
 
@@ -219,16 +205,37 @@ Rails.application.configure do
     core.app.localhost:3000
     core.net.localhost:3000
     core.dev.localhost:3000
+    core.dev.localhost:3001
     docs.com.localhost:3000
     docs.org.localhost:3000
     docs.app.localhost:3000
     news.com.localhost:3000
     news.org.localhost:3000
     news.app.localhost:3000
-    side.com.localhost:3000
-    side.org.localhost:3000
-    side.app.localhost:3000
+    warp.com.localhost:3000
+    warp.com.localhost:3001
+    warp.org.localhost:3000
+    warp.org.localhost:3001
+    warp.app.localhost:3000
+    warp.app.localhost:3001
     palm.app.localhost:3000
+    guid.net.localhost:3000
+    edit.org.localhost:3000
+    tech.org.localhost:3000
+    mission.core.dev.localhost:3000
+    mission.core.dev.localhost:3001
+    flipper.core.dev.localhost:3000
+    flipper.core.dev.localhost:3001
+    blazer.core.dev.localhost:3000
+    blazer.core.dev.localhost:3001
+    pghero.core.dev.localhost:3000
+    pghero.core.dev.localhost:3001
+    performance.core.dev.localhost:3000
+    performance.core.dev.localhost:3001
+    coverband.core.dev.localhost:3000
+    coverband.core.dev.localhost:3001
+    swagger.core.dev.localhost:3000
+    swagger.core.dev.localhost:3001
   )
 
   # Both families, deliberately. Per adr/public-private-url-boundaries.md, `PUBLIC_*` names
@@ -250,10 +257,21 @@ Rails.application.configure do
     PRIVATE_CORE_SERVICE_URL
     PRIVATE_CORE_STAFF_URL
     PRIVATE_CORE_CORPORATE_URL
+    PRIVATE_CORE_DEVELOPER_URL
     PRIVATE_PALM_SERVICE_URL
     PRIVATE_INFO_SERVICE_URL
     PRIVATE_INFO_STAFF_URL
     PRIVATE_INFO_CORPORATE_URL
+    PRIVATE_GUID_SERVICE_URL
+    PRIVATE_EDIT_STAFF_URL
+    PRIVATE_TECH_STAFF_URL
+    PRIVATE_MISSION_URL
+    PRIVATE_FLIPPER_URL
+    PRIVATE_BLAZER_URL
+    PRIVATE_PGHERO_URL
+    PRIVATE_PERFORMANCE_URL
+    PRIVATE_COVERBAND_URL
+    PRIVATE_SWAGGER_URL
     PRIVATE_DOCS_SERVICE_URL
     PRIVATE_DOCS_STAFF_URL
     PRIVATE_DOCS_CORPORATE_URL
@@ -273,13 +291,24 @@ Rails.application.configure do
     PUBLIC_CORE_SERVICE_URL
     PUBLIC_CORE_CORPORATE_URL
     PUBLIC_CORE_STAFF_URL
-    PUBLIC_SIDE_SERVICE_URL
-    PUBLIC_SIDE_CORPORATE_URL
-    PUBLIC_SIDE_STAFF_URL
+    PUBLIC_CORE_DEVELOPER_URL
+    PUBLIC_WARP_SERVICE_URL
+    PUBLIC_WARP_CORPORATE_URL
+    PUBLIC_WARP_STAFF_URL
     PUBLIC_PALM_SERVICE_URL
     PUBLIC_INFO_SERVICE_URL
     PUBLIC_INFO_CORPORATE_URL
     PUBLIC_INFO_STAFF_URL
+    PUBLIC_GUID_SERVICE_URL
+    PUBLIC_EDIT_STAFF_URL
+    PUBLIC_TECH_STAFF_URL
+    PUBLIC_MISSION_URL
+    PUBLIC_FLIPPER_URL
+    PUBLIC_BLAZER_URL
+    PUBLIC_PGHERO_URL
+    PUBLIC_PERFORMANCE_URL
+    PUBLIC_COVERBAND_URL
+    PUBLIC_SWAGGER_URL
     PUBLIC_DOCS_SERVICE_URL
     PUBLIC_DOCS_CORPORATE_URL
     PUBLIC_DOCS_STAFF_URL

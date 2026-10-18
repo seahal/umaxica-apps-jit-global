@@ -14,9 +14,9 @@ class DbscRegistrationEndpointWiringTest < ActiveSupport::TestCase
   # asserting the wiring against it guarded a class no request could reach. The routed preference
   # DBSC endpoint is `/api/v0/preferences/dbsc`, backed conservatively by the existing Core classes.
   test "core dbsc controllers use shared preference registration endpoint concern" do
-    assert_includes Core::App::Edge::V0::DbscController, PreferenceDbscRegistrationEndpoint
-    assert_includes Core::Org::Edge::V0::DbscController, PreferenceDbscRegistrationEndpoint
-    assert_includes Core::Com::Edge::V0::DbscController, PreferenceDbscRegistrationEndpoint
+    assert_includes Core::App::Api::V0::Preferences::DbscController, PreferenceDbscRegistrationEndpoint
+    assert_includes Core::Org::Api::V0::Preferences::DbscController, PreferenceDbscRegistrationEndpoint
+    assert_includes Core::Com::Api::V0::Preferences::DbscController, PreferenceDbscRegistrationEndpoint
   end
 
   # The wiring above is only meaningful if these are the classes the router actually reaches.
@@ -24,9 +24,9 @@ class DbscRegistrationEndpointWiringTest < ActiveSupport::TestCase
     {
       "auth/app/edge/v0/token/dbsc" => "create",
       "auth/org/edge/v0/token/dbsc" => "create",
-      "core/app/edge/v0/dbsc" => "create",
-      "core/com/edge/v0/dbsc" => "create",
-      "core/org/edge/v0/dbsc" => "create",
+      "core/app/api/v0/preferences/dbsc" => "create",
+      "core/com/api/v0/preferences/dbsc" => "create",
+      "core/org/api/v0/preferences/dbsc" => "create",
     }.each do |controller, action|
       mounted =
         Rails.application.routes.routes.any? do |route|
@@ -43,9 +43,9 @@ class DbscRegistrationEndpointWiringTest < ActiveSupport::TestCase
       Auth::Org::Edge::V0::Token::DbscController,
     ]
     preference_controllers = [
-      Core::App::Edge::V0::DbscController,
-      Core::Org::Edge::V0::DbscController,
-      Core::Com::Edge::V0::DbscController,
+      Core::App::Api::V0::Preferences::DbscController,
+      Core::Org::Api::V0::Preferences::DbscController,
+      Core::Com::Api::V0::Preferences::DbscController,
     ]
 
     (sign_controllers + preference_controllers).each do |controller|

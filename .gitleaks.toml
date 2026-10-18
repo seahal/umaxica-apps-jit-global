@@ -5,8 +5,25 @@ useDefault = true
 
 [allowlist]
 description = "Allow test fixtures"
-paths = ['''test/fixtures/user_identity_one_time_passwords.yml''',  '''.*\.lock$''',
+# Match allowlist regexes against the whole line: rules such as generic-api-key can match
+# only a fragment (for example `key:` inside `valkey:`), which hides the identifying context.
+regexTarget = "line"
+paths = [
+  '''test/fixtures/user_identity_one_time_passwords.yml''',
+  '''.*\.lock$''',
   '''(go|pnpm|package|yarn)-lock\.(json|yaml|toml)$''',
   '''node_modules/.*''',
   '''(.*/)?test(s)?/.*fixture.*''',
-  '''\.env\.example$''',]
+  '''\.env\.example$''',
+]
+# Values that match secret-shaped rules but are not secrets. Each is exact on purpose so a
+# real credential of the same shape is still reported.
+regexes = [
+  # Unsigned dummy JWT ({"alg":"HS256"}.{"sub":"secret"}.signature-value) that redaction
+  # tests feed through logging and persistence to prove it never appears in output.
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiJzZWNyZXQifQ\.signature-value''',
+  # Container image tags such as valkey/valkey:8.0-alpine3.22 in infrastructure notes.
+  '''valkey/valkey:[0-9][0-9A-Za-z._-]*''',
+  # Per-run Valkey test namespace identifiers recorded in evidence commands.
+  '''VALKEY_NAMESPACE_RUN_ID=[0-9A-Za-z._-]+''',
+]

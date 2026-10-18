@@ -36,7 +36,7 @@ class BaseOrgIdentitySecretCredentialsGuardsTest < ActiveSupport::TestCase
     harness.disabling = true
     harness.instance_variable_set(:@secret_credential, Struct.new(:public_id).new("secret-public-id"))
 
-    AuthMethodGuard.stub(:last_method?, true) do
+    AuthMethodGuard.stub(:can_remove_secret_credential?, false) do
       harness.update
     end
 

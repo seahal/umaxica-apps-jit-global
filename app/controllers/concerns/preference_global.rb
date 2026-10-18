@@ -110,10 +110,52 @@ module PreferenceGlobal
     normalized_value
   end
 
-  PUBLIC_CONTEXT_KEYS.each do |key|
-    define_method(:"request_context_#{key}") do
-      request_context_value(key)
-    end
+  def request_context_ri
+    request_context_value(:ri)
+  end
+
+  def request_context_pt
+    request_context_value(:pt)
+  end
+
+  def request_context_nt
+    request_context_value(:nt)
+  end
+
+  def request_context_lx
+    request_context_value(:lx)
+  end
+
+  def request_context_ct
+    request_context_value(:ct)
+  end
+
+  def request_context_tz
+    request_context_value(:tz)
+  end
+
+  def request_context_cu
+    request_context_value(:cu)
+  end
+
+  def request_context_df
+    request_context_value(:df)
+  end
+
+  def request_context_tf
+    request_context_value(:tf)
+  end
+
+  def request_context_mo
+    request_context_value(:mo)
+  end
+
+  def request_context_dn
+    request_context_value(:dn)
+  end
+
+  def request_context_ps
+    request_context_value(:ps)
   end
 
   def valid_ri_value?(value)
@@ -179,10 +221,6 @@ module PreferenceGlobal
     (request.get? || request.head?) ? :found : :see_other
   end
 
-  def get_theme
-    "sy"
-  end
-
   def get_language
     I18n.locale.to_s
   end
@@ -245,6 +283,8 @@ module PreferenceGlobal
     locale = normalized_locale(requested_context[:lx])
     locale ||= Actor.preferences.locale if defined?(Actor)
     I18n.locale = locale if locale.present?
+    return unless preference_state_write_request?
+
     write_preference_cookie(PreferenceBase::LANGUAGE_COOKIE_KEY, I18n.locale.to_s.downcase)
   end
 
@@ -257,7 +297,11 @@ module PreferenceGlobal
     timezone = Actor.preferences.timezone if timezone.blank? && defined?(Actor)
     timezone_value = TimezoneIdentifier.resolve(timezone)
     Time.zone = timezone_value
+    return unless preference_state_write_request?
+
     session[:timezone] = timezone_value
     write_preference_cookie(PreferenceBase::TIMEZONE_COOKIE_KEY, timezone_value)
   end
+
+  private :preference_context_from_hash, :normalized_preference_value
 end

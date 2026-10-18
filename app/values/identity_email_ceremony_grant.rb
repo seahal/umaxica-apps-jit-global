@@ -23,7 +23,7 @@ class IdentityEmailCeremonyGrant
 
   def self.issue(attributes, issuer_id:, now: Time.current)
     grant = new(attributes.merge(default_claims(attributes, now: now)), now: now)
-    JitSecurityJwtKeyring.encode(grant.payload, issuer_id: issuer_id)
+    JitSecurityJwtKeyring.encode(grant.payload, typ: TOKEN_TYPE, issuer_id: issuer_id)
   end
 
   def self.decode(token, issuer_id:, now: Time.current)

@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class SecurityOneTimeReveal < AppTicketRecord
+class SecurityOneTimeReveal < OpBaseAppRecord
   class << self
     def consume(jti_digest:, actor_type:, actor_id:, session_nonce_digest:, purpose:, now: Time.current)
       transaction do

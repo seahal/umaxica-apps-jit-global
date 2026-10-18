@@ -7,6 +7,9 @@ import Button from "@/components/ui/Button";
 import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
 import type { VerificationFormBase, VerificationLink } from "./types";
@@ -15,6 +18,11 @@ import VerificationFormFields from "./VerificationFormFields";
 export type TotpEntryForm = VerificationFormBase & {
   code_label: string;
   code_placeholder: string;
+  credential_selector?: {
+    name: string;
+    label: string;
+    options: { value: string; label: string }[];
+  };
 };
 
 export type TotpEntryTurnstile = {
@@ -33,6 +41,7 @@ export type TotpEntryProps = {
   form: TotpEntryForm;
   turnstile: TotpEntryTurnstile;
   back: VerificationLink;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function TotpEntry({
@@ -43,6 +52,7 @@ export default function TotpEntry({
   form,
   turnstile,
   back,
+  cancel,
 }: TotpEntryProps) {
   return (
     <Page
@@ -51,7 +61,7 @@ export default function TotpEntry({
       up={back}
       width="narrow"
     >
-      <p className="text-sm text-fg-muted">{totpHelp}</p>
+      <p className="text-base text-fg-muted">{totpHelp}</p>
 
       <ErrorList errors={errors} />
 
@@ -72,6 +82,26 @@ export default function TotpEntry({
           placeholder={form.code_placeholder}
         />
 
+        {form.credential_selector ? (
+          <label className="flex flex-col gap-1 text-base font-medium">
+            <span>{form.credential_selector.label}</span>
+            <select
+              name={form.credential_selector.name}
+              defaultValue={form.credential_selector.options[0]?.value}
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-fg"
+            >
+              {form.credential_selector.options.map((option) => (
+                <option
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         <TurnstileWidget
           site_key={turnstile.site_key}
           mode={turnstile.mode}
@@ -81,6 +111,8 @@ export default function TotpEntry({
 
         <Button type="submit">{form.submit_label}</Button>
       </form>
+      {/* Back returns to method selection; this ends the whole Step-Up ceremony. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

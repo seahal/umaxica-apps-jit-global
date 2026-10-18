@@ -20,8 +20,8 @@ class SecurityConsumedJtiPurgeJobTest < ActiveJob::TestCase
     freeze_time do
       now = Time.current
 
-      expired = consume!(purpose: :oidc_logout_token, expires_at: now - 1.second)
-      boundary = consume!(purpose: :jump_rt_return, expires_at: now)
+      expired = consume!(purpose: :oidc_logout_request, expires_at: now - 1.second)
+      boundary = consume!(purpose: :sign_out_notice, expires_at: now)
       active = consume!(purpose: :oidc_client_assertion, expires_at: now + 5.minutes)
 
       SecurityConsumedJtiPurgeJob.perform_now

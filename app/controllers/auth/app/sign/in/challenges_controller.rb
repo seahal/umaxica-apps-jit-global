@@ -6,11 +6,16 @@ module Auth
     module Sign
       module In
         class ChallengesController < ::Auth::App::ApplicationController
+          include ::AuthenticationModeSwitchGuard
           include ::SurfaceInertiaPage
+          include ::SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :guest
 
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
           before_action :ensure_pending_mfa!
+
+          public
 
           def show
             @mfa_user = pending_mfa_user
@@ -18,6 +23,12 @@ module Auth
             @can_use_passkey = @mfa_user&.client_passkeys&.exists?(status_id: ClientPasskeyStatus::ACTIVE)
 
             render inertia: true, props: mfa_challenge_props
+          end
+
+          # Cancel: ends the second-factor ceremony rather than stepping back to the sign-in form.
+          def destroy
+            cancel_pending_mfa!
+            redirect_to(auth_app_sign_in_path, status: :see_other)
           end
 
           private
@@ -31,7 +42,7 @@ module Auth
               description: page_t("#{scope}.description"),
               methods: mfa_challenge_methods(scope),
               no_methods_notice: any_method ? nil : page_t("#{scope}.no_methods_available"),
-              back_link: any_method ? nil : mfa_challenge_back_link,
+              cancel: mfa_challenge_cancel,
             }
           end
 
@@ -41,24 +52,24 @@ module Auth
               methods << {
                 key: "totp",
                 label: page_t("#{scope}.methods.totp"),
-                href: new_auth_app_sign_in_challenge_totp_path,
+                href: new_auth_app_sign_in_challenge_totp_path(**sign_in_mfa_binding_params),
               }
             end
             if @can_use_passkey
               methods << {
                 key: "passkey",
                 label: page_t("#{scope}.methods.passkey"),
-                href: new_auth_app_sign_in_challenge_passkey_path,
+                href: new_auth_app_sign_in_challenge_passkey_path(**sign_in_mfa_binding_params),
               }
             end
             methods
           end
 
-          def mfa_challenge_back_link
+          def mfa_challenge_cancel
             {
-              key: "back",
-              label: t("sign.app.authentication.new.back"),
-              href: auth_app_sign_in_path,
+              label: t("actions.cancel"),
+              action: auth_app_sign_in_challenge_path(**sign_in_mfa_binding_params),
+              method: "delete",
             }
           end
 

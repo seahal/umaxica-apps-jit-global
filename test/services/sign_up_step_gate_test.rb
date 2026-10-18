@@ -2,29 +2,51 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
 class SignUpStepGateTest < ActiveSupport::TestCase
-  test "for_show falls back to the session sequence id when the locator payload is missing" do
-    session = {}
-    cycle = fake_cycle(public_id: "seq-123")
-    session[:auth_app_up_sequence_id] = cycle.public_id
-    controller = gate_controller(session)
-
-    ClientSignUpFlow.stub(:find_by, cycle) do
-      gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "google", step: :confirmation)
-
-      assert_predicate gate, :success?
-      assert_equal cycle, gate.ticket
-      assert_equal :ok, gate.status
-    end
+  setup do
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
   end
 
-  test "for_show prefers the controller ticket fallback when the locator is empty" do
-    session = {}
-    cycle = fake_cycle(public_id: "seq-456")
-    controller = gate_controller(session)
-    controller.define_singleton_method(:current_sign_up_flow_ticket) { cycle }
+  ControllerBoundary = Struct.new(:session, :params, :current_sign_up_flow_ticket, :sign_up_ticket_public_id)
+
+  test "for_show falls back to the session sequence id with its signed flow binding" do
+    ClientSignUpFlowStatus.ensure_defaults!
+    cycle = ClientSignUpFlow.create!(
+      entry_method: "google", step: "checkpoint",
+      status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
+      nonce_digest: ClientSignUpFlow.digest_nonce("gate-sequence"),
+      completed_requirements: {},
+    )
+    controller = ControllerBoundary.new(
+      { auth_app_up_sequence_id: cycle.public_id },
+      { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: cycle, surface: :app) },
+      nil, cycle.public_id,
+    )
+
+    gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "google", step: :confirmation)
+
+    assert_predicate gate, :success?
+    assert_equal cycle, gate.ticket
+    assert_equal :ok, gate.status
+    binding = SignFlowBindingCodec.decode(controller.params.fetch(AuthIoKeys::Params::FLOW_BINDING))
+
+    assert_equal cycle.step, binding.phase
+    assert_equal cycle.checkpoint_version, binding.generation
+    assert_equal cycle.expires_at.to_i, binding.expires_at
+  end
+
+  test "for_show prefers the controller ticket with its signed flow binding when the locator is empty" do
+    cycle = ClientSignUpFlow.new(
+      public_id: "controller-gate-flow", entry_method: "google", step: "checkpoint",
+      status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
+      completed_requirements: {}, expires_at: 15.minutes.from_now,
+    )
+    controller = ControllerBoundary.new(
+      {}, { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: cycle, surface: :app) },
+      cycle, nil,
+    )
 
     gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "google", step: :confirmation)
 
@@ -32,88 +54,48 @@ class SignUpStepGateTest < ActiveSupport::TestCase
     assert_equal cycle, gate.ticket
   end
 
-  test "for_show still requires a ticket when neither locator nor sequence id is present" do
-    controller = gate_controller({})
+  test "for_show refuses when neither locator nor sequence id is present" do
+    controller = ControllerBoundary.new({}, {}, nil, nil)
 
     gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "google", step: :confirmation)
 
-    assert_equal :invalid, gate.status
-    assert_equal ["ticket is required"], gate.errors
+    assert_equal :refused, gate.status
+    assert_equal :no_active_flow, gate.refusal
+    assert_equal ["request contradicts the authoritative sign-up flow"], gate.errors
   end
 
-  private
+  test "for_show refuses an existing flow without its signed binding" do
+    cycle = ClientSignUpFlow.new(
+      public_id: "unbound-gate-flow", entry_method: "google", step: "checkpoint",
+      status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING, completed_requirements: {},
+    )
+    controller = ControllerBoundary.new({}, {}, cycle, nil)
 
-  def gate_controller(session)
-    Class.new do
-      define_method(:initialize) do |session_arg|
-        @session = session_arg
-      end
+    gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "google", step: :confirmation)
 
-      define_method(:session) do
-        @session
-      end
-
-      define_method(:params) do
-        {}
-      end
-
-      define_method(:sign_up_ticket_public_id) do
-        @session[:auth_app_up_sequence_id]
-      end
-
-      define_method(:sign_app_sign_up_check_google_confirmation_path) do |_args|
-        "/sign/up/check/google/confirmation"
-      end
-
-      define_method(:sign_app_sign_up_check_google_birthdate_path) do |_args|
-        "/sign/up/check/google/birthdate"
-      end
-    end.new(session)
+    assert_equal :refused, gate.status
+    assert_equal :flow_binding, gate.refusal
+    assert_nil gate.ticket
   end
 
-  def fake_cycle(public_id:)
-    Struct.new(:public_id).new(public_id).tap do |cycle|
-      cycle.define_singleton_method(:entry_method) { "google" }
-      cycle.define_singleton_method(:completed_requirements) { {} }
-      cycle.define_singleton_method(:step) { "confirmation" }
-      cycle.define_singleton_method(:expired?) { false }
-      cycle.define_singleton_method(:lapsed?) { false }
-      cycle.define_singleton_method(:sign_up_terminal?) { false }
-      cycle.define_singleton_method(:sign_up_checkpoint_pending?) { true }
-    end
-  end
-end
+  test "for_show refuses a signed binding from an earlier checkpoint generation" do
+    cycle = ClientSignUpFlow.create!(
+      entry_method: "email", step: "checkpoint",
+      status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
+      nonce_digest: ClientSignUpFlow.digest_nonce("stale-checkpoint-binding"),
+      completed_requirements: {},
+    )
+    binding = SignFlowBindingCodec.encode(flow: cycle, surface: :app)
+    cycle.update!(checkpoint_version: cycle.checkpoint_version + 1)
+    controller = ControllerBoundary.new(
+      { auth_app_up_sequence_id: cycle.public_id },
+      { AuthIoKeys::Params::FLOW_BINDING => binding },
+      nil, cycle.public_id,
+    )
 
-# DAMP local route helper aliases for former shared test support.
-class SignUpStepGateTest
-  SURFACE_ROUTE_PREFIX_MAP = {
-    "sign_app_" => "auth_app_",
-    "sign_org_" => "auth_org_",
-    "sign_com_" => "auth_com_",
-    "acme_app_" => "base_app_",
-    "acme_org_" => "base_org_",
-    "acme_com_" => "base_com_",
-  }.freeze unless const_defined?(:SURFACE_ROUTE_PREFIX_MAP, false)
+    gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "email", step: :otp)
 
-  private
-
-  def method_missing(name, ...)
-    aliased_name = aliased_surface_route_helper_name(name)
-    return public_send(aliased_name, ...) if aliased_name && respond_to?(aliased_name, true)
-
-    super
-  end
-
-  def respond_to_missing?(name, include_private = false)
-    aliased_name = aliased_surface_route_helper_name(name)
-    (aliased_name && respond_to?(aliased_name, include_private)) || super
-  end
-
-  def aliased_surface_route_helper_name(name)
-    helper_name = name.to_s
-    self.class::SURFACE_ROUTE_PREFIX_MAP.each do |source_prefix, target_prefix|
-      return helper_name.sub(source_prefix, target_prefix).to_sym if helper_name.start_with?(source_prefix)
-    end
-    nil
+    assert_equal :refused, gate.status
+    assert_equal :phase, gate.refusal
   end
 end

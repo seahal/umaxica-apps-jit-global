@@ -1,0 +1,33 @@
+# Rows inserted by db/op_base_org_migrate/20261006160002_seed_org_sign_flow_reference_data.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: OperatorSignInFlowState
+
+primary_pending:
+  id: 10
+mfa_pending:
+  id: 20
+session_limit_pending:
+  id: 30
+guardrail_pending:
+  id: 40
+session_issuance_pending:
+  id: 50
+checkpoint_pending:
+  id: 60
+selector_pending:
+  id: 65
+dashboard_pending:
+  id: 70
+return_pending:
+  id: 80
+completed:
+  id: 100
+failed:
+  id: 900
+expired:
+  id: 910
+cancelled:
+  id: 920
+halted:
+  id: 930

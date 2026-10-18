@@ -1,0 +1,51 @@
+# Environment-specific Valkey topology, analogous to config/database.yml.
+# Application code reads responsibilities through Umaxica::Valkey::Settings.
+# Logical DB indexes live only here. Orchestration supplies hosts and ports;
+# production supplies full URLs. Do not copy this mapping into Compose.
+#
+# Nonprod application DBs: development odd, test even, adjacent pairs.
+# cache        development 1 / test 2 (reserved; test uses MemoryStore)
+# rate-limit   development 3 / test 4
+# auth-state   development 5 / test 6
+development:
+  cache:
+    host_key: VALKEY_CACHE_HOST
+    port_key: VALKEY_CACHE_PORT
+    db: 1
+    namespace: cache:development
+  rate_limit:
+    host_key: VALKEY_KVS_HOST
+    port_key: VALKEY_KVS_PORT
+    db: 3
+    namespace: rate_limit:development
+  auth_state:
+    host_key: VALKEY_KVS_HOST
+    port_key: VALKEY_KVS_PORT
+    db: 5
+  performance:
+    host_key: VALKEY_DIAGNOSTIC_HOST
+    port_key: VALKEY_DIAGNOSTIC_PORT
+    db: 12
+  coverband:
+    host_key: VALKEY_DIAGNOSTIC_HOST
+    port_key: VALKEY_DIAGNOSTIC_PORT
+    db: 13
+test:
+  cache:
+    store: memory
+    reserved_db: 2
+  rate_limit:
+    host_key: VALKEY_KVS_HOST
+    port_key: VALKEY_KVS_PORT
+    db: 4
+  auth_state:
+    host_key: VALKEY_KVS_HOST
+    port_key: VALKEY_KVS_PORT
+    db: 6
+production:
+  cache:
+    url_key: CACHE_REDIS_URL
+  rate_limit:
+    url_key: RATE_LIMIT_REDIS_URL
+  auth_state:
+    url_key: AUTH_STATE_REDIS_URL

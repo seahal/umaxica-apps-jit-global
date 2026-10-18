@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
 export type TextLinkTone = "default" | "muted";
 
 const TONES: Record<TextLinkTone, string> = {
-  default: "text-fg hover:underline",
+  default: "text-link hover:underline",
   muted: "text-fg-muted hover:text-fg hover:underline",
 };
 
@@ -36,7 +36,7 @@ export default function TextLink({
   children,
   inertia = false,
 }: TextLinkProps) {
-  const classes = ["underline-offset-4", TONES[tone], className].filter(Boolean).join(" ");
+  const classes = ["ui-text-link", TONES[tone], className].filter(Boolean).join(" ");
 
   if (inertia) {
     return (

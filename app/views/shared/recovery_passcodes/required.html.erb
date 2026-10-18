@@ -1,5 +1,6 @@
 <% title t("sign.recovery_passcodes.required.title") if respond_to?(:title) %>
 
+<div class="ui-page ui-page--narrow">
 <h1><%= t("sign.recovery_passcodes.required.title") %></h1>
 <p>
   <%= t(
@@ -11,3 +12,5 @@
 <p>
   <%= link_to t("sign.recovery_passcodes.required.setup_link"), @recovery_passcode_setup_url %>
 </p>
+
+</div>

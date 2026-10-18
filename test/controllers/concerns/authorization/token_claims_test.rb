@@ -23,8 +23,9 @@ module Authorization
     test "build includes subject and actor claims" do
       payload, _issued_at = setup_token_claims_payload
 
-      assert_equal 42, payload["sub"]
-      assert_equal "client", payload["act"]
+      assert_equal "42", payload["sub"]
+      assert_nil payload["act"]
+      assert_includes payload["scope"], "domain:client"
     end
 
     test "build includes session id claim" do
@@ -55,8 +56,11 @@ module Authorization
     test "build includes type and issuer claims" do
       payload, _issued_at = setup_token_claims_payload
 
-      assert_equal "auth-access-token;client", payload["typ"]
-      assert_equal AuthenticationJwtConfiguration.issuer("client"), payload["iss"]
+      assert_nil payload["typ"]
+      assert_equal AuthenticationJwtConfiguration.issuer, payload["iss"]
+      assert_equal AuthenticationJwtConfiguration.client_id("client"), payload["client_id"]
+      assert_kind_of String, payload["scope"]
+      assert_nil payload["scp"]
     end
 
     test "build includes audience and jti claims" do
@@ -100,9 +104,26 @@ module Authorization
 
     test "extractors return nil when payload is nil" do
       assert_nil AuthorizationTokenClaims.subject(nil)
-      assert_nil AuthorizationTokenClaims.actor(nil)
+      assert_nil AuthorizationTokenClaims.resource_type(nil)
       assert_nil AuthorizationTokenClaims.session_id(nil)
+      assert_nil AuthorizationTokenClaims.base_session_id(nil)
       assert_nil AuthorizationTokenClaims.jti(nil)
+    end
+
+    test "build carries the Base Browser Session binding separately from the RP sid" do
+      issued_at = Time.zone.parse("2026-02-22 12:00:00")
+      payload = AuthorizationTokenClaims.build(
+        resource: DummyResource.new(42),
+        session_public_id: "base-session-public-id",
+        base_session_public_id: "base-session-public-id",
+        oidc_sid: "rp-session-public-id",
+        resource_type: "client",
+        issued_at: issued_at,
+        access_token_ttl: 5.minutes,
+      )
+
+      assert_equal "rp-session-public-id", payload.fetch("sid")
+      assert_equal "base-session-public-id", AuthorizationTokenClaims.base_session_id(payload)
     end
 
     test "build does not include preference claim" do

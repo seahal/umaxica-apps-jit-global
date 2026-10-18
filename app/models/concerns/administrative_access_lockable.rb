@@ -19,6 +19,7 @@ module AdministrativeAccessLockable
     other
   ).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     attribute :access_state, :string, default: ACCESS_STATE_ENABLED
 

@@ -4,7 +4,7 @@
 # Shared per-surface adapter for Preference lifecycle contract tests.
 #
 # Per app/com/org test-parity policy (see
-# memos/2026-07-21-preference-lifecycle-hardening-implementation.md), the
+# research/2026-07-21-preference-lifecycle-hardening-implementation.md), the
 # behavioral assertions in preference_sign_out_rotation_contract_test.rb,
 # preference_sign_up_initialization_test.rb, etc. must be shared code
 # exercised once per surface -- not three copy-pasted test files. This file
@@ -76,8 +76,8 @@ module PreferenceLifecycleSurfaces
       status_id: cfg[:status_class].call::NOTHING,
       binding_method_id: cfg[:binding_class].call::NOTHING,
       dbsc_status_id: cfg[:dbsc_class].call::NOTHING,
-      discarded_at: 20.years.from_now,
-      purged_at: 20.years.from_now,
+      discard_at: 20.years.from_now,
+      purge_eligible_at: 20.years.from_now,
       jti: JitSecurityJwtJtiGenerator.generate,
     )
     create_default_children!(pref) if with_default_children

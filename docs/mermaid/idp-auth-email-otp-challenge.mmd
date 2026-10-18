@@ -1,0 +1,30 @@
+stateDiagram-v2
+    state "No challenge" as absent
+    state "Issued, unverified" as issued
+    state "Verification committed" as verified
+    state "Cancelled" as cancelled
+    state "OTP expired (derived)" as expired
+    state "Result expired (derived)" as result_expired
+    [*] --> absent
+    absent --> issued: issue_email_otp!
+    issued --> issued: issue_email_otp! replaces this flow generation
+    issued --> verified: verify_email_otp! valid code and available budgets
+    issued --> cancelled: cancel_email_otp_challenge! under parent and ceremony locks
+    cancelled --> issued: issue_email_otp! creates a new generation
+    issued --> issued: wrong code / shared budget refusal
+    issued --> expired: OTP deadline elapsed
+    verified --> verified: already_verified receipt before result deadline; not another consumption
+    verified --> result_expired: result deadline elapsed
+    note right of issued
+        App/com sign-in receipt, verification and resend use this model.
+        Delivery refuses stale generation, destination, code or binding before transport.
+        Independent app/com Ticket storage; DB time rechecked after Contact ownership locks.
+        Current surface, purpose, SID, parent and effective Contact facts required.
+        Dummy generations cannot verify; Source OTP generations remain unchanged.
+        Cancellation retains the terminal generation and refuses verification and delivery.
+    end note
+    note right of verified
+        Reissue refuses committed proof. Retry retains original proof deadlines.
+        success? reports first consumption only; verified_evidence? admits receipt continuation.
+        Subordinate evidence only, never root or RP authority.
+    end note

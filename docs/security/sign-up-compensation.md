@@ -26,8 +26,8 @@ after sign-up completion.
 
 - `finalize_sign_up_from_checkpoint!` is the sign-up completion gate.
 - `IdentityGraphProvisioner.call!` runs inside that boundary before any sign-in handoff.
-- `establish_signed_in_session!(..., bootstrap_actor: true)` is the shared session-issuance helper
-  used only for newly provisioned sign-up identities.
+- `establish_signed_in_session!` is the shared session-issuance helper for the sign-up handoff, with
+  no cooldown or limit exemption.
 - If graph provisioning fails, the boundary must stop before handoff and must not issue auth state.
 - If session issuance fails after durable provisioning, the completed actor data must remain intact
   and the request must fail as a sign-in-domain problem, not as a sign-up rollback.

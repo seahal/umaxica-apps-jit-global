@@ -5,6 +5,8 @@ require "jwt"
 require "jit_security_jwt_issuer_builder"
 require "jit_security_jwt_key_source"
 require "jit_security_jwt_jwk"
+require_relative "../app/errors/jump_rt_configuration_error"
+require_relative "../app/values/jump_rt_surface"
 
 module JitSecurityJwtRegistry
   module_function
@@ -14,27 +16,51 @@ module JitSecurityJwtRegistry
   REQUIRED_JWK_FIELDS = JitSecurityJwtJwk::REQUIRED_PUBLIC_FIELDS
   PRIVATE_JWK_FIELDS = JitSecurityJwtJwk::PRIVATE_FIELDS
   SURFACE_NAMESPACES = %w(
-    SIGN_APP SIGN_COM SIGN_ORG
+    AUTH_APP AUTH_COM AUTH_ORG
     ACME_APP ACME_COM ACME_ORG
     CORE_APP CORE_COM CORE_ORG
+    WARP_APP WARP_COM WARP_ORG
+    PALM_APP
     BASE_APP BASE_COM BASE_ORG
   ).freeze
+  MAX_JUMP_PUBLISHED_JWKS_KEYS = 4
+  MAX_JUMP_PUBLISHED_JWKS_BYTES = 65_536
+  MAX_JUMP_KID_LENGTH = 128
+  # Palm signs Jump RTs; its bearer API does not use a surface access-token issuer. Jump issuer
+  # capability is narrower than this list and is owned by JumpRtSurface::ISSUER_NAMESPACES.
+  ACCESS_TOKEN_SURFACE_NAMESPACES = (SURFACE_NAMESPACES - %w(PALM_APP)).freeze
   OIDC_CLIENT_NAMESPACES = %w(
-    SIGN_APP SIGN_COM SIGN_ORG
+    AUTH_APP AUTH_COM AUTH_ORG
     ACME_APP ACME_COM ACME_ORG
-    CORE_APP CORE_COM CORE_ORG
+    CORE_APP_JP CORE_COM_JP CORE_ORG_JP
     BASE_APP BASE_COM BASE_ORG
+    BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
+    WARP_APP_JP WARP_COM_JP WARP_ORG_JP
+    EDIT_ORG_WW
+    PALM_APP_JP TECH_ORG_WW
   ).freeze
+  REQUIRED_OIDC_CLIENT_NAMESPACES = %w(
+    BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
+    WARP_APP_JP WARP_COM_JP WARP_ORG_JP
+    TECH_ORG_WW
+  ).freeze
+  # Issuer metadata for surface records without Jump issuer capability. Jump issuer records take
+  # JumpRtSurface's PUBLIC_* origin instead, so the record that holds a Jump signing key names the
+  # same `iss` the RT carries, and an invalid origin fails at boot rather than at request time.
   SURFACE_ISSUER_ORIGINS = {
-    "SIGN_APP" => "https://log.umaxica.app",
-    "SIGN_COM" => "https://log.umaxica.com",
-    "SIGN_ORG" => "https://log.umaxica.org",
+    "AUTH_APP" => "https://auth.umaxica.app",
+    "AUTH_COM" => "https://auth.umaxica.com",
+    "AUTH_ORG" => "https://auth.umaxica.org",
     "ACME_APP" => "https://www.umaxica.app",
     "ACME_COM" => "https://www.umaxica.com",
     "ACME_ORG" => "https://www.umaxica.org",
-    "CORE_APP" => "https://jpx.umaxica.app",
-    "CORE_COM" => "https://jpx.umaxica.com",
-    "CORE_ORG" => "https://jpx.umaxica.org",
+    "CORE_APP" => "https://jp.umaxica.app",
+    "CORE_COM" => "https://jp.umaxica.com",
+    "CORE_ORG" => "https://jp.umaxica.org",
+    "WARP_APP" => "https://www-jp.umaxica.app",
+    "WARP_COM" => "https://www-jp.umaxica.com",
+    "WARP_ORG" => "https://www-jp.umaxica.org",
+    "PALM_APP" => "https://palm-jp.umaxica.app",
     "BASE_APP" => "https://www.umaxica.app",
     "BASE_COM" => "https://www.umaxica.com",
     "BASE_ORG" => "https://www.umaxica.org",
@@ -43,8 +69,9 @@ module JitSecurityJwtRegistry
   ConfigurationError = Class.new(StandardError)
 
   DEFAULT_KID = "default"
-  DEFAULT_AUTH_AUDIENCES = ["umaxica-api"].freeze
-
+  AUTH_AUDIENCE_ENV_NAMES = %w(
+    AUTH_JWT_CLIENT_AUDIENCES AUTH_JWT_VISITOR_AUDIENCES AUTH_JWT_OPERATOR_AUDIENCES
+  ).freeze
   # kid substrings that mark non-production / throwaway signing material. Such a
   # kid must never appear outside local Rails environments: it means dev/test/
   # fixture keys (often ephemeral, auto-generated under tmp/ by the local keyset
@@ -53,11 +80,13 @@ module JitSecurityJwtRegistry
     /\b(?:development|test|local|fixture|sample|example|dummy|staging)\b/i
 
   def configure!
-    records = build_issuers
+    source = JitSecurityJwtKeySource.new
+    records = build_issuers(source: source)
     validate!(records)
     # rubocop:disable ThreadSafety/ClassInstanceVariable
     @issuers = records
     # rubocop:enable ThreadSafety/ClassInstanceVariable
+    records
   rescue ConfigurationError => e
     Rails.logger.fatal(
       "jwt.registry.configuration_invalid error_class=#{e.class.name} reason=#{e.message.inspect}",
@@ -122,9 +151,10 @@ module JitSecurityJwtRegistry
     value
   end
 
-  def build_issuers
-    source = JitSecurityJwtKeySource.new
+  def build_issuers(source:)
     records = {}
+    auth_audiences = AUTH_AUDIENCE_ENV_NAMES.flat_map { |name| source.csv(name) }
+    auth_audiences.uniq!
     records["auth"] = build_keyset_issuer(
       source: source,
       id: "auth",
@@ -132,7 +162,7 @@ module JitSecurityJwtRegistry
       public_keyset_name: :AUTH_JWT_PUBLIC_KEYSET,
       active_kid: source.fetch("AUTH_JWT_ACTIVE_KID", nil),
       issuer: source.fetch("AUTH_JWT_ISSUER", nil),
-      audiences: source.csv("AUTH_JWT_AUDIENCES").presence || DEFAULT_AUTH_AUDIENCES,
+      audiences: auth_audiences.freeze,
       revoked_kids: source.csv("AUTH_JWT_REVOKED_KIDS"),
     )
     records["preference"] = build_keyset_issuer(
@@ -142,7 +172,7 @@ module JitSecurityJwtRegistry
       public_keyset_name: :PREFERENCE_JWT_PUBLIC_KEYSET,
       active_kid: source.fetch("PREFERENCE_JWT_ACTIVE_KID", nil),
       issuer: source.fetch("PREFERENCE_JWT_ISSUER", nil),
-      audiences: preference_audiences(source: source),
+      audiences: preference_hosts_from_boot_config,
       revoked_kids: source.csv("PREFERENCE_JWT_REVOKED_KIDS"),
     )
 
@@ -174,28 +204,44 @@ module JitSecurityJwtRegistry
   end
 
   def build_surface_issuer(namespace, source:)
+    prefix = "JWT_#{namespace}"
+    public_keyset = source.value("#{prefix}_PUBLIC_KEYSET")
+    validate_jump_public_keyset!(namespace, public_keyset) if JumpRtSurface::ISSUER_NAMESPACES.include?(namespace)
+
     JitSecurityJwtIssuerBuilder.build_surface_issuer(
       namespace: namespace,
-      active_kid: source.value("JWT_#{namespace}_ACTIVE_KID"),
-      private_key: source.value("JWT_#{namespace}_PRIVATE_KEY"),
-      private_key_source: "JWT_#{namespace}_PRIVATE_KEY",
-      public_keyset: source.value("JWT_#{namespace}_PUBLIC_KEYSET"),
-      public_keyset_source: "JWT_#{namespace}_PUBLIC_KEYSET",
-      revoked_kids: source.csv("JWT_#{namespace}_REVOKED_KIDS"),
+      active_kid: source.value("#{prefix}_ACTIVE_KID"),
+      private_key: source.value("#{prefix}_PRIVATE_KEY"),
+      private_key_source: "#{prefix}_PRIVATE_KEY",
+      public_keyset: public_keyset,
+      public_keyset_source: "#{prefix}_PUBLIC_KEYSET",
+      revoked_kids: source.csv("#{prefix}_REVOKED_KIDS"),
       issuer: surface_issuer_origin(namespace),
-      audiences: [source.fetch("PUBLIC_JUMP_GATEWAY_URL", source.fetch("JUMP_GATEWAY_URL", "https://jump.umaxica.net"))].freeze,
+      audiences: [jump_gateway_audience].freeze,
     )
   rescue JitSecurityJwtIssuerBuilder::Error => e
     raise ConfigurationError, e.message
   end
 
   def build_oidc_client_issuer(namespace, source:)
+    active_kid_name = "OIDC_CLIENT_#{namespace}_ACTIVE_KID"
+    private_key_name = "OIDC_CLIENT_#{namespace}_PRIVATE_KEY"
+    active_kid = source.value(active_kid_name)
+    private_key = source.value(private_key_name)
+    require_oidc_client_key_material!(
+      namespace,
+      active_kid_name:,
+      private_key_name:,
+      active_kid:,
+      private_key:,
+    )
+
     JitSecurityJwtIssuerBuilder.build_surface_issuer_record(
       namespace: namespace,
       id: "oidc_client:#{namespace}",
-      active_kid: source.value("OIDC_CLIENT_#{namespace}_ACTIVE_KID"),
-      private_key: source.value("OIDC_CLIENT_#{namespace}_PRIVATE_KEY"),
-      private_key_source: "OIDC_CLIENT_#{namespace}_PRIVATE_KEY",
+      active_kid:,
+      private_key:,
+      private_key_source: private_key_name,
       public_keyset: source.fetch("OIDC_CLIENT_#{namespace}_PUBLIC_KEYSET", nil),
       public_keyset_source: "OIDC_CLIENT_#{namespace}_PUBLIC_KEYSET",
       revoked_kids: source.csv("OIDC_CLIENT_#{namespace}_REVOKED_KIDS"),
@@ -206,20 +252,50 @@ module JitSecurityJwtRegistry
     raise ConfigurationError, e.message
   end
 
-  def preference_audiences(source:)
-    hosts = preference_hosts_from_boot_config
-    return hosts if hosts.present?
+  def require_oidc_client_key_material!(namespace, active_kid_name:, private_key_name:, active_kid:, private_key:)
+    return unless required_oidc_client_namespaces.include?(namespace)
+    return if active_kid.present? && private_key.present?
 
-    audiences = [
-      source.fetch("PUBLIC_BASE_SERVICE_URL", source.fetch("BASE_SERVICE_URL", "base.app.localhost")),
-      source.fetch("PUBLIC_BASE_CORPORATE_URL", source.fetch("BASE_CORPORATE_URL", "base.com.localhost")),
-      source.fetch("PUBLIC_BASE_STAFF_URL", source.fetch("BASE_STAFF_URL", "base.org.localhost")),
-    ]
-    audiences.compact!
-    audiences.map!(&:to_s)
-    audiences.freeze
+    missing = []
+    missing << active_kid_name if active_kid.blank?
+    missing << private_key_name if private_key.blank?
+    raise ConfigurationError, "missing required OIDC client configuration: #{missing.join(", ")}"
   end
 
+  # In an RP cell process only the records it signs with must carry a private key; every other
+  # record is verification-only there (its public keyset still loads).
+  def private_key_required?(record)
+    return true unless RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+
+    RuntimeRole.rp_private_env_names.include?(private_env_name_for(record.id))
+  end
+
+  def private_env_name_for(record_id)
+    kind, namespace = record_id.to_s.split(":", 2)
+    case kind
+    when "auth" then "AUTH_JWT_PRIVATE_KEYSET"
+    when "preference" then "PREFERENCE_JWT_PRIVATE_KEYSET"
+    when "surface" then "JWT_#{namespace}_PRIVATE_KEY"
+    when "oidc_client" then "OIDC_CLIENT_#{namespace}_PRIVATE_KEY"
+    else raise ConfigurationError, "unknown JWT issuer record #{record_id.inspect}"
+    end
+  end
+
+  # An RP cell process holds only its own client key (RuntimeRole.rp_private_env_names), so only
+  # that namespace is required there; every other process requires the full list.
+  def required_oidc_client_namespaces
+    return REQUIRED_OIDC_CLIENT_NAMESPACES unless RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+
+    [RuntimeRole.rp_private_env_names.first.delete_prefix("OIDC_CLIENT_").delete_suffix("_PRIVATE_KEY")]
+  end
+
+  def jump_gateway_audience
+    Rails.configuration.x.boot_config.fetch(:jump).audience
+  end
+
+  # An empty list is left for `validate_record_metadata!` to reject, so a
+  # preference keyring without configured surface hosts fails at boot instead
+  # of signing tokens for a guessed audience.
   def preference_hosts_from_boot_config
     boot_config =
       begin
@@ -241,7 +317,68 @@ module JitSecurityJwtRegistry
   def validate!(records = issuers)
     records.each_value { |record| validate_record!(record) }
     validate_global_kid_uniqueness!(records)
+    validate_jump_issuer_records!(records)
     true
+  end
+
+  def validate_jump_public_keyset!(namespace, raw)
+    return if raw.blank?
+
+    parsed = JSON.parse(raw)
+    entries =
+      if parsed.is_a?(Array)
+        parsed
+      elsif parsed.is_a?(Hash) && parsed["keys"].is_a?(Array)
+        parsed.fetch("keys")
+      end
+    return unless entries
+
+    kids = entries.filter_map { |entry| entry["kid"] if entry.is_a?(Hash) }
+    return if kids.uniq.size == kids.size
+
+    raise ConfigurationError, "surface:#{namespace} public JWKS contains duplicate kid values"
+  rescue JSON::ParserError => e
+    raise ConfigurationError, "surface:#{namespace} public JWKS contains invalid JSON: #{e.message}"
+  end
+
+  def validate_jump_issuer_records!(records)
+    JumpRtSurface::ISSUER_NAMESPACES.each do |namespace|
+      record = records.fetch("surface:#{namespace}")
+      keys = record.jwks.fetch(:keys)
+      unless (1..MAX_JUMP_PUBLISHED_JWKS_KEYS).cover?(keys.size)
+        raise ConfigurationError,
+              "surface:#{namespace} published Jump JWKS must contain 1..#{MAX_JUMP_PUBLISHED_JWKS_KEYS} keys"
+      end
+
+      kids = keys.map { |key| key.fetch("kid") }
+      unless kids.uniq.size == kids.size
+        raise ConfigurationError, "surface:#{namespace} published Jump JWKS contains duplicate kid values"
+      end
+
+      keys.each do |key|
+        validate_jump_kid!(namespace, key.fetch("kid"))
+        validate_public_jwk!(key, source: "surface:#{namespace}:#{key.fetch("kid")}")
+      end
+
+      bytes = JSON.generate(record.jwks).bytesize
+      next if bytes <= MAX_JUMP_PUBLISHED_JWKS_BYTES
+
+      raise ConfigurationError,
+            "surface:#{namespace} published Jump JWKS exceeds #{MAX_JUMP_PUBLISHED_JWKS_BYTES} bytes"
+    end
+  end
+
+  def validate_jump_kid!(namespace, kid)
+    valid =
+      kid.is_a?(String) && kid.present? &&
+      kid.codepoints.none? { |codepoint| codepoint < 0x20 || (0x7f..0x9f).cover?(codepoint) } &&
+      kid.encode(Encoding::UTF_16LE).bytesize / 2 <= MAX_JUMP_KID_LENGTH
+    return if valid
+
+    raise ConfigurationError,
+          "surface:#{namespace} kid must be a safe string of at most #{MAX_JUMP_KID_LENGTH} UTF-16 units"
+  rescue EncodingError
+    raise ConfigurationError, "surface:#{namespace} kid contains invalid encoding"
   end
 
   def validate_record!(record)
@@ -274,7 +411,9 @@ module JitSecurityJwtRegistry
     end
 
     current = record.keys.fetch(record.current_kid)
-    raise ConfigurationError, "#{record.id} active private key is missing" if current.private_key.nil?
+    if current.private_key.nil? && private_key_required?(record)
+      raise ConfigurationError, "#{record.id} active private key is missing"
+    end
     return if record.jwks.fetch(:keys).any? { |jwk| jwk.fetch("kid") == record.current_kid }
 
     raise ConfigurationError, "#{record.id} active key #{record.current_kid.inspect} is missing from JWKS"
@@ -321,7 +460,11 @@ module JitSecurityJwtRegistry
   end
 
   def surface_issuer_origin(namespace)
-    SURFACE_ISSUER_ORIGINS.fetch(namespace)
+    return SURFACE_ISSUER_ORIGINS.fetch(namespace) unless JumpRtSurface::ISSUER_NAMESPACES.include?(namespace)
+
+    JumpRtSurface.issuer_origin(namespace)
+  rescue JumpRtConfigurationError => e
+    raise ConfigurationError, e.message
   end
 
   def normalize_oidc_client_namespace(namespace)
@@ -352,4 +495,13 @@ module JitSecurityJwtRegistry
   def reserved_env_kid?(kid)
     RESERVED_ENV_KID_PATTERN.match?(kid.to_s)
   end
+
+  private_class_method :build_issuers, :build_oidc_client_issuer, :require_oidc_client_key_material!,
+                       :jump_gateway_audience,
+                       :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
+                       :private_key_required?, :private_env_name_for, :required_oidc_client_namespaces,
+                       :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
+                       :validate_jump_public_keyset!, :validate_jump_issuer_records!, :validate_jump_kid!,
+                       :surface_issuer_origin, :normalize_oidc_client_namespace, :insecure_default_kid?,
+                       :insecure_default_kid_allowed?, :reserved_env_kid?
 end

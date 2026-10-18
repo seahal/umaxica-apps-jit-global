@@ -156,6 +156,8 @@ module ObjectStorage
         secret_access_key: Environment.fetch("OBJECT_STORAGE_SECRET_ACCESS_KEY"),
       )
     end
+
+    private_class_method :s3_compatible_storage
   end
 end
 

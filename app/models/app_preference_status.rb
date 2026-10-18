@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preference_statuses
@@ -6,8 +8,6 @@
 #
 #  id :bigint           not null, primary key
 #
-
-# frozen_string_literal: true
 
 class AppPreferenceStatus < AppSettingRecord
   include ReferenceRecord

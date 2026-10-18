@@ -30,7 +30,7 @@ class Division < OrgPrincipalRecord
              inverse_of: :divisions
 
   belongs_to :organization,
-             class_name: "Organization",
+             class_name: "OperatorOrganization",
              inverse_of: :divisions
 
   validates :division_status_id,

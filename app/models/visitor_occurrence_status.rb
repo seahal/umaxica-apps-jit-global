@@ -12,13 +12,13 @@
 class VisitorOccurrenceStatus < OccurrenceRecord
   include ReferenceRecord
 
+  include OccurrenceStatus
+
   NOTHING = 0
   ACTIVE = 1
   INACTIVE = 2
   DELETED = 3
   DEFAULTS = [NOTHING, ACTIVE, INACTIVE, DELETED].freeze
-
-  include OccurrenceStatus
 
   has_many :visitor_occurrences, foreign_key: :status_id, dependent: :restrict_with_error,
                                  inverse_of: :visitor_occurrence_status

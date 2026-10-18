@@ -12,7 +12,7 @@ class ResultShapeAndHostComparisonTest < ActiveSupport::TestCase
 
   test "only the declared terminal sign-in statuses map to an HTTP status" do
     {
-      session_limit_hard_reject: :forbidden,
+      session_limit_conflict: :service_unavailable,
       guardrail_blocked: :forbidden,
       login_forbidden: :forbidden,
       credential_failed: :unauthorized,
@@ -44,35 +44,26 @@ class ResultShapeAndHostComparisonTest < ActiveSupport::TestCase
     assert_match(/key not found: :previous_token/, error.message)
   end
 
-  # A configured host that cannot be parsed as an authority is compared verbatim
-  # rather than treated as matching everything.
-  test "an unparsable configured host is compared verbatim rather than accepted" do
-    request = OidcEndSessionRequest.allocate
-
-    assert request.send(:host_matches?, "www.umaxica.app", "www.umaxica.app")
-    assert_not request.send(:host_matches?, "www.umaxica.app", "evil.example.com")
-    assert request.send(:host_matches?, "[oops", "[oops")
-    assert_not request.send(:host_matches?, "www.umaxica.app", "[oops")
-  end
-
   # A redirect URI carrying its scheme's default port is normalised so it
   # compares equal to the registered one, which never carries it.
   test "a default port is dropped from a redirect URI and a non-default one kept" do
-    coordinator = OidcAuthorizeCoordinator.allocate
+    redirect =
+      lambda do |uri|
+        URI.parse(
+          OidcAuthorizeCoordinator.rp_redirect_url(redirect_uri: uri, resource_type: "client", response_params: []),
+        )
+      end
 
-    https = URI.parse("https://rp.example.test:443/callback")
-    coordinator.send(:normalize_default_port!, https)
+    https = redirect.call("https://rp.example.test:443/callback")
 
-    assert_equal "https://rp.example.test/callback", https.to_s
+    assert_equal "https://rp.example.test/callback", https.to_s.split("?").first
 
-    http = URI.parse("http://rp.example.test:80/callback")
-    coordinator.send(:normalize_default_port!, http)
+    http = redirect.call("http://rp.example.test:80/callback")
 
-    assert_equal "http://rp.example.test/callback", http.to_s
+    assert_equal "http://rp.example.test/callback", http.to_s.split("?").first
 
-    explicit = URI.parse("https://rp.example.test:8443/callback")
-    coordinator.send(:normalize_default_port!, explicit)
+    explicit = redirect.call("https://rp.example.test:8443/callback")
 
-    assert_equal "https://rp.example.test:8443/callback", explicit.to_s
+    assert_equal "https://rp.example.test:8443/callback", explicit.to_s.split("?").first
   end
 end

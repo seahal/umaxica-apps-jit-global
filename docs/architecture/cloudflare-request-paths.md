@@ -87,17 +87,24 @@ added there, not in Rails config:
    resolves.
 2. `development.rb` reads both `PRIVATE_*_URL` and `PUBLIC_*_URL` values into `env_host_keys`.
 3. `boot_config` is passed through unfiltered. `ConfigValues::HostFamilyValues` resolves several
-   families to browser-facing names in development (`#auth_key`, `#base_key`, `#side_key` fall back
-   to `PUBLIC_AUTH_*`/`PUBLIC_BASE_*`/`PUBLIC_SIDE_*_URL`), which is what the other consumers need
+   families to browser-facing names in development (`#auth_key`, `#base_key`, `#warp_key` fall back
+   to `PUBLIC_AUTH_*`/`PUBLIC_BASE_*`/`PUBLIC_WARP_*_URL`), which is what the other consumers need
    anyway: route constraints, the CSP form-action allowlist, and the OIDC authority all read
    `PUBLIC_*`.
 
-`test/config/host_authorization_contract_test.rb` guards the result in both directions: the
-published site names are accepted, and an Umaxica-owned hostname that no `PUBLIC_*_URL` names is
-still rejected — admitting the published names must not degrade into admitting the whole `umaxica.*`
-domain. It also asserts that every non-`*.localhost` alias in `compose.yaml` is backed by a
-`PUBLIC_*_URL` value in the same file, so an alias can never outlive the configuration that makes
-Rails accept it.
+The Edit staff Publishing surface is one such pair: `edit.umaxica.org` is the browser hostname and
+the remotely managed Tunnel routes it to `http://edit.org.localhost:3000`. It remains subject to
+Cloudflare Access at the perimeter and Rails operator authentication and Action Policy at the
+application boundary.
+
+The effective development Host Authorization policy was verified by booting Rails in development and
+exercising its middleware with `Rack::MockRequest`. The probe accepted the configured private
+origins and browser-facing site names, including `jp.umaxica.*`, and rejected the unconfigured
+`core-jp.umaxica.app` and `evil.example.com`; see the
+[recorded observation](../../evidence/2026-10-13-environment-test-retirement-A6V9.md). This one-time
+evidence is not a regression-test guard. It checks Rails' effective host policy, not Compose DNS or
+alias-to-environment-variable consistency; inspect those configuration boundaries directly when they
+change.
 
 ### Scheme and cookie behaviour on the tunnel path
 
@@ -119,11 +126,11 @@ Rails accept it.
 
 ## Trust Domains
 
-| Domain            | Purpose                                                | Never used for                                                                                                    |
-| ----------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Cloudflare Tunnel | Selected externally reachable Rails ingress            | Service-to-service (Workers / Edge) traffic                                                                       |
-| Workers VPC       | Cloudflare Worker / Edge -> Rails, service-to-service  | Public browser traffic, operator access                                                                           |
-| Cloudflare Access | Perimeter for explicitly protected hostnames           | Rails' primary identity system — Rails authentication and authorization remain authoritative regardless of Access |
+| Domain            | Purpose                                               | Never used for                                                                                                    |
+| ----------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Cloudflare Tunnel | Selected externally reachable Rails ingress           | Service-to-service (Workers / Edge) traffic                                                                       |
+| Workers VPC       | Cloudflare Worker / Edge -> Rails, service-to-service | Public browser traffic, operator access                                                                           |
+| Cloudflare Access | Perimeter for explicitly protected hostnames          | Rails' primary identity system — Rails authentication and authorization remain authoritative regardless of Access |
 
 ## Request Paths
 
@@ -136,17 +143,19 @@ Browser --(HTTPS)--> Cloudflare edge --(QUIC tunnel)--> cloudflared (compose: cl
 
 - `cloudflared` is the unprofiled `cloudflare-tunnel` service in `compose.yaml` (image
   `cloudflare/cloudflared:2026.8.2`,
-  `tunnel --no-autoupdate --protocol auto --metrics 0.0.0.0:2000 run`, and `TUNNEL_TOKEN` resolved from the
-  gitignored repository `.env`). A plain Compose `up` and the Dev Container lifecycle both start
-  it. The alternative connector stays behind `--profile tunnel-edge`. It is the
-  only component on the `frontend` network besides `core` itself.
+  `tunnel --no-autoupdate --protocol auto --metrics 0.0.0.0:2000 run`, and `TUNNEL_TOKEN` resolved
+  from the gitignored repository `.env`). A plain Compose `up` and the Dev Container lifecycle both
+  start it. The alternative connector stays behind `--profile tunnel-edge`. It is the only component
+  on the `frontend` network besides `core` itself.
 - The connector is attached only to Global's private `frontend` network. Edge and Global do not
   share a Podman network. An Edge Worker reaches Rails through its Cloudflare Workers VPC Service
   binding and this tunnel, including `remote: true` binding behavior during local Worker
   development.
-- `core` never publishes a host port in the base `compose.yaml` — verified by
-  `test/unit/security/tunnel_origin_isolation_test.rb`. This is the actual security boundary:
-  nothing outside the compose project's private networks can reach Rails directly.
+- `core` never publishes a host port in the base `compose.yaml`. No test asserts this any longer:
+  `test/unit/security/tunnel_origin_isolation_test.rb` was removed, and Compose configuration is
+  verified by running it (`adr/no-test-suite-for-environment-construction.md`). This is the actual
+  security boundary: nothing outside the compose project's private networks can reach Rails
+  directly.
 - Headers Cloudflare's edge sets and the client cannot override: `CF-Connecting-IP`, `CF-Ray`,
   `CF-IPCountry`. Headers the client _can_ set and Cloudflare may append to (not replace) if already
   present: `X-Forwarded-For`.
@@ -158,8 +167,8 @@ Browser --(HTTPS)--> Cloudflare edge --(QUIC tunnel)--> cloudflared (compose: cl
   whether the immediate peer (`REMOTE_ADDR`) is itself a trusted proxy — it only strips proxy-hop
   IPs found _within_ the `X-Forwarded-For` chain. A request that reached Rails directly, bypassing
   `cloudflared`, could set an arbitrary `X-Forwarded-For` and have it trusted regardless of
-  `trusted_proxies` value. See `test/unit/security/tunnel_origin_isolation_test.rb` for the
-  reproducible proof (no live infrastructure required). **The real control is network isolation**
+  `trusted_proxies` value. The removed `test/unit/security/tunnel_origin_isolation_test.rb` held the
+  reproducible proof; it is no longer in the suite. **The real control is network isolation**
   (previous paragraph), not the `trusted_proxies` value itself.
 - **Decision**: do not widen `trusted_proxies` to Cloudflare's public IP ranges — there is no
   evidence Rails ever receives a connection directly from those addresses (it only ever sees
@@ -186,18 +195,47 @@ Browser --(HTTPS, Access cookie/JWT)--> Cloudflare edge --(Access policy check)-
   validation point — it runs before the request reaches Rails at all.
 - **The development tunnel hostnames are Access-protected, and that protection lives in the
   Cloudflare account, not in this repository.** This remotely managed connector authenticates with
-  the tunnel-scoped token described in `docs/operations/cloudflare-private-origin.md`, so its ingress
-  rules and `originRequest.access` blocks are configured in the Cloudflare dashboard; no file here
-  can assert they are present. Treat "the Access application exists and the published development
-  route enables Access validation" as an external check, in the sense of the "External Checks"
-  section of `docs/operations/cloudflare-private-origin.md` — the repository-side controls (network
-  isolation, Host Authorization, Rails authentication) do not depend on it, but the confidentiality
-  of the development surface does. Record the hostname, `audTag`, and `teamName` here once they are
-  settled.
+  the tunnel-scoped token described in `docs/operations/cloudflare-private-origin.md`, so its
+  ingress rules and `originRequest.access` blocks are configured in the Cloudflare dashboard; no
+  file here can assert they are present. Treat "the Access application exists and the published
+  development route enables Access validation" as an external check, in the sense of the "External
+  Checks" section of `docs/operations/cloudflare-private-origin.md` — the repository-side controls
+  (network isolation, Host Authorization, Rails authentication) do not depend on it, but the
+  confidentiality of the development surface does. Record the hostname, `audTag`, and `teamName`
+  here once they are settled.
 - Rails does not validate `Cf-Access-Jwt-Assertion` itself and should not, unless a specific feature
   needs to consume Access identity/claims directly — none does today. Adding Rails-side validation
   merely for "defense in depth" duplicates the connector-side check without a concrete requirement
   driving it.
+
+#### Core (`jp.*`) tunnel path rules
+
+The browser-facing tunnel publishes the core hosts with a path regular expression, so only the
+listed paths reach Rails; every other path falls through to a later ingress rule and never appears
+in the Rails log. Like the rest of the ingress configuration, these rules live in the Cloudflare
+dashboard; this is the recorded intended value, not something the repository can enforce.
+
+| Hostname         | Service                          |
+| ---------------- | -------------------------------- |
+| `jp.umaxica.app` | `http://core.app.localhost:3000` |
+| `jp.umaxica.com` | `http://core.com.localhost:3000` |
+| `jp.umaxica.org` | `http://core.org.localhost:3000` |
+
+All three share this path:
+
+```text
+^/((api/v0|oidc|sign)(/.*)?|\.well-known/jwks\.json|csp-violation-report)$
+```
+
+- `sign(/.*)?` covers the whole `/sign` scope in `config/routes/core.rb`: `GET`/`POST /sign` (RP
+  start) and `/sign/out` (sign-out). An earlier value listed only `sign/out`, so `/sign` never
+  reached Rails and the edge answered with an empty HTTP 300.
+- `oidc(/.*)?` covers the `/oidc` scope, including the OIDC callback `/oidc/callback`. The callback
+  was `/sign/callback` until 2026-10-02.
+- The anchored group does not admit sibling prefixes such as `/signup` or `/signs`.
+- `jp.umaxica.dev` is not published through this rule set.
+- Diagnosis: a response that reached Rails carries `x-request-id`; a response without it, and no
+  matching line in `log/development.log`, was answered by Cloudflare.
 
 ### 3. Worker / Edge request through Workers VPC
 
@@ -207,9 +245,9 @@ Cloudflare Worker (fetch()) --(Workers VPC binding)--> VPC Service (bound to a T
 ```
 
 - Workers VPC binds to a VPC Service on the dedicated `umaxica-dev-workers-vpc` tunnel. The local
-  connector is `cloudflare-tunnel-workers-vpc`; it is distinct from the browser-facing `Auth`
-  tunnel and has no ingress rules, public hostname, or Access application. Workers VPC requires
-  cloudflared `2025.7.0` or newer; `compose.yaml` pins the supported `2026.8.2` release and uses
+  connector is `cloudflare-tunnel-workers-vpc`; it is distinct from the browser-facing `Auth` tunnel
+  and has no ingress rules, public hostname, or Access application. Workers VPC requires cloudflared
+  `2025.7.0` or newer; `compose.yaml` pins the supported `2026.8.2` release and uses
   `--protocol auto` so QUIC remains available.
 - The VPC Service connects to `core-workers-vpc.internal:3000`. This is a Compose DNS alias on the
   private `frontend` network, so it survives container and network recreation without pinning a

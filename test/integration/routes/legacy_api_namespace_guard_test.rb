@@ -25,7 +25,7 @@ class LegacyApiNamespaceGuardTest < ActiveSupport::TestCase
   # each of these on many hosts, and the vocabulary decision is about the path, not the host.
   #
   # Classification per `adr/api-route-vocabulary-consolidation.md` section "Classification rule",
-  # recorded in plans/rails-nextjs-openapi-contract-audit.md. `api` marks an actual API endpoint and
+  # recorded in research/rails-nextjs-openapi-contract-audit.md. `api` marks an actual API endpoint and
   # therefore a migration candidate; `ceremony` marks an endpoint whose classification the ADR does
   # not settle.
   LEGACY_OPERATIONS = {
@@ -35,13 +35,7 @@ class LegacyApiNamespaceGuardTest < ActiveSupport::TestCase
     "GET /edge/v0/token/check" => :api,
     "POST /edge/v0/token/dbsc" => :api,
     "POST /edge/v0/token/refresh" => :api,
-    "GET /web/v0/cookie" => :api,
-    "PATCH /web/v0/cookie" => :api,
-    "PUT /web/v0/cookie" => :api,
     "POST /web/v0/in/email/otp" => :ceremony,
-    "GET /web/v0/theme" => :api,
-    "PATCH /web/v0/theme" => :api,
-    "PUT /web/v0/theme" => :api,
   }.freeze
 
   test "the legacy API namespaces contain exactly the pinned operations" do
@@ -86,7 +80,7 @@ class LegacyApiNamespaceGuardTest < ActiveSupport::TestCase
     endpoints { |path| path.start_with?(*LEGACY_PREFIXES) }.map { |_, _, verb, path| "#{verb} #{path}" }.to_set
   end
 
-  # Service and surface come from the controller path (for example `auth/app/web/v0/themes`) rather
+  # Service and surface come from the controller path (for example `auth/app/web/v0/in/email/otps`) rather
   # than the route name, because the PATCH and PUT members that `resource` generates are unnamed.
   def endpoints
     Rails.application.routes.routes.filter_map { |route|

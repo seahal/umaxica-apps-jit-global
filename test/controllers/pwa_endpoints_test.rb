@@ -4,7 +4,7 @@
 require "test_helper"
 
 # The PWA offline fallback is served by the framework's own Rails::PwaController on every origin whose
-# public HTML Rails renders itself: base, auth, side, and palm. See adr/pwa-offline-route-exception.md.
+# public HTML Rails renders itself: base, auth, warp, and palm. See adr/pwa-offline-route-exception.md.
 class PwaEndpointsTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
@@ -15,9 +15,9 @@ class PwaEndpointsTest < ActionDispatch::IntegrationTest
     ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
     ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"),
     ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
-    ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "side.app.localhost"),
-    ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "side.com.localhost"),
-    ENV.fetch("PUBLIC_SIDE_STAFF_URL", "side.org.localhost"),
+    ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
+    ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),
+    ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"),
     ENV.fetch("PUBLIC_PALM_SERVICE_URL", "palm.app.localhost"),
   ].freeze
 
@@ -70,12 +70,23 @@ class PwaEndpointsTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, "<script"
   end
 
+  # A form without `action` submits to the document's own URL, so retrying a failed /dashboard
+  # navigation requests /dashboard again rather than its directory, `/`.
+  test "the offline retry control is a GET form that targets the failed path, not its directory" do
+    host! HOSTS.first
+    get "/offline", headers: WORKER_HEADERS
+
+    assert_select "form[method=get]", 1
+    assert_select "form[action]", 0
+    assert_select "form input", 0
+  end
+
   test "both endpoints resolve to the framework PWA controller, not a surface controller" do
     assert_equal Rails::PwaController, "rails/pwa".camelize.concat("Controller").constantize
 
     %w(Base::App::ServiceWorkersController Base::App::OfflinesController
        Auth::App::ServiceWorkersController Auth::App::OfflinesController
-       Side::App::ServiceWorkersController Side::App::OfflinesController
+       Warp::App::ServiceWorkersController Warp::App::OfflinesController
        Palm::App::ServiceWorkersController Palm::App::OfflinesController).each do |name|
       assert_nil name.safe_constantize,
                  "#{name} still exists; the PWA endpoints must be served by Rails::PwaController"

@@ -22,7 +22,7 @@ class SecretCredentialTest < ActiveSupport::TestCase
     end
 
     def self.name
-      "ClientSecretCredentialStatus"
+      "VisitorSecretCredentialStatus"
     end
   end
 
@@ -35,7 +35,7 @@ class SecretCredentialTest < ActiveSupport::TestCase
     attribute :id, :string
     attribute :name, :string
     attribute :uses_remaining, :integer
-    attribute :discarded_at, :datetime
+    attribute :discard_at, :datetime
     attribute :last_used_at, :datetime
     attribute :secret_credential_status_id, :integer
     attribute :password_digest, :string
@@ -105,23 +105,8 @@ class SecretCredentialTest < ActiveSupport::TestCase
     assert_equal DummySecret.status_id_for(:active), record[:secret_credential_status_id]
   end
 
-  test "verify_and_consume! decrements uses" do
-    record, raw_secret_credential = DummySecret.issue!(name: "test", uses: 5)
-
-    assert record.verify_and_consume!(raw_secret_credential)
-    assert_equal 4, record.uses_remaining
-  end
-
-  test "verify_and_consume! expires when uses exhausted" do
-    record, raw_secret_credential = DummySecret.issue!(name: "test", uses: 1)
-
-    assert record.verify_and_consume!(raw_secret_credential)
-    assert_equal 0, record.uses_remaining
-    assert_equal DummySecret.status_id_for(:used), record[:secret_credential_status_id]
-  end
-
   test "expire_if_needed! expires when time passed" do
-    record, _ = DummySecret.issue!(name: "test", discarded_at: 1.hour.ago)
+    record, = DummySecret.issue!(name: "test", discard_at: 1.hour.ago)
 
     assert record.expire_if_needed!
     assert_equal DummySecret.status_id_for(:expired), record[:secret_credential_status_id]

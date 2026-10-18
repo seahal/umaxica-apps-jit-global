@@ -3,13 +3,12 @@
 Date: 2026-08-11 Scope: this Rails repository only. No Next.js, Edge, Workers, Cloudflare
 Dashboard/Access/Tunnel, or DNS change was made or is proposed here.
 
-> **Note (2026-09-03):** this audit describes the health probes as JSON and the `/health`
-> aggregate as an HTML/`406` snapshot. That is superseded by the 2026-09-03 text+JSON health
-> contract — the probes are now `text/plain` and a separate `/api/v0/health.json` +
-> `/api/v0/revision.json` family carries the machine JSON. The Host Authorization findings in §5.1
-> (exact-match of the four singular text probe paths in `lib/health_probe_paths.rb`;
-> `/api/v0/*.json` deliberately not exempt) still hold. Current contract:
-> `docs/reference/health-endpoints.md`.
+> **Note (2026-09-03):** this audit describes the health probes as JSON and the `/health` aggregate
+> as an HTML/`406` snapshot. That is superseded by the 2026-09-03 text+JSON health contract — the
+> probes are now `text/plain` and a separate `/api/v0/health.json` + `/api/v0/revision.json` family
+> carries the machine JSON. The Host Authorization findings in §5.1 (exact-match of the four
+> singular text probe paths in `lib/health_probe_paths.rb`; `/api/v0/*.json` deliberately not
+> exempt) still hold. Current contract: `docs/reference/health-endpoints.md`.
 
 ## How to read this document
 
@@ -55,7 +54,7 @@ remain documented and unchanged (§5.2).
 | Inertia navigation            | `X-Inertia` GET returns the page object as JSON with the correct current-page `url` | Gem default (`renderer.rb:134`, `url: @request.original_fullpath`)                                   | Same file: JSON body, `X-Inertia: true`, `url == "/groups?ri=jp"` — passes [run]                                            | working                        |
 | Inertia asset version         | Stale client version answered `409` + `X-Inertia-Location`                          | `config.version = ViteRuby.digest`; `InertiaRails::Middleware`                                       | Same file: stale version returns 409 with the location — passes [run]                                                       | working                        |
 | **Inertia auth redirect**     | Leaving the SPA must use `409` + `X-Inertia-Location` [upstream]                    | `handle_auth_required_html` issued a plain `302`                                                     | Reproduced: `302` to `/oauth/authorize` [run]; now `409`                                                                    | **repaired**                   |
-| Inertia client boot           | SPA mounts on `#app`                                                                | `src/entrypoints/inertia/base_app.tsx` (was `src/entrypoints/inertia.tsx`), `@inertiajs/react 3.6.1` | Only test is `spec/entrypoints/inertia.test.ts`, which **mocks** `createInertiaApp`                                         | untested (see §2.4)            |
+| Inertia client boot           | SPA mounts on `#app`                                                                | `src/entrypoints/inertia/base_app.tsx` (was `src/entrypoints/inertia.tsx`), `@inertiajs/react 3.6.1` | Only test is `gait/entrypoints/inertia.test.ts`, which **mocks** `createInertiaApp`                                         | untested (see §2.4)            |
 | Flipper FQDN gate             | 503 before rate limiting for a switched-off or unknown FQDN                         | Did not exist                                                                                        | `test/integration/fqdn_availability_gate_test.rb`, 15 tests — pass [run]                                                    | **implemented**                |
 | Flipper registry discipline   | All reads through `FeatureFlags`                                                    | `app/values/feature_flags.rb` + invariant test                                                       | New flags registered; invariants pass [run]                                                                                 | working                        |
 | Shrine/S3                     | Not wired                                                                           | Boot-time `Shrine.storages` only; no uploader, no attachment, no S3                                  | `app/uploaders/` holds only `.keep`; `aws-sdk-s3` never required [repo]                                                     | vestigial (audit only)         |
@@ -103,7 +102,7 @@ client converts that into a full document visit (`InertiaRails::Controller#inert
    and never sent an `X-Inertia` header, so no test ever exercised the Inertia request path.
 2. Its unauthenticated case asserted `assert_response :redirect` — which is precisely the broken
    behaviour, pinned as correct.
-3. `spec/entrypoints/inertia.test.ts` mocks `createInertiaApp` and asserts a console message, so no
+3. `gait/entrypoints/inertia.test.ts` mocks `createInertiaApp` and asserts a console message, so no
    JavaScript test observes real client behaviour either.
 4. The repo does not use `InertiaRails::Minitest` (`inertia.component` / `inertia.props`), which the
    gem ships specifically to assert on the page object rather than the markup around it.
@@ -203,6 +202,13 @@ Not everything examined was broken. The following were verified and are correct:
   that Shrine is not wired to object storage.
 
 ## 4. Shrine/S3 readiness — AUDIT ONLY, NO FEATURE IMPLEMENTATION
+
+> **Current-state note (2026-09-25):** this section records the 2026-08-11 audit snapshot. Since
+> then, Shrine gained boundary-specific attachment persistence: test uses memory storage,
+> development/staging use configured S3-compatible storage, and production uses AWS S3 through the
+> platform credential provider. See `lib/object_storage_shrine_configuration.rb` and `docs/dds.md`.
+> The historical findings below are retained; authenticated Avatar image delivery, its URL
+> namespace, and CDN contract remain undecided.
 
 No Shrine or S3 code was written, and no Shrine configuration was changed.
 
@@ -335,16 +341,12 @@ not allowed):
 - a hypothetical `/health/diagnostics` returns `403`, pinning the no-inheritance property;
 - an allowed host reaches the application on every path.
 
-### 5.2 `palm_corporate` and `palm_staff` are configured but unrouted
+### 5.2 Palm configuration for com/org — resolved 2026-09-24
 
-`ConfigValues::HostFamilyValues` defines `palm_corporate` and `palm_staff` with real hostnames
-(`palm-jp.umaxica.com`, `palm-jp.umaxica.org`), but `config/routes/palm.rb` constrains on
-`palm_service` only [repo]. They are configuration for surfaces that do not exist.
-
-Surfaced by the new registry invariant, which is deliberately scoped to routed slots and carries a
-comment explaining the exclusion. Giving them an availability switch would give an operator a
-control with no effect. Either the routes are missing or the configuration is dead; that is a
-product question, not one this audit can answer from evidence.
+At the time of this audit, `ConfigValues::HostFamilyValues` defined `palm_corporate` and
+`palm_staff` with hostnames, but `config/routes/palm.rb` constrained only `palm_service`. The
+integrated F9 cleanup removed the unrouted com/org values and Host Authorization entries while
+retaining the routed Palm app host. No Palm com/org route was added.
 
 Related and already documented in the repository: `config/environments/production.rb:186-193`
 records that the docs and news surfaces have no production host entry.
@@ -373,7 +375,7 @@ into `/groups` would then swap the body without evaluating the surface Inertia e
 `playwright.config.ts` requires `E2E_BASE_SERVICE_URL`, which is not available in this session. It
 is recorded here so it is not lost, and explicitly not counted as a defect.
 
-The related test-quality gap is real regardless: `spec/entrypoints/inertia.test.ts` mocks
+The related test-quality gap is real regardless: `gait/entrypoints/inertia.test.ts` mocks
 `createInertiaApp`, so no JavaScript test in this repository observes the client actually mounting.
 
 ## 8. Test evidence
@@ -443,8 +445,9 @@ project-wide percentage change is unmeasured.
 - 43 × `app/controllers/*/*/{application,bare}_controller.rb` — one `include ::FqdnAvailabilityGate`
   line each, immediately above the existing `include ::RateLimit`, so the ordering is visible at the
   point of declaration.
-- `app/controllers/auth/{app,com,org}/preferences_base_controller.rb`,
-  `app/controllers/auth/app/oidc/callbacks_controller.rb`,
+- `app/controllers/auth/{app,com,org}/preferences_base_controller.rb`, the historical
+  `app/controllers/auth/app/oidc/callbacks_controller.rb` reference (the Auth callback controller
+  was retired by the ceremony-only boundary),
   `app/controllers/auth/app/sign/in/sessions_controller.rb`,
   `app/controllers/concerns/oidc_rp_logout_launcher.rb` — `ensure_fqdn_gate_first!` after their own
   `prepend_before_action`, which would otherwise land ahead of the gate.
@@ -485,7 +488,7 @@ project-wide percentage change is unmeasured.
 - `docs/hld.md` — removed Shrine and Active Storage from the "Integration" layer; neither integrates
   anything (§4).
 - `docs/audits/rails-intended-functionality-audit.md` (this file, new).
-- `notes/implementation/2026-08-11-rails-intended-functionality-audit.md` (new).
+- `research/implementation/2026-08-11-rails-intended-functionality-audit.md` (new).
 
 ## 10. Architecture after this audit
 

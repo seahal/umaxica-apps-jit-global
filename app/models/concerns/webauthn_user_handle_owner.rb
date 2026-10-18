@@ -10,6 +10,7 @@ module WebauthnUserHandleOwner
 
   USER_HANDLE_RANDOM_BYTES = 32
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :ensure_webauthn_user_handle, on: :create
     # before_save as well: saves with validate: false skip before_validation

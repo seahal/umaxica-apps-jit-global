@@ -80,4 +80,6 @@ module JitSecurityActiveRecordEncryptionKeyProvider
   def fallback_key_for(key)
     Digest::SHA256.hexdigest("jit-active-record-encryption:#{Rails.env}:#{key}")
   end
+
+  private_class_method :derivable_fallback_permitted?, :fallback_key_for
 end

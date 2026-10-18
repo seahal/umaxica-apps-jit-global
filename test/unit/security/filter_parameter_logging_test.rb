@@ -23,6 +23,7 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
       "cf-turnstile-response" => "turnstile-response",
       "turnstile_response" => "turnstile-response-alias",
       "uid" => "provider-user-id",
+      "entry_ref" => "opaque-admission-reference",
     )
 
     assert_equal "[FILTERED]", filtered.fetch("rt")
@@ -33,12 +34,58 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
     assert_equal "[FILTERED]", filtered.fetch("cf-turnstile-response")
     assert_equal "[FILTERED]", filtered.fetch("turnstile_response")
     assert_equal "[FILTERED]", filtered.fetch("uid")
+    assert_equal "[FILTERED]", filtered.fetch("entry_ref")
+  end
+
+  test "does not let short sensitive names hide safe diagnostic fields" do
+    filter = ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters)
+    filtered = filter.filter(
+      "code" => "oauth-code",
+      "rt" => "redirect-token",
+      "pt" => "path-target",
+      "der" => "certificate-der",
+      "state" => "oauth-state",
+      "uid" => "provider-user-id",
+      "provider_uid" => "provider-user-id",
+      "reason_code" => "phase_regression",
+      "status_code" => "409",
+      "http_status_code" => "409",
+      "guid" => "safe-guid",
+      "public_id" => "safe-public-id",
+      "provider" => "google",
+      "order" => "created_at",
+      "sort" => "asc",
+      "support" => "safe-support",
+      "attempt_count" => 2,
+      "event_uuid" => "safe-event-uuid",
+    )
+
+    %w(code rt pt der state uid provider_uid).each do |key|
+      assert_equal "[FILTERED]", filtered.fetch(key)
+    end
+
+    %w(
+      reason_code status_code http_status_code guid public_id provider order sort support attempt_count event_uuid
+    ).each do |key|
+      assert_not_equal "[FILTERED]", filtered.fetch(key)
+    end
   end
 
   test "filters social identity tokens from Active Record inspection and SQL logs" do
     assert_not_includes ClientExternalIdentity.column_names, "token"
     assert_not_includes ClientExternalIdentity.column_names, "refresh_token"
     assert_includes ClientExternalIdentity.filter_attributes.map(&:to_s), "subject"
+  end
+
+  test "browser admission proofs and references are filtered from diagnostic parameters" do
+    filter = ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters)
+    fields = %w(
+      auth_sid sid base_browser_digest confirmation_ref binding_ref transaction_ref restart_of
+      auth_ceremony_session_ref auth_email_otp_generation
+    )
+    filtered = filter.filter(fields.index_with { |field| "fixture-#{field}" })
+
+    assert_equal fields.index_with("[FILTERED]"), filtered
   end
 
   test "does not emit oauth credential values in active record sql logs" do
@@ -56,21 +103,24 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
     apple_token = "apple-token-#{SecureRandom.hex(6)}"
     apple_refresh = "apple-refresh-#{SecureRandom.hex(6)}"
     apple_uid = "apple-uid-#{SecureRandom.hex(6)}"
-    ClientGoogleIdentity.create!(
-      user: clients(:one),
-      uid: google_uid,
-      token: google_token,
-      refresh_token: google_refresh,
-      expires_at: 1.week.from_now.to_i,
-      user_google_identity_status: client_google_identity_statuses(:active),
+
+    [google_token, apple_token].each do |provider_token|
+      assert_raises(ActiveModel::UnknownAttributeError) { ClientExternalIdentity.new(token: provider_token) }
+    end
+    [google_refresh, apple_refresh].each do |provider_refresh|
+      assert_raises(ActiveModel::UnknownAttributeError) { ClientExternalIdentity.new(refresh_token: provider_refresh) }
+    end
+    ClientExternalIdentity.create!(
+      client: Client.create!(status_id: ClientStatus::ACTIVE),
+      provider: "google", issuer: "https://accounts.google.com", subject: google_uid,
+      audience: "google-client-id", verification_authority: "omniauth-google-oauth2/1.2.1",
+      verified_at: ClientExternalIdentity.database_now,
     )
-    ClientAppleIdentity.create!(
-      user: clients(:one),
-      uid: apple_uid,
-      token: apple_token,
-      refresh_token: apple_refresh,
-      expires_at: 1.week.from_now.to_i,
-      user_apple_identity_status: client_apple_identity_statuses(:active),
+    ClientExternalIdentity.create!(
+      client: Client.create!(status_id: ClientStatus::ACTIVE),
+      provider: "apple", issuer: "https://appleid.apple.com", subject: apple_uid,
+      audience: "apple-client-id", verification_authority: "omniauth-apple/1.4.0",
+      verified_at: ClientExternalIdentity.database_now,
     )
     log_output = log_io.string
 

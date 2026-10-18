@@ -1,10 +1,11 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
 import DestructiveButton from "@/features/base_com/identity/DestructiveButton";
 import type { ConfirmedAction, PageLink, TurnstileProps } from "@/features/base_com/identity/types";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
@@ -73,32 +74,44 @@ export default function EmailEdit({
         <ErrorList errors={errors} />
 
         <div className="rounded-md border border-line bg-surface-muted p-3">
-          <p className="text-sm font-medium text-fg">{alwaysOn.label}</p>
-          <p className="text-xs text-fg-muted">{alwaysOn.description}</p>
+          <p className="text-base font-medium text-fg">{alwaysOn.label}</p>
+          <p className="text-sm text-fg-muted">{alwaysOn.description}</p>
         </div>
 
         <div className="flex flex-col gap-1">
           <Checkbox
             id={`${form.scope}_promotional`}
             name={`${form.scope}[promotional]`}
+            aria-describedby={`${form.scope}_promotional_description`}
             isSelected={promotionalChecked}
             onChange={setPromotionalChecked}
           >
             {promotional.label}
           </Checkbox>
-          <p className="pl-6 text-xs text-fg-muted">{promotional.description}</p>
+          <p
+            id={`${form.scope}_promotional_description`}
+            className="pl-6 text-sm text-fg-muted"
+          >
+            {promotional.description}
+          </p>
         </div>
 
         <div className="flex flex-col gap-1">
           <Checkbox
             id={`${form.scope}_notifiable`}
             name={`${form.scope}[notifiable]`}
+            aria-describedby={`${form.scope}_notifiable_description`}
             isSelected={notifiableChecked}
             onChange={setNotifiableChecked}
           >
             {notifiable.label}
           </Checkbox>
-          <p className="pl-6 text-xs text-fg-muted">{notifiable.description}</p>
+          <p
+            id={`${form.scope}_notifiable_description`}
+            className="pl-6 text-sm text-fg-muted"
+          >
+            {notifiable.description}
+          </p>
         </div>
 
         <TurnstileWidget
@@ -115,14 +128,15 @@ export default function EmailEdit({
         </Button>
       </form>
 
-      <div className="flex items-center gap-4 border-t border-line pt-4">
+      <div className="flex flex-wrap items-center gap-4 border-t border-line pt-4">
         <DestructiveButton action={destroy} />
-        <Link
+        <TextLink
           href={cancelLink.href}
-          className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          inertia
+          tone="muted"
         >
           {cancelLink.label}
-        </Link>
+        </TextLink>
       </div>
     </Page>
   );

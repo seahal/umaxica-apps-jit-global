@@ -8,7 +8,6 @@ class SignEmailRegistrableIncludedDoTest < ActiveSupport::TestCase
   class Harness < ApplicationController
     include CloudflareTurnstile
     include CommonRedirect
-    include CommonOtp
     include SignEmailRegistrable
   end
 
@@ -20,16 +19,16 @@ class SignEmailRegistrableIncludedDoTest < ActiveSupport::TestCase
     assert_includes Harness.included_modules, CommonRedirect
   end
 
-  test "terminal controller includes CommonOtp explicitly" do
-    assert_includes Harness.included_modules, CommonOtp
+  test "terminal Email registration controller does not expose shared Source OTP policy" do
+    assert_not_includes Harness.included_modules.map(&:name), "CommonOtp"
   end
 
   test "SESSION_KEY constant is defined" do
     assert_equal :sign_up_email_flow_state, SignEmailRegistrable::SESSION_KEY
   end
 
-  test "EXISTING_EMAIL_SESSION_KEY constant is defined" do
-    assert_equal :sign_up_existing_email_id, SignEmailRegistrable::EXISTING_EMAIL_SESSION_KEY
+  test "the signup flow does not carry a cross-flow existing-email session key" do
+    assert_not_includes SignEmailRegistrable.constants, :EXISTING_EMAIL_SESSION_KEY
   end
 
   test "STATE_INIT constant is defined" do

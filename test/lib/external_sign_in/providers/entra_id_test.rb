@@ -162,7 +162,7 @@ class ExternalSignIn::Providers::EntraIdTest < ActiveSupport::TestCase
     # Using a different RSA key so the signature bytes are structurally valid but wrong.
     other_key = OpenSSL::PKey::RSA.generate(2048)
     parts = token.split(".")
-    wrong_sig = JWT::Base64.url_encode(other_key.sign(OpenSSL::Digest::SHA256.new, "#{parts[0]}.#{parts[1]}"))
+    wrong_sig = JWT::Base64.url_encode(other_key.sign(OpenSSL::Digest.new("SHA256"), "#{parts[0]}.#{parts[1]}"))
     tampered = "#{parts[0]}.#{parts[1]}.#{wrong_sig}"
 
     assert_raises(ExternalSignIn::Providers::EntraId::VerificationError) do

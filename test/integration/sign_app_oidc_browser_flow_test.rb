@@ -17,116 +17,24 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
     OperatorIdentityState.ensure_defaults!
   end
 
-  teardown do
-    cleanup_sign_oidc_browser_flow_data!
-  end
-
-  test "sign app settings auth-required sso resolves an existing acme session and returns to settings" do # rubocop:disable Minitest/MultipleAssertions
-    with_acme_oidc_client_key do
-      sign_host = configured_host(:sign_service)
-      acme_host = configured_host(:base_service)
-      email = "sign-oidc-browser-flow-#{SecureRandom.hex(4)}@example.com"
-      @user = create_verified_user_with_email(email_address: email)
-      current_session =
-        ClientToken.create!(
-          user: @user,
-          user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-          user_token_status_id: ClientTokenStatus::ACTIVE,
-        )
-      @current_session_id = current_session.id
-      acme_headers = as_user_headers(@user, host: acme_host, session_public_id: current_session.public_id)
-      acme_session = open_session
-      acme_session.host!(acme_host)
-      acme_session.https!
-
-      host! sign_host
-      https!
+  test "auth settings do not initiate an OIDC RP flow" do
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    assert_no_difference [
+      -> { ClientOidcAuthorizationTransaction.count },
+      -> {
+        ClientOidcAuthorizationTransaction.pending.where(
+          actor_ref: nil, session_ref: nil, authenticated_at: nil,
+        ).count
+      },
+    ] do
       get auth_app_settings_url(ri: "jp"), headers: browser_headers
-
-      assert_response :redirect
-      authorize_location = jump_rt_url_from_location(response.location)
-      authorize_uri = URI.parse(authorize_location)
-      authorize_query = Rack::Utils.parse_nested_query(authorize_uri.query.to_s)
-
-      assert_equal acme_host, authorize_uri.host
-      assert_equal "/oauth/authorize", authorize_uri.path
-      assert_equal "sign-rp", authorize_query.fetch("client_id")
-      assert_nil authorize_query["screen_hint"]
-      assert_nil session[AuthenticationBase::DEFAULT_PT_SESSION_KEY]
-      assert_nil session[:oidc_state]
-      assert_nil session[:oidc_nonce]
-      assert_nil session[:oidc_code_verifier]
-      pending_flow = session.fetch("oidc_pending_flows").fetch(authorize_query.fetch("state"))
-
-      assert_equal auth_app_settings_path(ri: "jp"), pending_flow.fetch("pt")
-      assert_equal authorize_query.fetch("nonce"), pending_flow.fetch("nonce")
-      assert_predicate pending_flow.fetch("code_verifier"), :present?
-
-      root_token_count = ClientToken.where(user_id: @user.id).count
-      usage_count = ClientTokenUsage.count
-
-      AppTicketRecord.connected_to(role: :writing) do
-        acme_session.get("/oauth/authorize", params: authorize_query, headers: acme_headers)
-
-        assert_predicate acme_session.response, :redirect?
-        callback_uri = URI.parse(jump_rt_url_from_location(acme_session.response.location))
-        callback_query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
-
-        assert_equal "/oidc/callback", callback_uri.path
-        assert_predicate callback_query["code"], :present?
-        assert_equal authorize_query.fetch("state"), callback_query.fetch("state")
-        code_record = ClientAuthorizationCode.find_by!(code: callback_query.fetch("code"))
-
-        assert_equal @user.id, code_record.user_id
-        assert_equal @current_session_id, code_record.client_token_id
-        assert_predicate code_record.client_token, :present?
-        assert_predicate code_record.resource, :present?
-
-        id_token = OidcIdTokenIssuer.call(
-          resource: @user,
-          client: OidcClientRegistry.find!("sign-rp"),
-          nonce: authorize_query.fetch("nonce"),
-          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
-          issuer: OidcIssuer.for_resource_type("client"),
-        )
-        token_result = OidcRpTokenClient::Result.new(
-          success: true,
-          token_response: { id_token: id_token },
-          error: nil,
-        )
-
-        host! sign_host
-        OidcRpTokenClient.stub(:call, token_result) do
-          get auth_app_oidc_callback_url(host: sign_host), params: callback_query, headers: browser_headers
-        end
-      end
-
-      if response.not_found?
-        assert_response :not_found
-        return
-      end
-
-      assert_response :redirect
-      assert_equal auth_app_settings_url(ri: "jp", host: sign_host), response.location
-      assert_includes response.headers["Set-Cookie"].to_s, "#{AuthenticationBase::ACCESS_COOKIE_KEY}="
-      assert_includes response.headers["Set-Cookie"].to_s, "#{AuthenticationBase::REFRESH_COOKIE_KEY}="
-      assert_equal root_token_count, ClientToken.where(user_id: @user.id).count
-      assert_equal usage_count + 1, ClientTokenUsage.count
-
-      get auth_app_settings_url(ri: "jp"), headers: browser_headers.merge("Host" => sign_host)
-
-      assert_response :success
-      assert_select "h1", "Settings"
-      assert_empty ClientOidcAuthorizationTransaction.pending.where(
-        actor_ref: nil,
-        session_ref: nil,
-        authenticated_at: nil,
-      )
-      assert_nil session[AuthenticationBase::DEFAULT_PT_SESSION_KEY]
-      assert_nil session[:oidc_state]
-      assert_nil session[:oidc_nonce]
-      assert_nil session[:oidc_code_verifier]
     end
+
+    assert_response :redirect
+    assert_base_sign_handoff_redirect(response.location, surface: :app)
+    assert_nil session[:oidc_state]
+    assert_nil session[:oidc_nonce]
+    assert_nil session[:oidc_code_verifier]
   end
 
   private
@@ -134,17 +42,13 @@ class SignAppOidcBrowserFlowTest < ActionDispatch::IntegrationTest
   def cleanup_sign_oidc_browser_flow_data!
     return unless defined?(@user) && @user.present?
 
-    AppTicketRecord.connected_to(role: :writing) do
-      ClientAuthorizationCode.where(
-        client_id: "sign-rp",
-        client_token_id: @current_session_id,
-      ).delete_all if defined?(@current_session_id)
-      ClientTokenUsage.where(client_token_id: @current_session_id).delete_all if defined?(@current_session_id)
-      ClientOidcConnection.where(user_id: @user.id, client_id: "sign-rp").delete_all
+    OpBaseAppRecord.connected_to(role: :writing) do
+      OpAppGrant.where(client_token_id: @current_session_id).delete_all if defined?(@current_session_id)
+      ClientOidcConnection.where(user_id: @user.id, client_id: "core-app-jp").delete_all
       ClientToken.where(id: @current_session_id).find_each(&:destroy!) if defined?(@current_session_id)
     end
 
-    AppPrincipalRecord.connected_to(role: :writing) do
+    AppZenithRecord.connected_to(role: :writing) do
       ClientEmail.where(user_id: @user.id).find_each(&:destroy!)
       Client.where(id: @user.id).find_each(&:destroy!)
     end
@@ -197,31 +101,11 @@ class SignAppOidcBrowserFlowTest
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "SIGN"
+    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "AUTH"
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -281,10 +165,8 @@ class SignAppOidcBrowserFlowTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -296,10 +178,8 @@ class SignAppOidcBrowserFlowTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -446,7 +326,7 @@ class SignAppOidcBrowserFlowTest
     social_auth_state_from_response
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app-jp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 
@@ -554,68 +434,6 @@ class SignAppOidcBrowserFlowTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    access_token = jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-    base.merge(
-      "X-TEST-SESSION-PUBLIC-ID" => session_public_id.presence || token.public_id,
-      "Authorization" => "Bearer #{access_token}",
-      "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-      "HTTP_COOKIE" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -631,10 +449,8 @@ class SignAppOidcBrowserFlowTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -654,12 +470,12 @@ class SignAppOidcBrowserFlowTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

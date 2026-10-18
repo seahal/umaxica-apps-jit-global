@@ -1,0 +1,8 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "Valkey key present" as issued
+    state "Key absent" as absent
+    [*] --> issued
+    issued --> absent: consume / read(delete:true)
+    issued --> absent: Redis wall-clock TTL
+    absent --> [*]

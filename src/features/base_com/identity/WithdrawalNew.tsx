@@ -1,10 +1,12 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import { useConfirm } from "@/components/ConfirmDialog";
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import ErrorList from "@/components/ui/ErrorList";
+import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
 import type { PageLink } from "@/features/base_com/identity/types";
 
 // Replaces `app/views/base/com/identity/withdrawals/new.html.erb`. The deactivation step is absent
@@ -30,8 +32,6 @@ export type WithdrawalNewProps = {
   schedule: WithdrawalAckForm;
   deactivate: WithdrawalAckForm | null;
 };
-
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
 
 function AckSection({ form }: { form: WithdrawalAckForm }) {
   const [checked, setChecked] = useState(form.checked ?? false);
@@ -64,7 +64,7 @@ function AckSection({ form }: { form: WithdrawalAckForm }) {
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4">
-      <h2 className="text-lg font-semibold text-fg">{form.title}</h2>
+      <h2 className="text-xl font-semibold text-fg">{form.title}</h2>
       <ErrorList errors={form.errors} />
 
       <form
@@ -101,19 +101,18 @@ export default function WithdrawalNew({
   deactivate,
 }: WithdrawalNewProps) {
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-
+    <Page title={title}>
       {alreadyDeactivated ? (
         <>
-          <p className="text-sm text-fg-muted">{alreadyDeactivatedMessage}</p>
+          <p className="text-base text-fg-muted">{alreadyDeactivatedMessage}</p>
           <p>
-            <Link
+            <TextLink
               href={recoveryLink.href}
-              className={LINK}
+              inertia
+              tone="muted"
             >
               {recoveryLink.label}
-            </Link>
+            </TextLink>
           </p>
         </>
       ) : (
@@ -122,6 +121,6 @@ export default function WithdrawalNew({
           {deactivate ? <AckSection form={deactivate} /> : null}
         </div>
       )}
-    </section>
+    </Page>
   );
 }

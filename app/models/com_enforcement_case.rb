@@ -5,10 +5,14 @@
 class ComEnforcementCase < ComPrincipalRecord
   include EnforcementCaseApplicable
 
+  encrypts :reason_note
+
   self.table_name = "com_enforcement_cases"
 
+  # `validate: true` so an invalid effect fails the Case save; a has_one otherwise drops it silently
+  # and the Case would go active without the effect it was applied for.
   has_one :principal_effect, class_name: "ComEnforcementPrincipalEffect", dependent: :destroy,
-                             inverse_of: :enforcement_case
+                             inverse_of: :enforcement_case, validate: true
   has_many :authentication_method_effects, class_name: "ComEnforcementAuthenticationMethodEffect",
                                            dependent: :destroy, inverse_of: :enforcement_case
   has_many :identifier_effects, class_name: "ComEnforcementIdentifierEffect", dependent: :destroy,
@@ -23,5 +27,10 @@ class ComEnforcementCase < ComPrincipalRecord
 
   def self.realm
     "com"
+  end
+  public
+
+  def principal_effect_record
+    ComEnforcementPrincipalEffect.find_by(com_enforcement_case_id: id)
   end
 end

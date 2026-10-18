@@ -5,17 +5,29 @@ class JumpRtReturnVerifier
   ALGORITHM = SecurityJwtJumpRtTokenCodec::ALGORITHM
   TOKEN_TYPE = SecurityJwtJumpRtTokenCodec::TOKEN_TYPE
   TOKEN_SUBJECT = SecurityJwtJumpRtTokenCodec::TOKEN_SUBJECT
-  DEFAULT_MAX_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
-  LEEWAY = 60
+  # Jump -> Rails structural maximum. Independent of JUMP_RT_TTL_SECONDS, which only sets the
+  # lifetime of tokens Rails issues to Jump; Jump always returns exp - iat = 30.
+  MAX_RETURN_TTL = SecurityTokenLifetimes::JUMP_RT_TTL.to_i
+  LEEWAY = 5
   MAX_TOKEN_LENGTH = 8_192
-  CACHE_TTL = 5.minutes
-  STALE_CACHE_TTL = 1.hour
-  NEGATIVE_CACHE_TTL = 30.seconds
+  MAX_URL_LENGTH = 2_048
+  MAX_JTI_LENGTH = 128
+  JTI_PATTERN = /\A[\x21-\x7E]{1,#{MAX_JTI_LENGTH}}\z/o
+  CACHE_TTL = 30.seconds
+  NEGATIVE_CACHE_TTL = 5.seconds
   HTTP_OPEN_TIMEOUT = 1
   HTTP_READ_TIMEOUT = 2
   MAX_JWKS_BYTES = 64.kilobytes
+  MAX_JWKS_KEYS = 10
+  ALLOWED_CLAIMS = %w(schema iss aud sub iat nbf exp jti src dst rpl url).freeze
   REQUIRED_JWK_FIELDS = SecurityJwtJumpRtTokenCodec::REQUIRED_JWK_FIELDS
   PRIVATE_JWK_FIELDS = SecurityJwtJumpRtTokenCodec::PRIVATE_JWK_FIELDS
+
+  class JwksUnavailable < StandardError; end
+
+  class UnknownKid < StandardError; end
+
+  class JwksBodyTooLarge < StandardError; end
 
   Result =
     Data.define(:success, :payload, :error) do
@@ -45,14 +57,23 @@ class JumpRtReturnVerifier
 
     payload = decode_with_jwks(header.fetch("kid"))
     return failure("invalid_claim") unless valid_payload?(payload)
+    return failure("invalid_url") unless same_request_without_rt?(payload["url"])
     return failure("invalid_claim") unless JumpRtReturnPolicy.allowed_source?(
       destination_origin: request_base_url,
       source: payload["src"],
     )
-    return failure("invalid_url") unless same_request_without_rt?(payload["url"])
-    return failure("replayed") if one_time_return?(payload) && !consume_jti!(payload)
 
     Result.new(success: true, payload: payload, error: nil)
+  rescue JwksUnavailable
+    failure("jwks_unavailable")
+  rescue UnknownKid
+    failure("unknown_kid")
+  rescue JWT::InvalidIssuerError
+    failure("issuer_mismatch")
+  rescue JWT::InvalidAudError
+    failure("audience_mismatch")
+  rescue JWT::ExpiredSignature, JWT::ImmatureSignature, JWT::InvalidIatError, JWT::MissingRequiredClaim
+    failure("invalid_claim")
   rescue JWT::DecodeError, JWT::VerificationError, OpenSSL::PKey::PKeyError, ArgumentError, TypeError
     failure("invalid_signature")
   end
@@ -77,7 +98,6 @@ class JumpRtReturnVerifier
 
   def decode_with_jwks(kid)
     key = public_key_for(kid)
-    raise JWT::DecodeError, "unknown kid" unless key
 
     SecurityJwtJumpRtTokenCodec.decode_with_key(
       token: token,
@@ -89,18 +109,20 @@ class JumpRtReturnVerifier
   end
 
   def public_key_for(kid)
-    raise JWT::DecodeError, "kid negative cached" if negative_kid_cached?(kid)
+    raise UnknownKid, "kid negative cached" if negative_kid_cached?(kid)
 
     jwk = jwks_keys(force: false).find { |entry| entry["kid"] == kid && entry["alg"] == ALGORITHM }
     jwk ||= jwks_keys(force: true).find { |entry| entry["kid"] == kid && entry["alg"] == ALGORITHM }
-    Rails.cache.write(negative_cache_key(kid), true, expires_in: NEGATIVE_CACHE_TTL) unless jwk
-    return nil unless jwk
+    unless jwk
+      Rails.cache.write(negative_cache_key(kid), true, expires_in: NEGATIVE_CACHE_TTL)
+      raise UnknownKid, "unknown kid"
+    end
 
     JWT::JWK.import(jwk).public_key
   end
 
   def jwks_keys(force:)
-    cached_jwks(force: force).fetch("keys", []).filter_map { |entry| normalized_public_jwk(entry) }
+    cached_jwks(force: force).fetch("keys")
   end
 
   def cached_jwks(force:)
@@ -109,22 +131,20 @@ class JumpRtReturnVerifier
     return cached if cached && !force
 
     fresh = fetcher.call
-    Rails.cache.write(cache_key, fresh, expires_in: CACHE_TTL)
-    Rails.cache.write(stale_cache_key, fresh, expires_in: STALE_CACHE_TTL)
-    fresh
-  rescue JWT::DecodeError, JSON::ParserError, SocketError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout
-    stale = Rails.cache.read(stale_cache_key)
-    raise JWT::DecodeError, "jwks fetch failed" unless stale
+    raise JwksUnavailable, "jwks fetch failed" unless fresh.is_a?(Hash)
 
-    stale
+    fresh = validate_jwks(fresh)
+
+    Rails.cache.write(cache_key, fresh, expires_in: CACHE_TTL)
+    fresh
+  rescue JwksUnavailable
+    raise
+  rescue JWT::DecodeError, JSON::ParserError, SocketError, SystemCallError, Net::OpenTimeout, Net::ReadTimeout
+    raise JwksUnavailable, "jwks fetch failed"
   end
 
   def cache_key
     "jump_rt:return_jwks:#{Digest::SHA256.hexdigest(jwks_url)}"
-  end
-
-  def stale_cache_key
-    "jump_rt:return_jwks:stale:#{Digest::SHA256.hexdigest(jwks_url)}"
   end
 
   def negative_cache_key(kid)
@@ -146,13 +166,60 @@ class JumpRtReturnVerifier
         read_timeout: HTTP_READ_TIMEOUT,
         require_https: true,
       )
-    response = connection.get(uri)
-    raise JWT::DecodeError, "jwks fetch failed" unless response.success?
-    raise JWT::DecodeError, "jwks response too large" if response.body.to_s.bytesize > MAX_JWKS_BYTES
+    body = +""
+    response =
+      connection.get(uri) do |request|
+        request.options.on_data =
+          lambda do |chunk, received_bytes, _env|
+            raise JwksBodyTooLarge if received_bytes > MAX_JWKS_BYTES
 
-    JSON.parse(response.body.presence || "{}")
+            body << chunk
+          end
+      end
+    raise JWT::DecodeError, "jwks fetch failed" unless response.success?
+
+    JSON.parse(body)
+  rescue JwksBodyTooLarge
+    raise JWT::DecodeError, "jwks response too large"
   rescue JSON::ParserError, URI::InvalidURIError, *OutboundHttp::Connection::NETWORK_ERRORS
     raise JWT::DecodeError, "jwks fetch failed"
+  end
+
+  def validate_jwks(document)
+    keys = document["keys"]
+    unless keys.is_a?(Array) && keys.any? && keys.size <= MAX_JWKS_KEYS
+      raise JwksUnavailable, "jwks key count is outside 1..#{MAX_JWKS_KEYS}"
+    end
+
+    seen_kids = Set.new
+    normalized_keys =
+      keys.map do |entry|
+        raise JwksUnavailable, "jwks entry must be an object" unless entry.is_a?(Hash)
+
+        source = entry.stringify_keys
+        kid = source["kid"]
+        unless SecurityJwtJumpRtTokenCodec.valid_kid?(kid) && seen_kids.add?(kid)
+          raise JwksUnavailable, "jwks kid is invalid or duplicated"
+        end
+
+        key_ops = source["key_ops"]
+        if source.key?("key_ops") && key_ops != ["verify"]
+          raise JwksUnavailable, "jwks key_ops must permit verification only"
+        end
+
+        jwk = normalized_public_jwk(source)
+        raise JwksUnavailable, "jwks entry is not a public ES384 verification key" unless jwk
+
+        begin
+          JWT::JWK.import(jwk).public_key
+        rescue JWT::JWKError, OpenSSL::PKey::PKeyError, ArgumentError => e
+          raise JwksUnavailable, "jwks entry has invalid public key material: #{e.class.name}"
+        end
+
+        jwk
+      end
+
+    { "keys" => normalized_keys }
   end
 
   def normalized_public_jwk(entry)
@@ -160,97 +227,79 @@ class JumpRtReturnVerifier
   end
 
   def valid_payload?(payload)
+    return false unless payload.is_a?(Hash)
+    return false unless (payload.keys - ALLOWED_CLAIMS).empty?
     return false unless payload["schema"] == 1
-    return false unless payload["sub"] == TOKEN_SUBJECT
-    return false unless payload["dst"] == "internal"
-    return false if payload["jti"].blank?
-    return false if payload["src"].blank?
-    return false if payload["url"].blank?
-    return false unless valid_replay_policy?(payload["rpl"])
-
-    iat = payload["iat"].to_i
-    exp = payload["exp"].to_i
-    nbf = payload["nbf"].to_i
-    current = now.to_i
-    return false if iat > current + LEEWAY
-    return false if nbf > exp
-    return false if exp - iat > max_ttl_seconds
+    return false unless valid_navigation_claims?(payload)
+    return false unless valid_time_claims?(payload)
 
     true
   end
 
-  def valid_replay_policy?(value)
-    value.blank? || JumpRtIssuer::VALID_REPLAY_POLICIES.include?(value.to_s)
+  def valid_navigation_claims?(payload)
+    return false unless payload["iss"].is_a?(String)
+    return false unless payload["aud"].is_a?(String)
+    return false unless payload["sub"] == TOKEN_SUBJECT
+    return false unless payload["dst"] == "internal"
+    return false unless valid_jti?(payload["jti"])
+    return false unless payload["src"].is_a?(String) && payload["src"].present?
+    return false unless valid_url_claim?(payload["url"])
+    return false unless payload["rpl"] == SecurityJwtJumpRtTokenCodec::REPLAY_POLICY
+
+    true
   end
 
-  def same_request_without_rt?(claimed_url)
-    claimed = normalize_url_without_rt(claimed_url)
-    current = normalize_url_without_rt(request_url)
-    !claimed.nil? && !current.nil? && claimed == current
+  def valid_time_claims?(payload)
+    iat, nbf, exp = payload.values_at("iat", "nbf", "exp")
+    return false unless [iat, nbf, exp].all? { |value| value.is_a?(Integer) && value.positive? }
+
+    current = now.to_i
+    return false if iat > current + LEEWAY
+    return false if nbf > exp
+    return false unless exp > iat
+    return false if exp - iat > MAX_RETURN_TTL
+
+    true
   end
 
-  def consume_jti!(payload)
-    expires_at = Time.zone.at(payload["exp"].to_i + LEEWAY)
-    return false unless expires_at.future?
+  def valid_jti?(value)
+    value.is_a?(String) && value.match?(JTI_PATTERN)
+  end
 
-    SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:jump_rt_return),
-      issuer: payload["iss"],
-      jti: payload["jti"],
-      expires_at: expires_at,
-    )
-  rescue ActiveRecord::ActiveRecordError
+  def valid_url_claim?(value)
+    return false unless value.is_a?(String) && value.present?
+
+    value.encode(Encoding::UTF_16LE).bytesize / 2 <= MAX_URL_LENGTH
+  rescue EncodingError
     false
   end
 
-  def one_time_return?(payload)
-    payload["rpl"].to_s == "once"
-  end
+  # The request must carry exactly this token as its only rt, and the signed url must carry none;
+  # the remaining ordered pairs must then serialize identically (JumpRtReturnUrlValue).
+  def same_request_without_rt?(claimed_url)
+    claimed = JumpRtReturnUrlValue.parse(claimed_url)
+    current = JumpRtReturnUrlValue.parse(request_url)
+    return false if claimed.nil? || current.nil?
+    return false unless claimed.return_token.nil?
+    return false unless current.return_token == token
 
-  # Returns a comparable tuple [scheme, host, port, path, query_hash] so the
-  # caller can match the request URL against the signed claim regardless of
-  # query parameter ordering. Returns nil for unparsable or unsafe URLs.
-  def normalize_url_without_rt(value)
-    uri = URI.parse(value.to_s)
-    return nil unless uri.is_a?(URI::HTTP)
-    return nil if uri.userinfo.present?
-    return nil if uri.fragment.present?
-
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-    query.delete("rt")
-    [
-      uri.scheme.downcase,
-      uri.host.to_s.downcase,
-      uri.port,
-      uri.path.presence || "/",
-      query,
-    ]
-  rescue URI::InvalidURIError
-    nil
+    claimed.canonical_without_return_token == current.canonical_without_return_token
   end
 
   def jump_origin
-    JumpRtReturnPolicy.normalize_origin(jump_gateway_url)
+    current_jump_config.origin
   end
 
   def jwks_url
     current_jump_config.jwks_uri
   end
 
-  def jump_gateway_url
-    current_jump_config.origin.to_s
-  end
-
   def revoked_kid?(kid)
     current_jump_config.revoked_kids.include?(kid.to_s)
   end
 
-  def max_ttl_seconds
-    current_jump_config.ttl_seconds
-  end
-
   def current_jump_config
-    ConfigValues::JumpGatewayValues.build(env: ENV, production: Rails.env.production?)
+    Rails.configuration.x.boot_config.fetch(:jump)
   end
 
   def failure(error)

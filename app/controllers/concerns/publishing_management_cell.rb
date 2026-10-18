@@ -2,12 +2,11 @@
 # frozen_string_literal: true
 
 # Everything the staff Publishing CMS controllers of one surface/audience cell
-# share: the cell's identity, the authenticated operator behind the request,
-# the query that never leaves the cell, and the props every page is built
-# from.
+# share: the cell's identity, the authenticated operator credential, the
+# Publishing authority client, and the props every page is built from.
 #
-# Contract: the including controller declares PUBLISHING_AUDIENCE,
-# PUBLISHING_SURFACE, and ENTRY_CLASS as explicit constants. Those values are
+# Contract: the including controller declares PUBLISHING_AUDIENCE and
+# PUBLISHING_SURFACE as explicit constants. Those values are
 # never inferred from the class name, request path, params, or host.
 #
 # The nested publication and archive controllers render and redirect to the
@@ -20,8 +19,6 @@
 # locales.
 module PublishingManagementCell
   extend ActiveSupport::Concern
-
-  include ::SurfaceInertiaPage
 
   class_methods do
     def publishing_audience
@@ -39,25 +36,17 @@ module PublishingManagementCell
 
       const_get(:PUBLISHING_SURFACE, false)
     end
-
-    def publishing_entry_class
-      unless const_defined?(:ENTRY_CLASS, false)
-        raise(NameError, "#{name} must declare ENTRY_CLASS")
-      end
-
-      const_get(:ENTRY_CLASS, false)
-    end
   end
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     # The CMS is staff-only. Every action writes or reads unpublished content,
     # including drafts that were never published and the bodies of archived
     # entries, so there is no action here that an anonymous request may reach.
     #
-    # The surface web rate limit comes from Base::Org::ApplicationController;
-    # these controllers no longer declare one of their own, which they had to
-    # while they inherited BareController and its empty quota.
-    before_action :authenticate_operator!
+    # The surface web rate limit comes from the staff ApplicationController
+    # these controllers inherit (Edit::Org::ApplicationController).
+    before_action :authenticate_browser_rp!
   end
 
   private
@@ -70,48 +59,61 @@ module PublishingManagementCell
     self.class.publishing_surface
   end
 
-  def publishing_entry_class
-    self.class.publishing_entry_class
+  # Staff CMS Inertia/controller prefix comes from the surface
+  # ApplicationController (Edit::Org::ApplicationController#publishing_management_namespace).
+  # Do not define a stub here: included modules sit ahead of the superclass in
+  # the ancestor chain and would shadow that implementation for every cell.
+
+  # R5-WU13: every read and write goes to the Publishing authority over HTTPS with this request's
+  # Operator Access JWT; the RP holds no publishing data and makes no policy decision itself.
+  def publishing_authority
+    @publishing_authority ||= PublishingAuthorityClient.new(
+      surface: publishing_surface, audience: publishing_audience,
+      access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+    )
   end
 
-  # Every CMS action asks the same question of the same policy. The record
-  # differs -- an entry for the member actions, the operator for the
-  # collection ones -- because that is what the action is about.
-  def authorize_publishing!(record, to:)
-    authorize!(record, to: to, with: PublishingEntryPolicy)
+  # Records the authority's decision for verify_authorized, then answers not-found or dependency
+  # failures the same way the pages always have. Returns the result for :ok and :unprocessable.
+  def authority_result!(result)
+    authorize!(result, to: :show?, with: PublishingRemoteResultPolicy)
+    raise ActiveRecord::RecordNotFound, "publishing entry not found" if result.status == :not_found
+
+    if result.status == :dependency
+      head :service_unavailable
+      return
+    end
+
+    result
   end
 
-  # Provenance for every row this request writes. `authenticate_operator!` has
-  # already run, so an absent operator here is a broken pipeline, not a
-  # visitor: it raises rather than writing an anonymous revision.
-  def operator_public_id
-    current_operator.public_id
-  end
-
-  def publishing_entries_query
-    PublishingManagementEntriesQuery.new(entry_class: publishing_entry_class)
+  def fetch_management_entry!(ref)
+    result = authority_result!(publishing_authority.entry(ref))
+    result&.data&.fetch("entry")
   end
 
   def find_management_entry!
-    publishing_entries_query.find!(public_id: params.expect(:id))
+    fetch_management_entry!(params.expect(:id))
   end
 
   def find_nested_management_entry!
-    publishing_entries_query.find!(public_id: params.expect(:entry_id))
+    fetch_management_entry!(params.expect(:entry_id))
   end
 
   # Absolute controller paths, so a nested controller addresses the entries
   # pages of its own cell rather than its own.
   def entries_controller_path
-    "/base/org/publishing/#{publishing_surface}/#{publishing_audience}/entries"
+    "/#{publishing_management_namespace}/#{publishing_surface}/#{publishing_audience}/entries"
   end
 
-  def entries_component(name)
-    "base/org/publishing/#{publishing_surface}/#{publishing_audience}/entries/#{name}"
+  # Every cell (four content families x three audiences) shares the same four ERB templates; the
+  # cell's identity travels as locals (surface/audience-derived hrefs), not as a per-cell view.
+  def entries_template(name)
+    "edit/org/publishing/entries/#{name}"
   end
 
   def entry_path(entry, action:)
-    url_for(controller: entries_controller_path, action: action, id: entry.public_id, only_path: true)
+    url_for(controller: entries_controller_path, action: action, id: entry.fetch("public_id"), only_path: true)
   end
 
   def entries_index_path(**)
@@ -121,21 +123,21 @@ module PublishingManagementCell
   def entry_publications_path(entry)
     url_for(
       controller: "#{entries_controller_path}/publications",
-      action: :create, entry_id: entry.public_id, only_path: true,
+      action: :create, entry_id: entry.fetch("public_id"), only_path: true,
     )
   end
 
   def entry_publication_path(entry, publication)
     url_for(
       controller: "#{entries_controller_path}/publications",
-      action: :destroy, entry_id: entry.public_id, id: publication.public_id, only_path: true,
+      action: :destroy, entry_id: entry.fetch("public_id"), id: publication.fetch("public_id"), only_path: true,
     )
   end
 
   def entry_archive_path(entry)
     url_for(
       controller: "#{entries_controller_path}/archives",
-      action: :create, entry_id: entry.public_id, only_path: true,
+      action: :create, entry_id: entry.fetch("public_id"), only_path: true,
     )
   end
 
@@ -144,44 +146,35 @@ module PublishingManagementCell
   end
 
   def index_page_props(page)
+    number = page.fetch("number")
     {
       title: management_title,
       description: "Entries for #{publishing_surface}/#{publishing_audience} across locales.",
       surface: publishing_surface,
       audience: publishing_audience,
       new_href: url_for(controller: entries_controller_path, action: :new, only_path: true),
-      entries: page.entries.map { |entry| index_entry_props(entry) },
+      entries: page.fetch("entries").map { |entry| index_entry_props(entry) },
       page: {
-        number: page.number,
-        per_page: page.per_page,
-        total: page.total,
-        previous_href: (entries_index_path(page: page.number - 1) if page.number > 1),
-        next_href: (entries_index_path(page: page.number + 1) if page.has_more),
+        number:,
+        per_page: page.fetch("per_page"),
+        total: page.fetch("total"),
+        previous_href: (entries_index_path(page: number - 1) if number > 1),
+        next_href: (entries_index_path(page: number + 1) if page.fetch("has_more")),
       },
     }
   end
 
   def index_entry_props(entry)
-    revision = entry.current_revision
-    {
-      public_id: entry.public_id,
-      title: revision&.title,
-      locale: entry.locale,
-      canonical_slug: entry.canonical_slug&.slug,
-      archive_state: entry.archived? ? "archived" : "active",
-      publication_state: entry.active_publication.present? ? "published" : "draft",
-      revision_sequence: revision&.sequence,
-      updated_at: entry.updated_at&.iso8601,
-      show_href: entry_path(entry, action: :show),
-      edit_href: entry_path(entry, action: :edit),
-    }
+    entry.slice(
+      "public_id", "title", "locale", "canonical_slug", "archive_state", "publication_state", "revision_sequence",
+      "updated_at",
+    ).symbolize_keys.merge(show_href: entry_path(entry, action: :show), edit_href: entry_path(entry, action: :edit))
   end
 
   def show_entry_props(entry, errors: {})
-    revision = entry.current_revision
-    active = entry.active_publication
+    active = entry["active_publication"]
     {
-      title: revision&.title.presence || management_title,
+      title: entry["title"].presence || management_title,
       description: "#{publishing_surface}/#{publishing_audience}",
       index_href: entries_index_path,
       edit_href: entry_path(entry, action: :edit),
@@ -189,53 +182,42 @@ module PublishingManagementCell
       archive_href: entry_archive_path(entry),
       errors: stringify_error_keys(errors),
       publication: (publication_props(entry, active) if active),
-      scheduled_publications: scheduled_publications(entry).map { |row| publication_props(entry, row) },
+      scheduled_publications: entry.fetch("scheduled_publications").map { |row| publication_props(entry, row) },
       entry: {
-        public_id: entry.public_id,
+        public_id: entry.fetch("public_id"),
         surface: publishing_surface,
         audience: publishing_audience,
-        locale: entry.locale,
-        canonical_slug: entry.canonical_slug&.slug,
-        current_revision_public_id: revision&.public_id,
-        revision_sequence: revision&.sequence,
-        title: revision&.title,
-        summary: revision&.summary,
-        body: revision&.body,
-        archive_state: entry.archived? ? "archived" : "active",
-        archive_reason: entry.archive_reason,
-        publication_state: active.present? ? "published" : "draft",
-        revision_count: entry.revisions.count,
-        version_count: entry.versions.count,
-        updated_at: entry.updated_at&.iso8601,
+        locale: entry["locale"],
+        canonical_slug: entry["canonical_slug"],
+        current_revision_public_id: entry["current_revision_public_id"],
+        revision_sequence: entry["revision_sequence"],
+        title: entry["title"],
+        summary: entry["summary"],
+        body: entry["body"],
+        archive_state: entry["archive_state"],
+        archive_reason: entry["archive_reason"],
+        publication_state: entry["publication_state"],
+        revision_count: entry["revision_count"],
+        version_count: entry["version_count"],
+        updated_at: entry["updated_at"],
       },
     }
   end
 
-  # Windows that have been recorded but have not started yet. They are not
-  # part of `active_publication`, and an operator who scheduled one has no
-  # other place to see or cancel it.
-  def scheduled_publications(entry)
-    entry.publications
-      .where(cancelled_at: nil, terminated_at: nil)
-      .where(effective_from: Time.current...)
-      .order(:effective_from)
-  end
-
   def publication_props(entry, publication)
     {
-      public_id: publication.public_id,
-      effective_from: publication.effective_from.iso8601,
-      version_public_id: publication.entry_version.public_id,
+      public_id: publication.fetch("public_id"),
+      effective_from: publication.fetch("effective_from"),
+      version_public_id: publication.fetch("version_public_id"),
       end_href: entry_publication_path(entry, publication),
     }
   end
 
   def edit_entry_props(entry, errors:, form: nil)
-    revision = entry.current_revision
     body_source = form&.body_text
-    body_source ||= pretty_body_json(revision&.body)
+    body_source ||= pretty_body_json(entry["body"])
     {
-      title: "Edit #{revision&.title.presence || entry.public_id}",
+      title: "Edit #{entry["title"].presence || entry.fetch("public_id")}",
       description: "#{publishing_surface}/#{publishing_audience}",
       index_href: entries_index_path,
       show_href: entry_path(entry, action: :show),
@@ -243,12 +225,12 @@ module PublishingManagementCell
       form: {
         action: entry_path(entry, action: :update),
         method: "patch",
-        title: form&.title || revision&.title,
-        summary: form&.summary || revision&.summary,
+        title: form&.title || entry["title"],
+        summary: form&.summary || entry["summary"],
         body: body_source,
-        lock_version: entry.lock_version,
-        locale: entry.locale,
-        canonical_slug: entry.canonical_slug&.slug,
+        lock_version: entry["lock_version"],
+        locale: entry["locale"],
+        canonical_slug: entry["canonical_slug"],
       },
     }
   end
@@ -275,8 +257,8 @@ module PublishingManagementCell
   # Publication and archive failures re-render the entry's own show page with
   # the message on it, because that is the page the operator acted from.
   def render_show_failure(entry, errors:)
-    render inertia: entries_component("show"),
-           props: show_entry_props(entry, errors: errors),
+    render entries_template("show"),
+           locals: show_entry_props(entry, errors: errors),
            status: :unprocessable_content
   end
 

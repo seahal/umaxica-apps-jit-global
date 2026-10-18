@@ -7,142 +7,66 @@ require "test_helper"
 class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-  BASE_COM_HOST = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
-  BASE_ORG_HOST = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+  BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+  BASE_COM_HOST = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  BASE_ORG_HOST = ENV.fetch("PUBLIC_BASE_STAFF_URL")
   PALM_HOST = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
 
   setup do
     load_jump_rt_env!
   end
 
-  test "base auth entrypoints redirect to acme authorize with base callback and signup intent" do
-    [
-      { host: BASE_APP_HOST, acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost") },
-      { host: BASE_COM_HOST, acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "www.com.localhost") },
-      { host: BASE_ORG_HOST, acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost") },
-    ].each do |surface|
-      host! surface.fetch(:host)
-
-      get "/oidc/authorization"
-
-      assert_response :redirect
-      uri = URI.parse(response.location)
-      query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-      redirect_uri = URI.parse(query.fetch("redirect_uri"))
-
-      assert_equal surface.fetch(:acme_host), uri.host
-      assert_equal "/oauth/authorize", uri.path
-      assert_not_equal "jump.umaxica.net", uri.host
-      assert_equal "base-rails-rp", query.fetch("client_id")
-      assert_equal "signup", query.fetch("screen_hint")
-      assert_equal surface.fetch(:host), redirect_uri.host
-      assert_equal "/oidc/callback", redirect_uri.path
-      assert_equal uri.scheme, redirect_uri.scheme
-      assert_predicate query["state"], :present?
-      assert_predicate query["nonce"], :present?
-      assert_predicate query["code_challenge"], :present?
-      assert_equal query.fetch("state"), session[:oidc_state]
-      assert_predicate session[:oidc_code_verifier], :present?
-    end
-  end
-
-  test "palm auth entrypoint redirects to acme authorize for the selected native client" do
-    [
-      { client_id: "app-ios-rp", redirect_uri: "umaxica://oidc/callback" },
-      { client_id: "app-android-rp", redirect_uri: "com.umaxica.app:/oidc/callback" },
-    ].each do |surface|
-      host! PALM_HOST
-
-      get "/oidc/authorization", params: { client_id: surface.fetch(:client_id) }
-
-      assert_response :redirect
-      uri = URI.parse(response.location)
-      query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-      assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), uri.host
-      assert_equal "/oauth/authorize", uri.path
-      assert_not_equal "jump.umaxica.net", uri.host
-      assert_equal surface.fetch(:client_id), query.fetch("client_id")
-      assert_equal "signup", query.fetch("screen_hint")
-      assert_equal surface.fetch(:redirect_uri), query.fetch("redirect_uri")
-      assert_predicate query["state"], :present?
-      assert_predicate query["nonce"], :present?
-      assert_predicate query["code_challenge"], :present?
-    end
-  end
-
-  test "palm auth entrypoint can request sign in intent for the selected native client" do
-    host! PALM_HOST
-
-    get "/oidc/authorization", params: { client_id: "app-ios-rp", screen_hint: "signin" }
-
-    assert_response :redirect
-    uri = URI.parse(response.location)
-    query = Rack::Utils.parse_nested_query(uri.query.to_s)
-
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "www.app.localhost"), uri.host
-    assert_equal "/oauth/authorize", uri.path
-    assert_not_equal "jump.umaxica.net", uri.host
-    assert_equal "app-ios-rp", query.fetch("client_id")
-    assert_equal "signin", query.fetch("screen_hint")
-    assert_equal "umaxica://oidc/callback", query.fetch("redirect_uri")
-  end
-
-  test "palm auth entrypoint rejects unknown native client ids" do
-    host! PALM_HOST
-
-    get "/oidc/authorization", params: { client_id: "unknown-rp" }
-
-    assert_response :bad_request
-    assert_equal "Invalid client", response.body
-  end
-
-  test "base callback routes are host constrained" do
-    {
-      BASE_APP_HOST => "base/app/oidc/callbacks",
-      BASE_COM_HOST => "base/com/oidc/callbacks",
-      BASE_ORG_HOST => "base/org/oidc/callbacks",
-    }.each do |host, controller|
-      assert_routing(
-        { method: :get, path: "http://#{host}/oidc/callback" },
-        { controller: controller, action: "show" },
-      )
-    end
-  end
-
-  test "base callbacks reject requests without rp state" do
+  test "base exposes no legacy RP authorization launcher" do
     [BASE_APP_HOST, BASE_COM_HOST, BASE_ORG_HOST].each do |host|
-      host! host
-
-      get "/oidc/callback", params: { code: "code", state: "state" }
-
-      assert_response :unprocessable_content
-      assert_equal I18n.t("errors.messages.login_required"), response.body
+      ["/oidc/authorization"].each do |path|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{host}#{path}", method: :get)
+        end
+      end
     end
   end
 
-  # The base roots no longer render a sign up entry point: they canonicalize to the regional root,
-  # which owns the entry point. Palm still serves its own.
-  test "base roots canonicalize to the regional root and palm root exposes sign up links" do
+  test "retired native Palm client ids are no longer registered" do
+    host! PALM_HOST
+
+    %w(app-ios-rp app-android-rp).each do |client_id|
+      assert_nil OidcClientRegistry.find(client_id), client_id
+    end
+    assert_nil OidcClientRegistry.find("app-ios-rp")
+    assert_nil OidcClientRegistry.find("app-android-rp")
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{PALM_HOST}/api/v0/profile", method: :get)
+    end
+  end
+
+  test "base app com and org expose their own self RP callback" do
+    { BASE_APP_HOST => "app", BASE_COM_HOST => "com", BASE_ORG_HOST => "org" }.each do |host, surface|
+      route = Rails.application.routes.recognize_path("https://#{host}/oidc/callback", method: :get)
+
+      assert_equal "base/#{surface}/oidc/callbacks", route.fetch(:controller)
+      assert_equal "show", route.fetch(:action)
+    end
+  end
+
+  # Base Root is the control-plane home. Palm's root links to its neutral browser sign-in page.
+  test "base roots render the control-plane home and palm root links to browser sign-in" do
     host! BASE_APP_HOST
     get "/", params: { ri: "jp" }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
 
     host! BASE_COM_HOST
     get "/", params: { ri: "jp" }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.com/", response.location
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
 
     host! BASE_ORG_HOST
     get "/", params: { ri: "jp" }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.org/", response.location
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
 
     # Palm renders regional HTML, so its root owes the same `ri` contract as the other HTML
     # surfaces: a request without a region is redirected to the canonical URL that carries one,
@@ -156,13 +80,7 @@ class BasePalmAuthEntrypointsTest < ActionDispatch::IntegrationTest
     get "/", params: { ri: "jp" }
 
     assert_response :success
-    assert_equal(
-      [
-        ["Sign up on iOS", palm_app_oidc_authorization_path(client_id: "app-ios-rp", ri: "jp")],
-        ["Sign up on Android", palm_app_oidc_authorization_path(client_id: "app-android-rp", ri: "jp")],
-      ],
-      inertia_props.fetch("links").map { |link| [link.fetch("label"), link.fetch("href")] },
-    )
+    assert_equal palm_app_sign_show_path(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
   end
 end
 
@@ -183,31 +101,11 @@ class BasePalmAuthEntrypointsTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -267,10 +165,8 @@ class BasePalmAuthEntrypointsTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -282,10 +178,8 @@ class BasePalmAuthEntrypointsTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -420,7 +314,8 @@ class BasePalmAuthEntrypointsTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,
@@ -506,63 +401,6 @@ class BasePalmAuthEntrypointsTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -578,10 +416,8 @@ class BasePalmAuthEntrypointsTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -601,12 +437,12 @@ class BasePalmAuthEntrypointsTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

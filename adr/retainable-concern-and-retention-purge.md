@@ -4,6 +4,11 @@
 
 Accepted
 
+The 2026-10-07 [identifier/dead-history decision](realm-separated-identifiers-and-dead-history.md)
+supersedes set-based Email/Telephone collection only. Their channel-specific purgers lock the owner
+and live row, respect legal/enforcement holds, create a minimal dead history and destroy the live
+identifier in one owning-database transaction. Other retention deletion remains set-based.
+
 ## context
 
 Applications require retention management in many models, but the current challenges include:
@@ -18,14 +23,18 @@ Applications require retention management in many models, but the current challe
 
 ### Column unification
 
-1. **`discarded_at`** - Logical deletion time (time when access becomes impossible)
-2. **`purged_at`** - Physical deletion candidate time (time when data can actually be deleted)
+1. **`discard_at`** - Logical deletion time (time when access becomes impossible)
+2. **`purge_eligible_at`** - Physical deletion candidate time (time when data can actually be deleted)
 
-`discarded_at` is the standard column name for the `discard` gem, so `self.discard_column = ...` for
-each model. Not set. In this migration, in order to maintain the time window semantics of the
-existing Retainable, `discarded_at = Float::INFINITY` equivalent to unrevoked sentinel,
-`discarded_at <= Time.current` be treated as inaccessible. discard gem `NULL = kept` Switching to
-semantics is a separate task after the time window usage has been separated into separate columns.
+`discard_at` is intentionally a domain-specific retention name rather than a `discard` gem
+integration. In order to maintain the time window semantics of the existing Retainable,
+`discard_at = Float::INFINITY` is equivalent to the unrevoked sentinel, and
+`discard_at <= evaluation_time` is treated as inaccessible. State-changing retention decisions
+use the owning model's writer-database clock (`database_now`, inherited from `ApplicationRecord`)
+when no explicit
+decision-unit time is supplied; callers that already hold a required lock may pass that same
+database time through the operation. Switching to discard gem `NULL = kept` semantics is a
+separate task after the time window usage has been separated into separate columns.
 
 ### Introducing Retainable Concern
 
@@ -38,46 +47,47 @@ module Retainable
   SENTINEL = ::Float::INFINITY
 
   included do
-    attribute :discarded_at, :datetime, default: -> { SENTINEL }
-    attribute :purged_at, :datetime, default: -> { SENTINEL }
+    attribute :discard_at, :datetime, default: -> { SENTINEL }
+    attribute :purge_eligible_at, :datetime, default: -> { SENTINEL }
 
-    validates :discarded_at, presence: true
-    validates :purged_at, presence: true
-    validate :discarded_at_not_after_purged_at
+    validates :discard_at, presence: true
+    validates :purge_eligible_at, presence: true
+    validate :retention_order_valid
     validate :retention_times_not_before_created_at, on: :update
   end
 
-  def accessible?
-    discarded_at > Time.current
+  def accessible?(evaluation_time = Time.current)
+    discard_at > evaluation_time
   end
 
-  def lapsed?
-    discarded_at <= Time.current
+  def lapsed?(evaluation_time = Time.current)
+    discard_at <= evaluation_time
   end
 
-  def purgeable?
-    purged_at <= Time.current
+  def purgeable?(evaluation_time = Time.current)
+    purge_eligible_at <= evaluation_time
   end
 
-  def schedule_retention!(discarded_at:, purged_at:)
-    raise ArgumentError, 'discarded_at must be in the future' if discarded_at <= Time.current
-    raise ArgumentError, 'purged_at must be in the future' if purged_at <= Time.current
-    raise ArgumentError, 'discarded_at must be <= purged_at' if discarded_at > purged_at
-    update!(discarded_at: discarded_at, purged_at: purged_at)
+  def schedule_retention!(discard_at:, purge_eligible_at:, now: nil)
+    now ||= self.class.database_now
+    raise ArgumentError, 'discard_at must be in the future' if discard_at <= now
+    raise ArgumentError, 'purge_eligible_at must be in the future' if purge_eligible_at <= now
+    raise ArgumentError, 'discard_at must be <= purge_eligible_at' if discard_at > purge_eligible_at
+    update!(discard_at: discard_at, purge_eligible_at: purge_eligible_at)
   end
 end
 ```
 
 ### Consolidated map of columns
 
-#### Columns to be integrated into `discarded_at`
+#### Columns to be integrated into `discard_at`
 
 - `revoked_at`
 - `expires_at` (credential variant)
 - `refresh_expires_at`
 - `compromised_at`
 
-#### Columns to be integrated into `purged_at`
+#### Columns to be integrated into `purge_eligible_at`
 
 - `deletable_at`
 - `shreddable_at`
@@ -98,7 +108,7 @@ end
 
 ### Solid Queue retention job
 
-Create a RetentionPurgeJob to periodically delete records that are `purged_at` old.
+Create a RetentionPurgeJob to periodically delete records that are `purge_eligible_at` old.
 
 ```ruby
 class RetentionPurgeJob < ApplicationJob
@@ -115,9 +125,9 @@ class RetentionPurgeJob < ApplicationJob
   ].freeze
 
   def perform(batch_size: 500)
-    now = Time.current
     RETAINABLE_MODELS.each do |klass|
-      klass.where('purged_at <= ?', now).in_batches(of: batch_size).delete_all
+      now = klass.database_now
+      klass.where('purge_eligible_at <= ?', now).in_batches(of: batch_size).delete_all
     end
   end
 end
@@ -126,14 +136,36 @@ end
 DB-backed JumpLink records were removed when redirect handling moved to the external Jump gateway
 and signed `rt` tokens.
 
+### Retention safety contract
+
+`RetentionPurgeJob` is an explicitly destructive maintenance operation. Its safety contract is
+provided by the operation's bounded, allowlisted execution rather than by a preview API:
+
+- only the explicit `RETAINABLE_MODELS` allowlist is processed;
+- the public batch-size input is restricted to the inclusive `1..500` range before any destructive
+  work begins;
+- each model is selected using its writer-database retention clock and processed in explicit
+  `in_batches` scopes;
+- the `discard_at <= purge_eligible_at` retention invariant keeps an un-discarded Retainable row
+  outside the purge window; models with separate archive or legal-retention semantics are not
+  included without an approved model-specific eligibility rule or hold, and are never discovered
+  through wildcard table enumeration;
+- applicable retention holds and enforcement effects are re-evaluated during execution;
+- the operational retention kill switch stops destructive work before processing begins; and
+- model-specific anonymization, child cleanup, and physical deletion behavior remains explicit.
+
+This contract does not require `dry_run`, preview, or simulation behavior, and those interfaces
+must not be added solely to satisfy retention safety. Notification provider receipt, delivery,
+retry, and permanent-failure semantics are separate contracts and are not implied by this ADR.
+
 ## reason
 
 1. By unifying columns, the complexity of retention management is significantly reduced.
-2. `discarded_at` is a standard column name for the `discard` gem, making
-   `self.discard_column = ...` unnecessary
+2. `discard_at` and `purge_eligible_at` make the two retention meanings explicit without
+   coupling the schema to a discard-gem convention
 3. `Retainable` concern provides consistent interface across all models
 4. Efficiently perform physical deletion processing with Solid Queue job
-5. `discarded_at` / `purged_at` is `Float::INFINITY` can be used as the sentinel value to simplify
+5. `discard_at` / `purge_eligible_at` use `Float::INFINITY` as the sentinel value to simplify
    the query while preserving the existing time window semantics.
 
 ## influence
@@ -141,5 +173,6 @@ and signed `rt` tokens.
 - Column name change and data migration required for models with 24 or more
 - Change references in existing controllers and services to new column names
 - The test code also needs to be adapted to the new column names.
-- The existing implementation `lapses_at` will be migrated to `discarded_at`
-- As a migration strategy, rename existing columns to `discarded_at` / `purged_at`
+- The existing implementation `lapses_at` is exposed as an alias for `discard_at`
+- Because the schema is unreleased, existing Retainable columns were renamed directly to
+  `discard_at` / `purge_eligible_at`; no compatibility columns or double writes are retained.

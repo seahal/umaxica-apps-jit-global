@@ -41,6 +41,7 @@ class WithdrawalLifecycle
 
   def suspend!
     now = Time.current
+    stop_event = nil
     deactivated = actor.deactivated_at.presence || now
 
     actor.class.transaction do
@@ -49,19 +50,21 @@ class WithdrawalLifecycle
       actor.update!(
         withdrawal_started_at: actor.withdrawal_started_at.presence || now,
         deactivated_at: deactivated,
-        discarded_at: deactivated,
-        purged_at: if actor.purged_at.present? && finite_future_time?(actor.purged_at)
-                     actor.purged_at
-                   else
-                     deactivated + RECOVERY_PERIOD
-                   end,
+        discard_at: deactivated,
+        purge_eligible_at: if actor.purge_eligible_at.present? && finite_future_time?(actor.purge_eligible_at)
+                             actor.purge_eligible_at
+                           else
+                             deactivated + RECOVERY_PERIOD
+                           end,
       )
-      revoke_sessions
+      stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_suspend")
     end
+    # The OP applies the stop only after the Zenith commit (one.md section 7.5).
+    OpIdentityEventInvalidator.deliver(event: stop_event)
 
     notify(
-      "suspended", deactivated_at: actor.deactivated_at, discarded_at: actor.discarded_at,
-                   purged_at: actor.purged_at,
+      "suspended", deactivated_at: actor.deactivated_at, discard_at: actor.discard_at,
+                   purge_eligible_at: actor.purge_eligible_at,
     )
     record_occurrence!("withdrawal.deactivated")
     actor
@@ -78,8 +81,8 @@ class WithdrawalLifecycle
       actor.update!(
         withdrawal_started_at: nil,
         deactivated_at: nil,
-        discarded_at: Float::INFINITY,
-        purged_at: Float::INFINITY,
+        discard_at: Float::INFINITY,
+        purge_eligible_at: Float::INFINITY,
         withdrawn_at: nil,
       )
     end
@@ -92,6 +95,8 @@ class WithdrawalLifecycle
   def terminate!
     raise Sign::InvalidWithdrawalStateError, actor.class.name unless actor.early_terminatable?
 
+    stop_event = nil
+
     actor.class.transaction do
       actor.lock!
       ensure_withdrawal_flow_terminated!(now: Time.current)
@@ -100,8 +105,9 @@ class WithdrawalLifecycle
         actor.save!(validate: false)
       end
       WithdrawalPersonalDataAnonymizer.call(actor:)
-      revoke_sessions
+      stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_terminate")
     end
+    OpIdentityEventInvalidator.deliver(event: stop_event)
 
     notify("terminated", terminated_at: actor.try(:terminated_at))
     record_occurrence!("withdrawal.terminated")
@@ -208,25 +214,6 @@ class WithdrawalLifecycle
       token_public_id: current_session_public_id,
       reason: reason,
     }
-  end
-
-  def revoke_sessions(except_public_id: nil)
-    scope = AuthenticationSessionRevoker.tokens_for(actor)
-    scope = exclude_session_identifier(scope, except_public_id) if except_public_id.present?
-    scope.find_each(&:revoke!)
-  end
-
-  def exclude_session_identifier(scope, identifier)
-    excluded = scope.where.not(public_id: identifier)
-    return excluded unless scope.klass.column_names.include?("oidc_sid") && uuid_identifier?(identifier)
-
-    excluded.where.not(oidc_sid: identifier)
-  end
-
-  def uuid_identifier?(value)
-    /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.match?(
-      value.to_s,
-    )
   end
 
   def finite_future_time?(value)

@@ -65,6 +65,15 @@ class OperatorEntraIdentityProvisionerTest < ActiveSupport::TestCase
     assert_equal 0, OperatorEntraIdentity.count
   end
 
+  test "rejects an app Client identifier as an org Entra provisioning target" do
+    client = Client.create!(public_id: "app_#{SecureRandom.hex(8)}")
+
+    assert_raises(OperatorEntraIdentityProvisioner::OperatorNotFound) do
+      with_pinned_tenant { provision(client.public_id, OBJECT_ID) }
+    end
+    assert_equal 0, OperatorEntraIdentity.count
+  end
+
   test "refuses to give one operator a second Entra identity" do
     with_pinned_tenant { provision(@operator.public_id, OBJECT_ID) }
 

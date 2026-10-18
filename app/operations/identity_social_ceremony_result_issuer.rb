@@ -50,6 +50,12 @@ class IdentitySocialCeremonyResultIssuer
   def validate_grant!
     raise IdentitySocialCeremonyContract::Error, "social ceremony grant is required" if grant_token.blank?
     raise IdentitySocialCeremonyContract::Error, "provider subject is required" if provider_subject.blank?
+
+    validate_grant_claims!
+    validate_grant_transaction!
+  end
+
+  def validate_grant_claims!
     raise IdentitySocialCeremonyContract::Error,
           "grant surface does not match ceremony" unless grant["surface"].to_s == surface
     raise IdentitySocialCeremonyContract::Error,
@@ -60,6 +66,9 @@ class IdentitySocialCeremonyResultIssuer
           "grant operation does not match ceremony" unless grant["operation"].to_s == operation
     raise IdentitySocialCeremonyContract::Error,
           "grant provider does not match ceremony" unless grant["provider"].to_s == provider
+  end
+
+  def validate_grant_transaction!
     raise IdentitySocialCeremonyContract::Error,
           "grant jti does not match transaction" unless grant["jti"].to_s == transaction.grant_jti.to_s
     raise IdentitySocialCeremonyContract::Error, "transaction is expired" if transaction.expired?(now: now)
@@ -130,6 +139,11 @@ class IdentitySocialCeremonyResultIssuer
       "candidate_ref" => candidate&.ref,
       "candidate_digest" => candidate&.digest,
       "birthdate" => birthdate,
+      # The adapter's verified_at is the only trusted authentication-event
+      # timestamp available at this boundary. Preserve it in the signed
+      # handoff so Base can establish its session with the event time rather
+      # than the later browser handoff time.
+      "auth_time" => principal.verified_at.to_i,
       "verified_at" => now.to_i,
       "challenge_id" => challenge_id.presence || transaction.transaction_id,
       "expires_at" => transaction.expires_at.to_i,

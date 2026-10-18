@@ -12,7 +12,8 @@
 # - `enabled` / `response` apply to every call, including the `verify_for_ceremony` path
 #   used by the social sign-up confirmation controllers. A set response applies on its own.
 #
-# Anything not stubbed falls through to the real verifier.
+# Anything not stubbed fails closed. Tests that exercise the real verifier must use an explicit
+# Faraday test adapter (see `OutboundHttpStub`) or stub the connection builder themselves.
 class TurnstileVerifierStub
   CHALLENGE_ENABLED = Concurrent::AtomicReference.new(false)
   CHALLENGE_RESPONSE = Concurrent::AtomicReference.new
@@ -59,14 +60,14 @@ class TurnstileVerifierStub
       self.response = nil
     end
 
-    def verify(**arguments)
+    def verify(**_arguments)
       # The challenge slot wins: it is the narrower of the two, and the override it
       # replaced was consulted before the verifier-level one.
-      challenge_stubbed_response || stubbed_response || JitSecurityTurnstileVerifier.verify(**arguments)
+      challenge_stubbed_response || stubbed_response || unstubbed_failure
     end
 
-    def verify_for_ceremony(**arguments)
-      stubbed_response || JitSecurityTurnstileVerifier.verify_for_ceremony(**arguments)
+    def verify_for_ceremony(**_arguments)
+      stubbed_response || unstubbed_failure
     end
 
     private
@@ -79,6 +80,11 @@ class TurnstileVerifierStub
       return nil unless challenge_enabled
 
       challenge_response.presence || { "success" => true }
+    end
+
+    def unstubbed_failure
+      raise TestSupport::ExternalCommunicationError,
+            "Turnstile verification is not stubbed in the test environment"
     end
   end
 end

@@ -6,36 +6,17 @@ module Base
     module Identity
       class StandingsController < ::Base::Org::ApplicationController
         include ::SurfaceInertiaPage
+        include ::OrgOwnerPageRelay
 
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
+        OWNER_PAGE_SURFACE = "org"
 
-        before_action :authenticate_operator!
+        public
 
+        # R5-WU12: the standing is resolved by the Enforcement owner over HTTPS.
         def show
-          authorize!(current_operator, to: :show?)
-          @standing = AccountStandingResolver.call(
-            enforcement_case_class: OrgEnforcementCase,
-            principal_public_id: current_operator.public_id,
-          )
-          render inertia: true, props: {
-            title: "Account Standing",
-            status_label: "Current status: #{@standing.level.to_s.humanize}",
-            decisions: @standing.decisions.map { |decision| serialize_decision(decision) },
-          }
-        end
-
-        private
-
-        def serialize_decision(decision)
-          expires_at = decision.fetch(:expires_at)
-
-          {
-            public_id: decision.fetch(:public_id),
-            kind: decision.fetch(:kind).humanize,
-            reason: decision.fetch(:reason_code).humanize,
-            ends_at: expires_at.present? ? "Ends: #{l(expires_at)}" : nil,
-          }
+          relay_owner_page!
         end
       end
     end

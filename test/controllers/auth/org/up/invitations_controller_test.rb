@@ -13,7 +13,7 @@ class Auth::Org::Sign::Up::InvitationsControllerTest < ActionDispatch::Integrati
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @invitation = OrganizationInvitation.create!(
       organization_id: 123,
-      email: "invitee-controller@example.com",
+      email: "invitee-controller-#{SecureRandom.hex(8)}@example.com",
       invited_by: operators(:one),
       role_id: 7,
     )

@@ -44,3 +44,11 @@ Prefer sources in this order:
 
 If no sufficient evidence can be found without Qiita or Zenn, state that no primary or trustworthy
 source was found. Do not use Qiita or Zenn as a fallback.
+
+## Security standards
+
+Use the [official OWASP ASVS project](https://owasp.org/projects/asvs) as an authoritative
+security-standard reference. At audit execution time, verify the latest stable release against the
+[official releases](https://github.com/OWASP/ASVS/releases); do not treat Bleeding Edge as stable.
+Record the exact release version, tag, and source commit used by the audit. Qualify requirement
+identifiers with that version (for example, `v5.0.0-6.3.3`); chapter numbers are not release versions.

@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
@@ -14,7 +15,67 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index renders groups through inertia" do
-    get base_app_groups_url(ri: "jp", host: @host), headers: as_user_headers(@user, host: @host)
+    http_headers_11 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    get base_app_groups_url(ri: "jp", host: @host), headers: http_headers_11
 
     assert_response :success
     assert_equal "text/html", response.media_type
@@ -30,123 +91,967 @@ class Base::App::GroupsControllerTest < ActionDispatch::IntegrationTest
     assert_select "script[src*=?]", "base_app"
   end
 
+  test "index lists the selected account's groups, archived included, and nothing else" do
+    account_public_id = @bootstrap.account.public_id
+    create_group(name: "Own active", account_public_id: account_public_id)
+    create_group(name: "Own archived", account_public_id: account_public_id, state: "archived")
+    other = BaseSelectorBootstrapAuthority.call(
+      surface: :app, principal: Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER),
+    )
+    create_group(
+      name: "Other account", account_public_id: other.account.public_id,
+      owner_collective_public_id: other.collective.public_id,
+    )
+    create_group(name: "Other surface", account_surface: "com", account_public_id: account_public_id)
+
+    http_headers_10 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    get base_app_groups_url(ri: "jp", host: @host), headers: http_headers_10
+
+    assert_response :success
+    page = JSON.parse(css_select("script[data-page='app']").first.text)
+    names = page.fetch("props").fetch("groups").map { |group| group.fetch("name") }
+
+    assert_equal ["Own active", "Own archived"], names.sort
+    page.fetch("props").fetch("groups").each do |group|
+      assert_equal base_app_group_path(group.fetch("public_id"), ri: "jp"), group.fetch("href")
+    end
+  end
+
   test "unauthenticated cannot access groups" do
     get base_app_groups_url(ri: "jp", host: @host), headers: host_headers(@host)
 
     assert_response :redirect
-    assert_oidc_authorize_redirect(response.location, host: @host)
+    assert_base_sign_entry_redirect(response.location, surface: :app)
   end
 
   test "client creates and views a group in the selected account" do
     assert_difference -> { AvatarGroup.count }, 1 do
+      http_headers_9 =
+        begin
+          rp_headers = as_user_headers(@user, host: @host)
+          rp_host = rp_headers["Host"]
+          rp_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+            rp_client_id =
+              case rp_family
+              when "base" then "base-#{rp_surface}-ww"
+              when "edit" then "edit-org-ww"
+              when "tech" then "tech-org-ww"
+              else "#{rp_family}-#{rp_surface}-jp"
+              end
+            rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            rp_client = OidcClientRegistry.find!(rp_client_id)
+            rp_key = [rp_client.client_id, rp_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OpAppGrant.exists?(
+                  device_session_id: rp_token.device_session_id,
+                  oidc_client_id: rp_client.client_id,
+                  revoked_at: nil,
+                ))
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OpAppGrant.create!(
+                client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                rp_token.actor_record, host: rp_host, resource_type: "client",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "client",
+                                       ), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[rp_key]
+              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_cookie = [
+                rp_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              ].join("; ")
+              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+            end
+          end
+          rp_headers
+        end
       post base_app_groups_url(ri: "jp", host: @host),
            params: { group: { name: "Coverage Group", description: "Group description" } },
-           headers: as_user_headers(@user, host: @host)
+           headers: http_headers_9
     end
 
     assert_response :created
     group = AvatarGroup.order(:id).last
 
     assert_equal "Coverage Group", group.name
+    assert_equal "app", group.current_ownership_period.owner_surface
+    assert_equal @bootstrap.collective.public_id, group.current_ownership_period.owner_collective_public_id
 
+    http_headers_8 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get base_app_group_url(group.public_id, ri: "jp", host: @host),
-        headers: as_user_headers(@user, host: @host)
+        headers: http_headers_8
 
     assert_response :success
     assert_equal group.public_id, response.parsed_body.dig("group", "public_id")
   end
 
-  test "client updates and archives a selected-account group" do
-    account_public_id = @bootstrap.account.public_id
-    group = AvatarGroup.create!(
-      account_surface: "app", account_public_id: account_public_id,
-      name: "Original Group", description: "Original", state: "active",
-    )
+  test "create returns forbidden when owner membership changes after policy authorization" do
+    membership = @bootstrap.account.persona_memberships.find_by!(enterprise: @bootstrap.collective)
+    membership_downgraded = false
+    locked_recheck_observed = false
+    sql_subscription =
+      lambda do |_name, _started, _finished, _unique_id, payload|
+        sql = payload[:sql]
+        next unless sql
 
+        if !membership_downgraded &&
+            sql.match?(/SELECT .*FROM "persona_memberships".*INNER JOIN "enterprises"/im) &&
+            !sql.match?(/FOR UPDATE/i)
+          membership_downgraded = true
+          membership.update!(membership_kind_id: PersonaMembershipKind::MEMBER)
+        end
+        locked_recheck_observed ||= sql.match?(
+          /FROM "persona_memberships".*FOR UPDATE OF "persona_memberships"/im,
+        )
+      end
+
+    assert_no_difference -> { AvatarGroup.count } do
+      ActiveSupport::Notifications.subscribed(sql_subscription, "sql.active_record") do
+        http_headers_7 =
+          begin
+            rp_headers = as_user_headers(@user, host: @host)
+            rp_host = rp_headers["Host"]
+            rp_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+              rp_client_id =
+                case rp_family
+                when "base" then "base-#{rp_surface}-ww"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
+                end
+              rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              rp_client = OidcClientRegistry.find!(rp_client_id)
+              rp_key = [rp_client.client_id, rp_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                  !(rp_token.device_session_id && OpAppGrant.exists?(
+                    device_session_id: rp_token.device_session_id,
+                    oidc_client_id: rp_client.client_id,
+                    revoked_at: nil,
+                  ))
+                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+                rp_now = Time.current
+                rp_session = OpAppGrant.create!(
+                  client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                  refresh_token_expires_at: rp_now + 10.minutes,
+                )
+                rp_access = AuthenticationTokenService.encode(
+                  rp_token.actor_record, host: rp_host, resource_type: "client",
+                                         session_public_id: rp_token.public_id,
+                                         base_session_public_id: rp_token.public_id,
+                                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                         subject: OidcSubject.for(
+                                           rp_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: rp_client.client_id,
+                )
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[rp_key]
+                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_cookie = [
+                  rp_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                ].join("; ")
+                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+              end
+            end
+            rp_headers
+          end
+        post base_app_groups_url(ri: "jp", host: @host),
+             params: { group: { name: "Revoked during create" } },
+             headers: http_headers_7
+      end
+    end
+
+    assert membership_downgraded, "the policy authorization query must precede the downgrade"
+    assert locked_recheck_observed, "the create service must lock and recheck owner membership"
+    assert_response :forbidden
+  end
+
+  test "client updates and archives a selected-account group" do
+    group = create_group(name: "Original Group", description: "Original")
+
+    http_headers_6 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     patch base_app_group_url(group.public_id, ri: "jp", host: @host),
           params: { group: { name: "Updated Group", description: "Updated" } },
-          headers: as_user_headers(@user, host: @host)
+          headers: http_headers_6
 
     assert_response :success
     assert_equal "Updated Group", group.reload.name
 
+    http_headers_5 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id,
+                oidc_client_id: rp_client.client_id,
+                revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     delete base_app_group_url(group.public_id, ri: "jp", host: @host),
-           headers: as_user_headers(@user, host: @host)
+           headers: http_headers_5
 
     assert_response :no_content
     assert_predicate group.reload, :archived?
   end
 
   test "client attaches an avatar to a selected-account group" do
-    group = AvatarGroup.new(
-      public_id: "group-public-id", account_surface: "app", account_public_id: @bootstrap.account.public_id,
-      name: "Membership Group", state: "active",
-    )
-    avatar = Avatar.new(public_id: "avatar-public-id", moniker: "Member")
-    membership = GroupAvatarMembership.new(
-      public_id: "membership-public-id", avatar_group: group, avatar: avatar,
-      role: "member", position: 2, state: "active",
-    )
+    group = create_group(name: "Membership Group")
+    avatar = @bootstrap.avatar
 
-    AvatarGroup.stub(:find_by!, group) do
-      Avatar.stub(:find_by!, avatar) do
-        GroupAvatarMemberships::Attach.stub(:call, membership) do
-          post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
-               params: { membership: { avatar_public_id: avatar.public_id, role: "member", position: 2 } },
-               headers: as_user_headers(@user, host: @host)
+    http_headers_4 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
         end
+        rp_headers
       end
-    end
+    post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
+         params: { membership: { avatar_public_id: avatar.public_id, position: 2 } },
+         headers: http_headers_4
 
     assert_response :created
-    assert_equal "membership-public-id", response.parsed_body.dig("membership", "public_id")
-    assert_equal "avatar-public-id", response.parsed_body.dig("membership", "avatar_public_id")
+    assert_equal avatar.public_id, response.parsed_body.dig("membership", "avatar_public_id")
+    assert_equal "member", response.parsed_body.dig("membership", "role")
+    assert_equal 2, response.parsed_body.dig("membership", "position")
+  end
+
+  test "membership request cannot assign a caller-selected role" do
+    group = create_group(name: "Fixed role group")
+    avatar = @bootstrap.avatar
+
+    http_headers_3 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
+         params: { membership: { avatar_public_id: avatar.public_id, role: "owner", position: 0 } },
+         headers: http_headers_3
+
+    assert_response :created
+    assert_equal "member", response.parsed_body.dig("membership", "role")
+    assert_equal "member", GroupAvatarMembership.order(:id).last.role
+  end
+
+  test "group account-management scope accepts app org and com" do
+    assert_predicate AvatarGroup.new(account_surface: "app", account_public_id: "a", name: "App", state: "active"),
+                     :valid?
+    assert_predicate AvatarGroup.new(account_surface: "org", account_public_id: "o", name: "Org", state: "active"),
+                     :valid?
+    assert_predicate AvatarGroup.new(account_surface: "com", account_public_id: "c", name: "Com", state: "active"),
+                     :valid?
   end
 
   test "client reorders and detaches a selected-account membership" do
-    group = AvatarGroup.new(
-      public_id: "group-public-id", account_surface: "app", account_public_id: @bootstrap.account.public_id,
-      name: "Membership Group", state: "active",
-    )
-    avatar = Avatar.new(public_id: "avatar-public-id", moniker: "Member")
-    membership = GroupAvatarMembership.new(
-      public_id: "membership-public-id", avatar_group: group, avatar: avatar,
-      role: "member", position: 1, state: "active",
-    )
-    memberships = Object.new
-    memberships.define_singleton_method(:find_by!) { |**| membership }
-    group.define_singleton_method(:group_avatar_memberships) { memberships }
-    reordered = membership.dup
-    reordered.avatar_group = group
-    reordered.avatar = avatar
-    reordered.position = 4
-
-    AvatarGroup.stub(:find_by!, group) do
-      GroupAvatarMemberships::Reorder.stub(:call, reordered) do
-        patch base_app_group_avatar_membership_url(
-          group.public_id, membership.public_id, ri: "jp", host: @host,
-        ), params: { membership: { position: 4 } }, headers: as_user_headers(@user, host: @host)
+    group = create_group(name: "Membership Group")
+    avatar = @bootstrap.avatar
+    http_headers_2 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
       end
-    end
+    post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
+         params: { membership: { avatar_public_id: avatar.public_id, position: 1 } },
+         headers: http_headers_2
+    membership = GroupAvatarMembership.order(:id).last
+
+    http_headers_1 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    patch base_app_group_avatar_membership_url(
+      group.public_id, membership.public_id, ri: "jp", host: @host,
+    ), params: { membership: { position: 4 } }, headers: http_headers_1
 
     assert_response :success
     assert_equal 4, response.parsed_body.dig("membership", "position")
 
-    AvatarGroup.stub(:find_by!, group) do
-      GroupAvatarMemberships::Detach.stub(:call, membership) do
-        delete base_app_group_avatar_membership_url(
-          group.public_id, membership.public_id, ri: "jp", host: @host,
-        ), headers: as_user_headers(@user, host: @host)
+    http_headers_0 =
+      begin
+        rp_headers = as_user_headers(@user, host: @host)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
       end
-    end
+    delete base_app_group_avatar_membership_url(
+      group.public_id, membership.public_id, ri: "jp", host: @host,
+    ), headers: http_headers_0
 
     assert_response :no_content
+  end
+
+  test "post-cutover membership HTTP mutations use concrete owners" do
+    group = AvatarGroup.create!(
+      account_surface: "app",
+      account_public_id: @bootstrap.account.public_id,
+      name: "Concrete ownership membership group",
+      state: "active",
+    )
+    legacy_owner = AvatarGroupOwnershipPeriod.create!(
+      avatar_group: group,
+      owner_surface: "app",
+      owner_collective_public_id: @bootstrap.collective.public_id,
+      valid_from: Time.current,
+    )
+
+    AvatarRecord.transaction(joinable: false) do
+      AvatarGroupConcreteOwnershipPeriod.create!(
+        avatar_group: group,
+        owner_surface: legacy_owner.owner_surface,
+        owner_collective_public_id: legacy_owner.owner_collective_public_id,
+        valid_from: legacy_owner.valid_from,
+      )
+      AvatarOwnershipCutover.create!(
+        id: AvatarOwnershipCutover::CUTOVER_ID,
+        cutover_at: Time.utc(2030, 1, 1),
+      )
+
+      rp_token = @token
+      rp_client = OidcClientRegistry.find!("base-app-ww")
+      rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+      rp_now = Time.current
+      rp_session = OpAppGrant.create!(
+        client_token: rp_token,
+        oidc_client_id: rp_client.client_id,
+        oidc_scope: "openid profile",
+        oidc_jti: SecureRandom.uuid,
+        oidc_nonce: SecureRandom.hex(16),
+        oidc_auth_time: rp_now,
+        refresh_token_expires_at: rp_now + 10.minutes,
+      )
+      root_access = AuthenticationToken.encode(
+        @user,
+        host: @host,
+        resource_type: "client",
+        session_public_id: rp_token.public_id,
+        jwt_issuer_id: "surface:BASE_APP",
+        authentication_context: rp_token.authentication_context_value.to_s,
+      )
+      rp_access = AuthenticationTokenService.encode(
+        rp_token.actor_record,
+        host: @host,
+        resource_type: "client",
+        session_public_id: rp_token.public_id,
+        base_session_public_id: rp_token.public_id,
+        oidc_sid: rp_session.public_id,
+        oidc_jti: rp_session.oidc_jti,
+        expires_at: rp_now + 10.minutes,
+        scopes: %w(openid profile),
+        issuer: OidcIssuer.for_client(rp_client),
+        audiences: [rp_client.aud],
+        jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+        subject: OidcSubject.for(rp_token.actor_record, resource_type: "client"),
+        client_id: rp_client.client_id,
+      )
+      rp_refresh = rp_session.issue_refresh_token!
+      cookie = [
+        "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(root_access)}",
+        "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+        "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+      ].join("; ")
+      headers = {
+        "Host" => @host,
+        "Client-Agent" => AuthenticationHarness::TEST_BROWSER_USER_AGENT,
+        "Authorization" => "Bearer #{root_access}",
+        "Cookie" => cookie,
+        "HTTP_COOKIE" => cookie,
+      }
+      post base_app_group_avatar_memberships_url(group.public_id, ri: "jp", host: @host),
+           params: { membership: { avatar_public_id: @bootstrap.avatar.public_id, position: 2 } },
+           headers: headers
+
+      assert_response :created
+      membership = GroupAvatarMembership.find_by!(public_id: response.parsed_body.dig("membership", "public_id"))
+
+      assert_equal "member", membership.role
+      assert_equal 2, membership.position
+
+      patch base_app_group_avatar_membership_url(group.public_id, membership.public_id, ri: "jp", host: @host),
+            params: { membership: { position: 4 } },
+            headers: headers
+
+      assert_response :success
+      assert_equal 4, response.parsed_body.dig("membership", "position")
+
+      delete base_app_group_avatar_membership_url(group.public_id, membership.public_id, ri: "jp", host: @host),
+             headers: headers
+
+      assert_response :no_content
+      assert_equal "removed", membership.reload.state
+      assert_instance_of AvatarGroupConcreteOwnershipPeriod, group.reload.current_ownership_period
+      assert_instance_of AvatarEnterpriseOwnershipPeriod, @bootstrap.avatar.reload.current_ownership_period
+      assert_equal @bootstrap.account.public_id, group.account_public_id
+
+      # Roll back the marker and synthetic graph through the ordinary test transaction.
+      raise ActiveRecord::Rollback
+    end
   end
 
   private
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
+  end
+
+  def create_group(name:, account_surface: "app", account_public_id: @bootstrap.account.public_id,
+                   owner_surface: "app", owner_collective_public_id: @bootstrap.collective.public_id,
+                   state: "active", description: nil)
+    archived_at = Time.current if state == "archived"
+    group = AvatarGroup.create!(
+      account_surface: account_surface,
+      account_public_id: account_public_id,
+      name: name,
+      description: description,
+      state: state,
+      archived_at: archived_at,
+    )
+    AvatarGroupOwnershipPeriod.create!(
+      avatar_group: group,
+      owner_surface: owner_surface,
+      owner_collective_public_id: owner_collective_public_id,
+      valid_from: Time.current,
+    )
+    group
   end
 end
 
@@ -166,26 +1071,6 @@ class Base::App::GroupsControllerTest
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
-  end
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
   end
 
   def ensure_user_reference_records!
@@ -232,10 +1117,8 @@ class Base::App::GroupsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -247,10 +1130,8 @@ class Base::App::GroupsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -385,7 +1266,8 @@ class Base::App::GroupsControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,
@@ -486,10 +1368,8 @@ class Base::App::GroupsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -509,12 +1389,12 @@ class Base::App::GroupsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 
@@ -582,12 +1462,12 @@ class Base::App::GroupsControllerTest
       elsif normalized.include?("core")
         "CORE"
       elsif normalized.include?("auth") || normalized.include?("sign") || normalized.include?("log.umaxica")
-        "SIGN"
+        "AUTH"
       else
         "BASE"
       end
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -601,83 +1481,5 @@ class Base::App::GroupsControllerTest
         "APP"
       end
     "surface:#{service}_#{surface}"
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    token_public_id = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(user, host: host, session_public_id: token_public_id, resource_type: "client")
-    set_access_cookie(access_token)
-    base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
-    base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id,
-      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    token_public_id = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      staff, host: host, session_public_id: token_public_id,
-             resource_type: "operator",
-    )
-    set_access_cookie(access_token)
-    base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
-    base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id,
-      visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    token_public_id = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      visitor, host: host, session_public_id: token_public_id,
-               resource_type: "visitor",
-    )
-    set_access_cookie(access_token)
-    base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
-    base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
-    base
   end
 end

@@ -5,9 +5,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SkipForgeryProtectionUsageTest < ActiveSupport::TestCase
-  self.use_transactional_tests = false
-  self.fixture_table_names = []
-
   # CSP violation reports are browser-generated telemetry POSTs that carry no CSRF token and may
   # arrive with `Origin: null`. The exception is scoped to `create` on an endpoint that records
   # bounded untrusted telemetry and touches no actor, session or cookie state.
@@ -40,5 +37,19 @@ class SkipForgeryProtectionUsageTest < ActiveSupport::TestCase
     assert_empty missing_allowed,
                  "Allowed list contains controllers that no longer call skip_forgery_protection. " \
                  "Please update ALLOWED_SKIP_FORGERY_PROTECTION_PATHS: #{missing_allowed.join("\n  ")}"
+  end
+  private
+
+  # Pure static analysis test - no database/fixtures needed. `use_transactional_tests = false`
+  # was the wrong tool for that: it makes Rails clear the process-wide fixture cache
+  # (`@@already_loaded_fixtures`) on every run, which forces every other `fixtures :all` test
+  # class to reload all ~200 fixture tables (~600 extra queries) on its next example. Overriding
+  # these two hooks as no-ops opts this class out of the fixtures machinery entirely, without that
+  # side effect, while keeping every other `ActiveSupport::TestCase` behavior (assertions, the
+  # `test` DSL) intact. See docs/guides/test-profiling.md.
+  def setup_fixtures(*)
+  end
+
+  def teardown_fixtures(*)
   end
 end

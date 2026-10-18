@@ -12,6 +12,14 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** This package was assembled before the accepted
+> Base/Auth authority decision. Its historical Acme-only, Sign, and shared-RP descriptions must not
+> be treated as current implementation requirements. The active Rails contract is
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
+> IdP/Authorization Server, Auth is ceremony-only, and first-party browser RPs use independent
+> surface registrations with `/sign` and `/oidc/callback`. The package remains useful as historical
+> vendor-review context until its individual inventories are refreshed.
+
 # Purpose
 
 This package is the stable vendor-facing documentation set for Umaxica identity and control-plane
@@ -19,7 +27,7 @@ behavior as evidenced by the current repository.
 
 # Distribution Warning
 
-- `notes/oauth2-1-compliance-gap.md` is INTERNAL ONLY.
+- `research/oauth2-1-compliance-gap.md` is INTERNAL ONLY.
 - It must not be included in any RFI/RFP/vendor package.
 - It contains stale vocabulary such as `sign.*` as AS.
 - Vendor-facing authority is defined by `01_responsibility_matrix.md` and
@@ -67,10 +75,6 @@ Primary evidence used for this package:
 - `docs/security/observability-boundary.md`
 - `adr/acme-sign-core-base-port-boundary.md`
 - `adr/frontend-architecture-toolchain.md`
-- `docs/auth-ceremony/CONTEXT.md`
-- `docs/auth-ceremony/AUTHORITY-MATRIX.md`
-- `docs/auth-ceremony/OPEN-QUESTIONS.md`
-- `docs/auth-ceremony/EVIDENCE-LEDGER.md`
 
 # Current Decisions
 
@@ -84,7 +88,6 @@ Primary evidence used for this package:
 - Social email match must not automatically link accounts.
 - User-confirmed linking is required.
 - Vendor-facing docs use current English vocabulary only.
-- `docs/auth-ceremony/` is evidence-only working area.
 - `docs/vendor/identity/` is the stable external handoff package.
 
 # Open Questions

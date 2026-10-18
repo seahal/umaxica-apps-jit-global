@@ -4,17 +4,17 @@
 # == Schema Information
 #
 # Table name: visitor_sign_out_flows
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                      :bigint           not null, primary key
 #  access_discarded_at     :datetime
 #  access_expires_at       :datetime         not null
 #  completed_at            :datetime
-#  discarded_at            :datetime         default(Infinity), not null
+#  discard_at            :datetime         default(Infinity), not null
 #  failed_at               :datetime
 #  logically_revoked_at    :datetime
 #  nonce_digest            :string
-#  purged_at               :datetime         default(Infinity), not null
+#  purge_eligible_at               :datetime         default(Infinity), not null
 #  refresh_expires_at      :datetime         not null
 #  requested_at            :datetime         not null
 #  return_to               :text
@@ -30,11 +30,11 @@
 # Indexes
 #
 #  index_visitor_sign_out_flows_on_access_expires_at        (access_expires_at)
-#  index_visitor_sign_out_flows_on_discarded_at             (discarded_at)
+#  index_visitor_sign_out_flows_on_discard_at             (discard_at)
 #  index_visitor_sign_out_flows_on_kind_id                  (kind_id)
 #  index_visitor_sign_out_flows_on_principal_id             (principal_id)
 #  index_visitor_sign_out_flows_on_public_id                (public_id) UNIQUE
-#  index_visitor_sign_out_flows_on_purged_at                (purged_at)
+#  index_visitor_sign_out_flows_on_purge_eligible_at                (purge_eligible_at)
 #  index_visitor_sign_out_flows_on_refresh_expires_at       (refresh_expires_at)
 #  index_visitor_sign_out_flows_on_refresh_token_family_id  (refresh_token_family_id)
 #  index_visitor_sign_out_flows_on_status_id                (status_id)
@@ -46,9 +46,11 @@
 #  fk_rails_...  (status_id => visitor_sign_out_flow_statuses.id)
 #  fk_rails_...  (token_id => visitor_tokens.id) ON DELETE => cascade
 #
-class VisitorSignOutFlow < ComTicketRecord
+class VisitorSignOutFlow < OpBaseComRecord
   include SignOutFlow
   include FlowSignOut
+
+  cycle_status_column :status_id
 
   STATUS_MODEL = VisitorSignOutFlowStatus
   KIND_MODEL = VisitorSignOutFlowKind
@@ -60,6 +62,9 @@ class VisitorSignOutFlow < ComTicketRecord
     "AWAITING_EXPIRY" => STATUS_MODEL::AWAITING_EXPIRY,
     "COMPLETED" => STATUS_MODEL::COMPLETED,
     "FAILED" => STATUS_MODEL::FAILED,
+    "EXPIRED" => STATUS_MODEL::EXPIRED,
+    "CANCELLED" => STATUS_MODEL::CANCELLED,
+    "HALTED" => STATUS_MODEL::HALTED,
   }.freeze
   STATUS_NAMES = STATUSES.invert.freeze
   STATUS_IDS = STATUSES.values.freeze
@@ -73,15 +78,30 @@ class VisitorSignOutFlow < ComTicketRecord
   KIND_IDS = KINDS.values.freeze
   TRANSITIONS = {
     STATUS_MODEL::NOTHING => [STATUS_MODEL::REQUESTED],
-    STATUS_MODEL::REQUESTED => [STATUS_MODEL::ACCESS_DISCARDED, STATUS_MODEL::FAILED],
-    STATUS_MODEL::ACCESS_DISCARDED => [STATUS_MODEL::LOGICALLY_REVOKED, STATUS_MODEL::FAILED],
-    STATUS_MODEL::LOGICALLY_REVOKED => [STATUS_MODEL::AWAITING_EXPIRY, STATUS_MODEL::FAILED],
-    STATUS_MODEL::AWAITING_EXPIRY => [STATUS_MODEL::COMPLETED, STATUS_MODEL::FAILED],
+    STATUS_MODEL::REQUESTED => [STATUS_MODEL::ACCESS_DISCARDED, STATUS_MODEL::EXPIRED, STATUS_MODEL::CANCELLED, STATUS_MODEL::HALTED],
+    STATUS_MODEL::ACCESS_DISCARDED => [STATUS_MODEL::LOGICALLY_REVOKED, STATUS_MODEL::EXPIRED, STATUS_MODEL::CANCELLED,
+                                       STATUS_MODEL::HALTED,],
+    STATUS_MODEL::LOGICALLY_REVOKED => [STATUS_MODEL::COMPLETED, STATUS_MODEL::EXPIRED, STATUS_MODEL::CANCELLED, STATUS_MODEL::HALTED],
+    STATUS_MODEL::AWAITING_EXPIRY => [],
     STATUS_MODEL::COMPLETED => [],
     STATUS_MODEL::FAILED => [],
+    STATUS_MODEL::EXPIRED => [],
+    STATUS_MODEL::CANCELLED => [],
+    STATUS_MODEL::HALTED => [],
   }.freeze
 
   belongs_to :token, class_name: "VisitorToken"
   belongs_to :status, class_name: "VisitorSignOutFlowStatus"
   belongs_to :kind, class_name: "VisitorSignOutFlowKind"
+
+  validates :status_id, inclusion: { in: ->(record) { record.class::STATUS_IDS } }
+  validates :step, presence: true, inclusion: { in: ->(record) { record.class::STEPS } },
+                   if: ->(record) { record.class.const_defined?(:STEPS, false) }
+  validates :state, presence: true, if: ->(record) { record.has_attribute?(:state) }
+  validate :legacy_state_matches_status
+  validate :step_matches_status
+  validate :completed_status_has_completed_at
+
+  before_validation :assign_default_status_id
+  before_validation :sync_legacy_state_from_status
 end

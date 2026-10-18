@@ -11,13 +11,13 @@
 
 class TelephoneOccurrenceStatus < OccurrenceRecord
   include ReferenceRecord
+  include OccurrenceStatus
 
   # Fixed IDs - do not modify these values
   NOTHING = 0
   ACTIVE = 1
   LEGACY_NOTHING = 2
   DEFAULTS = [NOTHING, ACTIVE, LEGACY_NOTHING].freeze
-  include OccurrenceStatus
 
   has_many :telephone_occurrences, foreign_key: :status_id, dependent: :restrict_with_error,
                                    inverse_of: :telephone_occurrence_status

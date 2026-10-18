@@ -1,5 +1,11 @@
 # Credential Gateway
 
+> **Legacy Sign/Acme vocabulary:** The `sign/id` and `acme/www` names in this document are retained
+> for historical placement and responsibility context. The current Rails implementation uses Auth
+> as the ceremony service and Base as the sole OIDC/Browser Session/RP Session authority. The
+> current handoff is the opaque, generation-bound Base/Auth contract documented in
+> `docs/security/ceremony-grant-result.md`.
+
 ## Purpose
 
 `sign/id` is the Credential Gateway and Credential Ceremony Zone for fixed URL, provider callback,
@@ -48,7 +54,7 @@ Emails, telephones, birthdate, secrets, secret credentials, sessions, revocation
 withdrawal belong to Base identity. Retired Auth settings URLs must not redirect to Base identity;
 they must be unroutable after migration.
 
-## Ceremony Contract
+## Historical Sign/Acme Ceremony Contract
 
 When acme delegates a ceremony, `sign/id` receives a ceremony grant and returns a signed ceremony
 result. The result is not a session update, account update, preference update, token, or freshness

@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_dpop_proof_states
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id            :bigint           not null, primary key
 #  expires_at    :datetime         not null
@@ -24,6 +24,6 @@
 #  index_operator_dpop_proof_states_on_jti         (jti) UNIQUE WHERE (jti IS NOT NULL)
 #  index_operator_dpop_proof_states_on_nonce       (nonce) UNIQUE WHERE (nonce IS NOT NULL)
 #
-class OperatorDpopProofState < OrgTicketRecord
+class OperatorDpopProofState < OpBaseOrgRecord
   include DpopProofStateable
 end

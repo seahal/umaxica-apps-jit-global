@@ -24,7 +24,7 @@ class SignRecoveryPasscodeRequirement
 
   def usable_unused_relation
     relation = actor_secret_credentials
-    relation = relation.where(status_column => credential_class::SIGN_IN_ALLOWED_STATUS_IDS)
+    relation = relation.where(status_column => credential_class::ACTIVE_STATUS_IDS)
     return relation.none unless credential_class.const_defined?(:RECOVERY)
 
     recovery_kind_id = credential_class.const_get(:RECOVERY)
@@ -32,21 +32,19 @@ class SignRecoveryPasscodeRequirement
     relation = relation.where(kind_column => recovery_kind_id)
     relation = relation.where(last_used_at: nil)
     relation = relation.where(
-      "discarded_at IS NULL OR discarded_at > ?",
+      "discard_at IS NULL OR discard_at > ?",
       now,
-    ) if credential_class.column_names.include?("discarded_at")
+    ) if credential_class.column_names.include?("discard_at")
     relation = relation.where(
-      "purged_at IS NULL OR purged_at > ?",
+      "purge_eligible_at IS NULL OR purge_eligible_at > ?",
       now,
-    ) if credential_class.column_names.include?("purged_at")
+    ) if credential_class.column_names.include?("purge_eligible_at")
     relation = relation.where("uses_remaining > 0") if credential_class.column_names.include?("uses_remaining")
     relation
   end
 
   def actor_secret_credentials
     case credential_class.name
-    when "ClientSecretCredential"
-      actor.client_secret_credentials
     when "VisitorSecretCredential"
       actor.visitor_secret_credentials
     when "OperatorSecretCredential"
@@ -62,8 +60,6 @@ class SignRecoveryPasscodeRequirement
 
   def kind_column
     case credential_class.name
-    when "ClientSecretCredential"
-      :user_secret_kind_id
     when "VisitorSecretCredential"
       :visitor_secret_credential_kind_id
     when "OperatorSecretCredential"

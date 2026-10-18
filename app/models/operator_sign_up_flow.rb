@@ -4,15 +4,15 @@
 # == Schema Information
 #
 # Table name: operator_sign_up_flows
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id           :bigint           not null, primary key
 #  completed_at :datetime
-#  discarded_at :datetime         default(Infinity), not null
+#  discard_at :datetime         default(Infinity), not null
 #  expires_at   :datetime         not null
 #  issued_at    :datetime         not null
 #  nonce_digest :string           not null
-#  purged_at    :datetime         default(Infinity), not null
+#  purge_eligible_at    :datetime         default(Infinity), not null
 #  return_to    :text
 #  state        :string           not null
 #  step         :string           not null
@@ -25,7 +25,7 @@
 #
 # Indexes
 #
-#  index_operator_sign_up_flows_on_discarded_at  (discarded_at)
+#  index_operator_sign_up_flows_on_discard_at  (discard_at)
 #  index_operator_sign_up_flows_on_expires_at    (expires_at)
 #  index_operator_sign_up_flows_on_principal_id  (principal_id)
 #  index_operator_sign_up_flows_on_public_id     (public_id) UNIQUE
@@ -38,9 +38,11 @@
 #  fk_rails_...  (status_id => operator_sign_up_flow_statuses.id)
 #  fk_rails_...  (token_id => operator_tokens.id) ON DELETE => cascade
 #
-class OperatorSignUpFlow < OrgTicketRecord
+class OperatorSignUpFlow < OpBaseOrgRecord
   include SignFlow
   include FlowSignUp
+
+  cycle_status_column :status_id
 
   STATUS_MODEL = OperatorSignUpFlowStatus
   STATUSES = {
@@ -49,27 +51,53 @@ class OperatorSignUpFlow < OrgTicketRecord
     "CREDENTIAL_PENDING" => STATUS_MODEL::CREDENTIAL_PENDING,
     "CHECKPOINT_PENDING" => STATUS_MODEL::CHECKPOINT_PENDING,
     "COMPLETED" => STATUS_MODEL::COMPLETED,
+    "FAILED" => STATUS_MODEL::FAILED,
+    "EXPIRED" => STATUS_MODEL::EXPIRED,
+    "CANCELLED" => STATUS_MODEL::CANCELLED,
+    "HALTED" => STATUS_MODEL::HALTED,
   }.freeze
   STATUS_NAMES = STATUSES.invert.freeze
   STATUS_IDS = STATUSES.values.freeze
-  STEPS = %w(start contact credential checkpoint completed).freeze
+  STEPS = %w(start contact credential checkpoint completed failed expired cancelled halted).freeze
   TRANSITIONS = {
     STATUS_MODEL::STARTED => [
       STATUS_MODEL::CONTACT_PENDING,
       STATUS_MODEL::CREDENTIAL_PENDING,
       STATUS_MODEL::CHECKPOINT_PENDING,
       STATUS_MODEL::COMPLETED,
+      STATUS_MODEL::EXPIRED, STATUS_MODEL::CANCELLED, STATUS_MODEL::HALTED,
     ],
     STATUS_MODEL::CONTACT_PENDING => [
       STATUS_MODEL::CREDENTIAL_PENDING,
       STATUS_MODEL::CHECKPOINT_PENDING,
       STATUS_MODEL::COMPLETED,
+      STATUS_MODEL::EXPIRED, STATUS_MODEL::CANCELLED, STATUS_MODEL::HALTED,
     ],
-    STATUS_MODEL::CREDENTIAL_PENDING => [STATUS_MODEL::CHECKPOINT_PENDING, STATUS_MODEL::COMPLETED],
-    STATUS_MODEL::CHECKPOINT_PENDING => [STATUS_MODEL::COMPLETED],
+    STATUS_MODEL::CREDENTIAL_PENDING => [STATUS_MODEL::CHECKPOINT_PENDING, STATUS_MODEL::COMPLETED,
+                                         STATUS_MODEL::EXPIRED, STATUS_MODEL::CANCELLED, STATUS_MODEL::HALTED,],
+    STATUS_MODEL::CHECKPOINT_PENDING => [STATUS_MODEL::COMPLETED, STATUS_MODEL::EXPIRED, STATUS_MODEL::CANCELLED, STATUS_MODEL::HALTED],
     STATUS_MODEL::COMPLETED => [],
+    STATUS_MODEL::FAILED => [],
+    STATUS_MODEL::EXPIRED => [],
+    STATUS_MODEL::CANCELLED => [],
+    STATUS_MODEL::HALTED => [],
   }.freeze
 
   belongs_to :token, class_name: "OperatorToken"
   belongs_to :status, class_name: "OperatorSignUpFlowStatus"
+
+  # SignFlow disables required belongs_to validation, so status presence stays explicit.
+  # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :status_id, presence: true,
+                        inclusion: { in: ->(record) { record.class::STATUS_IDS } }
+  # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :step, presence: true, inclusion: { in: ->(record) { record.class::STEPS } },
+                   if: ->(record) { record.class.const_defined?(:STEPS, false) }
+  validates :state, presence: true, if: ->(record) { record.has_attribute?(:state) }
+  validate :legacy_state_matches_status
+  validate :step_matches_status
+  validate :completed_status_has_completed_at
+
+  before_validation :assign_default_status_id
+  before_validation :sync_legacy_state_from_status
 end

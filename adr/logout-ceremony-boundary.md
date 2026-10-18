@@ -1,8 +1,22 @@
 # Logout Ceremony Boundary
 
+> **Supersession (2026-09-13):** Browser completion is one-shot `GET /sign/out` (no
+> `/sign/out/complete`). See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
+
+> **Browser RP amendment (2026-10-14):** Every participating first-party RP, including Base Self-RP,
+> Core, Warp, Edit, Palm and Tech, uses the noun continuation resource
+> `GET/POST /sign/out/completion`; exact registered post-logout URIs carry the supported `ri` value,
+> and direct `/sign/out` is not a registered return URI. GET is read-only and the protected POST
+> requires a Rails authenticity token. The older route descriptions below are historical for
+> authority-driven Browser RP completion. See
+> `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` for the current contract
+> and remaining BCL, full-authority and browser-acceptance gates. The shared parent-and-RP
+> transaction is locally implemented and focused-tested; final acceptance remains open.
+
 ## Status
 
-Accepted (2026-06-21)
+Accepted; partially superseded (2026-09-13) (2026-06-21). Amended for Base completion destination by
+`adr/base-lobby-unauthenticated-entry.md`.
 
 ## Context
 
@@ -44,11 +58,9 @@ and does not use `sot`.
 
 `DELETE /sign/out` is not part of the public contract.
 
-Palm is a future native client. Its documented completion target is:
-
-```text
-https://<palm-host>/sign/out/complete
-```
+The former Palm native-RP and custom-scheme completion description is superseded by
+`adr/tech-and-palm-browser-rp-participation.md`. Palm is a first-party Browser RP and uses the
+dedicated completion resource recorded above.
 
 ## Consequences
 
@@ -63,3 +75,11 @@ https://<palm-host>/sign/out/complete
 - `docs/security/logout-sequence.md`
 - `docs/security/oidc-discovery-profile.md`
 - `docs/security/logout-session-management.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Logout is authority-first. The parent Browser Session is revoked at the irreversible commit point,
+then authority cleanup, origin cleanup, initiating RP cleanup and finalization run with durable
+operation facts. Access JWTs remain valid until `exp` plus leeway and sibling RP rows are not
+synchronously revoked. Completed, cancelled and expired browser ceremonies use replace-style
+navigation and the official Inertia history primitive; stale mutation is rejected server-side.

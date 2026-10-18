@@ -36,4 +36,6 @@ module JitSecurityJwtJwks
       raise Error, "must be a JWK Set JSON object or array"
     end
   end
+
+  private_class_method :public_entries
 end

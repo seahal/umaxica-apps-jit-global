@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: client_sign_out_flow_kinds
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id :bigint           not null, primary key
 #
-class ClientSignOutFlowKind < AppTicketRecord
+class ClientSignOutFlowKind < OpBaseAppRecord
   include ReferenceRecord
 
   NOTHING = 0

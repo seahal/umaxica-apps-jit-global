@@ -23,6 +23,12 @@ unless Rails.env.production?
     /SELECT.*FROM.*"ar_internal_metadata"/,
     /SELECT.*FROM.*"schema_migrations"/,
   ]
+
+  # Mission Control Jobs pages its own Solid Queue tables (a lookup per recurring task key, 1000-row
+  # job pages). Those N+1s are in gem code this application does not own and cannot fix, so exempt
+  # stack frames inside that gem. The exemption is keyed on the stack path rather than on the
+  # Solid Queue tables, so application code that queries them is still scanned.
+  Prosopite.allow_stack_paths = [%r{/mission_control-jobs-}]
 end
 
 if Rails.env.development?

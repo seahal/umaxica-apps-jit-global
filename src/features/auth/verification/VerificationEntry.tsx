@@ -1,6 +1,9 @@
 import Card from "@/components/ui/Card";
 import NavList from "@/components/ui/NavList";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 
 // The entry screen of the step-up verification ceremony: pick a second factor.
 //
@@ -17,6 +20,7 @@ export type VerificationEntryProps = {
   methods: VerificationMethodLink[];
   no_methods_notice: string | null;
   notice: string | null;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function VerificationEntry({
@@ -26,25 +30,26 @@ export default function VerificationEntry({
   methods,
   no_methods_notice: noMethodsNotice,
   notice,
+  cancel,
 }: VerificationEntryProps) {
   return (
     <Page title={heading}>
       {notice ? (
         <p
           data-test-id="verification-notice"
-          className="rounded-md border border-line bg-surface-muted p-3 text-sm text-fg"
+          className="rounded-md border border-line bg-surface-muted p-3 text-base text-fg"
         >
           {notice}
         </p>
       ) : null}
 
       <Card heading={sectionTitle}>
-        <p className="text-sm text-fg-muted">{description}</p>
+        <p className="text-base text-fg-muted">{description}</p>
 
         {noMethodsNotice ? (
           <p
             data-test-id="verification-no-methods"
-            className="text-sm text-fg-muted"
+            className="text-base text-fg-muted"
           >
             {noMethodsNotice}
           </p>
@@ -53,6 +58,8 @@ export default function VerificationEntry({
           <NavList items={methods} />
         )}
       </Card>
+      {/* Ends the whole Step-Up ceremony; the server decides where the actor lands. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

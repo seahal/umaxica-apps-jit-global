@@ -5,46 +5,42 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SurfaceRootsControllerTest < ActionDispatch::IntegrationTest
-  # The base gateway hosts no longer serve a page at `/`. They canonicalize to the regional root
-  # for the requested region, normalizing a missing region first.
-  test "acme app root normalizes the region then permanently redirects to the regional root" do
+  # Public www hosts share Base Root. Home resolves a missing region in place without redirecting
+  # (adr/home-dashboard-authentication-boundary.md).
+  test "acme app root without a region renders the control-plane home without redirect" do
     get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost") }
 
-    assert_response :found
-    follow_redirect!
-
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_response :success
+    assert_nil response.location
+    assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "acme app www root permanently redirects to the regional root with ri parameter" do
+  test "acme app www root with a region renders the control-plane home" do
     get "/?ri=jp", headers: { "Host" => ENV.fetch("PRIVATE_BASE_SERVICE_URL", "www.app.localhost") }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
   end
 
-  test "acme com root normalizes the region then permanently redirects to the regional root" do
+  test "acme com root without a region renders the control-plane home without redirect" do
     get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_CORPORATE_URL", "www.com.localhost") }
-    follow_redirect! if response.redirect? && response.status == 302
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.com/", response.location
+    assert_response :success
+    assert_equal "base/com/roots/index", inertia_component
   end
 
-  test "acme org root normalizes the region then permanently redirects to the regional root" do
+  test "acme org root without a region renders the control-plane home without redirect" do
     get "/", headers: { "Host" => ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost") }
-    follow_redirect! if response.redirect? && response.status == 302
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.org/", response.location
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
   end
 
-  test "acme org www root permanently redirects to the regional root with ri parameter" do
+  test "acme org www root with a region renders the control-plane home" do
     get "/?ri=jp", headers: { "Host" => ENV.fetch("PRIVATE_BASE_STAFF_URL", "www.org.localhost") }
 
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.org/", response.location
+    assert_response :success
+    assert_equal "base/org/roots/index", inertia_component
   end
 end
 

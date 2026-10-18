@@ -19,15 +19,15 @@ class Core::Com::RootsControllerTest < ActionDispatch::IntegrationTest
     assert_equal I18n.t("landing.thin_endpoint"), inertia_props.fetch("description")
   end
 
-  test "creates preference cookies on root" do
+  test "root does not create preference state" do
     host! ENV.fetch("PUBLIC_CORE_CORPORATE_URL", ENV.fetch("PUBLIC_CORE_CORPORATE_URL", "core.com.localhost"))
 
-    assert_difference("ComPreference.count", 1) do
+    assert_no_difference("ComPreference.count") do
       get core_com_root_url(ri: "jp")
     end
 
     assert_response :success
-    assert_predicate cookies[PreferenceCookieName.access(surface: :com)], :present?
-    assert_predicate cookies[PreferenceCookieName.refresh(surface: :com)], :present?
+    assert_nil cookies[PreferenceCookieName.access(surface: :com)]
+    assert_nil cookies[PreferenceCookieName.refresh(surface: :com)]
   end
 end

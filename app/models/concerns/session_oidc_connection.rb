@@ -6,6 +6,7 @@ module SessionOidcConnection
 
   FIRST_PARTY_CLIENT_ID = "first_party_session"
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :ensure_session_oidc_connection, on: :create
     validates :oidc_client_id, length: { maximum: 64 }, allow_blank: true

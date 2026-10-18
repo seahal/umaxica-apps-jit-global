@@ -60,7 +60,8 @@ Enforced boundary (the only sanctioned exceptions):
   machine-to-machine endpoint that renders no regional HTML: skipping the callback on a controller
   that renders HTML strips `ri` from every URL that controller generates, because
   `PreferenceGlobal#default_url_options` reads the request params only and has no fallback. That is
-  the auth sign-in/sign-up regression recorded in `plans/ri-preference-routing-regression-audit.md`.
+  the auth sign-in/sign-up regression recorded in
+  `research/ri-preference-routing-regression-audit.md`.
 - Skipping the remaining non-security context/preference callbacks (for example
   `:set_preferences_cookie`, `:set_color_theme`) is allowed where an endpoint legitimately does not
   participate in that context, and is not a security relaxation.
@@ -213,10 +214,15 @@ purge needs.
 
 Sanctioned call sites (do not "fix" these into row-by-row `destroy`):
 
+Email/Telephone Contact collection is the explicit exception to that set-based prescription:
+`adr/realm-separated-identifiers-and-dead-history.md` requires separate history-aware locked
+purgers. The exception does not extend to Avatar, generic retained records or cross-database child
+purging.
+
 - `app/jobs/retention_purge_job.rb`, `app/jobs/dpop_proof_state_purge_job.rb`
 - `app/services/retention_cross_database_child_purge.rb`
 - `app/services/identity_*_ceremony_transaction_purger.rb`
-- discard/expiry sweeps such as `acme_refresh_token_service.rb` (`update_all(discarded_at:)`)
+- discard/expiry sweeps such as `acme_refresh_token_service.rb` (`update_all(discard_at:)`)
 
 New destructive-op call sites still require explicit approval and should reference an Accepted ADR.
 

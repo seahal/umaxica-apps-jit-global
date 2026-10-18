@@ -20,9 +20,10 @@ class SignUpContractsTest < ActiveSupport::TestCase
     assert_equal %i(otp birthdate),
                  SignUpRequirementRegistry.for_entry(surface: :app, entry_method: "email").requirements
     assert_equal(
-      %i(otp passkey passcode birthdate),
+      %i(otp passkey birthdate),
       SignUpRequirementRegistry.for_entry(surface: :app, entry_method: "telephone").requirements,
     )
+    assert_not SignUpRequirementRegistry.for_entry(surface: :app, entry_method: "telephone").requirement?(:passcode)
     assert_equal %i(confirmation birthdate),
                  SignUpRequirementRegistry.for_entry(surface: :app, entry_method: "google").requirements
     assert_equal %i(confirmation birthdate),
@@ -35,9 +36,10 @@ class SignUpContractsTest < ActiveSupport::TestCase
     assert_equal %i(otp birthdate),
                  SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "email").requirements
     assert_equal(
-      %i(otp passkey passcode birthdate),
+      %i(otp passkey birthdate),
       SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "telephone").requirements,
     )
+    assert_not SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "telephone").requirement?(:passcode)
 
     assert_raises(ArgumentError) { SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "google") }
     assert_raises(ArgumentError) { SignUpRequirementRegistry.for_entry(surface: :com, entry_method: "apple") }
@@ -48,11 +50,11 @@ class SignUpContractsTest < ActiveSupport::TestCase
   end
 
   test "requirement registry derives surface from ticket class" do
-    app_ticket = build_cycle(ClientSignUpFlow, entry_method: "google")
-    com_ticket = build_cycle(VisitorSignUpFlow, entry_method: "telephone")
+    op_base_app = build_cycle(ClientSignUpFlow, entry_method: "google")
+    op_base_com = build_cycle(VisitorSignUpFlow, entry_method: "telephone")
 
-    assert_equal :app, SignUpRequirementRegistry.for_ticket(app_ticket).surface
-    assert_equal :com, SignUpRequirementRegistry.for_ticket(com_ticket).surface
+    assert_equal :app, SignUpRequirementRegistry.for_ticket(op_base_app).surface
+    assert_equal :com, SignUpRequirementRegistry.for_ticket(op_base_com).surface
   end
 
   test "policy context copies step and entry method from ticket" do
@@ -96,16 +98,6 @@ class SignUpContractsTest < ActiveSupport::TestCase
       },
     )
 
-    assert_raises(ArgumentError) do
-      SignUpFinalizationContext.build(
-        surface: :app,
-        actor_authentication: nil,
-        ticket: ticket,
-        pending_actor: Object.new,
-      )
-    end
-
-    ticket.completed_requirements["passcode"] = { "cleared" => true }
     context = SignUpFinalizationContext.build(
       surface: :app,
       actor_authentication: nil,
@@ -114,6 +106,16 @@ class SignUpContractsTest < ActiveSupport::TestCase
     )
 
     assert_equal :app, context.surface
+
+    ticket.completed_requirements.delete("birthdate")
+    assert_raises(ArgumentError) do
+      SignUpFinalizationContext.build(
+        surface: :app,
+        actor_authentication: nil,
+        ticket: ticket,
+        pending_actor: Object.new,
+      )
+    end
   end
 
   test "requirement registry rejects unsupported ticket class" do

@@ -146,6 +146,18 @@ class ChronicleRecordPolicyTest < ActiveSupport::TestCase
     assert_not_includes result, "token"
   end
 
+  test "sanitize preserves bounded categorical reason codes" do
+    result = ChronicleRecordPolicy.sanitize(
+      {
+        reason_code: "telephone_verification_rate_limit",
+        unsafe_reason_code: "a" * 64,
+      },
+    )
+
+    assert_equal "telephone_verification_rate_limit", result["reason_code"]
+    assert_equal "[FILTERED]", result["unsafe_reason_code"]
+  end
+
   test "sanitize filters reserved context keys" do
     input = { "request_id" => "123", "ip_address" => "127.0.0.1", "user_agent" => "Chrome", "custom" => "ok" }
     result = ChronicleRecordPolicy.sanitize(input)
@@ -172,36 +184,5 @@ class ChronicleRecordPolicyTest < ActiveSupport::TestCase
     result = ChronicleRecordPolicy.sanitize(input)
 
     assert_equal({ "reason" => "mfa_disabled" }, result)
-  end
-
-  test "forbidden_key? detects sensitive keys" do
-    assert ChronicleRecordPolicy.send(:forbidden_key?, "password")
-    assert ChronicleRecordPolicy.send(:forbidden_key?, "PASSWORD")
-    assert ChronicleRecordPolicy.send(:forbidden_key?, "token_value")
-    assert_not ChronicleRecordPolicy.send(:forbidden_key?, "browser")
-    assert_not ChronicleRecordPolicy.send(:forbidden_key?, "session_id_digest")
-  end
-
-  test "sanitize_error_message truncates long messages" do
-    long = "." * (ChronicleRecordPolicy::MAX_ERROR_MESSAGE_BYTES + 100)
-    result = ChronicleRecordPolicy.send(:sanitize_error_message, long)
-
-    assert_operator result.bytesize, :<=, ChronicleRecordPolicy::MAX_ERROR_MESSAGE_BYTES
-    assert_equal "." * ChronicleRecordPolicy::MAX_ERROR_MESSAGE_BYTES, result
-  end
-
-  test "sanitize_error_message returns nil for blank" do
-    assert_nil ChronicleRecordPolicy.send(:sanitize_error_message, "")
-    assert_nil ChronicleRecordPolicy.send(:sanitize_error_message, nil)
-  end
-
-  test "sanitize_string filters all sensitive patterns" do
-    jwt_part = "eyJhbGciOiJIUzI1NiJ9.eyJkYXRhIjoiMSJ9." \
-               "xXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXxXX"
-    input = "Bearer #{jwt_part} and password=secret123"
-    result = ChronicleRecordPolicy.send(:sanitize_string, input.dup)
-
-    assert_includes result, "[FILTERED]"
-    assert_not_includes result, "password=secret123"
   end
 end

@@ -9,7 +9,7 @@ require "committee/rails/test/methods"
 # Validates a request and the response it produced against the bundled OpenAPI description for the
 # surface under test.
 #
-# The descriptions in `public/openapi.{app,com,org}.yml` are the source of truth for the JSON API
+# The descriptions in `openapi/bundled/openapi.{app,com,org}.yml` are the source of truth for the JSON API
 # (adr/api-versioning-and-client-conventions.md section 4). Before this module existed nothing read
 # them, so the accuracy requirement in that ADR had no enforcement and the descriptions drifted.
 #
@@ -23,13 +23,19 @@ module OpenapiContract
 
   SURFACES = %w(app com org).freeze
 
+  # The one directory every consumer reads the bundled descriptions from: Committee here, Redocly
+  # on write (redocly.yaml), and rswag-api when it serves them to Swagger UI
+  # (config/initializers/rswag_api.rb). Deliberately outside `public/`, which development serves
+  # statically and without credentials.
+  BUNDLE_DIRECTORY = "openapi/bundled"
+
   # Committee caches parsed schemas by path and content digest, so this is read once per process.
   def self.schema_path(surface)
     unless SURFACES.include?(surface.to_s)
       raise ArgumentError, "unknown OpenAPI surface: #{surface.inspect} (expected one of #{SURFACES.join(", ")})"
     end
 
-    Rails.public_path.join("openapi.#{surface}.yml").to_s
+    Rails.root.join(BUNDLE_DIRECTORY, "openapi.#{surface}.yml").to_s
   end
 
   class_methods do

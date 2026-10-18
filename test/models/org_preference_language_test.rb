@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_languages
@@ -20,8 +22,6 @@
 #  fk_org_preference_languages_on_option_id  (option_id => org_preference_language_options.id)
 #  fk_rails_...                              (preference_id => org_preferences.id)
 #
-
-# frozen_string_literal: true
 
 require "test_helper"
 

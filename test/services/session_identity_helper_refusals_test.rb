@@ -11,32 +11,6 @@ require "test_helper"
 class SessionIdentityHelperRefusalsTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_visibilities
 
-  def transition
-    CredentialSecurityTransition.new(
-      actor: clients(:one), current_session: nil, reason: "secret_credential_changed",
-      affected_surface: :app, revoke_current: false, revoke_step_up: false,
-      revoke_other_sessions: false, request: nil,
-    )
-  end
-
-  # Two tokens are only "the same session" when both exist and both carry an id.
-  # Anything else is treated as a different session, which errs towards revoking
-  # rather than sparing.
-  test "two tokens are only the same session when both carry a comparable id" do
-    subject = transition
-    token = Struct.new(:id).new(7)
-
-    assert subject.send(:same_token?, token, Struct.new(:id).new(7))
-    assert_not subject.send(:same_token?, token, Struct.new(:id).new(8))
-    assert_not subject.send(:same_token?, nil, token)
-    assert_not subject.send(:same_token?, token, nil)
-    assert_not subject.send(:same_token?, Object.new, Object.new)
-  end
-
-  test "a session that cannot be shown to be the current one is revoked rather than spared" do
-    assert transition.send(:revoke_session?, Object.new)
-  end
-
   # The sign-in email state is either a real address the surface holds or a dummy
   # stood up so an unknown address is answered identically to a known one.
   test "an email authentication state without a record is a dummy" do

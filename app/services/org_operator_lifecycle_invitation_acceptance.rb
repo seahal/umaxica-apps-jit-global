@@ -102,7 +102,7 @@ class OrgOperatorLifecycleInvitationAcceptance
 
   def create_operator_account!(operator)
     OrgRpRecord.transaction do
-      operator.create_rp_account! unless operator.rp_account
+      OperatorAccount.create!(staff_id: operator.id)
     end
   end
 
@@ -110,7 +110,12 @@ class OrgOperatorLifecycleInvitationAcceptance
     return unless operator&.persisted?
 
     OrgPrincipalRecord.transaction do
-      Operator.where(id: operator.id).find_each(&:destroy!)
+      dependent_associations =
+        Operator.reflect_on_all_associations.filter_map do |reflection|
+          reflection.name if reflection.options[:dependent]
+        end
+      operator_for_destruction = Operator.includes(*dependent_associations).find(operator.id)
+      operator_for_destruction.destroy!
     end
   rescue StandardError => e
     Rails.logger.error(

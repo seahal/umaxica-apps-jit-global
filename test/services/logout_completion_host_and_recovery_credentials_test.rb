@@ -21,9 +21,9 @@ class LogoutCompletionHostAndRecoveryCredentialsTest < ActiveSupport::TestCase
       ["core", "app"] => hosts.core_service.host,
       ["core", "com"] => hosts.core_corporate.host,
       ["core", "org"] => hosts.core_staff.host,
-      ["side", "app"] => hosts.side_service.host,
-      ["side", "com"] => hosts.side_corporate.host,
-      ["side", "org"] => hosts.side_staff.host,
+      ["warp", "app"] => hosts.warp_service.host,
+      ["warp", "com"] => hosts.warp_corporate.host,
+      ["warp", "org"] => hosts.warp_staff.host,
       ["palm", "app"] => hosts.palm_service.host,
     }.each do |(origin, surface), expected|
       assert_equal expected,
@@ -47,32 +47,5 @@ class LogoutCompletionHostAndRecoveryCredentialsTest < ActiveSupport::TestCase
     assert_equal :missing, result.status
     assert_equal "not_found", result.error
     assert_nil result.transaction
-  end
-
-  # The three surfaces keep their recovery passcodes in separate relations under
-  # separate limits. A class the service was not taught raises rather than
-  # answering from another surface's relation.
-  test "each credential class names its own relation, limit and kind association" do
-    operator = operators(:one)
-    top_up = RecoveryPasscodeTopUp.new(
-      actor: operator, credential_class: OperatorSecretCredential, target_count: 10, now: Time.current,
-    )
-
-    assert_equal OperatorSecretCredential::MAX_SECRETS_PER_STAFF, top_up.send(:max_secret_count_limit)
-    assert_equal :staff_secret_credential_kind, top_up.send(:recovery_kind_association)
-    assert_equal operator.staff_secret_credentials.to_a, top_up.send(:secret_credential_relation).to_a
-  end
-
-  test "a credential class the top-up does not serve is named in the error" do
-    top_up = RecoveryPasscodeTopUp.new(
-      actor: operators(:one), credential_class: OperatorToken, target_count: 10, now: Time.current,
-    )
-
-    error = assert_raises(ArgumentError) { top_up.send(:secret_credential_relation) }
-
-    assert_match(/unsupported recovery passcode credential class/, error.message)
-    assert_nil top_up.send(:max_secret_count_limit),
-               "a class with no declared limit answers nil rather than raising a NameError"
-    assert_nil top_up.send(:recovery_kind_association)
   end
 end

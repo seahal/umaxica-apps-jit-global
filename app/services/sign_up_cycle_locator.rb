@@ -62,7 +62,7 @@ class SignUpCycleLocator
   end
 
   def terminal?(cycle)
-    %w(COMPLETED FAILED EXPIRED CANCELLED).any? do |status_name|
+    %w(COMPLETED FAILED EXPIRED CANCELLED HALTED).any? do |status_name|
       cycle.status_id == cycle.status_id_for(status_name)
     end
   end

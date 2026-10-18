@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class IdentitySecretCredentialCeremonyCandidate < AppTicketRecord
+class IdentitySecretCredentialCeremonyCandidate < OpBaseAppRecord
   include IdentityCeremonyCandidateRecord
 
   encrypts :password_digest

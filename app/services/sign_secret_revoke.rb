@@ -17,7 +17,7 @@ class SignSecretRevoke
     @secret_credential.with_lock do
       @secret_credential.reload
       @secret_credential.revoked_at = @now if @secret_credential.respond_to?(:revoked_at=)
-      @secret_credential.discarded_at = @now if @secret_credential.respond_to?(:discarded_at=)
+      @secret_credential.discard_at = @now if @secret_credential.respond_to?(:discard_at=)
       @secret_credential.save!
     end
 

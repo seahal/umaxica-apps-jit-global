@@ -7,8 +7,8 @@ require "test_helper"
 # the registered client: an operator client must never reach a visitor usage row
 # and vice versa. OidcTokenRevokerCoverageTest stubs the lookups away, so these
 # tests exercise them against the real per-surface ticket databases, including
-# the sid fallback that revokes an access token bound to a browser session
-# rather than to an OAuth usage row.
+# an access token bound to an OAuth usage row rather than to a parent browser
+# session row.
 class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_token_kinds, :client_token_statuses,
            :client_token_binding_methods, :client_token_dbsc_statuses,
@@ -22,15 +22,17 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       staff: operators(:one),
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
-    usage = OperatorTokenUsage.create!(operator_token: token, oidc_client_id: "docs_org")
+    usage = OpOrgGrant.create!(
+      operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
+    )
     refresh_token = usage.issue_refresh_token!
 
     result =
       OidcClientRegistry.stub(:authenticate, true) do
         OidcTokenRevoker.call(
-          token: refresh_token, client_id: "docs_org", client_secret: "secret",
+          token: refresh_token, client_id: "core-org-jp", client_secret: "secret",
           token_type_hint: "refresh_token",
         )
       end
@@ -44,15 +46,17 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       visitor: visitors(:reserved_visitor),
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
-    usage = VisitorTokenUsage.create!(visitor_token: token, oidc_client_id: "docs_com")
+    usage = OpComGrant.create!(
+      visitor_token: token, oidc_client_id: "core-com-jp", refresh_token_expires_at: 1.hour.from_now,
+    )
     refresh_token = usage.issue_refresh_token!
 
     result =
       OidcClientRegistry.stub(:authenticate, true) do
         OidcTokenRevoker.call(
-          token: refresh_token, client_id: "docs_com", client_secret: "secret",
+          token: refresh_token, client_id: "core-com-jp", client_secret: "secret",
           token_type_hint: "refresh_token",
         )
       end
@@ -66,14 +70,16 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       staff: operators(:one),
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
-    usage = OperatorTokenUsage.create!(operator_token: token, oidc_client_id: "docs_org")
+    usage = OpOrgGrant.create!(
+      operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
+    )
     refresh_token = usage.issue_refresh_token!
 
     OidcClientRegistry.stub(:authenticate, true) do
       OidcTokenRevoker.call(
-        token: refresh_token, client_id: "docs_com", client_secret: "secret",
+        token: refresh_token, client_id: "core-com-jp", client_secret: "secret",
         token_type_hint: "refresh_token",
       )
     end
@@ -82,13 +88,13 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
                "#{usage.public_id}: a visitor-authenticated revocation must not reach a staff usage row"
   end
 
-  test "an access token is revoked through the session sid when no usage row matches" do
+  test "an access token sid that names only the parent does not revoke the parent" do
     token = ClientToken.create!(
       user: clients(:one),
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      oidc_client_id: "docs_app",
+      discard_at: 1.day.from_now,
+      oidc_client_id: "core-app-jp",
       oidc_sid: SecureRandom.uuid,
       oidc_jti: SecureRandom.uuid,
     )
@@ -98,13 +104,13 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       OidcClientRegistry.stub(:authenticate, true) do
         AuthenticationTokenService.stub(:decode_allow_expired, payload) do
           OidcTokenRevoker.call(
-            token: "opaque-access-token", client_id: "docs_app", client_secret: "secret",
+            token: "opaque-access-token", client_id: "core-app-jp", client_secret: "secret",
           )
         end
       end
 
     assert_predicate result, :success?
-    assert_predicate token.reload, :revoked?
+    assert_predicate token.reload, :currently_usable?
   end
 
   test "an access token whose jti does not match the session is not revoked" do
@@ -112,8 +118,8 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
       user: clients(:one),
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
-      oidc_client_id: "docs_app",
+      discard_at: 1.day.from_now,
+      oidc_client_id: "core-app-jp",
       oidc_sid: SecureRandom.uuid,
       oidc_jti: SecureRandom.uuid,
     )
@@ -122,7 +128,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
     OidcClientRegistry.stub(:authenticate, true) do
       AuthenticationTokenService.stub(:decode_allow_expired, payload) do
         OidcTokenRevoker.call(
-          token: "opaque-access-token", client_id: "docs_app", client_secret: "secret",
+          token: "opaque-access-token", client_id: "core-app-jp", client_secret: "secret",
         )
       end
     end

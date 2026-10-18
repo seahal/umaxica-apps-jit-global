@@ -33,16 +33,20 @@ The gates are intentionally independent:
    running connector requests `GET /health/liveness` through every private surface alias and
    requires HTTP `200`. No committed script performs this — `bin/` carries generated binstubs only —
    so it is a manual procedure, written out under "Running the Transport Probe" below.
-2. **Host Authorization**: `ruby test/config/host_authorization_contract_test.rb` boots a separate
-   Rails development process, constructs the middleware from the effective development settings,
-   requests the non-excluded `/` path, accepts the private origins and the published site hostnames,
-   and rejects both an unknown host and an Umaxica-owned hostname that no `PUBLIC_*_URL` names.
+2. **Host Authorization**: boot Rails in development, construct `ActionDispatch::HostAuthorization`
+   from the effective settings, and send `GET /` through `Rack::MockRequest` to a stub endpoint.
+   Confirm HTTP 200 for the documented private origin aliases and published site hostnames; confirm
+   HTTP 403 for an unconfigured Umaxica hostname and an unrelated hostname. The 2026-10-13
+   observation is recorded in
+   [evidence](../../evidence/2026-10-13-environment-test-retirement-A6V9.md). This is an operational
+   check, not a test-suite guard; repeat it after changing host configuration.
 3. **Surface routing**: the route contract tests recognize non-health application resources for the
    private Host values and assert the matching `app`, `com`, `org`, `net`, or `dev` controller.
 4. **Podman DNS aliases**: `podman compose config` must show the private aliases on `core`'s
    `frontend` network and no new host port publication. The connector never needs an inbound host
    port and must not be given one; the only publications in the stack are `core`'s loopback-bound
-   `3000`/`3036`. See `docs/operations/development-host-port-exposure.md`.
+   host `3001` to container `3000`, plus `3036` for Vite. See
+   `docs/operations/development-host-port-exposure.md`.
 5. **Workers VPC connector prerequisites**: `cloudflare-tunnel-workers-vpc` is pinned at the
    supported `2026.8.2` release, runs with QUIC, authenticates with its own tunnel token from the
    gitignored repository `.env`, and requires outbound UDP port 7844. Its `/ready` must report four
@@ -65,6 +69,12 @@ accepts both families and nothing else. See the "Development Is Tunnel-Exposed B
 section of `docs/architecture/cloudflare-request-paths.md` for how each family reaches
 `config.hosts`, and for the `FORCE_SECURE_COOKIES` trade-off between the tunnel path and the
 plain-`http` local path.
+
+`edit.umaxica.org` follows the same private-origin contract: its remotely managed Tunnel ingress
+uses `http://edit.org.localhost:3000` on `frontend`. The `core` aliases in
+`.devcontainer/compose.yaml` are the repository source of that origin name. The Cloudflare account
+owns the matching public-hostname, ingress, DNS, and Access records; update that remote
+configuration by merging with its current ingress rather than replacing it.
 
 Access is the control that keeps the development surface non-public, and it lives in the Cloudflare
 account rather than in this repository — see "External Checks" below.
@@ -131,8 +141,9 @@ profile:
 
 `cloudflare-tunnel-edge` merges `cloudflare-tunnel`'s definition through a YAML anchor, so the two
 differ only in the edge profile and token; the pinned release, the QUIC command, the `frontend`
-attachment, and the crash-loop caps are shared by construction.
-`test/tooling/compose_local_override_optional_test.rb` is the guard.
+attachment, and the crash-loop caps are shared by construction. No test guards this any longer:
+`test/tooling/compose_local_override_optional_test.rb` was removed, and Compose configuration is
+verified by running it (`adr/no-test-suite-for-environment-construction.md`).
 
 Each service reads its tunnel's scoped connector token from the repository-local `.env` and passes
 it to cloudflared as `TUNNEL_TOKEN`. Neither is an account API key. Each authorizes a connector to
@@ -295,15 +306,16 @@ The second and third items were verified for development on 2026-08-10 against t
 Rails hostnames: every unauthenticated external request returned an Access login redirect, a nonce
 probe confirmed no such request reached the origin, and authenticated browser traffic was observed
 arriving at Rails from a public client address. Evidence is in
-`notes/implementation/2026-08-10-development-tunnel-access-verification.md`. That run covers
+`research/implementation/2026-08-10-development-tunnel-access-verification.md`. That run covers
 development only; the first and fourth items remain unverified, and production remains blocked on
 all four. A dated verification run is evidence, not a substitute for re-checking after any account
 change.
 
 That run also found that `palm-jp.umaxica.app` currently carries an interactive Access application.
-Palm is a bearer-token API surface whose authenticator rejects any request carrying a cookie, and
-Access forwards its `CF_Authorization` cookie to the origin, so interactive Access breaks both
-browser and native clients there. Resolve that before treating Palm as published.
+The observation predates Palm's move to a Browser RP: the former bearer API is retired. Before
+publishing the current browser flow, re-verify Access behavior, cookie forwarding, and private-origin
+reachability against the deployed route and callback contract. Local Rails routing does not establish
+that production or development edge routing has been published.
 
 The Docs, Help, and News families are not published through the tunnel. `PUBLIC_DOCS_*_URL` names a
 private `*.localhost` origin and no `PUBLIC_HELP_*`/`PUBLIC_NEWS_*` value is set, so the former

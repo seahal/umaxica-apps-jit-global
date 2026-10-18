@@ -22,7 +22,7 @@ module SignOutCancellation
     logout_challenge = params[:logout_challenge].to_s
     return if logout_challenge.blank?
 
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: logout_challenge).fail!
     end
   rescue ActiveRecord::RecordNotFound

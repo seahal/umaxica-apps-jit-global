@@ -64,7 +64,7 @@ module Auth::Org
       token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
       jwt = AuthenticationToken.encode(
         @staff, host: host, session_public_id: token.public_id, resource_type: "operator",
-                jwt_issuer_id: "surface:SIGN_ORG",
+                jwt_issuer_id: "surface:AUTH_ORG",
       )
       @controller.request.headers["Authorization"] = "Bearer #{jwt}"
       # Should not raise or redirect

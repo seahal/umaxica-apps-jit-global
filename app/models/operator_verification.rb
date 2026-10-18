@@ -4,12 +4,12 @@
 # == Schema Information
 #
 # Table name: operator_verifications
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id             :bigint           not null, primary key
-#  discarded_at   :datetime         default(Infinity), not null
+#  discard_at   :datetime         default(Infinity), not null
 #  last_used_at   :datetime
-#  purged_at      :datetime         default(Infinity), not null
+#  purge_eligible_at      :datetime         default(Infinity), not null
 #  token_digest   :string           not null
 #  created_at     :datetime         not null
 #  updated_at     :datetime         not null
@@ -24,7 +24,7 @@
 #
 #  fk_rails_...  (staff_token_id => operator_tokens.id) ON DELETE => cascade
 #
-class OperatorVerification < OrgTicketRecord
+class OperatorVerification < OpBaseOrgRecord
   include Retainable
   include RefreshTokenShared
   include VerificationCookieable
@@ -34,19 +34,15 @@ class OperatorVerification < OrgTicketRecord
   belongs_to :staff_token, class_name: "OperatorToken", inverse_of: :staff_verifications
 
   validates :token_digest, presence: true, uniqueness: true
-  validates :discarded_at, presence: true
+  validates :discard_at, presence: true
 
-  scope :active, -> { where(arel_table[:discarded_at].gt(Time.current)) }
-
-  def active?
-    discarded_at.present? && discarded_at > Time.current
-  end
+  scope :active, -> { where(arel_table[:discard_at].gt(Time.current)) }
 
   def self.digest_token(raw_token)
     digest_refresh_token(raw_token.to_s).unpack1("H*")
   end
 
-  def self.issue_for_token!(token:, discarded_at: TTL.from_now)
+  def self.issue_for_token!(token:, discard_at: TTL.from_now)
     now = Time.current
     raw_token = SecureRandom.urlsafe_base64(32)
     digest = digest_token(raw_token)
@@ -54,17 +50,21 @@ class OperatorVerification < OrgTicketRecord
     verification =
       transaction do
         where(staff_token_id: token.id).active.find_each do |verification_record|
-          verification_record.update!(discarded_at: now, updated_at: now)
+          verification_record.update!(discard_at: now, updated_at: now)
         end
 
         create!(
           staff_token: token,
           token_digest: digest,
-          discarded_at: discarded_at,
+          discard_at: discard_at,
           last_used_at: now,
         )
       end
 
     [verification, raw_token]
+  end
+
+  def active?
+    discard_at.present? && discard_at > Time.current
   end
 end

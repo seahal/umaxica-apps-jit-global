@@ -74,7 +74,7 @@ public/vite-test
 
 # Test and coverage
 test/
-spec/
+gait/
 coverage/
 .simplecov
 
@@ -134,6 +134,7 @@ podman/*
 podman/core/*
 !podman/core/entrypoint.sh
 !podman/core/dev-supervisor.sh
+!podman/core/desktop.sh
 !podman/core/sshd_config
 gke/
 

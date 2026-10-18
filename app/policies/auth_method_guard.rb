@@ -19,96 +19,43 @@ class AuthMethodGuard
     VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP,
   ].freeze
 
-  def self.remaining_count(actor, excluding: nil)
-    AuthenticationCredentialInventory.call(actor, excluding: excluding, reload: true).aal1_method_count
-  end
-
-  def self.last_method?(actor, excluding: nil)
-    remaining_count(actor, excluding: excluding).zero?
-  end
-
   def self.can_remove_passkey?(actor, passkey)
-    inventory = AuthenticationCredentialInventory.call(actor, excluding: passkey, reload: true)
-    inventory.retains_aal1? && inventory.retains_uv_step_up?
+    preserves_required_capabilities?(actor, passkey)
   end
 
   def self.can_remove_email?(actor, email)
-    inventory = AuthenticationCredentialInventory.call(actor, excluding: email, reload: true)
-    inventory.retains_contactability? && inventory.retains_aal1? && inventory.retains_uv_step_up?
+    preserves_required_capabilities?(actor, email)
   end
 
   def self.can_remove_telephone?(actor, telephone)
-    AuthenticationCredentialInventory.call(actor, excluding: telephone, reload: true).retains_contactability?
+    preserves_required_capabilities?(actor, telephone)
   end
 
   def self.can_remove_totp?(actor, totp)
-    AuthenticationCredentialInventory.call(actor, excluding: totp, reload: true).retains_uv_step_up?
+    preserves_required_capabilities?(actor, totp)
   end
 
   def self.can_remove_secret_credential?(actor, secret_credential)
-    AuthenticationCredentialInventory.call(actor, excluding: secret_credential, reload: true).retains_aal1?
+    preserves_required_capabilities?(actor, secret_credential)
   end
 
-  def self.verified_emails_count(actor, excluding: nil)
-    if actor.respond_to?(:client_emails)
-      scope = actor.client_emails.where(user_email_status_id: VERIFIED_EMAIL_STATUSES)
-      scope = scope.where.not(id: excluding.id) if excluding_record?(excluding, "ClientEmail")
-      return scope.count
-    end
-
-    if actor.respond_to?(:visitor_emails)
-      scope = actor.visitor_emails.where(visitor_email_status_id: VISITOR_VERIFIED_EMAIL_STATUSES)
-      scope = scope.where.not(id: excluding.id) if excluding_record?(excluding, "VisitorEmail")
-      return scope.count
-    end
-
-    0
+  def self.can_remove_external_identity?(actor, external_identity)
+    preserves_required_capabilities?(actor, external_identity)
   end
 
-  def self.verified_telephones_count(actor, excluding: nil)
-    if actor.respond_to?(:client_telephones)
-      scope = actor.client_telephones.where(user_telephone_status_id: VERIFIED_TELEPHONE_STATUSES)
-      scope = scope.where.not(id: excluding.id) if excluding_record?(excluding, "ClientTelephone")
-      return scope.count
-    end
+  def self.preserves_required_capabilities?(actor, excluding)
+    before = AuthenticationCredentialInventory.call(actor, reload: true)
+    after = AuthenticationCredentialInventory.call(actor, excluding: excluding, reload: true)
 
-    if actor.respond_to?(:visitor_telephones)
-      scope = actor.visitor_telephones.where(visitor_telephone_status_id: VISITOR_VERIFIED_TELEPHONE_STATUSES)
-      scope = scope.where.not(id: excluding.id) if excluding_record?(excluding, "VisitorTelephone")
-      return scope.count
-    end
-
-    0
+    capability_survives?(before.has_usable_sign_in_capability?, after.has_usable_sign_in_capability?) &&
+      capability_survives?(before.has_usable_step_up_capability?, after.has_usable_step_up_capability?)
   end
 
-  def self.active_passkeys_count(actor, excluding: nil)
-    if actor.respond_to?(:client_passkeys)
-      scope = actor.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE)
-      scope = scope.where.not(id: excluding.id) if excluding_record?(excluding, "ClientPasskey")
-      return scope.count
-    end
+  private_class_method :preserves_required_capabilities?
 
-    if actor.respond_to?(:visitor_passkeys)
-      scope = actor.visitor_passkeys.where(status_id: VisitorPasskeyStatus::ACTIVE)
-      scope = scope.where.not(id: excluding.id) if excluding_record?(excluding, "VisitorPasskey")
-      return scope.count
-    end
-
-    0
+  def self.capability_survives?(was_available, remains_available)
+    !was_available || remains_available
   end
 
-  def self.active_social_count(actor)
-    (AuthenticationCredentialInventory.call(actor, reload: true).aal1_methods & %i(apple google)).count
-  end
-
-  private_class_method :verified_emails_count,
-                       :verified_telephones_count,
-                       :active_passkeys_count,
-                       :active_social_count
-
-  def self.excluding_record?(record, class_name)
-    record.present? && record.respond_to?(:id) && record.class.name == class_name
-  end
-
-  private_class_method :excluding_record?
+  private_class_method :capability_survives?
 end

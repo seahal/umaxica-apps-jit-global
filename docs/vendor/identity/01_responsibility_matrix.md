@@ -11,8 +11,15 @@ owner: internal-architecture-owner
 last-reviewed: 2026-06-24
 source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
-related-audit-ledger: plans/umaxica-immutable-pinwheel.md
+related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
+
+> **Current-contract supersession (2026-09-23):** This matrix is a historical vendor-review
+> baseline, not the active authority assignment. Its Acme/Sign rows predate the accepted Base/Auth
+> decision. The current Rails authority is defined by
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
+> IdP/Authorization Server, Auth is ceremony-only, and browser RPs are independently registered by
+> surface. Do not treat the matrix's Acme-only or shared-RP rows as implementation instructions.
 
 # Purpose
 
@@ -62,7 +69,7 @@ This matrix covers:
 - `docs/architecture/dpop.md`
 - `adr/acme-sign-core-base-port-boundary.md`
 - `adr/security-audit-findings-2026-06-13.md`
-- `plans/umaxica-immutable-pinwheel.md` (audit ledger, DECISION DEC-001~013)
+- `docs/vendor/identity/11_decision-register.md` (audit ledger, DECISION DEC-001~013)
 
 # Non-negotiable Authority Boundaries
 
@@ -369,14 +376,14 @@ The following evidence is required for SIer-implemented capability to be accepte
 | `docs/vendor/identity/09_acceptance-criteria.md`         | Detailed acceptance criteria. Section above summarizes.                         |
 | `docs/vendor/identity/11_decision-register.md`           | Internal vendor decision register (pre-Round 4). Update pending.                |
 | `docs/vendor/identity/12_gap-risk-register.md`           | Internal gap register (pre-Round 4). Update pending.                            |
-| `plans/umaxica-immutable-pinwheel.md`                    | Audit ledger. DEC-001~013 and NR-001~004 originate here.                        |
+| `docs/vendor/identity/11_decision-register.md`           | Audit ledger. DEC-001~~013 and NR-001~~004 originate here.                      |
 
 ---
 
 # Document Status Warnings
 
 - **08_threat-model.md** is DRAFT, owner TBD. Share in RFI as context only; not normative. (DEC-010)
-- **notes/oauth2-1-compliance-gap.md** is a stale non-authoritative doc. Do not include in RFI
+- **research/oauth2-1-compliance-gap.md** is a stale non-authoritative doc. Do not include in RFI
   resource set. Seal before first SIer contact. Update or archive before RFP. (DEC-001/002)
 - **docs/spec/authorization_guide.md** (Pundit version) is stale. Use `docs/authorization_guide.md`
   (ActionPolicy version). (DEC-007)

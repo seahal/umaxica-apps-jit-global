@@ -13,12 +13,34 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! @host
     cookies["csrf_token"] = csrf_token_value
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+
+    # Exercise OTP endpoints only after the public admission transitions.
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                               headers: { "Host" => @host }
+
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/sign/up", params: { ri: "jp", entry_ref: admission.reference, authenticity_token: csrf },
+                     headers: { "Host" => @host }
+
+    assert_response :see_other
 
     Prosopite.pause do
       [VisitorStatus::NOTHING, VisitorStatus::ACTIVE].each { |id| VisitorStatus.find_or_create_by!(id: id) }
@@ -43,49 +65,57 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "show renders the OTP code entry page for a valid telephone session" do
     start_telephone_signup!("+819011110001")
 
-    get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    get auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
     assert_response :success
     assert_equal "auth/com/sign/up/telephones/edit", inertia_component
     assert_equal I18n.t("sign.app.registration.telephone.edit.page_title"), inertia_props.fetch("title")
   end
 
-  test "show returns to the start when there is no sign-up flow at all" do
-    get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+  test "show without a sign-up flow binding refuses to select a ticket" do
+    get auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
-    assert_redirected_to auth_com_sign_up_url(ri: "jp")
+    assert_response :conflict
+    assert_nil session[:auth_com_up_sequence_id]
   end
 
   test "show renders session expired when the OTP has expired" do
     telephone = start_telephone_signup!("+819011110002")
-    telephone.update!(otp_expires_at: 1.minute.ago)
+    transaction = VisitorTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: telephone.public_id)
+    transaction.update!(otp_expires_at: 1.minute.ago)
 
-    get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    get auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
     assert_response :unprocessable_content
     assert_includes response.body, I18n.t("sign.com.registration.telephone.edit.session_expired")
   end
 
   test "create resends an OTP and redirects back to the OTP page" do
-    start_telephone_signup!("+819011110003")
+    telephone = start_telephone_signup!("+819011110003")
+    after_cooldown = telephone.reload.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN
 
-    assert_enqueued_jobs 1, only: Outbound::SmsDeliveryJob do
-      post auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    VisitorTelephone.stub(:database_now, after_cooldown) do
+      assert_enqueued_jobs 1, only: Outbound::SmsDeliveryJob do
+        post auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
+      end
     end
 
-    assert_redirected_to auth_com_sign_up_check_telephone_otp_url(ri: "jp")
+    assert_redirected_to auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding)
     assert_predicate session[:visitor_telephone_otp_last_sent_at], :present?
   end
 
   test "create is rate limited when resending too soon" do
-    start_telephone_signup!("+819011110004")
+    telephone = start_telephone_signup!("+819011110004")
+    after_cooldown = telephone.reload.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN
 
-    post auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    VisitorTelephone.stub(:database_now, after_cooldown) do
+      post auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
-    assert_response :redirect
+      assert_response :redirect
 
-    assert_enqueued_jobs 0, only: Outbound::SmsDeliveryJob do
-      post auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+      assert_enqueued_jobs 0, only: Outbound::SmsDeliveryJob do
+        post auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
+      end
     end
 
     assert_response :too_many_requests
@@ -95,11 +125,13 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "update with a valid OTP advances to the guard page" do
     telephone = start_telephone_signup!("+819011110005")
 
-    patch auth_com_sign_up_check_telephone_otp_url(ri: "jp"),
+    patch auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
           params: { visitor_telephone: { pass_code: otp_code_for(telephone) } },
           headers: default_headers
 
-    assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp")
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
+    assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
 
     cycle = current_sign_up_flow
 
@@ -111,7 +143,7 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "update with a blank OTP returns a validation error" do
     start_telephone_signup!("+819011110006")
 
-    patch auth_com_sign_up_check_telephone_otp_url(ri: "jp"),
+    patch auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
           params: { visitor_telephone: { pass_code: "" } },
           headers: default_headers
 
@@ -122,7 +154,7 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
   test "update with an invalid OTP keeps the ticket at contact pending" do
     start_telephone_signup!("+819011110007")
 
-    patch auth_com_sign_up_check_telephone_otp_url(ri: "jp"),
+    patch auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
           params: { visitor_telephone: { pass_code: "000000" } },
           headers: default_headers
 
@@ -140,7 +172,7 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     cycle = current_sign_up_flow
 
     Telephone::MAX_OTP_ATTEMPTS.times do
-      patch auth_com_sign_up_check_telephone_otp_url(ri: "jp"),
+      patch auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
             params: { visitor_telephone: { pass_code: "000000" } },
             headers: default_headers
     end
@@ -159,12 +191,12 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     # Cancellation terminates and discards the cycle; SignUpTermination schedules
     # the physical purge later, so the row is still present right after the request.
     assert_no_difference("VisitorSignUpFlow.count") do
-      delete auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+      delete auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
     end
 
     assert_redirected_to auth_com_sign_up_url(ri: "jp")
     assert_equal VisitorSignUpFlowStatus::CANCELLED, cycle.reload.status_id
-    assert_operator cycle.discarded_at, :<=, Time.current
+    assert_operator cycle.discard_at, :<=, Time.current
     assert_nil session[:com_sign_up_flow_locator]
   end
 
@@ -172,7 +204,7 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
 
   def start_telephone_signup!(raw_number)
     post(
-      auth_com_sign_up_telephone_url(ri: "jp"),
+      auth_com_sign_up_telephone_url(ri: "jp", fb: @flow_binding),
       params: {
         visitor_telephone: {
           raw_number: raw_number,
@@ -185,19 +217,28 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     )
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     VisitorTelephone.order(:created_at).last
   end
 
   def current_sign_up_flow
-    public_id = session.dig(:com_sign_up_flow_locator, "public_id")
+    public_id = session[:auth_com_up_sequence_id]
     return if public_id.blank?
 
     VisitorSignUpFlow.find_by(public_id: public_id)
   end
 
   def otp_code_for(telephone)
-    otp_data = telephone.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    job =
+      enqueued_jobs.reverse.find do |entry|
+        next false unless entry.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(entry.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:to) == telephone.number
+      end
+    OutboundSensitivePayload.decrypt_sms_delivery(
+      job.fetch(:args).fetch(0).fetch("encrypted_payload"),
+    ).fetch(:otp_code)
   end
 
   def default_headers

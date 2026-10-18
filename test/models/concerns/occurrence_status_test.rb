@@ -19,7 +19,7 @@ class OccurrenceStatusTest < ActiveSupport::TestCase
   test "does not add lifecycle attributes on status rows" do
     record = ClientOccurrenceStatus.new
 
-    assert_not record.has_attribute?(:discarded_at)
-    assert_not record.has_attribute?(:purged_at)
+    assert_not record.has_attribute?(:discard_at)
+    assert_not record.has_attribute?(:purge_eligible_at)
   end
 end

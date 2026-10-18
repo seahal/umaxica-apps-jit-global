@@ -10,7 +10,6 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     @user = clients(:one)
-    ClientSignInFlowStatus.ensure_defaults!
   end
 
   test "route resolves to guard controller" do
@@ -36,7 +35,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
       controller.show
     end
 
-    assert_equal "/sign/in/check?ri=jp", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/check", cycle, "GUARDRAIL_PENDING")
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
@@ -61,18 +60,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/check?ri=jp", controller.redirected_to
-    assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
-  end
-
-  test "session limit state redirects to session" do
-    cycle = create_cycle(status: "SESSION_LIMIT_PENDING")
-    before_attrs = guarded_cycle_attrs(cycle.reload)
-    controller = build_controller(cycle: cycle, actor: @user)
-
-    controller.show
-
-    assert_equal "/sign/in/session?ri=jp", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/check", cycle, "CHECKPOINT_PENDING")
     assert_equal before_attrs, guarded_cycle_attrs(cycle.reload)
   end
 
@@ -82,16 +70,18 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
 
     controller.show
 
-    assert_equal "/sign/in/selector?pt=/dashboard", controller.redirected_to
+    assert_bound_redirect(controller.redirected_to, "/sign/in/selector", cycle, "SELECTOR_PENDING", pt: "/dashboard")
   end
 
-  test "later state redirects to welcome sequence path" do
-    cycle = create_cycle(status: "DASHBOARD_PENDING", return_to: "/dashboard")
+  test "session issuance state redirects to welcome sequence path" do
+    cycle = create_cycle(status: "SESSION_ISSUANCE_PENDING", return_to: "/dashboard")
     controller = build_controller(cycle: cycle, actor: @user)
 
     controller.show
 
-    assert_equal "/sign/in/welcome?pt=/dashboard", controller.redirected_to
+    assert_bound_redirect(
+      controller.redirected_to, "/sign/in/welcome", cycle, "SESSION_ISSUANCE_PENDING", pt: "/dashboard",
+    )
   end
 
   test "unsafe path target redirects to sign in entry without flash" do
@@ -101,7 +91,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.show
 
     assert_equal "/sign/in?ri=jp", controller.redirected_to
-    assert_equal "CHECKPOINT_PENDING", cycle.reload.state
+    assert_equal "CHECKPOINT_PENDING", cycle.reload.state_name_for(cycle.state_id)
   end
 
   test "unsafe return target redirects to sign in entry without flash" do
@@ -111,7 +101,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.show
 
     assert_equal "/sign/in?ri=jp", controller.redirected_to
-    assert_equal "CHECKPOINT_PENDING", cycle.reload.state
+    assert_equal "CHECKPOINT_PENDING", cycle.reload.state_name_for(cycle.state_id)
   end
 
   test "expired cycle redirects to sign in entry without flash" do
@@ -133,9 +123,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
   def create_cycle(actor: @user, status:, issued_at: Time.current, expires_at: 15.minutes.from_now, return_to: nil)
     ClientSignInFlow.create!(
       principal_id: actor.id,
-      status_id: ClientSignInFlow.status_id_for(status),
-      state: status,
-      step: step_for(status),
+      state_id: ClientSignInFlow.state_id_for(status),
       nonce_digest: ClientSignInFlow.digest_nonce("pending-test-nonce"),
       issued_at: issued_at,
       expires_at: expires_at,
@@ -153,14 +141,25 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller.define_singleton_method(:current_db_sign_in_flow_for_sequence) { cycle }
     controller.define_singleton_method(:sign_in_flow_actor) { |_| actor }
     controller.define_singleton_method(:auth_app_sign_in_path) { |ri: nil| "/sign/in?ri=#{ri}" }
-    controller.define_singleton_method(:auth_app_sign_in_check_path) { |ri: nil, pt: nil|
-      "/sign/in/check?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
+    controller.define_singleton_method(:auth_app_sign_in_check_path) { |ri: nil, pt: nil, fb: nil|
+      { ri: ri, pt: pt, fb: fb }.compact.then { |query| "/sign/in/check?#{query.to_query}" }
     }
-    controller.define_singleton_method(:auth_app_sign_in_session_path) { |ri: nil, pt: nil|
-      "/sign/in/session?ri=#{ri}#{pt ? "&pt=#{pt}" : ""}"
+    controller.define_singleton_method(:sign_in_selector_path) { |pt: nil, **options|
+      {
+        pt: pt,
+        fb: SignInFlowBindingCodec.encode(
+          flow: options.fetch(:cycle), surface: "app", phase: "SELECTOR_PENDING",
+        ),
+      }.compact.then { |query| "/sign/in/selector?#{query.to_query}" }
     }
-    controller.define_singleton_method(:sign_in_selector_path) { |pt: nil| "/sign/in/selector?pt=#{pt}" }
-    controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil| "/sign/in/welcome?pt=#{pt}" }
+    controller.define_singleton_method(:sign_in_welcome_path) { |pt: nil, **options|
+      {
+        pt: pt,
+        fb: SignInFlowBindingCodec.encode(
+          flow: options.fetch(:cycle), surface: "app", phase: "SESSION_ISSUANCE_PENDING",
+        ),
+      }.compact.then { |query| "/sign/in/welcome?#{query.to_query}" }
+    }
     controller.define_singleton_method(:redirect_to) { |path, **_options| @redirected_to = path }
     controller.define_singleton_method(:render) { |**options| @rendered = options }
     controller.define_singleton_method(:redirected_to) { @redirected_to }
@@ -168,12 +167,21 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     controller
   end
 
-  def step_for(status)
-    ClientSignInFlow::STEP_BY_STATUS_ID.fetch(ClientSignInFlow.status_id_for(status))
+  def guarded_cycle_attrs(cycle)
+    cycle.attributes.slice("state_id", "token_id", "completed_at", "session_issued_at")
   end
 
-  def guarded_cycle_attrs(cycle)
-    cycle.attributes.slice("status_id", "state", "step", "token_id", "completed_at", "session_issued_at")
+  def assert_bound_redirect(location, path, cycle, phase, pt: nil)
+    uri = URI.parse(location)
+
+    assert_equal path, uri.path
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    assert_equal "jp", query.fetch("ri") if path.end_with?("/check")
+    assert_equal pt, query["pt"] if pt
+    binding = SignInFlowBindingCodec.decode(query.fetch("fb"))
+
+    assert_equal cycle.public_id, binding.flow_public_id
+    assert_equal phase, binding.phase
   end
 
   def assert_no_sign_in_guard_durable_changes(&)
@@ -181,7 +189,7 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
       assert_no_difference("ClientGoogleIdentity.count") do
         assert_no_difference("ClientAppleIdentity.count") do
           assert_no_difference("ClientAccount.count") do
-            assert_no_difference("Organization.count") do
+            assert_no_difference("OperatorOrganization.count") do
               assert_no_difference("Avatar.count") do
                 assert_no_difference("ClientToken.count") do
                   assert_no_difference("ClientSignUpFlow.count", &)
@@ -222,89 +230,6 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
     headers
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-
-    if user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-      token =
-        if session_public_id.present?
-          ClientToken.find_by(public_id: session_public_id)
-        else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-        end
-      token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-
-    if staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-      token =
-        if session_public_id.present?
-          OperatorToken.find_by(public_id: session_public_id)
-        else
-          OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    VisitorTokenBindingMethod.ensure_defaults! if defined?(VisitorTokenBindingMethod)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB) if defined?(VisitorTokenKind)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-
-    if visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-      token =
-        if session_public_id.present?
-          VisitorToken.find_by(public_id: session_public_id)
-        else
-          VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= VisitorToken.create!(visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -314,31 +239,11 @@ end
 class Auth::App::Sign::In::GuardsControllerTest
   private
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"

@@ -18,21 +18,28 @@ class OperatorSecretCredentialsUpdate
   end
 
   def call
-    @secret_credential.name = @params[:name].to_s.strip if @params[:name].present?
-    @secret_credential.staff_secret_status_id = status_id_for(@params[:enabled]) if @params.key?(:enabled)
-
     OperatorChronicle.transaction do
       OperatorSecretCredential.transaction do
-        ensure_audit_dependencies!
-        @secret_credential.save!
-        OperatorChronicle.create!(
-          actor: @actor,
-          subject_type: "OperatorSecretCredential",
-          subject_id: @secret_credential.id.to_s,
-          event_id: EVENT_ID,
-          occurred_at: Time.current,
-          context: { action: ACTION },
-        )
+        @actor.with_lock do
+          @secret_credential = OperatorSecretCredential.lock.find_by!(id: @secret_credential.id, staff_id: @actor.id)
+          if disabling? && !AuthMethodGuard.can_remove_secret_credential?(@actor, @secret_credential)
+            raise ActiveRecord::RecordInvalid, @secret_credential
+          end
+
+          @secret_credential.name = @params[:name].to_s.strip if @params[:name].present?
+          @secret_credential.staff_secret_status_id = status_id_for(@params[:enabled]) if @params.key?(:enabled)
+
+          ensure_audit_dependencies!
+          @secret_credential.save!
+          OperatorChronicle.create!(
+            actor: @actor,
+            subject_type: "OperatorSecretCredential",
+            subject_id: @secret_credential.id.to_s,
+            event_id: EVENT_ID,
+            occurred_at: Time.current,
+            context: { action: ACTION },
+          )
+        end
       end
     end
 
@@ -40,6 +47,10 @@ class OperatorSecretCredentialsUpdate
   end
 
   private
+
+  def disabling?
+    @params.key?(:enabled) && !ActiveModel::Type::Boolean.new.cast(@params[:enabled])
+  end
 
   def status_id_for(enabled_param)
     enabled = ActiveModel::Type::Boolean.new.cast(enabled_param)

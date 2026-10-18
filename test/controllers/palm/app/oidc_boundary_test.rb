@@ -9,13 +9,17 @@ module Palm
     class OidcBoundaryTest < ActiveSupport::TestCase
       self.fixture_table_names = []
 
-      test "palm app exposes only the generic reserved oidc callback stub and no issuer endpoints" do
+      test "palm app exposes the Browser RP callback and no issuer endpoints" do
         host = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
 
         assert_equal(
           "palm/app/oidc/callbacks#show",
           route_to("https://#{host}/oidc/callback", method: :get),
         )
+
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("https://#{host}/oidc/authorization", method: :get)
+        end
 
         source = Rails.root.join("config/routes/palm.rb").read
 
@@ -41,13 +45,46 @@ module Palm
         end
       end
 
-      test "palm app exposes bearer profile api under the api namespace" do
+      test "palm native profile and authorization endpoints are retired" do
         host = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
 
-        assert_equal(
-          "palm/app/api/v0/profiles#show",
-          route_to("https://#{host}/api/v0/profile", method: :get),
-        )
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("https://#{host}/api/v0/profile", method: :get)
+        end
+
+        %w(app-ios-rp app-android-rp).each do |client_id|
+          assert_nil OidcClientRegistry.find(client_id), client_id
+        end
+      end
+
+      test "retired Palm clients cannot exchange authorization codes or refresh tokens" do
+        palm_host = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
+
+        %w(app-ios-rp app-android-rp).each do |client_id|
+          authorization_code_result = OidcTokenExchangeCoordinator.call(
+            grant_type: "authorization_code",
+            code: "retired-palm-code",
+            redirect_uri: "https://#{palm_host}/oauth/callback",
+            client_id: client_id,
+            client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+            client_assertion: "retired-palm-assertion",
+            token_endpoint_uri: OidcIssuer.token_endpoint("client"),
+            code_verifier: "retired-palm-verifier",
+            expected_resource_type: "client",
+          )
+          refresh_token_result = OidcTokenExchangeCoordinator.call(
+            grant_type: "refresh_token",
+            refresh_token: "retired-palm-refresh-token",
+            client_id: client_id,
+            client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+            client_assertion: "retired-palm-assertion",
+            token_endpoint_uri: OidcIssuer.token_endpoint("client"),
+            expected_resource_type: "client",
+          )
+
+          assert_equal "invalid_client", authorization_code_result.error, client_id
+          assert_equal "invalid_client", refresh_token_result.error, client_id
+        end
       end
 
       test "sign does not own native client registration or oauth issuance routes" do

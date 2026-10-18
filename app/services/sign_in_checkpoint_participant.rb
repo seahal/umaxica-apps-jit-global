@@ -17,10 +17,10 @@ class SignInCheckpointParticipant
   end
 
   def advance_if_clear!
-    cycle.class.transaction do
-      cycle.lock!
+    cycle.with_cycle_lock do
+      cycle.require_active_cycle!
       result = evaluate
-      return result if result.blocking?
+      next result if result.blocking?
 
       cycle.advance_sign_in_to_selector!
       result

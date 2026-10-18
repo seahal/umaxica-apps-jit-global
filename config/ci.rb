@@ -4,10 +4,29 @@
 # Run using bin/ci
 
 CI.run do
-  step "Setup: test database", "env RAILS_ENV=test bin/rails db:prepare"
+  step "Structure: Repository knowledge", "scripts/check-repository-knowledge"
+
+  step "Setup: create test databases",
+       "env RAILS_ENV=test bin/rails db:create"
+  step "Setup: test database",
+       "POSTGRESQL_TEST_PREPARE_DATABASES=" \
+       "test_primary_db,test_publishing_db,test_app_zenith_db,test_com_zenith_db," \
+       "test_org_zenith_db,test_app_setting_db,test_com_setting_db,test_org_setting_db," \
+       "test_op_base_app_db,test_op_base_com_db,test_op_base_org_db,test_app_signal_db," \
+       "test_rp_base_app_db,test_rp_core_app_jp_db,test_rp_warp_app_jp_db,test_rp_palm_app_jp_db," \
+       "test_rp_base_com_db,test_rp_core_com_jp_db,test_rp_warp_com_jp_db," \
+       "test_rp_base_org_db,test_rp_core_org_jp_db,test_rp_warp_org_jp_db," \
+       "test_rp_edit_org_db,test_rp_tech_org_db," \
+       "test_com_signal_db,test_org_signal_db,test_avatar_db,test_chronicle_db," \
+       "test_occurrence_db,test_queue_db,test_search_db,test_storage_db " \
+       "env RAILS_ENV=test bin/rails db:test:prepare"
 
   step "Style: JavaScript", "bun run check"
   step "Style: Ruby", "bin/rubocop"
+  step "Style: Frozen string literal placement", "ruby scripts/check_frozen_string_literal_directives.rb"
+  step "Style: Frozen string literals",
+       "bundle exec rubocop --config .rubocop_frozen_string_literal.yml " \
+       "--only Style/FrozenStringLiteralComment,Style/DisableCopsWithinSourceCodeDirective ."
   step "Style: ERB", "bundle exec erb_lint --lint-all"
 
   step "Security: Gem audit", "bin/bundler-audit"
@@ -35,7 +54,12 @@ CI.run do
 
     trap cleanup EXIT INT TERM
 
-    env RAILS_ENV=test bin/rails server \
+    SERVER_RUN_ID="ci-server-${BASHPID:-$$}-$(date -u +%Y%m%d%H%M%S)"
+
+    env RAILS_ENV=test \
+      VALKEY_NAMESPACE_RUN_ID="$SERVER_RUN_ID" \
+      VALKEY_NAMESPACE_WORKER_ID=server \
+      bin/rails server \
       --environment test \
       --binding 127.0.0.1 \
       --port 0 \
@@ -71,9 +95,15 @@ CI.run do
     step "Tests: Rails", "bin/rails test"
   end
 
+  step "Security: Authentication invariant guards", <<~SH
+    bin/rails test \
+      test/security/invariants/lifecycle_direct_state_write_invariant_test.rb \
+      test/security/invariants/csrf_verification_strategy_invariant_test.rb \
+      test/unit/security/standard_csrf_invariant_test.rb \
+      test/unit/security/identity_authority_inversion_guard_test.rb \
+      test/unit/security/webauthn_invariants_test.rb
+  SH
+
   # Enable this after db/seeds.rb is intentionally valid as a CI contract.
   # step "Database: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"
-
-  # Enable this after database_consistency has project configuration.
-  # step "Database consistency", "bundle exec database_consistency"
 end

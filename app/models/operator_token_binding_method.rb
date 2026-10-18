@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: operator_token_binding_methods
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id :bigint           not null, primary key
 #
-class OperatorTokenBindingMethod < OrgTicketRecord
+class OperatorTokenBindingMethod < OpBaseOrgRecord
   include ReferenceRecord
 
   NOTHING = 0

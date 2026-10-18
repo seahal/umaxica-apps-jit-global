@@ -28,7 +28,7 @@ module SignUp
     end
 
     def enter_checkpoint?
-      mutable_ticket? && at_step?("contact_verified", "guardrail")
+      mutable_ticket? && at_step?("guardrail")
     end
 
     def clear_requirement?
@@ -37,10 +37,6 @@ module SignUp
 
     def finalize?
       mutable_ticket? && at_step?("checkpoint") && pending_actor_matches?
-    end
-
-    def handoff_to_sign_in?
-      mutable_ticket? && at_step?("finalized") && pending_actor_matches?
     end
 
     def cancel?

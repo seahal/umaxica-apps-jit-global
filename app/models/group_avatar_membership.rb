@@ -5,11 +5,12 @@ class GroupAvatarMembership < AvatarRecord
   include PublicId
 
   STATES = %w(active removed).freeze
+  ROLE = "member"
 
   belongs_to :avatar_group, inverse_of: :group_avatar_memberships
   belongs_to :avatar, inverse_of: :group_avatar_memberships
 
-  validates :role, presence: true
+  validates :role, inclusion: { in: [ROLE] }
   validates :position, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :state, inclusion: { in: STATES }
   validates :avatar_id, uniqueness: { scope: :avatar_group_id, conditions: -> { where(removed_at: nil) } }

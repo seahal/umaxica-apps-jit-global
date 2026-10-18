@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: operator_secret_credential_ceremony_transactions
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                          :bigint           not null, primary key
 #  actor_ref                   :string           not null
@@ -32,7 +32,7 @@
 #  idx_on_result_jti_6830d7796f             (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  idx_on_transaction_id_c4257bc798         (transaction_id) UNIQUE
 #
-class OperatorSecretCredentialCeremonyTransaction < OrgTicketRecord
+class OperatorSecretCredentialCeremonyTransaction < OpBaseOrgRecord
   include SecretCredentialCeremonyTransactionable
 
   ceremony_surface "org"

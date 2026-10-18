@@ -9,7 +9,6 @@ module Base
 
         AUTHENTICATION_MODE = :private
 
-        before_action :authenticate_operator!
         # Object-level authorization (ActionPolicy): only the owner may view their own birthdate.
         # Step-up freshness is still enforced separately below.
         before_action :authorize_birthdate!, only: :show

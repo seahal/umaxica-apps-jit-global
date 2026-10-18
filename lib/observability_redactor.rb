@@ -12,7 +12,8 @@ module ObservabilityRedactor
       (?:.*)
       (?:
         email|uid|token|rt|jwt|authorization|cookie|set-cookie|session(?:_id)?|
-        code|state|nonce|verifier|challenge|dpop|otp|totp|hotp|password|secret|private_key|client_secret|
+        code|state|nonce|verifier|challenge|dpop|otp|totp|hotp|password|secret|
+        private_key|client_secret|sign_up_flow_ref|
         refresh_token|access_token|id_token|query_string|request_uri|original_url|
         url|redirect_uri|return_to|return_url
       )
@@ -23,7 +24,15 @@ module ObservabilityRedactor
     authorization cookie set-cookie x-csrf-token x-request-id x-forwarded-for
     dpop dpop-proof
   ).freeze
-  NON_SENSITIVE_KEYS = %w(event_uuid reason_code).freeze
+  # Keys whose values are a fixed internal vocabulary, although their names match the pattern above.
+  NON_SENSITIVE_KEYS = %w(
+    event_uuid reason_code error_code state_before state_after authentication_state
+  ).freeze
+  SENSITIVE_STRING_PATTERNS = [
+    /\bBearer\s+[a-z0-9._~+\-\/=]+/i,
+    /\beyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b/,
+    /\b(?:access_token|refresh_token|id_token|token|secret|password|otp|totp|recovery_code)\s*[:=]\s*[^\s,;]+/i,
+  ].freeze
   SAFE_OBSERVABILITY_KEY_PATTERN = /
     \A
     (?:.*_)?
@@ -79,15 +88,28 @@ module ObservabilityRedactor
     host = uri.host.to_s.downcase
     base = "#{uri.scheme.downcase}://#{host}"
     base += ":#{port}" if port && port != default_port
-    base += uri.path.to_s.presence || "/"
+    base += scrub_path(uri.path.to_s.presence || "/")
     base
   rescue URI::InvalidURIError
     REDACTED
   end
 
-  def scrub_string(value)
-    return value unless value.match?(/\Ahttps?:\/\//i)
+  def scrub_path(path)
+    return nil if path.nil?
 
-    scrub_url(value)
+    path.to_s.sub(
+      %r{\A(/ceremony_bindings/)[^/?#]+(/confirmation)(?=\z|[/?#])},
+      '\\1[FILTERED]\\2',
+    )
   end
+
+  def scrub_string(value)
+    return scrub_url(value) if value.match?(/\Ahttps?:\/\//i)
+
+    SENSITIVE_STRING_PATTERNS.reduce(value) do |scrubbed, pattern|
+      scrubbed.gsub(pattern, REDACTED)
+    end
+  end
+
+  private_class_method :scrub_entry, :url_like_key?, :scrub_string
 end

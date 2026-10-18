@@ -105,7 +105,7 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     assert_not_predicate SignUp::TicketPolicy.new(context, user: nil), :show?
   end
 
-  test "participant policy allows checkpoint only from sign-up participant states" do
+  test "participant policy requires guardrail before checkpoint" do
     contact_verified = build_ticket(
       ClientSignUpFlow, status_id: ClientSignUpFlowStatus::CONTACT_VERIFIED,
                         step: "contact_verified",
@@ -115,7 +115,7 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
                         step: "contact",
     )
 
-    assert_predicate SignUp::ParticipantPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
+    assert_not_predicate SignUp::ParticipantPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
     assert_not_predicate SignUp::ParticipantPolicy.new(policy_context(contact_pending), user: nil), :enter_checkpoint?
   end
 
@@ -133,7 +133,6 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
 
     assert_predicate policy, :clear_requirement?
     assert_predicate policy, :register_passkey?
-    assert_not_predicate policy, :confirm_passcode?
   end
 
   test "requirement policy rejects stale already-cleared requirement" do
@@ -228,21 +227,21 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
   end
 
   test "social callback policy is app social only" do
-    app_ticket = build_ticket(
+    op_base_app = build_ticket(
       ClientSignUpFlow,
       entry_method: "google",
       status_id: ClientSignUpFlowStatus::STARTED,
       step: "start",
     )
-    com_ticket = build_ticket(
+    op_base_com = build_ticket(
       VisitorSignUpFlow,
       entry_method: "email",
       status_id: VisitorSignUpFlowStatus::STARTED,
       step: "start",
     )
 
-    assert_predicate SignUp::SocialCallbackPolicy.new(policy_context(app_ticket), user: nil), :start_social_callback?
-    assert_not_predicate SignUp::SocialCallbackPolicy.new(policy_context(com_ticket), user: nil),
+    assert_predicate SignUp::SocialCallbackPolicy.new(policy_context(op_base_app), user: nil), :start_social_callback?
+    assert_not_predicate SignUp::SocialCallbackPolicy.new(policy_context(op_base_com), user: nil),
                          :start_social_callback?
   end
 
@@ -308,12 +307,12 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     assert_predicate SignUp::TicketPolicy.new(policy_context(ticket), user: nil), :enter_guardrail?
   end
 
-  test "ticket policy enter_checkpoint requires contact_verified or guardrail step" do
+  test "ticket policy enter_checkpoint requires guardrail or checkpoint step" do
     contact_verified = build_ticket(ClientSignUpFlow, step: "contact_verified")
     guardrail = build_ticket(ClientSignUpFlow, step: "guardrail")
     start = build_ticket(ClientSignUpFlow, step: "start")
 
-    assert_predicate SignUp::TicketPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
+    assert_not_predicate SignUp::TicketPolicy.new(policy_context(contact_verified), user: nil), :enter_checkpoint?
     assert_predicate SignUp::TicketPolicy.new(policy_context(guardrail), user: nil), :enter_checkpoint?
     assert_not_predicate SignUp::TicketPolicy.new(policy_context(start), user: nil), :enter_checkpoint?
   end
@@ -333,14 +332,10 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     assert_not_predicate SignUp::TicketPolicy.new(context, user: nil), :clear_requirement?
   end
 
-  test "ticket policy handoff_to_sign_in requires finalized step" do
-    ticket = build_ticket(
-      ClientSignUpFlow,
-      step: "finalized",
-      principal_id: 42,
-    )
+  test "ticket policy does not authorize a second action after finalization starts" do
+    ticket = build_ticket(ClientSignUpFlow, step: "finalizing", principal_id: 42)
 
-    assert_not_predicate SignUp::TicketPolicy.new(policy_context(ticket), user: nil), :handoff_to_sign_in?
+    assert_not_predicate SignUp::TicketPolicy.new(policy_context(ticket), user: nil), :finalize?
   end
 
   test "requirement policy clear_birthdate delegates to clear_named_requirement" do
@@ -426,12 +421,12 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
     end
   end
 
-  test "finalization policy allows handoff to sign in from finalized step" do
+  test "finalization policy only authorizes checkpoint finalization" do
     ticket = build_ticket(
       ClientSignUpFlow,
       entry_method: "email",
-      status_id: ClientSignUpFlowStatus::FINALIZED,
-      step: "finalized",
+      status_id: ClientSignUpFlowStatus::FINALIZING,
+      step: "finalizing",
       principal_id: 42,
       completed_requirements: {
         "otp" => { "cleared" => true },
@@ -445,7 +440,7 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
       pending_actor: PendingActor.new(id: 42),
     )
 
-    assert_predicate SignUp::FinalizationPolicy.new(context, user: nil), :handoff_to_sign_in?
+    assert_not_predicate SignUp::FinalizationPolicy.new(context, user: nil), :finalize?
   end
 
   test "finalization policy rescues argument error in requirements check" do

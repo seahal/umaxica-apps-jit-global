@@ -4,188 +4,108 @@
 require "test_helper"
 
 class CoverageThresholdServicesTest < ActiveSupport::TestCase
-  class MachineTicket
-    attr_accessor :status_id, :checkpoint_version, :completed_requirements, :step
-
-    def initialize(status = "STARTED")
-      @status_id = status
-      @step = "start"
-      @checkpoint_version = 0
-      @completed_requirements = {}
-    end
-
-    def persisted? = false
-
-    def expired? = false
-
-    def lapsed? = false
-
-    def sign_up_terminal? = %w(COMPLETED FAILED EXPIRED CANCELLED).include?(status_id)
-
-    def sign_up_cancelable? = true
-
-    def sign_up_cancelled? = status_id == "CANCELLED"
-
-    def has_attribute?(_name) = false
-
-    def status_id_for(name) = name
-
-    def transition_to!(name, step: _step)
-      instance_variable_set(:@last_step, step)
-      self.status_id = name
-      self
-    end
-
-    def update!(attrs)
-      attrs.each { |key, value| public_send("#{key}=", value) if respond_to?("#{key}=") }
-      self
-    end
-
-    def complete_sign_up!
-      self.status_id = "COMPLETED"
-    end
-  end
-
-  test "sign-up state machine dispatches every terminal and linear transition" do
+  test "sign-up state machine dispatches real terminal and linear transitions" do
     cases = {
-      start: ["STARTED", :submit_contact],
-      submit_contact: ["STARTED", :verify_contact],
-      verify_contact: ["STARTED", :enter_guardrail],
-      enter_guardrail: ["STARTED", :enter_checkpoint],
-      enter_checkpoint: ["STARTED", :clear_requirement],
-      fail: ["STARTED", nil],
-      expire: ["STARTED", nil],
-      cancel: ["STARTED", nil],
-      complete: ["STARTED", nil],
+      start: [[], :ok, ClientSignUpFlowStatus::STARTED],
+      submit_contact: [[], :advanced, ClientSignUpFlowStatus::CONTACT_PENDING],
+      verify_contact: [[:submit_contact], :advanced, ClientSignUpFlowStatus::CONTACT_VERIFIED],
+      enter_guardrail: [%i(submit_contact verify_contact), :advanced, ClientSignUpFlowStatus::GUARDRAIL_PENDING],
+      enter_checkpoint: [%i(submit_contact verify_contact enter_guardrail), :advanced,
+                         ClientSignUpFlowStatus::CHECKPOINT_PENDING,],
+      halt: [[], :failed, ClientSignUpFlowStatus::HALTED],
+      expire: [[], :expired, ClientSignUpFlowStatus::EXPIRED],
+      cancel: [[], :failed, ClientSignUpFlowStatus::CANCELLED],
     }
-    cases.each do |event, (status, _next_event)|
-      ticket = MachineTicket.new(status)
+    cases.each do |event, (prior_events, expected_result, expected_status)|
+      now = ClientSignUpFlow.database_now
+      ticket = ClientSignUpFlow.create!(
+        entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
+        issued_at: now - 16.minutes, expires_at: now + 15.minutes,
+      )
+      prior_events.each do |prior_event|
+        preparation = SignUpStateMachine.call(ticket: ticket, event: prior_event, actor_context: nil)
+
+        assert_equal :advanced, preparation.status, prior_event
+      end
+      if event == :expire
+        # Move only the deadline; explicit expiry must not terminalize a live operation.
+        ticket.update_columns(expires_at: ClientSignUpFlow.database_now - 1.second)
+      end
       result = SignUpStateMachine.call(ticket: ticket, event: event, actor_context: nil)
 
-      assert_includes %i(ok advanced failed expired completed), result.status, event
+      assert_equal [expected_result, expected_status], [result.status, ticket.reload.status_id], event
     end
   end
 
-  test "sign-up state machine refuses expired, lapsed, terminal, and uncancelable tickets" do
-    expired = MachineTicket.new
-    expired.define_singleton_method(:expired?) { true }
+  test "sign-up state machine clears real requirements and completes once" do
+    now = ClientSignUpFlow.database_now
+    ticket = ClientSignUpFlow.create!(
+      entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
+      issued_at: now, expires_at: now + 15.minutes,
+    )
+    %i(submit_contact verify_contact enter_guardrail enter_checkpoint).each do |event|
+      result = SignUpStateMachine.call(ticket: ticket, event: event, actor_context: nil)
 
-    assert_equal :expired, SignUpStateMachine.call(ticket: expired, event: :start, actor_context: nil).status
-
-    lapsed = MachineTicket.new
-    lapsed.define_singleton_method(:lapsed?) { true }
-
-    assert_equal :expired, SignUpStateMachine.call(ticket: lapsed, event: :start, actor_context: nil).status
-
-    terminal = MachineTicket.new("COMPLETED")
-
-    assert_equal :invalid_transition,
-                 SignUpStateMachine.call(ticket: terminal, event: :submit_contact, actor_context: nil).status
-
-    cancelled = MachineTicket.new
-    cancelled.define_singleton_method(:sign_up_cancelable?) { false }
-
-    assert_equal :invalid_transition,
-                 SignUpStateMachine.call(ticket: cancelled, event: :cancel, actor_context: nil).status
-  end
-
-  test "sign-up state machine covers handoff status arms and checkpoint guards" do
-    ticket = MachineTicket.new("FINALIZED")
-    %i(accepted stopped failed).each do |status|
-      ticket = MachineTicket.new("FINALIZED")
+      assert_equal :advanced, result.status, event
+    end
+    %i(otp birthdate).each do |requirement|
       result = SignUpStateMachine.call(
-        ticket: ticket, event: :handoff_to_sign_in, actor_context: nil,
-        payload: { sign_in_handoff_status: status },
+        ticket: ticket, event: :clear_requirement, actor_context: nil,
+        payload: { requirement: requirement, checkpoint_version: ticket.reload.checkpoint_version },
       )
 
-      assert_equal(
-        { accepted: :sign_in_handoff_accepted,
-          stopped: :sign_in_handoff_stopped,
-          failed: :sign_in_handoff_failed, }.fetch(status), result.status,
-      )
+      assert_equal :advanced, result.status, requirement
     end
-    missing = SignUpStateMachine.call(ticket: ticket, event: :handoff_to_sign_in, actor_context: nil)
-
-    assert_equal :blocked, missing.status
-    unknown = SignUpStateMachine.call(
-      ticket: ticket, event: :handoff_to_sign_in, actor_context: nil,
-      payload: { sign_in_handoff_status: :other },
+    finalization = SignUpStateMachine.call(
+      ticket: ticket, event: :finalize, actor_context: nil, payload: { finalization_result: :accepted },
     )
 
-    assert_equal :invalid_transition, unknown.status
+    assert_equal [:advanced, ClientSignUpFlowStatus::FINALIZING], [finalization.status, ticket.reload.status_id]
+    assert_equal :invalid_transition, SignUpStateMachine.call(ticket: ticket, event: :cancel, actor_context: nil).status
 
-    machine = SignUpStateMachine.new(ticket: MachineTicket.new, event: :clear_requirement, actor_context: nil)
+    completion = SignUpStateMachine.call(ticket: ticket, event: :complete, actor_context: nil)
 
-    assert machine.send(:checkpoint_version_matches?)
-    machine = SignUpStateMachine.new(
-      ticket: MachineTicket.new, event: :clear_requirement, actor_context: nil,
-      payload: { checkpoint_version: "bad" },
+    assert_equal [:completed, true, true],
+                 [completion.status, ticket.reload.sign_up_completed?, ticket.completed_at.present?]
+    assert_equal :invalid_transition,
+                 SignUpStateMachine.call(ticket: ticket, event: :submit_contact, actor_context: nil).status
+  end
+
+  test "sign-up state machine durably expires a real overdue ticket and refuses discarded tickets" do
+    now = ClientSignUpFlow.database_now
+    expired = ClientSignUpFlow.create!(
+      entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
+      issued_at: now - 16.minutes, expires_at: now + 1.minute,
     )
-    machine.ticket.define_singleton_method(:has_attribute?) { |_name| true }
+    # Move only the deadline: the public state machine owns the resulting expiry transition.
+    expired.update_columns(expires_at: now - 1.second)
+    result = SignUpStateMachine.call(ticket: expired, event: :start, actor_context: nil)
 
-    assert_not machine.send(:checkpoint_version_matches?)
-  end
+    assert_equal [:expired, ClientSignUpFlowStatus::EXPIRED], [result.status, expired.reload.status_id]
 
-  test "OTP scope rejects unsupported purpose, surface, channel, and subject" do
-    subject = ClientSignUpFlow.new(pending_contact_type: "email")
-    invalids = [
-      { purpose: :sign_in, surface: :app, channel: :email, subject: subject },
-      { purpose: :sign_up, surface: :org, channel: :email, subject: subject },
-      { purpose: :sign_up, surface: :app, channel: :sms, subject: subject },
-      { purpose: :sign_up, surface: :com, channel: :email, subject: subject },
-    ]
+    discarded = ClientSignUpFlow.create!(
+      entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
+      issued_at: now, expires_at: now + 15.minutes,
+    )
+    discarded.discard_sign_up!(now: discarded.created_at)
+    result = SignUpStateMachine.call(ticket: discarded, event: :start, actor_context: nil)
 
-    invalids.each { |args| assert_raises(ArgumentError) { SignOtpCeremony.new(**args).send(:validate_scope!) } }
-    assert_equal ClientEmail,
-                 SignOtpCeremony.new(
-                   purpose: :sign_up, surface: :app, channel: :email,
-                   subject: subject,
-                 ).send(:expected_record_class)
-    assert_equal ClientTelephone,
-                 SignOtpCeremony.new(
-                   purpose: :sign_up, surface: :app, channel: :telephone,
-                   subject: ClientSignUpFlow.new(pending_contact_type: "telephone"),
-                 ).send(:expected_record_class)
-    assert_equal VisitorEmail,
-                 SignOtpCeremony.new(
-                   purpose: :sign_up, surface: :com, channel: :email,
-                   subject: VisitorSignUpFlow.new(pending_contact_type: "email"),
-                 ).send(:expected_record_class)
-    assert_equal VisitorTelephone,
-                 SignOtpCeremony.new(
-                   purpose: :sign_up, surface: :com, channel: :telephone,
-                   subject: VisitorSignUpFlow.new(pending_contact_type: "telephone"),
-                 ).send(:expected_record_class)
-  end
-
-  test "Palm authenticator token binding helpers reject missing and mismatched claims" do
-    service = PalmAccessTokenAuthenticator.allocate
-
-    assert service.send(:token_jti_matches?, Object.new, {})
-    token = Struct.new(:oidc_jti).new(nil)
-
-    assert service.send(:token_jti_matches?, token, {})
-    token.oidc_jti = "expected"
-
-    assert_not service.send(:token_jti_matches?, token, { "jti" => "different" })
-    assert service.send(:token_jti_matches?, token, { "jti" => "expected" })
-    assert_not service.send(:token_belongs_to_audience?, Object.new, {})
+    assert_equal [:expired, ClientSignUpFlowStatus::STARTED], [result.status, discarded.reload.status_id]
   end
 
   test "credential inventory result exposes availability and removal predicates" do
     result = AuthenticationCredentialInventory::Result.new(
-      actor: nil, excluding: nil, aal1_methods: [:email],
-      aal2_methods: [:totp], aal3_methods: [], step_up_methods: [:passkey],
+      actor: nil, excluding: nil, sign_in_methods: [:email],
+      step_up_methods: [:passkey],
       uv_step_up_methods: [:passkey], contact_identifiers: [:email],
       phishing_resistant_methods: [:passkey],
     )
 
-    assert_equal [:email], result.login_methods
-    assert_predicate result, :login_available?
-    assert_predicate result, :step_up_available?
-    assert_predicate result, :retains_uv_step_up?
-    assert_not_predicate result, :last_login_method?
-    assert_predicate result, :removable_login_credential?
-    assert_equal 1, result.aal1_method_count
+    assert_equal [:email], result.sign_in_methods
+    assert_predicate result, :has_usable_sign_in_capability?
+    assert_predicate result, :has_usable_step_up_capability?
+    assert_equal [:email], result.usable_sign_in_capabilities
+    assert_equal [:passkey], result.usable_step_up_capabilities
+    assert_equal 1, result.usable_sign_in_capabilities.length
   end
 end

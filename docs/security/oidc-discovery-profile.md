@@ -1,16 +1,30 @@
-# OIDC Discovery Profile (Acme IdP / Authorization Server)
+# OIDC Discovery Profile (historical Acme vocabulary)
+
+> **Current-contract supersession (2026-09-23):** This profile predates the accepted physical
+> authority relocation. Its Acme issuer vocabulary and discovery descriptions are retained for
+> protocol-history context only. The active Rails OIDC authority is Base, Auth is ceremony-only, and
+> the current client/route contract is defined by `adr/base-auth-ceremony-and-seven-rp-boundary.md`
+> and the live Base route registry. Do not use this document to restore an Acme route family or a
+> retired shared browser RP.
 
 Acme (`https://www.umaxica.app`, `.com`, `.org`) is the only IdP / Authorization Server. Sign / Core
 / Base / Palm are relying parties and hold no IdP authority. This document records the intentional,
 non-default choices in Acme's published OIDC metadata so reviewers do not mistake them for gaps.
 
-Source of truth: `app/services/oidc_discovery_document.rb`, `app/services/oidc_issuer.rb`.
+Source of truth: `app/values/oidc_discovery_document.rb`, `app/values/oidc_issuer.rb`.
 
 ## ES384-only is a private profile, not strict OIDC conformance
 
 `id_token_signing_alg_values_supported` and `token_endpoint_auth_signing_alg_values_supported` are
 both `["ES384"]`. The OpenID Connect Core conformance profiles expect `RS256` support; Acme
 **intentionally does not** offer `RS256`.
+
+First-party JWT access tokens (`auth_access` and preference access) follow RFC 9068 in token
+structure, claims, semantics, and validation requirements. ES384 is the sole supported signing
+algorithm. UMAXICA intentionally does not implement the RFC 9068 §2.1 requirement that conforming
+authorization servers and resource servers include RS256 among their supported signature algorithms.
+ES384 itself is permitted by RFC 9068; the deviation is the absence of RS256 support. See
+`adr/rfc9068-access-token-profile.md`.
 
 This is a deliberate private profile:
 
@@ -21,7 +35,7 @@ This is a deliberate private profile:
 
 The logout completion URI is not part of discovery. Discovery continues to publish
 `end_session_endpoint` as `https://<acme-surface-host>/oidc/logout`; browser completion returns to
-the RP or Acme surface-local `/sign/out/complete`.
+the RP surface-local `/sign/out/complete`, or Base `/lobby` when the RP is a Base host.
 
 If `RS256` is ever required, it must be implemented end to end (key rotation, JWKS publication, ID
 token signing selection, client-assertion verification, and tests) rather than advertised in
@@ -60,3 +74,11 @@ URLs, key selection) does not depend on it and must never be broken by it.
 environments (`enforce_public_key_hygiene?`). Development and test may mint local keys; production,
 staging, review, and other non-local environments must provide deployable key identifiers. See
 `docs/operations/jwt-key-rotation.md` for rotation guidance.
+
+## Delivered reconciliation (2026-10-06)
+
+Base is the active OIDC discovery, authorization, token, UserInfo and logout authority. The
+discovery document is generated from the registered allowlist and advertises only supported grant
+types and endpoints. UserInfo accepts Bearer credentials on GET or POST and applies scope-filtered
+claims. The old Acme vocabulary at the top is historical; the current route and client registry
+are defined by the Base authority ADR and live route tests.

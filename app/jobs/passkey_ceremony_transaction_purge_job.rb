@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 class PasskeyCeremonyTransactionPurgeJob < ApplicationJob
-  queue_as :default
+  queue_as :retention
 
   def perform
     IdentityPasskeyCeremonyTransactionPurger.call

@@ -6,6 +6,7 @@ module CollectiveUnit
 
   include ::PublicId
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     self.belongs_to_required_by_default = false
 

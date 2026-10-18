@@ -21,10 +21,12 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
   COOKIE_NAME = -> { PreferenceCookieName.refresh(production: false, surface: :app) }
 
   test "refresh_token URL parameter cannot replace the HttpOnly cookie" do
-    # Bootstrap a preference + cookie pair.
-    get edit_base_app_preference_region_url(ri: "jp")
+    # The explicit preference write establishes a refresh cookie; a read-only GET
+    # must ignore a token supplied only as a query parameter.
+    patch base_app_preference_region_url(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
     legitimate_token = cookies[COOKIE_NAME.call]
 
     assert_not_nil legitimate_token
@@ -33,15 +35,12 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
     reset!
     https!
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    preference_count = AppPreference.count
     get edit_base_app_preference_region_url(ri: "jp", refresh_token: legitimate_token)
 
     assert_response :success
-
-    new_token = cookies[COOKIE_NAME.call]
-
-    assert_not_nil new_token
-    assert_not_equal legitimate_token, new_token,
-                     "URL params must not adopt the presented refresh token"
+    assert_equal preference_count, AppPreference.count
+    assert_nil cookies[COOKIE_NAME.call], "a URL token must not be adopted as an HttpOnly cookie"
   end
 
   test "timezone update rejects unknown raw strings even with a slash" do
@@ -101,9 +100,10 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
   end
 
   test "a preference refresh cookie issued on app is inert on the com host" do
-    get edit_base_app_preference_theme_url(ri: "jp")
+    patch base_app_preference_region_url(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
 
     app_refresh_token = cookies[COOKIE_NAME.call]
 
@@ -118,18 +118,17 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
 
     get edit_base_com_preference_theme_url(ri: "jp")
 
-    # A presented-but-non-matching refresh token fails closed (same invariant
-    # as a corrupt cookie, see preference_corrupt_cookie_test.rb) rather than
-    # being silently ignored, so it can never resolve to an unrelated Com row.
-    assert_response :unauthorized
+    # The cross-surface credential is detached and cannot resolve to a Com row.
+    assert_response :success
     assert_equal com_count_before, ComPreference.count,
                  "an app-issued refresh cookie must not resolve to any Com preference; com bootstraps its own"
   end
 
   test "a preference refresh cookie issued on app is inert on the org host" do
-    get edit_base_app_preference_theme_url(ri: "jp")
+    patch base_app_preference_region_url(ri: "jp"),
+          params: { preference_region: { option_id: "JP" } }
 
-    assert_response :success
+    assert_response :redirect
 
     app_refresh_token = cookies[COOKIE_NAME.call]
 
@@ -144,7 +143,7 @@ class PreferenceSecurityTest < ActionDispatch::IntegrationTest
 
     get edit_base_org_preference_theme_url(ri: "jp")
 
-    assert_response :unauthorized
+    assert_response :success
     assert_equal org_count_before, OrgPreference.count,
                  "an app-issued refresh cookie must not resolve to any Org preference; org bootstraps its own"
   end

@@ -7,7 +7,25 @@ description: RESTful routes, correct verbs, path helpers, CSRF, and no hardcoded
 
 ## Policy
 
-Rails routes must be resourceful by default.
+Classify routes as A, B or C before adding or revising them.
+
+- **A — normally allowed:** `resource` / `resources` using only the standard actions `index`,
+  `show`, `new`, `edit`, `create`, `update` and `destroy`. Permitted `namespace`, `scope` and host
+  constraint wrappers may establish module, helper, path or host boundaries. A wrapper does not
+  authorize a non-resourceful route inside it.
+- **B — approved exception:** an exact exception already approved and recorded in the routing ADR,
+  or an exception explicitly approved by the user and recorded there before implementation. The ADR
+  entry identifies the purpose, route file and extent (host, path, method, controller/action and
+  helper), reason, approval source and reference. Existing protocol and infrastructure exception
+  classes remain limited to their stated purpose; a category is not blanket approval for new
+  business routes.
+- **C — normally prohibited:** anything outside A or B, including unapproved business-specific
+  actions, custom `member` / `collection` routes, `match`, routes built from request or database
+  input, and route-level overrides without a matching approval. Existing C routes are debt: record
+  and annotate them only within an authorized scope; do not silently rewrite them.
+
+Using `get` or `post` does not by itself make a route B. Route-level `path:`, `controller:`, `to:`,
+`as:` and `defaults:` remain restricted; do not confuse those with permitted boundary wrappers.
 
 Use only:
 
@@ -19,8 +37,7 @@ for application route declarations.
 Boundary wrappers are allowed when they do not define custom actions by themselves:
 
 - `namespace`
-- `scope module: ...`
-- `scope(module: ..., as: ...)`
+- `scope` forms used to establish module, helper or path boundaries
 - `constraints(host: ...)`
 - `constraints(subdomain: ...)`
 
@@ -103,8 +120,7 @@ context.
 The following boundary primitives are allowed and do not require approval by themselves:
 
 - `namespace`
-- `scope module: ...`
-- `scope(module: ..., as: ...)`
+- `scope` wrappers used only to establish module, helper or path boundaries
 - `constraints(host: ...)`
 - `constraints(subdomain: ...)`
 
@@ -115,7 +131,8 @@ Routes inside these blocks still need to follow the resourceful routing policy.
 Some routes are external, protocol, or infrastructure contracts and may need non-standard paths or
 route options. Even for these categories, keep the route as resourceful as possible.
 
-The pre-approved categories are:
+The routing ADR records the existing approved categories below. Each route must stay within the
+category's protocol or infrastructure purpose and its recorded extent:
 
 - `root`
 - health check endpoints
@@ -135,13 +152,24 @@ The pre-approved categories are:
 - framework-generated routes
 - redirect-only legacy compatibility routes
 
+`root` and any mounted application that answers at `/` count toward a maximum of one root definition
+per concrete FQDN. Count host aliases across all route files, including overlapping and
+unconstrained routes; route priority determines the effective response but does not erase a duplicate
+definition. Record duplicates and their effective order without fixing them in a documentation-only
+step.
+
+The Rails routing DSL option `param:` is existing debt unless an individual route approval is
+cited in the ADR. Do not add new `param:` uses. Keep Rails' default `:id` route parameter and resolve
+public identifiers through the established model/controller contract.
+
 ## Exception process
 
-If a route cannot be represented with `resource` or `resources`, stop before implementing it.
+If a route cannot be represented with `resource` or `resources`, stop before implementing it unless
+an applicable B exception already exists.
 
 Do not silently add the route.
 
-The implementer must ask the user for permission and provide:
+For a new exception, the implementer must ask the user for permission and provide:
 
 1. proposed route
 2. reason `resource` / `resources` cannot express it
@@ -176,6 +204,15 @@ The ADR must include:
 - risk assessment
 
 Do not add a non-resourceful route exception without updating the ADR.
+
+When an authorized step annotates existing C debt, use one English FIXME per group of routes with a
+shared reason, state its extent, future direction and concrete risk, and cite the ADR section:
+
+```ruby
+# FIXME: [routing] <Current issue>. <Intended direction>. <Concrete risk>. See <ADR/section>.
+```
+
+Do not invent a risk or add a FIXME merely because an approved engine is mounted.
 
 ## Safety
 

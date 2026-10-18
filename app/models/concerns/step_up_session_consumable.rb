@@ -1,0 +1,210 @@
+# typed: false
+# frozen_string_literal: true
+
+module StepUpSessionConsumable
+  extend ActiveSupport::Concern
+
+  class ChallengeError < StandardError; end
+
+  public
+
+  VERIFICATION_PURPOSES = %w(step_up reauthentication).freeze
+  REGISTRATION_PURPOSES = %w(bootstrap credential_registration).freeze
+  MAX_CHALLENGE_REF_COLLISION_RETRIES = 3
+
+  def revoke_authority!
+    self.class.revoke_authority_for!(id: id)
+    reload
+  end
+
+  def issue_bound_passkey_challenge!(transaction:, challenge:, rp_id:, origin:)
+    issue_passkey_challenge_for!(
+      transaction: transaction, challenge: challenge, rp_id: rp_id, origin: origin, purposes: VERIFICATION_PURPOSES,
+    )
+  end
+
+  # A registration challenge belongs to a registration permission and can never be consumed as an
+  # assertion challenge, nor the reverse: each consumer names the purposes it accepts.
+  def issue_bound_passkey_registration_challenge!(transaction:, challenge:, rp_id:, origin:)
+    issue_passkey_challenge_for!(
+      transaction: transaction, challenge: challenge, rp_id: rp_id, origin: origin, purposes: REGISTRATION_PURPOSES,
+    )
+  end
+
+  def consume_bound_passkey_challenge!(transaction:, reference:, rp_id:, origin:)
+    consume_passkey_challenge_for!(
+      transaction: transaction, reference: reference, rp_id: rp_id, origin: origin, purposes: VERIFICATION_PURPOSES,
+    )
+  end
+
+  def consume_bound_passkey_registration_challenge!(transaction:, reference:, rp_id:, origin:)
+    consume_passkey_challenge_for!(
+      transaction: transaction, reference: reference, rp_id: rp_id, origin: origin, purposes: REGISTRATION_PURPOSES,
+    )
+  end
+
+  private
+
+  def issue_passkey_challenge_for!(transaction:, challenge:, rp_id:, origin:, purposes:)
+    unless challenge.is_a?(String) && challenge.present? && challenge.exclude?("\0") &&
+        rp_id.is_a?(String) && rp_id.present? &&
+        origin.is_a?(String) && origin.present?
+      raise ArgumentError, "Passkey challenge binding is required"
+    end
+
+    Webauthn::RelyingPartyConfig.new(rp_id: rp_id, origin: origin)
+
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      with_lock do
+        transaction.with_lock do
+          now = transaction.class.database_now
+          validate_passkey_transaction!(transaction, now: now, purposes: purposes)
+          deadline = [passkey_challenge_expires_at || (now + 10.minutes), transaction.expires_at].min
+          raise ChallengeError, "challenge expired" if deadline <= now
+
+          persist_bound_passkey_challenge!(
+            challenge:, rp_id:, origin:, deadline:,
+          )
+        end
+      end
+    end
+  end
+
+  def persist_bound_passkey_challenge!(challenge:, rp_id:, origin:, deadline:)
+    retries = 0
+
+    loop do
+      reference = PublicId.generate
+      begin
+        self.class.transaction(requires_new: true) do
+          update!(
+            passkey_challenge: challenge, passkey_challenge_ref: reference,
+            passkey_rp_id: rp_id, passkey_origin: origin,
+            passkey_challenge_expires_at: deadline, passkey_challenge_consumed_at: nil,
+          )
+        end
+        return reference
+      rescue ActiveRecord::RecordNotUnique => e
+        raise unless passkey_challenge_ref_constraint_names.include?(postgres_constraint_name(e))
+
+        retries += 1
+        raise if retries > MAX_CHALLENGE_REF_COLLISION_RETRIES
+      end
+    end
+  end
+
+  def consume_passkey_challenge_for!(transaction:, reference:, rp_id:, origin:, purposes:)
+    challenge = nil
+    failure = nil
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      with_lock do
+        transaction.with_lock do
+          now = transaction.class.database_now
+          validate_passkey_transaction!(transaction, now: now, purposes: purposes)
+          unless reference.is_a?(String) && reference.present? && reference == passkey_challenge_ref &&
+              passkey_challenge_consumed_at.nil? && passkey_challenge.present?
+            raise ChallengeError, "challenge unavailable"
+          end
+
+          # Commit the burn before raising for an expired or mismatched assertion. A rescue outside
+          # this transaction must not resurrect a challenge after signature verification fails.
+          update!(passkey_challenge_consumed_at: now)
+          if passkey_challenge_expires_at <= now || passkey_rp_id != rp_id || passkey_origin != origin
+            failure = ChallengeError
+          else
+            challenge = passkey_challenge
+          end
+        end
+      end
+    end
+    raise failure, "challenge rejected" if failure
+
+    challenge
+  end
+
+  def validate_passkey_transaction!(transaction, now:, purposes:)
+    unless transaction.is_a?(passkey_transaction_model) &&
+        step_up_ceremony_transaction_ref == transaction.transaction_id &&
+        transaction.session_ref == passkey_session_token.public_id &&
+        purposes.include?(transaction.purpose) && transaction.status == "pending" &&
+        !transaction.expired?(now: now) && transaction.allowed_methods_array.include?("passkey") &&
+        status == "PENDING" && discard_at > now
+      raise ChallengeError, "ceremony unavailable"
+    end
+  end
+
+  def passkey_challenge_ref_constraint_names
+    self.class.lease_connection.schema_cache.indexes(self.class.table_name).filter_map do |index|
+      index.name if index.unique && index.where.nil? && index.columns == ["passkey_challenge_ref"]
+    end
+  end
+
+  def postgres_constraint_name(error)
+    result = error.cause&.result
+    return unless result
+
+    result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  class_methods do
+    public
+
+    def revoke_authority_for!(id:)
+      revoke_matching_authority!({ id: id })
+    end
+
+    def revoke_for_token!(token:)
+      key =
+        if self == ClientStepUpSession && token.is_a?(ClientToken)
+          :user_token_id
+        elsif self == VisitorStepUpSession && token.is_a?(VisitorToken)
+          :visitor_token_id
+        elsif self == OperatorStepUpSession && token.is_a?(OperatorToken)
+          :staff_token_id
+        else
+          raise ArgumentError, "step-up revocation realm mismatch"
+        end
+      revoke_matching_authority!({ key => token.id })
+    end
+
+    # Runs the one-time completion work while holding the session row lock. A nil block result
+    # leaves the row untouched; a successful result destroys the pending row before the transaction
+    # commits. This keeps a concurrent worker from issuing a second step-up result.
+    def consume_pending!(id:, now: Time.current)
+      raise ArgumentError, "a completion block is required" unless block_given?
+
+      result = nil
+      transaction do
+        locked = lock.find_by(id: id)
+        if locked&.status == "PENDING" && locked.discard_at > now
+          candidate = yield locked
+          unless candidate.nil?
+            locked.destroy!
+            result = candidate
+          end
+        end
+      end
+      result
+    end
+
+    private
+
+    def revoke_matching_authority!(conditions)
+      connection_class_for_self.connected_to(role: :writing) do
+        transaction do
+          record = where(conditions).lock.first
+          return unless record
+
+          now = database_now
+          attributes = { discard_at: record.accessible?(now) ? now : record.discard_at }
+          if record.passkey_challenge.present?
+            attributes[:passkey_challenge] = nil
+            attributes[:passkey_challenge_consumed_at] = record.passkey_challenge_consumed_at || now
+          end
+          record.update!(attributes)
+          record
+        end
+      end
+    end
+  end
+end

@@ -36,10 +36,16 @@ class CorePreferenceApiSurfaceSmokeTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_equal "application/json", response.media_type
 
+      # A body without a consent decision is a validation problem, not a credential failure.
       patch "https://#{host}#{surface.fetch(:cookie_path)}", params: { ri: "jp", value: "1" }, as: :json
 
-      assert_response :unauthorized
-      assert_equal "missing_preference_access_token", response.parsed_body.fetch("error")
+      assert_response :unprocessable_content
+      assert_equal "application/problem+json", response.media_type
+      assert_equal ["/cookie/consented"], response.parsed_body.fetch("errors").pluck("pointer")
+
+      patch "https://#{host}#{surface.fetch(:cookie_path)}", params: { cookie: { consented: true } }, as: :json
+
+      assert_response :no_content
 
       get "https://#{host}#{surface.fetch(:theme_path)}", params: { ri: "jp" }
 
@@ -48,8 +54,14 @@ class CorePreferenceApiSurfaceSmokeTest < ActionDispatch::IntegrationTest
 
       patch "https://#{host}#{surface.fetch(:theme_path)}", params: { ri: "jp", value: "dark" }, as: :json
 
+      assert_response :unprocessable_content
+      assert_equal ["/theme"], response.parsed_body.fetch("errors").pluck("pointer")
+
+      patch "https://#{host}#{surface.fetch(:theme_path)}", params: { theme: "dark" }, as: :json
+
       assert_response :success
       assert_equal "application/json", response.media_type
+      assert_equal "dr", response.parsed_body.fetch("theme")
 
       post "https://#{host}#{surface.fetch(:dbsc_path)}", params: { ri: "jp" }, as: :json
 

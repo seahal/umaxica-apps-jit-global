@@ -1,49 +1,44 @@
-# typed: false
 # frozen_string_literal: true
 
-# Authorization for the app (client) secret-credential management.
-#
-# `Sign::App::Settings::SecretCredentialsController` scopes every lookup to
-# `current_client.client_secret_credentials`, so row-level ownership is enforced by the controller.
-# This policy adds object-level authorization: listing/registration are allowed for any client
-# actor; per-record actions require ownership (record.user_id == user.id). Step-up and Turnstile
-# guards remain on the controller's verification before_actions.
+# Ownership layer for app Secret management. Mutating callers must additionally
+# enforce their operation-specific Step-Up requirement and current session binding.
 class ClientSecretCredentialPolicy < ApplicationPolicy
+  public
+
   def index?
-    user.is_a?(Client)
+    persisted_client?
   end
 
   def create?
-    user.is_a?(Client)
-  end
-
-  def new?
-    create?
+    persisted_client?
   end
 
   def show?
-    owner?
+    credential_owner?
   end
 
   def update?
-    owner?
-  end
-
-  def edit?
-    update?
+    credential_owner?
   end
 
   def destroy?
-    owner?
-  end
-
-  def regenerate?
-    owner?
+    credential_owner?
   end
 
   relation_scope do |relation|
-    return relation.none unless user
+    return relation.none unless persisted_client?
 
-    relation.where(user_id: user.id)
+    relation.where(client_id: user.id)
+  end
+
+  private
+
+  def persisted_client?
+    user.is_a?(Client) && user.persisted?
+  end
+
+  def credential_owner?
+    persisted_client? && record.is_a?(ClientSecretCredential) &&
+      record.persisted? && record.client_id == user.id
   end
 end

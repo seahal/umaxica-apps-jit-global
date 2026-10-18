@@ -14,6 +14,11 @@ module Concerns
       .reject { |f| f.include?("/sign/com/") }
       .reject { |f| f.include?("/jump/") }
       .reject { |f| f.include?("/palm/") }
+      # The Base developer and network faces are OIDC/OAuth Non-Participants that serve only a
+      # landing page, so they carry no actor/session lifecycle. See
+      # adr/oidc-oauth-participation-allowlist-and-non-participant-surfaces.md.
+      .reject { |f| f.include?("/base/dev/") }
+      .reject { |f| f.include?("/base/net/") }
       .sort
     CONTROLLER_FILES =
       ALL_CONTROLLER_FILES.index_with do |file|
@@ -195,19 +200,18 @@ module Concerns
       end
     end
 
-    # Wedge: every full-lifecycle surface controller must enforce the restricted-session
-    # guard. Regression guard against core/side surfaces silently dropping it again.
-    test "all lifecycle application controllers enforce the restricted session guard" do
+    # Wedge: the retired session-limit placeholder must not reintroduce a controller guard.
+    test "lifecycle application controllers do not register the retired restricted-session guard" do
       lifecycle_controllers.each do |controller|
         content = controller[:content]
         controller_name = controller[:path_name]
 
-        assert_includes content, "RestrictedSessionGuard",
-                        "#{controller_name} should include RestrictedSessionGuard (guard drift)"
-        assert_match(
+        assert_not_includes content, "RestrictedSessionGuard",
+                            "#{controller_name} reintroduced the retired restricted-session guard"
+        assert_no_match(
           /before_action :enforce_restricted_session_guard!$/,
           content,
-          "#{controller_name} should run enforce_restricted_session_guard! (guard drift)",
+          "#{controller_name} reintroduced the retired restricted-session callback",
         )
       end
     end
@@ -216,7 +220,7 @@ module Concerns
     # timezone alongside locale. Regression guard against auth/app losing set_timezone.
     test "app surface lifecycle controllers reflect timezone" do
       app_controllers =
-        lifecycle_controllers.select { |controller| controller[:content].include?("AuthenticationClient") }
+        lifecycle_controllers.select { |controller| controller[:path_name].end_with?("::app") }
 
       assert_operator app_controllers.length, :>=, 3,
                       "expected multiple app-surface lifecycle controllers"

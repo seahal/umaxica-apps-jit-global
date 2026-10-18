@@ -9,19 +9,7 @@ module Base
 
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
-
-        def create
-          record = AvatarFollow.new(follower_avatar: actor_avatar, followed_avatar: target_avatar)
-          authorize!(record, to: :create?, with: AvatarFollowPolicy, context: { user: actor_avatar })
-          render_edge(AvatarSocialGraph::Follow.call(actor_avatar: actor_avatar, target_avatar: target_avatar))
-        end
-
-        def destroy
-          record = AvatarFollow.find_by!(follower_avatar: actor_avatar, followed_avatar: target_avatar)
-          authorize!(record, to: :destroy?, with: AvatarFollowPolicy, context: { user: actor_avatar })
-          AvatarSocialGraph::Unfollow.call(actor_avatar: actor_avatar, target_avatar: target_avatar)
-          head :no_content
-        end
+        EDGE_KIND = "follows"
       end
     end
   end

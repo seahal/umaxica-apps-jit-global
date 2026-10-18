@@ -11,34 +11,53 @@ module RefreshTokenable
 
   REFRESH_TTL = SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :ensure_lapses_at, on: :create
     before_validation :ensure_refresh_token_family_id, on: :create
     before_validation :ensure_refresh_token_generation, on: :create
     before_validation :ensure_device_session_record, on: :create
+    after_create :set_initial_device_session_current_token
     validates :refresh_token_digest, uniqueness: true, allow_nil: true
   end
 
   class_methods do
-    def rotate_refresh!(presented_refresh_digest:, now: Time.current)
+    def rotate_refresh!(presented_refresh_digest:, now: nil)
       return { status: :invalid, token: nil } if presented_refresh_digest.blank?
 
       operation =
         lambda do
           transaction do
-            current_token = lock_refresh_token_record_by_digest(
-              presented_refresh_digest,
-              digest_column: :refresh_token_digest,
-              now: now,
-            )
+            decision_time = now || database_now
+            candidate = where(refresh_token_digest: presented_refresh_digest).select(:id, :device_session_id).first
+            return { status: :invalid, token: nil } unless candidate
 
-            return { status: :invalid, token: nil } unless current_token
+            device_session = device_session_class.lock.find_by(id: candidate.device_session_id)
+            return { status: :invalid, token: nil } unless device_session&.usable?
+
+            current_token_id = device_session.current_refresh_token_id
+            return { status: :invalid, token: nil } unless current_token_id
+
+            unless current_token_id == candidate.id
+              replay_token = find_by(id: candidate.id)
+              return { status: :replay, token: replay_token } if replay_token&.rotated_at.present?
+
+              return { status: :invalid, token: replay_token }
+            end
+
+            current_token = lock.find(current_token_id)
             return { status: :replay, token: current_token } if current_token.rotated_at.present?
-            return { status: :invalid, token: current_token } unless current_token.currently_usable?(now)
+            return { status: :invalid, token: current_token } unless current_token.active_status?(decision_time)
 
-            current_token.update!(rotated_at: now, last_used_at: now, updated_at: now)
+            current_token.assign_attributes(
+              rotated_at: decision_time,
+              last_used_at: decision_time,
+              updated_at: decision_time,
+            )
+            current_token.save!(touch: false)
 
-            replacement, raw_refresh_token = create_rotated_token_record!(current_token)
+            replacement, raw_refresh_token = create_rotated_token_record!(current_token, now: decision_time)
+            current_token.revoke_step_up_authority!(now: decision_time)
 
             {
               status: :rotated,
@@ -52,9 +71,72 @@ module RefreshTokenable
       defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     end
 
+    # Full reauthentication replaces the root token row while retaining the same Device Session.
+    # The caller owns the surrounding ceremony transaction and decides when the predecessor's
+    # step-up authority is retired. This primitive only performs the ordered root replacement and
+    # returns the new row; it never exposes the raw predecessor verifier.
+    def replace_current_for_reauthentication!(token:, authentication_event_at:, established_authentication_method:,
+                                              now: nil)
+      raise ArgumentError, "token class mismatch" unless token.is_a?(self)
+      raise ArgumentError, "authentication event time is required" unless authentication_event_at.respond_to?(:to_time)
+
+      transaction do
+        decision_time = now || database_now
+        device_session = device_session_class.lock.find_by(id: token.device_session_id)
+        raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session&.usable?
+
+        current_token = lock.find_by(id: device_session.current_refresh_token_id)
+        unless current_token&.id == token.id && current_token.active_status?(decision_time)
+          raise RpSession::IssuanceRejected, "Browser Session current root token changed"
+        end
+
+        current_token.assign_attributes(
+          rotated_at: decision_time, last_used_at: decision_time,
+          updated_at: decision_time,
+        )
+        current_token.save!(touch: false)
+
+        attrs = rotated_token_attributes(current_token)
+        copy_attribute_if_present(attrs, current_token, :root_login_established_at)
+        copy_attribute_if_present(attrs, current_token, :authentication_context)
+        if column_names.include?("authentication_event_at")
+          attrs[:authentication_event_at] = authentication_event_at
+        end
+        if column_names.include?("established_authentication_method")
+          attrs[:established_authentication_method] = established_authentication_method
+        end
+
+        release_unique_dbsc_session_id!(current_token)
+        replacement = new(attrs)
+        replacement.skip_session_limit_check = true if replacement.respond_to?(:skip_session_limit_check=)
+        replacement.save!
+
+        raw_refresh_token, verifier = generate_refresh_token(public_id: replacement.public_id)
+        replacement.update!(refresh_token_digest: digest_refresh_token(verifier))
+        update_device_session_after_rotation!(current_token, replacement, now: decision_time)
+
+        {
+          previous_token: current_token,
+          token: replacement,
+          refresh_token: raw_refresh_token,
+          now: decision_time,
+        }
+      end
+    end
+
     private
 
-    def create_rotated_token_record!(previous_token)
+    def device_session_class
+      case name
+      when "ClientToken" then ClientDeviceSession
+      when "VisitorToken" then VisitorDeviceSession
+      when "OperatorToken" then OperatorDeviceSession
+      else
+        raise FlowConfigurationError, "#{name} does not define a device-session owner"
+      end
+    end
+
+    def create_rotated_token_record!(previous_token, now: nil)
       attrs = rotated_token_attributes(previous_token)
       release_unique_dbsc_session_id!(previous_token) if attrs[:dbsc_session_id].present?
       replacement = new(attrs)
@@ -63,7 +145,7 @@ module RefreshTokenable
 
       raw_refresh_token, verifier = generate_refresh_token(public_id: replacement.public_id)
       replacement.update!(refresh_token_digest: digest_refresh_token(verifier))
-      update_device_session_after_rotation!(previous_token, replacement)
+      update_device_session_after_rotation!(previous_token, replacement, now: now)
       [replacement, raw_refresh_token]
     end
 
@@ -71,14 +153,28 @@ module RefreshTokenable
       attrs = rotated_token_core_attributes(previous_token)
       copy_rotated_token_optional_attributes(attrs, previous_token)
       copy_rotated_token_binding_attributes(attrs, previous_token)
+      copy_rotated_token_authentication_context(attrs, previous_token)
       attrs
+    end
+
+    # Rotation replaces the session row, so anything the replacement does not
+    # copy is silently dropped. The authentication context must not be: a
+    # Restricted Mode session that rotated into a row with no context would
+    # become a Normal session, which is exactly the upgrade the design forbids.
+    # Kept as its own step rather than one more line in the optional-attribute
+    # list, because this one is a security invariant
+    # (docs/security/org-emergency-access.md).
+    def copy_rotated_token_authentication_context(attrs, previous_token)
+      return unless previous_token.has_attribute?(:authentication_context)
+
+      attrs[:authentication_context] = previous_token.authentication_context
     end
 
     def rotated_token_core_attributes(previous_token)
       {
         refresh_token_family_id: previous_token.refresh_token_family_id.presence || SecureRandom.uuid,
         refresh_token_generation: Integer(previous_token.refresh_token_generation.to_s, 10) + 1,
-        discarded_at: previous_token.discarded_at,
+        discard_at: previous_token.discard_at,
         dbsc_session_id: previous_token.dbsc_session_id,
         dbsc_public_key: previous_token.dbsc_public_key,
         dbsc_challenge: previous_token.dbsc_challenge,
@@ -89,11 +185,12 @@ module RefreshTokenable
     def copy_rotated_token_optional_attributes(attrs, previous_token)
       copy_attribute_if_present(attrs, previous_token, :device_session_id)
       copy_attribute_if_present(attrs, previous_token, :dpop_jkt)
-      copy_attribute_if_present(attrs, previous_token, :purged_at)
+      copy_attribute_if_present(attrs, previous_token, :purge_eligible_at)
       copy_attribute_if_present(attrs, previous_token, :oidc_connection_id)
       copy_attribute_if_present(attrs, previous_token, :oidc_client_id)
       copy_attribute_if_present(attrs, previous_token, :oidc_scope)
       copy_attribute_if_present(attrs, previous_token, :oidc_sid)
+      copy_attribute_if_present(attrs, previous_token, :authentication_event_at)
 
       actor_key = actor_foreign_key_from(previous_token)
       token_status_key = token_status_key_from(previous_token)
@@ -120,16 +217,18 @@ module RefreshTokenable
       attrs[name] = previous_token.public_send(name) if previous_token.has_attribute?(name)
     end
 
-    def update_device_session_after_rotation!(previous_token, replacement)
-      return unless replacement.respond_to?(:device_session)
+    def update_device_session_after_rotation!(previous_token, replacement, now: nil)
+      return unless replacement.has_attribute?(:device_session_id)
 
-      device_session = replacement.device_session || previous_token.try(:device_session)
-      return if device_session.blank?
+      device_session_id = replacement.device_session_id || previous_token.device_session_id
+      return if device_session_id.blank?
+
+      device_session = device_session_class.find(device_session_id)
 
       attrs = {
         current_refresh_token_id: replacement.id,
         refresh_token_family_id: replacement.refresh_token_family_id,
-        last_seen_at: Time.current,
+        last_seen_at: now || replacement.class.database_now,
       }
       attrs[:dpop_jkt] = replacement.dpop_jkt if replacement.has_attribute?(:dpop_jkt)
       # rubocop:disable Rails/SkipsModelValidations
@@ -166,12 +265,33 @@ module RefreshTokenable
     end
   end
 
+  public
+
+  def device_session_record
+    return if device_session_id.blank?
+
+    device_session_class.find_by(id: device_session_id)
+  end
+
+  def device_session_record!
+    device_session_class.find(device_session_id)
+  end
+
+  def actor_record
+    case self
+    when ClientToken then Client.find_by(id: user_id)
+    when VisitorToken then Visitor.find_by(id: visitor_id)
+    when OperatorToken then Operator.find_by(id: staff_id)
+    else
+      raise FlowConfigurationError, "#{self.class.name} does not define an actor owner"
+    end
+  end
+
   # Whether the refresh token has expired.
   def expired_refresh?
-    return false if discarded_at.blank?
-    return false if discarded_at.respond_to?(:infinite?) && discarded_at.infinite?
+    return true unless SessionAbsoluteExpiryValue.finite?(discard_at)
 
-    discarded_at <= Time.current
+    discard_at <= Time.current
   end
 
   # Whether the token is active.
@@ -180,24 +300,27 @@ module RefreshTokenable
   end
 
   # Rotate (refresh) the token and return the raw token for the client.
-  def rotate_refresh_token!(discarded_at: nil)
+  def rotate_refresh_token!(discard_at: nil, now: nil)
     # Use a transaction to keep token state consistent.
     transaction do
+      now ||= self.class.database_now
       token, verifier = generate_refresh_token(public_id: public_id)
 
       self.refresh_token_digest = digest_refresh_token(verifier)
-      self.discarded_at =
-        if discarded_at
-          discarded_at
-        elsif self.discarded_at.respond_to?(:infinite?) && self.discarded_at.infinite?
-          default_lapses_at
+      self.discard_at =
+        if discard_at
+          SessionAbsoluteExpiryValue.cap(proposed_expiry: discard_at, absolute_expiry: self.discard_at)
+        elsif self.discard_at.respond_to?(:infinite?) && self.discard_at.infinite?
+          default_lapses_at(now: now)
         else
-          self.discarded_at
+          self.discard_at
         end
-      self.last_used_at = Time.current
+      self.last_used_at = now
       self.refresh_token_generation = Integer(refresh_token_generation.to_s, 10) + 1
       save!
-      self.class.send(:update_device_session_after_rotation!, self, self) if respond_to?(:device_session)
+      if has_attribute?(:device_session_id)
+        update_device_session_after_rotation!(self, self, now: now)
+      end
 
       # Return the combined token for the client.
       token
@@ -225,14 +348,45 @@ module RefreshTokenable
 
   private
 
-  def default_lapses_at
-    Time.current + REFRESH_TTL
+  def update_device_session_after_rotation!(previous_token, replacement, now: nil)
+    device_session_id = replacement.device_session_id || previous_token.device_session_id
+    return if device_session_id.blank?
+
+    device_session = device_session_class.find(device_session_id)
+    attrs = {
+      current_refresh_token_id: replacement.id,
+      refresh_token_family_id: replacement.refresh_token_family_id,
+      last_seen_at: now || self.class.database_now,
+    }
+    attrs[:dpop_jkt] = replacement.dpop_jkt if replacement.has_attribute?(:dpop_jkt)
+    # rubocop:disable Rails/SkipsModelValidations
+    device_session.update_columns(attrs)
+    # rubocop:enable Rails/SkipsModelValidations
+  end
+
+  def set_initial_device_session_current_token
+    return unless has_attribute?(:device_session_id)
+    return if device_session_id.blank?
+
+    device_session = device_session_class.find(device_session_id)
+    self.device_session = device_session
+    return if device_session.current_refresh_token_id.present?
+
+    device_session.update!(
+      current_refresh_token_id: id,
+      refresh_token_family_id: refresh_token_family_id,
+      last_seen_at: self.class.database_now,
+    )
+  end
+
+  def default_lapses_at(now: nil)
+    (now || self.class.database_now) + REFRESH_TTL
   end
 
   def ensure_lapses_at
-    return if discarded_at.present? && !(discarded_at.respond_to?(:infinite?) && discarded_at.infinite?)
+    return if discard_at.present? && !(discard_at.respond_to?(:infinite?) && discard_at.infinite?)
 
-    self.discarded_at = default_lapses_at
+    self.discard_at = default_lapses_at
   end
 
   def ensure_refresh_token_family_id
@@ -249,13 +403,14 @@ module RefreshTokenable
 
     klass = device_session_class
     actor_key = device_session_actor_key
-    return unless klass && actor_key && public_send(actor_key).present?
+    actor_id = self[actor_key]
+    raise ActiveRecord::RecordInvalid.new(self), "device-session actor is missing" if actor_id.blank?
 
     attrs = {
-      actor_key => public_send(actor_key),
+      actor_key => actor_id,
       :dpop_jkt => has_attribute?(:dpop_jkt) ? dpop_jkt.presence : nil,
       :refresh_token_family_id => refresh_token_family_id,
-      :last_seen_at => Time.current,
+      :last_seen_at => self.class.database_now,
     }
     operation =
       lambda do
@@ -271,13 +426,16 @@ module RefreshTokenable
     when "ClientToken" then ClientDeviceSession
     when "OperatorToken" then OperatorDeviceSession
     when "VisitorToken" then VisitorDeviceSession
+    else
+      raise FlowConfigurationError, "#{self.class.name} does not define a device-session owner"
     end
   end
 
   def device_session_actor_key
     return :user_id if has_attribute?(:user_id)
     return :staff_id if has_attribute?(:staff_id)
+    return :visitor_id if has_attribute?(:visitor_id)
 
-    :visitor_id if has_attribute?(:visitor_id)
+    raise FlowConfigurationError, "#{self.class.name} does not define a device-session actor"
   end
 end

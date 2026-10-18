@@ -20,22 +20,24 @@ module OutboundHttp
 
     class InsecureEndpointError < StandardError; end
 
-    # `require_https` has no default on purpose. Most callers reach fixed HTTPS
-    # provider endpoints, but OidcBackchannelLogoutDeliveryJob posts to
-    # registry-supplied relying-party URIs whose scheme is decided by the
-    # registration, so the policy has to be stated per call site rather than
-    # assumed here.
+    # `require_https` has no default on purpose: the transport policy is stated
+    # at each call site rather than assumed here.
     #
     # `write_timeout` is genuinely optional: only the Google JWKS fetch pins one.
     def self.build(url:, open_timeout:, read_timeout:, require_https:, write_timeout: nil)
-      uri = url.is_a?(URI::Generic) ? url : URI.parse(url.to_s)
+      # Faraday mutates the URI it is handed (Faraday::Connection#url_prefix=
+      # assigns #path on it). Call sites legitimately pass a shared class
+      # constant -- JitSecurityTurnstileVerifier::VERIFY_URI is frozen, others
+      # are merely shared -- so build always works on a private copy: a frozen
+      # constant would otherwise raise FrozenError, and a shared mutable one
+      # would be rewritten under other threads.
+      uri = (url.is_a?(URI::Generic) ? url.dup : URI.parse(url.to_s))
       raise InsecureEndpointError, "outbound HTTP endpoint must be HTTPS" if require_https && !uri.is_a?(URI::HTTPS)
 
       Faraday.new(url: uri) do |builder|
         builder.request(:url_encoded)
-        # No follow_redirects: OidcBackchannelLogoutDeliveryJob posts to an
-        # allowlisted destination, and following a redirect off that list would
-        # reintroduce the SSRF the allowlist exists to prevent.
+        # No follow_redirects: callers reach fixed endpoints, and following a
+        # redirect elsewhere would reintroduce SSRF.
         builder.adapter(default_adapter)
         builder.options.open_timeout = open_timeout
         builder.options.timeout = read_timeout

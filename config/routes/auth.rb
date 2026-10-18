@@ -12,7 +12,6 @@ scope(module: :auth, as: :auth) do
   ) do
     scope(module: :app, as: :app) do
       root "roots#index"
-      resource :dashboard, only: :show
       resources :billings, only: :index
 
       namespace(:well_known, path: ".well-known") do
@@ -42,6 +41,7 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
+      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -56,23 +56,16 @@ scope(module: :auth, as: :auth) do
 
       # Canonical ceremony entrypoints and authed-out confirmation/cleanup.
       namespace :sign do
-        resource :registration, only: :show, path: "up", controller: :ups, as: :up
-        resource :session, only: :show, path: "in", controller: :ins, as: :in
-        resource :termination, only: %i(new edit create destroy), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+        resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
+        resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
+        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :handoff, only: %i(show create)
+        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
-      namespace(:oidc) do
-        resource(:authorization, only: :show)
-        resource(:callback, only: :show)
+      # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
 
-        namespace(:backchannel) do
-          resource(:logout, only: :create)
-        end
-      end
-
-      # Public web API: OTP delivery, cookie consent, theme.
+      # Public web API: OTP delivery (a ceremony endpoint, not migrated).
       namespace :web do
         namespace :v0 do
           namespace :in do
@@ -80,9 +73,21 @@ scope(module: :auth, as: :auth) do
               resource :otp, only: :create
             end
           end
+        end
+      end
 
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
+        namespace :v0 do
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -129,7 +134,9 @@ scope(module: :auth, as: :auth) do
             namespace(:telephone) do
               resource(:otp, only: %i(show create update destroy))
               resource(:passkey, only: %i(show create update destroy))
-              resource(:passcode, only: %i(show update destroy))
+              resource(:secret, only: %i(show create update destroy)) do
+                post :reattempt
+              end
               resource(:birthdate, only: %i(show update destroy))
             end
           end
@@ -137,21 +144,20 @@ scope(module: :auth, as: :auth) do
 
         # Sign-in ceremony.
         namespace :in do
-          resource :email, only: %i(new create edit update)
+          resource :email, only: %i(new create edit update destroy)
 
           resource :passkey, only: :new
+          resource :secret, only: %i(new create)
           namespace :passkey do
             resource :options, only: :create
             resource :verification, only: :create
           end
 
-          resource :secret, only: %i(new create)
-          resource :session, only: %i(show update destroy)
-
           resource :guard, only: :show
           resource :check, only: :show
 
-          resource :challenge, only: :show
+          # `destroy` cancels the pending second-factor ceremony.
+          resource :challenge, only: %i(show destroy)
           namespace :challenge do
             resource :totp, only: %i(new create)
             resource :passkey, only: %i(new create)
@@ -160,6 +166,7 @@ scope(module: :auth, as: :auth) do
       end
 
       namespace(:social) do
+        resource :link_completion, only: :create
         # Non-resourceful exception: OmniAuth middleware owns these fixed provider callback paths.
         get(
           "google/callback",
@@ -201,14 +208,22 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: :new
+        resource :setup, only: %i(new create)
+        resource :handoff, only: %i(show create)
+        post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
         resource :totp, only: %i(new create)
+
+        namespace :registration do
+          post "passkey/options", to: "passkeys#options", as: :passkey_options
+          resource :passkey, only: %i(new create)
+          resource :handoff, only: %i(show create)
+        end
 
         resources :emails, only: %i(new create edit update) do
           resource :redelivery, only: :create
@@ -218,16 +233,14 @@ scope(module: :auth, as: :auth) do
       # Settings and credential management.
       resource :settings, only: :show
       namespace :settings do
-        resources :totps, only: %i(index new create edit update destroy)
-
-        resources :passkeys do
-          resource :removal, only: :create
+        # Enrolment of a new authenticator is its own lifecycle: POST starts it with a fresh secret,
+        # DELETE ends it. Declared before `resources :totps` so `/settings/totps/enrollment` is not
+        # read as a credential id.
+        namespace :totps do
+          resource :enrollment, only: %i(create destroy)
+          resource :handoff, only: %i(show create)
         end
-
-        namespace :passkeys do
-          resource :options, only: :create
-          resource :verification, only: :create
-        end
+        resources :totps, only: %i(new create)
 
         resource :apple, only: %i(show edit create destroy)
         resource :google, only: %i(show edit create destroy)
@@ -242,7 +255,6 @@ scope(module: :auth, as: :auth) do
   ) do
     scope(module: :com, as: :com) do
       root "roots#index"
-      resource :dashboard, only: :show
 
       namespace(:well_known, path: ".well-known") do
         resource(:jwks, only: :show, path: "jwks.json", format: false)
@@ -271,6 +283,7 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
+      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -281,23 +294,16 @@ scope(module: :auth, as: :auth) do
 
       # Canonical ceremony entrypoints and authed-out confirmation.
       namespace :sign do
-        resource :registration, only: :show, path: "up", controller: :ups, as: :up
-        resource :session, only: :show, path: "in", controller: :ins, as: :in
-        resource :termination, only: %i(new edit create destroy), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+        resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
+        resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
+        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :handoff, only: %i(show create)
+        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
-      namespace(:oidc) do
-        resource(:authorization, only: :show)
-        resource(:callback, only: :show)
+      # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
 
-        namespace(:backchannel) do
-          resource(:logout, only: :create)
-        end
-      end
-
-      # Public web API: OTP delivery, cookie consent, theme.
+      # Public web API: OTP delivery (a ceremony endpoint, not migrated).
       namespace :web do
         namespace :v0 do
           namespace :in do
@@ -305,9 +311,21 @@ scope(module: :auth, as: :auth) do
               resource :otp, only: :create
             end
           end
+        end
+      end
 
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
+        namespace :v0 do
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -342,7 +360,6 @@ scope(module: :auth, as: :auth) do
             namespace(:telephone) do
               resource(:otp, only: %i(show create update destroy))
               resource(:passkey, only: %i(show create update destroy))
-              resource(:passcode, only: %i(show update destroy))
               resource(:birthdate, only: %i(show update destroy))
             end
           end
@@ -350,7 +367,7 @@ scope(module: :auth, as: :auth) do
 
         # Sign-in ceremony.
         namespace :in do
-          resource :email, only: %i(new create edit update)
+          resource :email, only: %i(new create edit update destroy)
 
           resource :passkey, only: :new
           namespace :passkey do
@@ -358,13 +375,11 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
-          resource :secret, only: %i(new create)
-          resource :session, only: %i(show update destroy)
-
           resource :guard, only: :show
           resource :check, only: :show
 
-          resource :challenge, only: :show
+          # `destroy` cancels the pending second-factor ceremony.
+          resource :challenge, only: %i(show destroy)
 
           namespace :challenge do
             resource :passkey, only: %i(new create)
@@ -373,13 +388,21 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: :new
+        resource :setup, only: %i(new create)
+        resource :handoff, only: %i(show create)
+        post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
+
+        namespace :registration do
+          post "passkey/options", to: "passkeys#options", as: :passkey_options
+          resource :passkey, only: %i(new create)
+          resource :handoff, only: %i(show create)
+        end
 
         resources :emails, only: %i(new create edit update) do
           resource :redelivery, only: :create
@@ -388,16 +411,6 @@ scope(module: :auth, as: :auth) do
 
       # Settings and credential management.
       resource :settings, only: :show
-      namespace :settings do
-        resources :passkeys do
-          resource :removal, only: :create
-        end
-
-        namespace :passkeys do
-          resource :options, only: :create
-          resource :verification, only: :create
-        end
-      end
     end
   end
 
@@ -408,7 +421,6 @@ scope(module: :auth, as: :auth) do
   ) do
     scope(module: :org, as: :org) do
       root "roots#index"
-      resource :dashboard, only: :show
 
       namespace(:well_known, path: ".well-known") do
         resource(:jwks, only: :show, path: "jwks.json", format: false)
@@ -437,6 +449,7 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
+      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -456,27 +469,27 @@ scope(module: :auth, as: :auth) do
 
       # Canonical ceremony entrypoints and authed-out confirmation.
       namespace :sign do
-        resource :registration, only: :show, path: "up", controller: :ups, as: :up
-        resource :session, only: :show, path: "in", controller: :ins, as: :in
-        resource :termination, only: %i(new edit create destroy), path: "out", controller: :outs, as: :out do
-          resource :completion, only: :show, path: "complete", module: :outs
-        end
+        resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
+        resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
+        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :handoff, only: %i(show create)
+        resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
       end
 
-      namespace(:oidc) do
-        resource(:authorization, only: :show)
-        resource(:callback, only: :show)
+      # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
 
-        namespace(:backchannel) do
-          resource(:logout, only: :create)
-        end
-      end
-
-      # Public web API: cookie consent, theme.
-      namespace :web do
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
         namespace :v0 do
-          resource :theme, only: %i(show update)
-          resource :cookie, only: %i(show update)
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
         end
       end
 
@@ -506,17 +519,27 @@ scope(module: :auth, as: :auth) do
             resource :verification, only: :create
           end
 
-          resource :secret, only: %i(new create)
-          resource :session, only: %i(show update destroy)
+          # Emergency Access (Restricted Mode). Org only, Passkey only, and no
+          # Entra stage: it is the way in when the Entra path is unavailable.
+          # The ceremony is the same shape as the normal passkey ceremony above
+          # because it is the same implementation with a different ceremony
+          # purpose and post-verification context; only the entry differs.
+          # There is deliberately no emergency sign-up and no emergency
+          # sign-out -- both modes terminate through the canonical
+          # /sign/out ceremony. See docs/security/org-emergency-access.md.
+          namespace :emergency do
+            resource :passkey, only: :new
+
+            namespace :passkey do
+              resource :options, only: :create
+              resource :verification, only: :create
+            end
+          end
 
           resource :guard, only: :show
           resource :check, only: :show
-
-          resource :challenge, only: :show
-
-          namespace :challenge do
-            resource :passkey, only: %i(new create)
-          end
+          # No second-factor challenge: every org sign-in completes as a passkey sign-in, which
+          # bypasses MFA, so no org state reaches MFA_PENDING.
         end
       end
 
@@ -545,28 +568,26 @@ scope(module: :auth, as: :auth) do
       end
 
       # Step-up verification.
-      resource :verification, only: :show
+      resource :verification, only: %i(show create)
       namespace :verification do
         resource :cancellation, only: :create
       end
       namespace :verification do
-        resource :setup, only: :new
+        resource :setup, only: %i(new create)
+        resource :handoff, only: %i(show create)
+        post "passkey/options", to: "passkeys#options", as: :passkey_options
         resource :passkey, only: %i(new create)
+
+        namespace :registration do
+          post "passkey/options", to: "passkeys#options", as: :passkey_options
+          resource :passkey, only: %i(new create)
+          resource :handoff, only: %i(show create)
+        end
       end
 
       # Settings and credential management.
       resource :settings, only: :show
       namespace :settings do
-        resources :passkeys do
-          resource :removal, only: :create
-        end
-
-        namespace :passkeys do
-          resource :options, only: :create
-          # Passkey (WebAuthn) assertion verification for settings-level re-auth.
-          resource :verification, only: :create
-        end
-
         resource :entra, only: %i(show edit create destroy)
       end
     end

@@ -13,11 +13,11 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
 #  token_valid_after_at        :datetime
@@ -38,11 +38,11 @@
 #  index_clients_on_access_state           (access_state)
 #  index_clients_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_clients_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_clients_on_discarded_at           (discarded_at)
+#  index_clients_on_discard_at           (discard_at)
 #  index_clients_on_mfa_level_id           (mfa_level_id)
 #  index_clients_on_mfa_status_id          (mfa_status_id)
 #  index_clients_on_public_id              (public_id) UNIQUE
-#  index_clients_on_purged_at              (purged_at) WHERE (purged_at IS NOT NULL)
+#  index_clients_on_purge_eligible_at              (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL)
 #  index_clients_on_status_id              (status_id)
 #  index_clients_on_terminated_at          (terminated_at) WHERE (terminated_at IS NOT NULL)
 #  index_clients_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
@@ -61,18 +61,16 @@
 
 # Lifecycle column reference (see adr/retention-lifecycle-column-boundary.md):
 #
-# * `discarded_at` / `purged_at` -- Retainable retention contract. The only
+# * `discard_at` / `purge_eligible_at` -- Retainable retention contract. The only
 #   columns the `RetentionPurgeJob` consults for delete eligibility.
 # * `withdrawal_started_at` -- Sign-out / withdrawal flow started.
 # * `withdrawn_at` -- Withdrawal flow finalized. Retention is independent.
 # * `deactivated_at` -- Withdrawal/suspension lifecycle marker. Reversible. Not a
 #   deletion signal. Forced administrative access removal is represented by
 #   `access_state: "admin_locked"` plus the `admin_locked_*` metadata columns.
-# * `terminated_at` -- Set by `RetentionPurgeJob#anonymize_accounts` AFTER
-#   `WithdrawalPersonalDataAnonymizer` finishes. Marks "PII has been scrubbed
-#   on this row"; distinct from `discarded_at` (logical hide) and `purged_at`
-#   (physical delete). Anonymized rows are retained for audit linkage with
-#   anonymous PII placeholders.
+# * `terminated_at` is not a PII erasure receipt: early termination can precede
+#   identifier retention and legal-hold expiry. Retained Identity rows preserve
+#   audit linkage; identifier-only purge preserves their dead histories.
 class Client < AppPrincipalRecord
   include Retainable
   include Withdrawable
@@ -85,6 +83,7 @@ class Client < AppPrincipalRecord
   include MfaStatusTrackable
   include ActorLifecycleConsistency
   include AdministrativeAccessLockable
+  include Retainable
 
   LOGIN_BLOCKED_STATUS_IDS = [ClientStatus::RESERVED].freeze
   # what is this?
@@ -98,9 +97,11 @@ class Client < AppPrincipalRecord
   ].freeze
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.user.recovery_identity_required")
 
+  encrypts :admin_locked_reason_note
+
   attribute :status_id, default: ClientStatus::NOTHING
-  mfa_level_reference ClientMfaLevel
-  mfa_status_reference ClientMfaStatus
+
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   belongs_to :user_status, class_name: "ClientStatus",
                            foreign_key: :status_id,
@@ -129,9 +130,8 @@ class Client < AppPrincipalRecord
            dependent: :destroy,
            inverse_of: :user
   has_many :client_secret_credentials,
-           foreign_key: :user_id,
-           dependent: :destroy,
-           inverse_of: :user
+           dependent: :restrict_with_error,
+           inverse_of: :client
   has_many :client_totp_credentials,
            foreign_key: :user_id,
            dependent: :destroy,
@@ -243,6 +243,21 @@ class Client < AppPrincipalRecord
            inverse_of: :user
   has_many :client_bulletins, foreign_key: :user_id, dependent: :destroy, inverse_of: :user
   has_one :rp_account, class_name: "ClientAccount", foreign_key: :user_id, dependent: :destroy, inverse_of: :user
+  has_many :client_persona_ownerships, dependent: :restrict_with_error, inverse_of: :client
+  has_many :owned_client_personas, through: :client_persona_ownerships, source: :client_persona
+  has_many :client_persona_administration_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :client_persona_delegation_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :client_persona_usage_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :client_persona_view_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_one :authority_lock,
+          class_name: "ClientAuthorityLock",
+          dependent: :destroy,
+          inverse_of: :client
+  has_many :enterprise_ownerships, dependent: :restrict_with_error, inverse_of: :client
+  has_many :owned_enterprises, through: :enterprise_ownerships, source: :enterprise
+  has_many :enterprise_administration_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :enterprise_delegation_grants, dependent: :restrict_with_error, inverse_of: :client
+  has_many :enterprise_view_grants, dependent: :restrict_with_error, inverse_of: :client
   has_one :core_app_client_bridge,
           dependent: :destroy,
           inverse_of: :client
@@ -252,12 +267,16 @@ class Client < AppPrincipalRecord
   # RetentionCrossDatabaseChildPurge, not by an implicit cross-DB cascade.
   has_many :avatar_assignments, foreign_key: :user_id, inverse_of: :user # rubocop:disable Rails/HasManyOrHasOneDependent
   has_many :assigned_avatars, through: :avatar_assignments, source: :avatar
-  has_many :owned_avatars,
-           -> { joins(:avatar_assignments).where(avatar_assignments: { role: "owner" }) },
-           through: :avatar_assignments,
-           source: :avatar
+
+  validates :status_id, numericality: { only_integer: true }
   validates :public_id, uniqueness: true, length: { maximum: 21 }
-  include Retainable
+
+  before_destroy :admit_identifier_history_erasure, prepend: true
+
+  mfa_level_reference ClientMfaLevel
+  mfa_status_reference ClientMfaStatus
+
+  before_destroy :erase_dead_identifier_histories
 
   def totp_enabled?
     if client_totp_credentials.loaded?
@@ -280,7 +299,7 @@ class Client < AppPrincipalRecord
   end
 
   def client_google_identities
-    identity = client_external_identities.find_by(provider: "google")
+    identity = client_external_identities.effective_binding.find_by(provider: "google", state: "active")
     identity ? [identity] : []
   end
 
@@ -304,7 +323,7 @@ class Client < AppPrincipalRecord
   def remaining_social_unlink_methods(excluding_provider:)
     excluded = SocialIdentifiable.normalize_provider(excluding_provider)
     methods = []
-    methods << :email if client_emails.exists?(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
+    methods << :email if client_emails.effective_binding.exists?(user_email_status_id: AuthMethodGuard::VERIFIED_EMAIL_STATUSES)
     methods << :passkey if client_passkeys.exists?(status_id: ClientPasskeyStatus::ACTIVE)
     methods << :google if excluded != "google" && active_google_identity_exists?
     methods << :apple if excluded != "apple" && active_apple_identity_exists?
@@ -313,7 +332,10 @@ class Client < AppPrincipalRecord
 
   def remaining_login_methods(excluding_provider: nil)
     excluded = excluding_provider.present? ? SocialIdentifiable.normalize_provider(excluding_provider) : nil
-    methods = authentication_credential_inventory.aal1_methods.map { |method| (method == :email_otp) ? :email : method }
+    methods =
+      authentication_credential_inventory.sign_in_methods.map { |method|
+        (method == :email_otp) ? :email : method
+      }
     return methods unless excluded
 
     methods - [excluded.to_sym]
@@ -321,31 +343,34 @@ class Client < AppPrincipalRecord
 
   def active_social_provider?(provider)
     normalized = SocialIdentifiable.normalize_provider(provider)
-    client_external_identities.exists?(provider: normalized, state: "active")
+    client_external_identities.effective_binding.exists?(provider: normalized, state: "active")
   end
 
   def active_google_identity_exists?
-    client_external_identities.exists?(provider: "google", state: "active")
+    client_external_identities.effective_binding.exists?(provider: "google", state: "active")
   end
 
   def active_apple_identity_exists?
-    client_external_identities.exists?(provider: "apple", state: "active")
+    client_external_identities.effective_binding.exists?(provider: "apple", state: "active")
   end
 
   def verified_email?
+    # Only an effective binding identifies the Client (D-85); a verified-status candidate does not.
     return client_emails.any? { |e|
-      VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.user_email_status_id)
+      e.binding_effective? && VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.user_email_status_id)
     } if client_emails.loaded?
 
-    client_emails.exists?(user_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
+    client_emails.effective_binding.exists?(user_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
   end
 
   def verified_telephone?
     return client_telephones.any? { |t|
-      VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.user_identity_telephone_status_id)
+      t.binding_effective? && VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.user_identity_telephone_status_id)
     } if client_telephones.loaded?
 
-    client_telephones.exists?(user_identity_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
+    client_telephones.effective_binding.exists?(
+      user_identity_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS,
+    )
   end
 
   def passkey_login_available?
@@ -360,7 +385,74 @@ class Client < AppPrincipalRecord
     verified_telephone?
   end
 
+  public
+
+  def finalize_email_sign_up!(email:, flow:)
+    with_lock do
+      unless email.is_a?(ClientEmail) && flow.is_a?(ClientSignUpFlow) &&
+          email.user_id == id && flow.principal_id == id && flow.pending_contact_type == "email" &&
+          flow.pending_contact_id == email.id && flow.sign_up_checkpoint_pending? &&
+          flow.expires_at > flow.class.database_now && flow.requirement_cleared?(:otp) &&
+          email.binding_effective? && email.user_email_status_id == ClientEmailStatus::VERIFIED_WITH_SIGN_UP &&
+          active? && access_enabled? && accessible?(self.class.database_now)
+        raise ActiveRecord::RecordNotSaved, "APP Email signup owner authority is unavailable"
+      end
+      return self if status_id == ClientStatus::VERIFIED_WITH_SIGN_UP
+
+      unless status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+        raise ActiveRecord::RecordNotSaved, "APP Email signup owner is not pending"
+      end
+
+      update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+      self
+    end
+  end
+
+  def finalize_telephone_sign_up!(telephone:, flow:)
+    with_lock do
+      unless telephone.is_a?(ClientTelephone) && flow.is_a?(ClientSignUpFlow) &&
+          telephone.user_id == id && flow.principal_id == id && flow.pending_contact_type == "telephone" &&
+          flow.pending_contact_id == telephone.id && flow.sign_up_checkpoint_pending? &&
+          flow.expires_at > flow.class.database_now && flow.requirement_cleared?(:otp) &&
+          telephone.binding_effective? &&
+          telephone.user_telephone_status_id == ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP && active? &&
+          access_enabled? && accessible?(self.class.database_now) && client_passkeys.active.exists?
+        raise ActiveRecord::RecordNotSaved, "APP Telephone signup owner authority is unavailable"
+      end
+      return self if status_id == ClientStatus::VERIFIED_WITH_SIGN_UP
+
+      unless status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+        raise ActiveRecord::RecordNotSaved, "APP Telephone signup owner is not pending"
+      end
+
+      update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+      self
+    end
+  end
+
   private
+
+  def admit_identifier_history_erasure
+    with_lock do
+      now = self.class.database_now
+      if !lapsed?(now) || !purgeable?(now) || client_retention_holds.active_at(now).exists? ||
+          AppEnforcementCase.principal_effect_blocking?(public_id, :withdrawal_purge_blocked) ||
+          AppEnforcementCase.principal_effect_blocking?(public_id, :principal_hard_delete_blocked)
+        errors.add(:base, "Identity is recoverable or legally retained")
+        throw(:abort)
+      end
+
+      if notification_records.exists? || avatar_assignments.exists?
+        errors.add(:base, "Cross-database children require the account purge workflow")
+        throw(:abort)
+      end
+    end
+  end
+
+  def erase_dead_identifier_histories
+    ClientEmailHistory.where(user_id: id).delete_all
+    ClientTelephoneHistory.where(user_id: id).delete_all
+  end
 
   def configured_mfa_level_methods
     step_up_methods

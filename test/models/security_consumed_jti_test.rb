@@ -21,6 +21,25 @@ class SecurityConsumedJtiTest < ActiveSupport::TestCase
     )
   end
 
+  # A safe (GET) request runs on the reading role; a replay record is always a write and must still
+  # be recorded there, or every safe-request refresh fails closed.
+  test "consume records on the writer while the caller is on the reading role" do
+    jti = SecureRandom.uuid
+
+    consumed =
+      ActiveRecord::Base.connected_to(role: :reading) do
+        SecurityConsumedJti.consume!(
+          purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_client_assertion),
+          issuer: "tech-org-ww",
+          jti: jti,
+          expires_at: 2.minutes.from_now,
+        )
+      end
+
+    assert consumed
+    assert SecurityConsumedJti.exists?(jti_digest: SecurityConsumedJti.digest_jti(jti))
+  end
+
   test "same jti under different purpose does not collide" do
     jti = SecureRandom.uuid
 
@@ -31,7 +50,7 @@ class SecurityConsumedJtiTest < ActiveSupport::TestCase
       expires_at: 2.minutes.from_now,
     )
     assert SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:jump_rt_return),
+      purpose: SecurityConsumedJti::PURPOSES.fetch(:sign_out_notice),
       issuer: "issuer-a",
       jti: jti,
       expires_at: 2.minutes.from_now,
@@ -42,13 +61,13 @@ class SecurityConsumedJtiTest < ActiveSupport::TestCase
     jti = SecureRandom.uuid
 
     assert SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_token),
+      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_request),
       issuer: "issuer-a",
       jti: jti,
       expires_at: 2.minutes.from_now,
     )
     assert SecurityConsumedJti.consume!(
-      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_token),
+      purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_logout_request),
       issuer: "issuer-b",
       jti: jti,
       expires_at: 2.minutes.from_now,

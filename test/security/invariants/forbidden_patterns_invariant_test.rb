@@ -4,6 +4,7 @@
 # rubocop:disable I18n/RailsI18n/DecorateString
 
 require "test_helper"
+require "prism"
 # require "helpers/global_test_support"
 
 module Security
@@ -45,6 +46,12 @@ module Security
       ALLOWLIST = [
         {
           pattern: "access policy bypass",
+          path: "app/controllers/concerns/browser_rp_authentication.rb",
+          line: /\A\s*raise SkipNotAllowedError, "skip_before_action :enforce_access_policy! is prohibited/,
+          reason: "The Browser RP policy guard raises when an inheritor attempts to disable authorization.",
+        },
+        {
+          pattern: "access policy bypass",
           path: "app/controllers/concerns/authentication_base.rb",
           line: /skip_before_action :enforce_access_policy! is prohibited/,
           reason: "Policy guard raises on attempts to skip enforce_access_policy!.",
@@ -60,6 +67,13 @@ module Security
           path: "app/controllers/concerns/sign_oidc_logout.rb",
           line: OIDC_LOGOUT_REDIRECT_RE,
           reason: "OIDC logout must redirect to the RP post-logout URI after state validation.",
+        },
+        {
+          pattern: "cross-host redirect escape hatch",
+          path: "app/controllers/palm/app/oidc/callbacks_controller.rb",
+          line: /redirect_to\(uri\.to_s, allow_other_host: true, status: :see_other\)/,
+          reason: "Palm delivers a verified Base return to a fixed registered native callback, " \
+                  "bound to the initiating browser state; see adr/jump-directed-rails-handoff-contract.md.",
         },
         {
           pattern: "cross-host redirect escape hatch",
@@ -135,60 +149,6 @@ module Security
           reason: "OAuth protocol endpoints use client auth or bearer tokens and skip Rails browser session state.",
         },
         {
-          pattern: "csrf null_session",
-          path: "app/controllers/sign/app/oidc/backchannel/logouts_controller.rb",
-          line: /protect_from_forgery with: :null_session/,
-          reason: "OIDC backchannel logout is a server-to-server callback and does not use browser session CSRF.",
-        },
-        {
-          pattern: "csrf null_session",
-          path: "app/controllers/sign/com/oidc/backchannel/logouts_controller.rb",
-          line: /protect_from_forgery with: :null_session/,
-          reason: "OIDC backchannel logout is a server-to-server callback and does not use browser session CSRF.",
-        },
-        {
-          pattern: "csrf null_session",
-          path: "app/controllers/sign/org/oidc/backchannel/logouts_controller.rb",
-          line: /protect_from_forgery with: :null_session/,
-          reason: "OIDC backchannel logout is a server-to-server callback and does not use browser session CSRF.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/base/app/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Base app authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/base/com/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Base com authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/base/org/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Base org authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/palm/app/oidc/authorizations_controller.rb",
-          line: /redirect_to\(url, allow_other_host: true\)/,
-          reason: "Palm app authorization starts the reviewed jump gateway handoff.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/sign/app/sign/ins_controller.rb",
-          line: /redirect_to\(result\.resume_url, allow_other_host: true\)/,
-          reason: "Sign-in completion returns through the reviewed RP resume URL.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/auth/app/sign/in/sessions_controller.rb",
-          line: /redirect_to\(resume_url, allow_other_host: true\)/,
-          reason: "Sign-in completion returns through the reviewed RP resume URL.",
-        },
-        {
           pattern: "cross-host redirect escape hatch",
           path: "app/controllers/auth/app/sign/ins_controller.rb",
           line: /\A\s*allow_other_host: true,\s*\z/,
@@ -196,16 +156,16 @@ module Security
         },
         {
           pattern: "cross-host redirect escape hatch",
-          path: "app/controllers/auth/app/sign/ins_controller.rb",
-          line: /redirect_to\(result\.resume_url, allow_other_host: true\)/,
-          reason: "Sign-in completion returns through the reviewed RP resume URL.",
-        },
-        {
-          pattern: "cross-host redirect escape hatch",
           path: "app/controllers/auth/app/sign/outs_controller.rb",
           line: /allow_other_host: true,/,
           reason: "The coordinated sign-out continuation returns the browser to the reviewed " \
                   "Base completion page after the auth-host cleanup hop.",
+        },
+        {
+          pattern: "cross-host redirect escape hatch",
+          path: "app/controllers/auth/com/sign/outs_controller.rb",
+          line: /allow_other_host: true,/,
+          reason: "Auth com sign-out uses only the configured Base com route for the fixed authority handoff.",
         },
         {
           pattern: "cross-host redirect escape hatch",
@@ -221,6 +181,12 @@ module Security
         },
         {
           pattern: "cross-host redirect escape hatch",
+          path: "app/controllers/auth/org/sign/outs_controller.rb",
+          line: /allow_other_host: true,/,
+          reason: "Auth org sign-out uses only the configured Base org route for the fixed authority handoff.",
+        },
+        {
+          pattern: "cross-host redirect escape hatch",
           path: "app/controllers/concerns/oidc_callback.rb",
           line: /redirect_to\(sign_in_url_with_pt\(nil\), allow_other_host: true\)/,
           reason: "OIDC callback failure must send the browser back to the sign-in surface.",
@@ -232,6 +198,81 @@ module Security
           reason: "OIDC SSO initiation hands the browser to the reviewed authorization endpoint.",
         },
       ].freeze
+
+      RECEIVER_REDIRECTS = {
+        "app/controllers/concerns/auth_local_result_handoff.rb" => {
+          target: "local_result_completion_url",
+          reason: "Base receives a server-stored local result by reference and same-origin CSRF POST.",
+        },
+        "app/controllers/concerns/auth_oidc_result_handoff.rb" => {
+          target: "oidc_result_base_completion_url",
+          reason: "Base receives a server-stored OIDC result by reference and same-origin CSRF POST.",
+        },
+        "app/controllers/concerns/auth_step_up_result_handoff.rb" => {
+          target: "ceremony_result_completion_url",
+          reason: "Base receives a server-stored Step-Up result by reference and same-origin CSRF POST.",
+        },
+        "app/controllers/concerns/base_ceremony_binding_confirmation.rb" => {
+          target: "auth_binding_entry_url",
+          reason: "Auth resumes the exact Base-confirmed admission on its configured receiver host.",
+        },
+        "app/controllers/concerns/base_identity_passkey_management.rb" => {
+          target: "registration_auth_url",
+          reason: "Auth receives an explicit Base-issued passkey registration admission.",
+        },
+        "app/controllers/concerns/oidc_rp_logout_authority.rb" => {
+          target: "browser_rp_logout_origin_url",
+          reason: "The validated logout transaction returns to its registered RP receiver.",
+        },
+        "app/controllers/concerns/sign_out_notice.rb" => {
+          target: "uri.to_s",
+          reason: "The fixed authority cleanup handoff carries only the durable logout challenge.",
+        },
+        "app/controllers/concerns/sign_up_social_birthdate_support.rb" => {
+          target: "base_app_social_authentication_completion_url",
+          reason: "Base confirms a server-stored social signup result through its local CSRF form.",
+        },
+        "app/controllers/concerns/social_auth.rb" => {
+          target: "base_app_social_authentication_completion_url",
+          reason: "Base confirms a server-stored social login result through its local CSRF form.",
+        },
+        "app/controllers/base/app/identity/totps_controller.rb" => {
+          target: "new_auth_app_settings_totp_url",
+          reason: "Auth receives an explicit Base-issued TOTP registration admission.",
+        },
+        "app/controllers/auth/app/ceremony_bindings_controller.rb" => {
+          target: "base_app_ceremony_binding_confirmation_url",
+          reason: "The configured Base receiver verifies its browser nonce and admission confirmation.",
+        },
+        "app/controllers/auth/app/verification/cancellations_controller.rb" => {
+          target: "base_app_verification_cancellation_url",
+          reason: "Base resolves the server-stored cancellation evidence from its exact lookup reference.",
+        },
+        "app/controllers/auth/com/ceremony_bindings_controller.rb" => {
+          target: "base_com_ceremony_binding_confirmation_url",
+          reason: "The configured Base receiver verifies its browser nonce and admission confirmation.",
+        },
+        "app/controllers/auth/com/verification/cancellations_controller.rb" => {
+          target: "base_com_verification_cancellation_url",
+          reason: "Base resolves the server-stored cancellation evidence from its exact lookup reference.",
+        },
+        "app/controllers/auth/org/ceremony_bindings_controller.rb" => {
+          target: "base_org_ceremony_binding_confirmation_url",
+          reason: "The configured Base receiver verifies its browser nonce and admission confirmation.",
+        },
+        "app/controllers/auth/org/verification/cancellations_controller.rb" => {
+          target: "base_org_verification_cancellation_url",
+          reason: "Base resolves the server-stored cancellation evidence from its exact lookup reference.",
+        },
+        "app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb" => {
+          target: "base_app_sign_show_url",
+          reason: "A refused local ceremony returns to the configured neutral Base entry.",
+        },
+        "app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb" => {
+          target: "base_com_sign_show_url",
+          reason: "A refused local ceremony returns to the configured neutral Base entry.",
+        },
+      }.freeze
 
       LOGGER_ALLOWLIST = [].freeze
 
@@ -267,6 +308,11 @@ module Security
           reason: "Current OAuth launch code forwards assurance metadata to the protocol boundary.",
         },
         {
+          path: "app/controllers/concerns/auth_oidc_result_handoff.rb",
+          line: /Actor\.authn\.access_claims/,
+          reason: "OIDC result handoff forwards the authenticated ceremony assurance metadata to Base.",
+        },
+        {
           path: "app/controllers/concerns/actor_support.rb",
           line: /token_claims: authn\.access_claims/,
           reason: "ActorSupport installs the decoded authn snapshot at the request boundary.",
@@ -275,11 +321,6 @@ module Security
           path: "app/controllers/concerns/authentication_base.rb",
           line: /token_claims: authn\.access_claims/,
           reason: "AuthenticationBase bridges authenticated resource resolution into Actor authz.",
-        },
-        {
-          path: "app/controllers/concerns/sign_out_notice.rb",
-          line: /access_expires_at_from_claims\(Actor\.authn\.access_claims\)/,
-          reason: "Sign-out notice derives display expiry from the current token snapshot.",
         },
         {
           path: "app/controllers/concerns/sign_up_sequence_controller_support.rb",
@@ -300,7 +341,8 @@ module Security
 
       test "allowlist entries have explicit reasons" do
         missing_reasons =
-          (ALLOWLIST + LOGGER_ALLOWLIST + RAW_ACTOR_CLAIMS_ALLOWLIST).filter_map do |entry|
+          (ALLOWLIST + LOGGER_ALLOWLIST + RAW_ACTOR_CLAIMS_ALLOWLIST +
+            RECEIVER_REDIRECTS.map { |path, entry| entry.merge(path: path) }).filter_map do |entry|
             "#{entry[:path]} #{entry[:pattern]}" if entry.fetch(:reason).blank?
           end
 
@@ -313,10 +355,43 @@ module Security
             relative_path = path.relative_path_from(Rails.root).to_s
             content = File.binread(path).encode("UTF-8", invalid: :replace, undef: :replace)
 
+            receiver_redirect_lines = []
+            contract = RECEIVER_REDIRECTS[relative_path]
+            if contract
+              parsed = Prism.parse(content)
+
+              assert_predicate parsed, :success?, "Security redirect inventory requires valid Ruby: #{relative_path}"
+              pending = [parsed.value]
+              until pending.empty?
+                node = pending.pop
+                pending.concat(node.child_nodes.compact)
+                next unless node.is_a?(Prism::CallNode) && node.name == :redirect_to
+
+                arguments = node.arguments&.arguments || []
+                target = arguments.first
+                next unless target.is_a?(Prism::CallNode)
+
+                target_name = target.receiver ? "#{target.receiver.location.slice}.#{target.name}" : target.name.to_s
+                next unless target_name == contract.fetch(:target)
+
+                options = arguments.grep(Prism::KeywordHashNode).flat_map(&:elements)
+                options =
+                  options.select { |entry| entry.is_a?(Prism::AssocNode) }.to_h do |entry|
+                    [entry.key.location.slice.delete_suffix(":"), entry.value.location.slice]
+                  end
+                next unless options["status"] == ":see_other" && options["allow_other_host"] == "true"
+                next if target.location.slice.match?(/\b(?:cancellation_handoff|admission|result_token):/)
+
+                receiver_redirect_lines.concat((node.location.start_line..node.location.end_line).to_a)
+              end
+            end
+
             content.each_line.with_index(1).filter_map do |line, line_number|
               pattern_name = FORBIDDEN_PATTERNS.find { |_name, pattern| line.match?(pattern) }&.first
               next unless pattern_name
               next if allowlisted?(ALLOWLIST, pattern_name, relative_path, line)
+              next if pattern_name == "cross-host redirect escape hatch" &&
+                receiver_redirect_lines.include?(line_number)
 
               "#{relative_path}:#{line_number}: #{pattern_name}: #{line.strip}"
             end
@@ -388,3 +463,4 @@ module Security
     end
   end
 end
+# rubocop:enable I18n/RailsI18n/DecorateString

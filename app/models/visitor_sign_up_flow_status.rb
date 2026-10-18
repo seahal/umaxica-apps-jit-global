@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: visitor_sign_up_flow_statuses
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id :bigint           not null, primary key
 #
-class VisitorSignUpFlowStatus < ComTicketRecord
+class VisitorSignUpFlowStatus < OpBaseComRecord
   include ReferenceRecord
 
   STARTED = 10
@@ -24,6 +24,7 @@ class VisitorSignUpFlowStatus < ComTicketRecord
   FAILED = 900
   EXPIRED = 910
   CANCELLED = 920
+  HALTED = 930
   DEFAULTS = [
     STARTED,
     CONTACT_PENDING,
@@ -38,6 +39,7 @@ class VisitorSignUpFlowStatus < ComTicketRecord
     FAILED,
     EXPIRED,
     CANCELLED,
+    HALTED,
   ].freeze
 
   has_many :visitor_sign_up_flows,

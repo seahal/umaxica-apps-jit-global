@@ -12,6 +12,14 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** The responsibility matrix below records the
+> earlier Acme/Sign architecture. It is retained as vendor-review history and is not a current
+> authority assignment. Use `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
+> `docs/security/session-token-authority.md` for the active contract: Base owns the physical OIDC
+> IdP/Authorization Server, Browser Session, RP Session, and token authority; Auth owns ceremony
+> continuity only; and the first-party browser RPs are surface-specific. Do not restore shared RP
+> clients or Acme/Sign session authority from this matrix.
+
 # Purpose
 
 Define which surface owns each identity capability.

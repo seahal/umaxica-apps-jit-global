@@ -14,13 +14,15 @@ module Auth::App::In
     fixtures :clients, :client_statuses, :client_email_statuses, :client_telephone_statuses
 
     setup do
-      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
       TurnstileVerifierStub.enabled = true
       TurnstileVerifierStub.response = { "success" => true }
       @user = create_verified_user_with_email(email_address: "passkey_test_user_#{SecureRandom.hex(6)}@example.com")
       @user_email = @user.client_emails.first # Use the email created by the helper
+      # Only an effective binding counts as a verified contact (D-85).
+      @user_email.finalize_binding!
 
       @user_telephone = ClientTelephone.create!(
         user: @user,
@@ -32,6 +34,108 @@ module Auth::App::In
       # verification exercises the actual signature/RP ID/origin/UV path.
       @fake_client = webauthn_fake_client
       @passkey = register_fake_client_passkey!(client: @fake_client, user: @user, description: "Login Key")
+      # Auth runs a ceremony only for a browser that Base admitted (D-82).
+      begin
+        fv5026 = "app"
+        fv5025 = auth_app_sign_in_path
+        fv5024 = { ri: "jp" }
+        fv5023 = { "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL") }
+        begin
+          fv5001 = self
+          fv5017 = fv5026.to_s
+          fv5013 = fv5025
+          fv5012 = fv5024
+          fv5020 = fv5023
+          fv5015 = fv5001.cookies["__Host-auth_sid"].presence || fv5001.cookies["auth_sid"].presence
+          if fv5015.present?
+            fv5022 = {
+              "app" => ClientAuthCeremonySession,
+              "com" => VisitorAuthCeremonySession,
+              "org" => OperatorAuthCeremonySession,
+            }.fetch(fv5017).find_active_by_raw_sid(fv5015)
+            fv5021 = fv5022&.admitted? && fv5022.admission_purpose == "local_sign_in"
+          end
+
+          unless fv5021
+            fv5014 = ENV.fetch(
+              { "app" => "PUBLIC_AUTH_SERVICE_URL",
+                "com" => "PUBLIC_AUTH_CORPORATE_URL",
+                "org" => "PUBLIC_AUTH_STAFF_URL", }.fetch(fv5017),
+            )
+
+            fv5002 = fv5020.merge(
+              "Host" => fv5014, "Origin" => "https://#{fv5014}", "Sec-Fetch-Site" => "same-origin",
+            )
+            fv5011 = BaseAuthAdmissionCoordinator.issue_local_entry!(
+              surface: fv5017,
+              intent: "sign_in",
+              base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              base_token: nil,
+            )
+            fv5018 = BaseAuthAdmissionCoordinator.find_admission_binding!(
+              surface: fv5017, reference: fv5011.reference,
+            )
+            fv5019, fv5015 = fv5018.class.auth_admission_session_class.issue!
+            fv5018.attach_auth_session!(auth_session: fv5019, confirmation_ref: SecureRandom.uuid)
+            fv5018.confirm_base!(
+              base_token: nil,
+              browser_digest: AuthAdmissionBinding.browser_digest(
+                surface: fv5017,
+                entry_ref: fv5011.reference,
+                nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+              ),
+            )
+            fv5001.host!(fv5014)
+            fv5001.https!
+            fv5016 = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+            fv5001.cookies.delete("auth_sid")
+            fv5001.cookies.delete("__Host-auth_sid")
+            store_raw_cookies(
+              fv5001.cookies,
+              "#{fv5016}=#{Rack::Utils.escape(fv5015)}", URI.parse("https://#{fv5014}/"),
+            )
+            fv5001.get(
+              fv5013,
+              params: fv5012.merge(entry_ref: fv5011.reference),
+              headers: fv5002,
+            )
+            fv5005, fv5003, fv5004 =
+              begin
+                fv5010 = fv5001.response.body
+                fv5009 = false
+                fv5008 = Nokogiri::HTML(fv5010).at_css("form")
+                if fv5008.nil? && fv5009
+                  nil
+                else
+                  raise RuntimeError, "Auth continuation form is missing" unless fv5008
+
+                  fv5007 = fv5008.at_css("input[name='authenticity_token']")&.[]("value")
+                  raise RuntimeError,
+                        "Auth continuation is missing its CSRF token" if fv5007.blank?
+
+                  fv5006 = fv5008.css("input[type='hidden']").to_h do |input|
+                    [input["name"], input["value"]]
+                  end.except("authenticity_token")
+                  [fv5008["action"], fv5007, fv5006]
+                end
+              end
+            fv5001.post(
+              fv5005,
+              params: fv5004.merge(authenticity_token: fv5003),
+              headers: fv5002,
+            )
+
+            cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+            ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
+            flow = ClientSignInFlow.find_by!(public_id: ceremony.local_sign_in_flow_ref)
+            @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+              flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+            )
+
+            assert_equal 303, fv5001.response.status
+          end
+        end
+      end
     end
 
     teardown do
@@ -41,53 +145,68 @@ module Auth::App::In
       TurnstileVerifierStub.response = nil
     end
     test "should get new" do
-      get new_auth_app_sign_in_passkey_path(ri: "jp")
+      get new_auth_app_sign_in_passkey_path(ri: "jp", fb: @primary_sign_in_binding)
 
       assert_response :success
       assert_equal "auth/app/sign/in/passkeys/new", inertia_component
 
       panel = inertia_props.fetch("panel")
 
-      assert_equal auth_app_sign_in_passkey_options_path(ri: "jp"), panel.fetch("options_url")
-      assert_equal auth_app_sign_in_passkey_verification_path(ri: "jp"), panel.fetch("verification_url")
+      options_uri = URI.parse(panel.fetch("options_url"))
+      verification_uri = URI.parse(panel.fetch("verification_url"))
+
+      assert_equal URI.parse(auth_app_sign_in_passkey_options_path(ri: "jp")).path, options_uri.path
+      assert_equal URI.parse(auth_app_sign_in_passkey_verification_path(ri: "jp")).path, verification_uri.path
+      assert_equal "app", SignInFlowBindingCodec.decode(
+        Rack::Utils.parse_nested_query(options_uri.query).fetch("fb"),
+      ).surface
+      assert_equal "app", SignInFlowBindingCodec.decode(
+        Rack::Utils.parse_nested_query(verification_uri.query).fetch("fb"),
+      ).surface
       assert_equal "jp", panel.fetch("region")
-      assert_equal auth_app_sign_in_path(ri: "jp"), inertia_props.fetch("back_link").fetch("href")
+      assert_nil panel.fetch("identifier_param")
+      assert_nil panel.fetch("field")
+      assert_equal URI.parse(auth_app_sign_in_path(ri: "jp")).path,
+                   URI.parse(inertia_props.fetch("back_link").fetch("href")).path
     end
 
-    # Case F-1: Identifier does not exist
-    test "options returns an indistinguishable padded challenge if identifier is not found" do
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
-           params: options_params(identifier: "unknown@example.com")
+    test "options is anonymous and does not disclose credential descriptors" do
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: { "cf-turnstile-response": "test_token" }
 
       assert_response :ok
-      assert_predicate response.parsed_body["challenge_id"], :present?
-      assert_equal 4, response.parsed_body.dig("options", "allowCredentials").size
+      json = response.parsed_body
+
+      assert_predicate json["challenge_id"], :present?
+      assert_predicate json.dig("options", "challenge"), :present?
+      assert_empty Array(json.dig("options", "allowCredentials"))
+      assert_nil session[:passkey_challenges].fetch(json.fetch("challenge_id"))["actor_global_key"]
+      assert_not_includes response.body, @passkey.webauthn_id
     end
 
-    test "options returns error if identifier missing" do
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: nil)
-
-      assert_response :unprocessable_content
-      assert_includes response.body, I18n.t("errors.webauthn.pii_required")
-    end
-
-    # Case F-2: Identifier exists but no passkey
-    test "options returns an indistinguishable padded challenge if the account has no passkeys" do
-      user_no_passkey = clients(:two)
-      user_no_passkey_email = ClientEmail.create!(user: user_no_passkey, address: "nopasskey@example.com")
-
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
-           params: options_params(identifier: user_no_passkey_email.address)
+    test "options ignores a submitted identifier instead of using it for identity selection" do
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: @user_email.address)
 
       assert_response :ok
-      assert_predicate response.parsed_body["challenge_id"], :present?
-      assert_equal 4, response.parsed_body.dig("options", "allowCredentials").size
+      known = response.parsed_body
+
+      assert_empty Array(known.dig("options", "allowCredentials"))
+      assert_nil session[:passkey_challenges].fetch(known.fetch("challenge_id"))["actor_global_key"]
+
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: "unknown-identifier@example.com")
+
+      assert_response :ok
+      unknown = response.parsed_body
+
+      assert_empty Array(unknown.dig("options", "allowCredentials"))
+      assert_nil session[:passkey_challenges].fetch(unknown.fetch("challenge_id"))["actor_global_key"]
     end
 
-    test "options returns challenge and allowCredentials for email identifier" do
-      email = ClientEmail.find_by(user: @user).address
-
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email)
+    test "options does not require an identifier or account lookup" do
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: { "cf-turnstile-response": "test_token" }
 
       assert_response :ok
       json = response.parsed_body
@@ -95,38 +214,30 @@ module Auth::App::In
       assert_not_nil json["challenge_id"]
       options = json["options"]
 
-      assert_equal 4, options["allowCredentials"].size
-
-      Rails.logger.debug { "DEBUG: allowCredentials = #{options["allowCredentials"].inspect}" }
-      Rails.logger.debug { "DEBUG: allowCredentials = #{options["allowCredentials"].inspect}" }
-      Rails.logger.debug { "DEBUG: passkey_id = #{@passkey.webauthn_id}" }
-
-      # Verify allowCredentials contains our passkey ID
-      match = options["allowCredentials"].any? { |c| c["id"] == @passkey.webauthn_id }
-
-      assert match, "Expected allowCredentials to contain #{@passkey.webauthn_id}"
+      assert_empty Array(options["allowCredentials"])
 
       # Case F-4: Challenge saved with correct purpose
       assert_not_nil session[:passkey_challenges][json["challenge_id"]]
       assert_equal "authentication", session[:passkey_challenges][json["challenge_id"]]["purpose"]
     end
 
-    test "options returns challenge and allowCredentials for telephone identifier" do
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
+    test "options ignores a telephone identifier" do
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
            params: options_params(identifier: @user_telephone.number)
 
       assert_response :ok
       json = response.parsed_body
 
       assert_not_nil json["challenge_id"]
-      assert_not_empty json.dig("options", "allowCredentials")
+      assert_empty Array(json.dig("options", "allowCredentials"))
     end
 
     # Case F-3b: JSON response format validation for authentication options (regression test)
     test "options returns valid Base64URL encoded challenge" do
       email = ClientEmail.find_by(user: @user).address
 
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email)
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: email)
 
       assert_response :ok
       json = response.parsed_body
@@ -143,28 +254,21 @@ module Auth::App::In
 
       # Verify no duplicate keys in JSON
       json_string = response.body
-      challenge_count = json_string.scan(/"challenge"/).count
+      challenge_count = json_string.scan('"challenge"').count
 
       assert_equal 1, challenge_count,
                    "JSON should contain exactly one 'challenge' key (found #{challenge_count})"
 
-      # Verify allowCredentials IDs are properly encoded
-      options["allowCredentials"].each_with_index do |credential, index|
-        cred_id = credential["id"]
-
-        assert_match(
-          /\A[A-Za-z0-9_-]+\z/, cred_id,
-          "allowCredentials[#{index}].id should be Base64URL format",
-        )
-      end
+      assert_empty Array(options["allowCredentials"])
     end
 
     # Case G-1: Verification success
-    test "verification logs user in on success" do
+    test "verification records authentication evidence and issues no session" do
       assert_not_nil @passkey, "Passkey must exist"
       # Get challenge
       email = ClientEmail.find_by(user: @user).address
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email)
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: email)
       explanation = response.parsed_body
       challenge_id = explanation["challenge_id"]
 
@@ -174,27 +278,31 @@ module Auth::App::In
       )
 
       # Should log in
-      post auth_app_sign_in_passkey_verification_path(ri: "jp", pt: "/settings/emails"), params: params
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding, pt: "/settings/emails"),
+           params: params
 
       assert_response :ok
       json = response.parsed_body
 
       assert_equal "ok", json["status"]
-      assert_not_nil json["access_token"]
-      assert_equal "Bearer", json["token_type"]
-      assert_equal AuthenticationBase::ACCESS_TOKEN_TTL.to_i, json["expires_in"]
-      assert_equal auth_app_sign_in_check_path(ri: "jp"), json["redirect_url"]
+      # Auth proves the credential and hands the result to Base; it issues no session (D-10).
+      assert_equal %w(redirect_url status), json.keys.sort
+      assert_equal 0, ClientToken.where(user_id: @user.id).count
+      ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies["auth_sid"])
+
+      assert_predicate ceremony, :authentication_evidence_recorded?
+      assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(json.fetch("redirect_url")).path
 
       # Challenge verification updates sign count
       assert_equal 1, @passkey.reload.sign_count
     end
 
     test "verification rejects a UV=false assertion even with a valid signature" do
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
            params: options_params(identifier: @user_email.address)
       body = response.parsed_body
 
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: {
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
         challenge_id: body["challenge_id"],
         credential: fake_assertion(
           @fake_client, challenge: body.dig("options", "challenge"), user_verified: false,
@@ -205,38 +313,13 @@ module Auth::App::In
       assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     end
 
-    test "verification with session limit exceeded returns session_restricted" do
-      # Create 2 active sessions to hit the limit
-      ClientToken.where(user_id: @user.id).delete_all
-      2.times do
-        create_rotated_active_user_session(@user, rotations: 3)
-      end
-
-      # Get challenge
-      email = ClientEmail.find_by(user: @user).address
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email)
-      explanation = response.parsed_body
-
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: assertion_params_for(
-        challenge_id: explanation["challenge_id"],
-        challenge: explanation.dig("options", "challenge"),
-      )
-
-      assert_response :ok
-      json = response.parsed_body
-
-      assert_equal "session_restricted", json["status"]
-      assert_equal auth_app_sign_in_session_path(ri: "jp"), json["redirect_url"]
-      assert_equal 0, ClientToken.where(user_id: @user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).count
-    end
-
     test "verification returns same response for credential mismatch and missing verified pii" do
       # Baseline: credential mismatch
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
            params: options_params(identifier: @user_email.address)
       baseline_challenge_id = response.parsed_body["challenge_id"]
 
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: {
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
         challenge_id: baseline_challenge_id,
         credential: {
           id: Base64.urlsafe_encode64("unknown_credential", padding: false),
@@ -263,10 +346,11 @@ module Auth::App::In
       )
       email.update!(user_email_status_id: ClientEmailStatus::UNVERIFIED)
 
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email.address)
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: email.address)
       pii_challenge_id = response.parsed_body["challenge_id"]
 
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: {
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
         challenge_id: pii_challenge_id,
         credential: {
           id: passkey.webauthn_id,
@@ -281,38 +365,62 @@ module Auth::App::In
       assert_equal mismatch_body, response.body
     end
 
-    test "verification returns unauthorized when challenge actor and passkey owner mismatch" do
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
-           params: options_params(identifier: @user_email.address)
-      challenge_id = response.parsed_body["challenge_id"]
+    test "verification uses credential ownership and ignores a forged userHandle" do
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params
+      body = response.parsed_body
+      credential = fake_assertion(@fake_client, challenge: body.dig("options", "challenge"))
+      credential["response"]["userHandle"] = Base64.urlsafe_encode64("forged-user-handle", padding: false)
 
-      other_user = create_verified_user_with_email(email_address: "passkey_other_#{SecureRandom.hex(4)}@example.com")
-      other_passkey = ClientPasskey.create!(
-        user: other_user,
-        webauthn_id: Base64.urlsafe_encode64("other_user_key_#{SecureRandom.hex(4)}", padding: false),
-        external_id: SecureRandom.uuid,
-        public_key: "other_user_key",
-        description: "Other Client Key",
-        status_id: ClientPasskeyStatus::ACTIVE,
-      )
-
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: {
-        challenge_id: challenge_id,
-        credential: {
-          id: other_passkey.webauthn_id,
-          response: { clientDataJSON: "e30=",
-                      authenticatorData: "e30=",
-                      signature: "sig",
-                      userHandle: "h", },
-        },
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+        challenge_id: body.fetch("challenge_id"),
+        credential: credential,
       }
+
+      assert_response :ok
+      assert_equal "ok", response.parsed_body["status"]
+      # The evidence names the credential owner, never the forged handle; Auth issues no session (D-10).
+      assert_equal 0, ClientToken.where(user_id: @user.id).count
+      ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies["auth_sid"])
+
+      assert_predicate ceremony, :authentication_evidence_recorded?
+      assert_equal @user.id, ClientSignInFlow.find_by!(public_id: ceremony.local_sign_in_flow_ref).principal_id
+    end
+
+    test "verification rejects a disabled discoverable credential" do
+      @passkey.update!(status_id: ClientPasskeyStatus::DISABLED)
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding), params: options_params
+      body = response.parsed_body
+
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: assertion_params_for(
+             challenge_id: body.fetch("challenge_id"),
+             challenge: body.dig("options", "challenge"),
+           )
 
       assert_response :unauthorized
       assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+      assert_empty ClientToken.where(user_id: @user.id)
+    end
+
+    test "verification rejects a discoverable credential owned by a suspended client" do
+      @user.update!(deactivated_at: Time.current)
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding), params: options_params
+      body = response.parsed_body
+
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: assertion_params_for(
+             challenge_id: body.fetch("challenge_id"),
+             challenge: body.dig("options", "challenge"),
+           )
+
+      assert_response :unauthorized
+      assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+      assert_empty ClientToken.where(user_id: @user.id)
     end
 
     test "verification returns 422 when login result status is unknown" do
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
            params: options_params(identifier: @user_email.address)
       body = response.parsed_body
 
@@ -322,7 +430,8 @@ module Auth::App::In
       end
       begin
         post(
-          auth_app_sign_in_passkey_verification_path(ri: "jp"), params: assertion_params_for(
+          auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+          params: assertion_params_for(
             challenge_id: body["challenge_id"],
             challenge: body.dig("options", "challenge"),
           ),
@@ -337,11 +446,12 @@ module Auth::App::In
 
     test "verification rejects replaying a consumed challenge" do
       email = ClientEmail.find_by(user: @user).address
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: options_params(identifier: email)
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: options_params(identifier: email)
       body = response.parsed_body
 
       # First attempt fails UV policy but must still burn the challenge.
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: {
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding), params: {
         challenge_id: body["challenge_id"],
         credential: fake_assertion(
           @fake_client, challenge: body.dig("options", "challenge"), user_verified: false,
@@ -351,10 +461,11 @@ module Auth::App::In
       assert_response :unauthorized
 
       # Replaying the same challenge with a valid assertion is rejected.
-      post auth_app_sign_in_passkey_verification_path(ri: "jp"), params: assertion_params_for(
-        challenge_id: body["challenge_id"],
-        challenge: body.dig("options", "challenge"),
-      )
+      post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: assertion_params_for(
+             challenge_id: body["challenge_id"],
+             challenge: body.dig("options", "challenge"),
+           )
 
       assert_response :bad_request
       assert_includes response.body, I18n.t("errors.webauthn.challenge_invalid")
@@ -367,23 +478,24 @@ module Auth::App::In
         create_rotated_active_user_session(@user, rotations: 3)
       end
       restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-      restricted.rotate_refresh_token!(discarded_at: 15.minutes.from_now)
+      restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
 
-      post auth_app_sign_in_passkey_options_path(ri: "jp"),
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
            params: options_params(identifier: @user_email.address),
            as: :json
 
       assert_response :ok
       assert_predicate response.parsed_body["challenge_id"], :present?
-      assert_equal 4, response.parsed_body.dig("options", "allowCredentials").size
+      assert_empty Array(response.parsed_body.dig("options", "allowCredentials"))
     end
 
     test "options returns turnstile error when response token is missing" do
       TurnstileVerifierStub.challenge_enabled = false
       TurnstileVerifierStub.enabled = false
-      TurnstileVerifierStub.response = nil
+      TurnstileVerifierStub.response = { "success" => false, "error" => "missing cf-turnstile-response" }
 
-      post auth_app_sign_in_passkey_options_path(ri: "jp"), params: { identifier: @user_email.address }
+      post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+           params: { identifier: @user_email.address }
 
       assert_response :unprocessable_content
       assert_equal I18n.t("turnstile_error"), response.parsed_body["error"]
@@ -408,11 +520,10 @@ module Auth::App::In
       }
     end
 
-    def options_params(identifier:)
-      {
-        identifier: identifier,
-        "cf-turnstile-response": "test_token",
-      }
+    def options_params(identifier: nil)
+      params = { "cf-turnstile-response": "test_token" }
+      params[:identifier] = identifier unless identifier.nil?
+      params
     end
 
     def create_rotated_active_user_session(user, rotations:)
@@ -443,31 +554,11 @@ class Auth::App::In::PasskeysControllerTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -527,10 +618,8 @@ class Auth::App::In::PasskeysControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -542,10 +631,8 @@ class Auth::App::In::PasskeysControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -766,87 +853,6 @@ class Auth::App::In::PasskeysControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -862,10 +868,8 @@ class Auth::App::In::PasskeysControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -885,12 +889,12 @@ class Auth::App::In::PasskeysControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

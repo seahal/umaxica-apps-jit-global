@@ -1,8 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/MethodLength
-
 module PreferenceRefreshTokenTransport
   extend ActiveSupport::Concern
 
@@ -26,10 +24,7 @@ module PreferenceRefreshTokenTransport
 
     if preference.present?
       if preference.replay?
-        # A concurrent sibling request may have rotated this token moments ago.
-        # In that grace case the handler adopts the replacement into @preferences
-        # and we serve the request with it instead of failing closed.
-        return [@preferences, false] if handle_preference_refresh_replay!(preference) == :grace
+        handle_preference_refresh_replay!(preference)
       else
         handle_preference_refresh_failed(preference, refresh_public_id)
       end
@@ -47,6 +42,82 @@ module PreferenceRefreshTokenTransport
     @refresh_public_id = nil
     preference = create_new_preference_record!
     [preference, true]
+  end
+
+  def load_read_only_preference_record_from_refresh_token!
+    token_value = refresh_token_value
+    return if token_value.blank?
+
+    @refresh_token_value = token_value
+    @refresh_presented_digest = nil
+    @refresh_public_id = nil
+
+    refresh_public_id, refresh_digest = refresh_token_data(token_value)
+    @refresh_presented_digest = refresh_digest
+    @refresh_public_id = refresh_public_id
+
+    preference =
+      if refresh_digest.present?
+        with_preference_connection(:writing) do
+          relation = preference_class.includes(preference_associations_to_preload)
+          if refresh_public_id.present?
+            relation.find_by(public_id: refresh_public_id)
+          else
+            relation.find_by(token_digest: refresh_digest)
+          end
+        end
+      end
+
+    binding_allowed = preference.present? && preference_refresh_binding_allowed?(preference)
+    valid = preference.present? && !refresh_digest_mismatch?(preference, refresh_digest) &&
+      valid_refresh_preference?(preference) && binding_allowed
+
+    if valid
+      @preferences = preference
+      return preference
+    end
+
+    @preference_refresh_failed = true
+    @preference_credential_failure =
+      classify_refresh_credential_failure(preference, refresh_public_id, refresh_digest)
+    if @preference_credential_failure == :replay_detected && superseded_preference_generation?(preference)
+      @preference_credential_failure = :superseded_generation
+    end
+    event =
+      @preference_refresh_binding_reason.present? ? "preference.token.refresh.binding_denied" :
+           "preference.token.refresh.failed"
+    Rails.logger.warn(
+      JitLogEvent.format(
+        event,
+        reason: @preference_refresh_binding_reason || "invalid_or_inactive_refresh_token",
+        **preference_refresh_log_context(preference, refresh_public_id),
+      ),
+    )
+    nil
+  end
+
+  # Names why a presented refresh credential cannot be used. Only states the database positively
+  # confirmed are named; a lookup that raised never reaches here. A token that does not parse into
+  # the current `public_id.verifier` shape and matches no legacy digest is :malformed.
+  def classify_refresh_credential_failure(preference, refresh_public_id, refresh_digest)
+    return :malformed if refresh_digest.blank?
+    return (refresh_public_id.present? ? :record_not_found : :malformed) if preference.nil?
+    return :digest_mismatch if refresh_digest_mismatch?(preference, refresh_digest)
+    return :binding_denied if @preference_refresh_binding_reason.present?
+    return :replay_detected if preference.replay?
+    return :ordinarily_deleted if preference.status_id == preference_status_class::DELETED
+    # expires_at is an alias of discard_at, which replay handling and revocation also set, so the
+    # schema cannot tell an ordinary expiry from a revocation. The name says exactly that.
+    return :expired_or_revoked if preference.revoked?
+
+    :unclassified
+  end
+
+  # Consumed by ordinary rotation (not retired by replay handling or sign-out, which also end its
+  # life), and recently enough to be a request that raced the rotating write.
+  def superseded_preference_generation?(preference)
+    preference.used_at.present? && preference.replaced_by_id.present? && !preference.revoked? &&
+      preference.used_at > PreferenceTransport::PREFERENCE_STALE_GENERATION_WINDOW.ago
   end
 
   def refresh_token_data(token_value)
@@ -101,6 +172,7 @@ module PreferenceRefreshTokenTransport
   end
 
   def handle_invalid_refresh_digest(pref, refresh_public_id)
+    @preference_credential_failure = :digest_mismatch
     handle_preference_refresh_failed(pref, refresh_public_id)
     nil
   end
@@ -187,9 +259,6 @@ module PreferenceRefreshTokenTransport
 
   def refresh_refresh_token_lifetime(preference)
     return if @refresh_token_value.blank? || preference.blank? || @refresh_presented_digest.blank?
-    # A grace-window sibling already adopted the replacement read-only; do not
-    # attempt another rotation against the consumed parent digest.
-    return if @preference_refresh_grace
 
     rotated_preference =
       with_preference_connection(:writing) do
@@ -200,15 +269,23 @@ module PreferenceRefreshTokenTransport
       end
 
     unless rotated_preference
-      replayed_preference = find_preference_by_presented_token
-      if replayed_preference&.replay?
-        handle_preference_refresh_replay!(replayed_preference)
+      current = with_preference_connection(:writing) { find_preference_by_presented_token }
+      if current&.replay?
+        handle_preference_refresh_replay!(current)
         return
       end
 
+      # The row passed validation but was not consumable under the row lock. Name the state the
+      # database now confirms (a concurrent expiry, revocation, or deletion). A row that is still
+      # valid means rotation itself failed; that is a system failure, not a credential refusal.
+      log_preference_refresh_rotation_failed(preference, @refresh_public_id)
+      failure = classify_refresh_credential_failure(current, @refresh_public_id, @refresh_presented_digest)
+      raise PreferenceBase::ResolutionError, "preference refresh rotation failed for a valid credential" if
+        failure == :unclassified
+
       clear_preference_auth_cookies!
       @preference_refresh_failed = true
-      log_preference_refresh_rotation_failed(preference, @refresh_public_id)
+      @preference_credential_failure = failure
       return
     end
 
@@ -240,7 +317,9 @@ module PreferenceRefreshTokenTransport
   # Accepting them via URL/body params leaks them to logs, history, and Referer
   # headers, defeating the HttpOnly/Secure cookie protections.
   def refresh_token_value
-    refresh_token_cookie_names.lazy.filter_map { |cookie_name| cookies[cookie_name].to_s.presence }.first
+    refresh_token_cookie_names.lazy.filter_map { |cookie_name|
+      BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
+    }.first
   end
 
   def refresh_token_expiry
@@ -251,5 +330,3 @@ module PreferenceRefreshTokenTransport
     legacy_refresh_token_digest(token)
   end
 end
-
-# rubocop:enable Metrics/MethodLength

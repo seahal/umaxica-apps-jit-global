@@ -11,12 +11,4 @@ class VisitorPolicy < ApplicationPolicy
   def update?
     owner?
   end
-
-  def revoke_all?
-    user.is_a?(Visitor) && user.id == record.id
-  end
-
-  def purge_sessions?
-    user.is_a?(Operator)
-  end
 end

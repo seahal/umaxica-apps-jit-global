@@ -7,6 +7,7 @@ module Auth
       class UpsController < ::Auth::Com::ApplicationController
         include SignUpSuspensionGuard
         include ::SurfaceInertiaPage
+        include ::AuthCeremonyAdmission
 
         AUTHENTICATION_MODE = :guest
 
@@ -14,29 +15,12 @@ module Auth
         declare_authentication_mode! :guest, no_redirect: true
 
         def show
-          return reject_logged_in_direct_entry! if logged_in? && params[:login_challenge].blank?
-          return render_method_selection! if params[:login_challenge].blank?
-
-          transaction =
-            OidcAuthorizationTransactionCoordinator.find_by_login_challenge!(
-              surface: "com",
-              login_challenge: params[:login_challenge].to_s,
-            )
-          raise ActionController::BadRequest,
-                "authorization transaction expired" if transaction.login_challenge_expired?
-          raise ActionController::BadRequest, "authorization transaction already consumed" if transaction.consumed?
-          raise ActionController::BadRequest,
-                "authorization transaction intent mismatch" unless transaction.intent == "sign_up"
-
-          session[:oidc_authorization_login_challenge] = transaction.login_challenge
-          @oidc_authorization_intent = transaction.intent
-          render inertia: "auth/com/sign_ups/new", props: sign_up_method_props
-        rescue ActiveRecord::RecordNotFound
-          render plain: I18n.t("errors.messages.invalid_request"),
-                 status: :bad_request
+          admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
         end
 
         private
+
+        def auth_ceremony_entry_intent = "sign_up"
 
         def sign_up_surface = :com
 
@@ -46,13 +30,6 @@ module Auth
           render inertia: "auth/com/sign_ups/new", props: sign_up_method_props, status: :service_unavailable
         end
 
-        def reject_logged_in_direct_entry!
-          render plain: I18n.t("errors.messages.already_authenticated"), status: :forbidden
-        end
-
-        # Direct entry without an authorization transaction renders this surface's entry page instead
-        # of bouncing through Base. Every page it links to is already reachable directly, and the
-        # completion paths branch on a missing `oidc_authorization_login_challenge`.
         def render_method_selection!
           render inertia: "auth/com/sign_ups/new", props: sign_up_method_props
         end
@@ -66,6 +43,7 @@ module Auth
 
           {
             title: t("sign.app.registration.new.page_title"),
+            cancel_label: t("actions.cancel"),
             description: nil,
             suspended_notice: suspended ? t("errors.messages.sign_up_suspended") : nil,
             methods: suspended ? [] : sign_up_method_links(entry_params),

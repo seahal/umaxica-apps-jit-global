@@ -9,7 +9,8 @@ module Base
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
 
-          before_action :authenticate_client!
+          step_up only: %i(create destroy), scope: "session_revoke_all"
+
           def create
             authorize!(ClientToken, to: :revoke_others?)
             AuthenticationOtherSessionsRevoker.call(
@@ -18,7 +19,7 @@ module Base
               current_token: current_session,
               current_session_public_id: current_session_public_id,
             )
-            redirect_to(base_app_identity_sessions_path(ri: params[:ri]), status: :see_other)
+            redirect_to(base_app_sessions_path(ri: params[:ri]), status: :see_other)
           end
           alias_method :destroy, :create
         end

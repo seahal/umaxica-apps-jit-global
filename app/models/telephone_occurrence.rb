@@ -8,9 +8,9 @@
 #
 #  id           :bigint           not null, primary key
 #  body         :string           default(""), not null
-#  discarded_at :datetime         default(Infinity), not null
+#  discard_at :datetime         default(Infinity), not null
 #  memo         :string           default(""), not null
-#  purged_at    :datetime         default(Infinity), not null
+#  purge_eligible_at    :datetime         default(Infinity), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
 #  public_id    :string(21)       default(""), not null
@@ -21,7 +21,7 @@
 #  index_telephone_occurrences_on_body             (body) UNIQUE
 #  index_telephone_occurrences_on_body_created_at  (body,created_at)
 #  index_telephone_occurrences_on_public_id        (public_id) UNIQUE
-#  index_telephone_occurrences_on_purged_at        (purged_at)
+#  index_telephone_occurrences_on_purge_eligible_at        (purge_eligible_at)
 #  index_telephone_occurrences_on_status_id        (status_id)
 #
 # Foreign Keys
@@ -38,11 +38,6 @@ class TelephoneOccurrence < OccurrenceRecord
   HMAC_BODY_FORMAT = /\A\h{64}\z/
 
   attribute :status_id, default: TelephoneOccurrenceStatus::NOTHING
-
-  before_validation :normalize_body_unless_hmac
-
-  validates :body, presence: true, length: { maximum: 255 }
-  validate :validate_body_format_unless_hmac
 
   belongs_to :telephone_occurrence_status, foreign_key: :status_id, inverse_of: :telephone_occurrences
   has_many :area_telephone_occurrences, dependent: :destroy, inverse_of: :telephone_occurrence
@@ -62,7 +57,12 @@ class TelephoneOccurrence < OccurrenceRecord
   has_many :telephone_zip_occurrences, dependent: :destroy, inverse_of: :telephone_occurrence
   has_many :zip_occurrences, through: :telephone_zip_occurrences
 
+  validates :body, presence: true, length: { maximum: 255 }
+  validate :validate_body_format_unless_hmac
+
   validates :status_id, numericality: { only_integer: true }
+
+  before_validation :normalize_body_unless_hmac
 
   private
 

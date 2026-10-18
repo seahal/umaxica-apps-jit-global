@@ -42,7 +42,6 @@ module Security
         declared =
           OutboundChannelSuspension::CHANNEL_FEATURE_NAMES.values +
           SignUpSuspension::SURFACE_FEATURE_NAMES.values +
-          OtpEmailNotifierRollout::SURFACE_FEATURE_NAMES.values +
           ExternalAuthentication::FlipperProviderAvailabilityAdapter::PROVIDER_FEATURE_NAMES.values +
           [TurnstileDegradation::FEATURE_NAME, RetentionPurgeJob::FEATURE_NAME]
 

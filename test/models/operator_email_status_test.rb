@@ -43,8 +43,6 @@ class OperatorEmailStatusTest < ActiveSupport::TestCase
       staff_id: staff.id,
       staff_email_status_id: status.id,
       public_id: "email#{SecureRandom.hex(6)}",
-      otp_counter: "1",
-      otp_private_key: "secret_credential",
     )
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

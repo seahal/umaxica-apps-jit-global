@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: client_members
@@ -20,8 +22,6 @@
 #  fk_rails_...  (member_id => members.id) ON DELETE => cascade
 #  fk_rails_...  (user_id => clients.id) ON DELETE => cascade
 #
-
-# frozen_string_literal: true
 
 class ClientMember < AppPrincipalRecord
   belongs_to :user, class_name: "Client"

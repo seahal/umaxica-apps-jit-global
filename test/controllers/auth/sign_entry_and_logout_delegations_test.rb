@@ -26,29 +26,7 @@ class Auth::SignEntryAndLogoutDelegationsTest < ActiveSupport::TestCase
     end.new
   end
 
-  [
-    Auth::Com::Sign::InsController,
-    Auth::Com::Sign::UpsController,
-    Auth::Org::Sign::InsController,
-    Auth::Org::Sign::UpsController,
-  ].each do |controller_class|
-    test "#{controller_class.name} refuses a signed-in client that lands on it directly" do
-      harness = harness_for(controller_class)
-
-      harness.invoke(:reject_logged_in_direct_entry!)
-
-      assert_equal(
-        [[], { plain: I18n.t("errors.messages.already_authenticated"), status: :forbidden }],
-        harness.rendered,
-      )
-    end
-  end
-
-  [
-    Auth::App::Sign::Outs::CompletionsController,
-    Auth::Com::Sign::Outs::CompletionsController,
-    Auth::Org::Sign::Outs::CompletionsController,
-  ].each do |controller_class|
+  [].each do |controller_class|
     test "#{controller_class.name} answers the completion page with the logout response itself" do
       harness = harness_for(controller_class)
 

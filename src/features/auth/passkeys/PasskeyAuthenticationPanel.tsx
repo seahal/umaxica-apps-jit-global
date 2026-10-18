@@ -1,13 +1,15 @@
-// React port of `src/controllers/passkey_authentication_controller.js`.
+// Shared React panel for actor-known and discoverable passkey ceremonies.
 //
-// The ceremony is unchanged: solve an invisible Turnstile token, POST it with the identifier to the
-// options endpoint, run `navigator.credentials.get`, POST the assertion to the verification
+// The ceremony is unchanged: solve an invisible Turnstile token, POST it to the anonymous options
+// endpoint, run `navigator.credentials.get`, POST the assertion to the verification
 // endpoint, and follow the redirect the server returns. Both endpoints are the same server-side
-// routes with the same rate limits and the same CSRF header; only the code that drives them moved
-// out of Stimulus.
+// routes with the same rate limits and the same CSRF header. App/com direct sign-in passes a null
+// identifier field and therefore never collects or submits an account identifier; org actor-known
+// ceremonies retain their explicit server-selected contract.
 import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
+import TextField from "@/components/ui/TextField";
 import { csrfToken } from "@/lib/csrf";
 import { readNonEmptyString, readObject, readString } from "@/lib/payload";
 
@@ -28,10 +30,16 @@ export type PasskeyAuthenticationPanelProps = {
   options_url: string;
   verification_url: string;
   region: string;
-  identifier_param: string;
+  /**
+   * Null when an earlier stage of the ceremony already selected the actor, as the org normal
+   * sign-in flow does after Entra ID: the server reads the actor from its own pending transaction
+   * and ignores anything sent here, so the panel asks for nothing and sends nothing.
+   */
+  identifier_param: string | null;
   turnstile_site_key: string;
   turnstile_error_message: string;
-  field: PasskeyAuthenticationField;
+  /** Null exactly when `identifier_param` is null. */
+  field: PasskeyAuthenticationField | null;
   submit_label: string;
 };
 
@@ -67,9 +75,9 @@ export default function PasskeyAuthenticationPanel({
   verification_url: verificationUrl,
   region,
   identifier_param: identifierParam,
+  field,
   turnstile_site_key: turnstileSiteKey,
   turnstile_error_message: turnstileErrorMessage,
-  field,
   submit_label: submitLabel,
 }: PasskeyAuthenticationPanelProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -84,12 +92,6 @@ export default function PasskeyAuthenticationPanel({
       return;
     }
 
-    const trimmed = identifier.trim();
-    if (!trimmed) {
-      showError(PASSKEY_MESSAGES.identifierRequired);
-      return;
-    }
-
     try {
       const token = await solveInvisibleTurnstile(
         turnstileSiteKey,
@@ -99,7 +101,7 @@ export default function PasskeyAuthenticationPanel({
       showStatus(PASSKEY_MESSAGES.fetchingOptions);
 
       const optionsResponse = await postJson(optionsUrl, {
-        [identifierParam]: trimmed,
+        ...(identifierParam === null ? {} : { [identifierParam]: identifier }),
         "cf-turnstile-response": token,
         ri: region || undefined,
       });
@@ -163,47 +165,37 @@ export default function PasskeyAuthenticationPanel({
       ref={hostRef}
       className="flex flex-col gap-4"
     >
-      {/*
-        A plain, hand-styled input rather than the shared `TextField`: `TextField` has no prop for
-        `autoCapitalize`, and dropping it would change the mobile keyboard behaviour this identifier
-        relies on.
-      */}
-      <div className="flex flex-col gap-1">
-        <label
-          htmlFor="identifier"
-          className="text-sm font-medium text-fg"
-        >
-          {field.label}
-        </label>
-        <input
-          type="text"
-          id="identifier"
-          value={identifier}
-          onChange={(event) => setIdentifier(event.target.value)}
-          placeholder={field.placeholder}
-          autoComplete="username webauthn"
-          autoCapitalize="characters"
-          minLength={field.min_length}
-          maxLength={field.max_length}
-          pattern={field.pattern}
-          spellCheck={false}
-          required
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
-            placeholder:text-fg-muted"
-        />
-      </div>
-
       {error ? (
         <p
           role="alert"
-          className="text-sm text-danger"
+          className="text-base text-error"
         >
           {error}
         </p>
       ) : null}
-      {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
+      <output
+        aria-atomic="true"
+        className="text-base text-fg-muted"
+      >
+        {status}
+      </output>
 
       <div>
+        {identifierParam !== null && field ? (
+          <TextField
+            label={field.label}
+            name={identifierParam}
+            value={identifier}
+            onChange={setIdentifier}
+            placeholder={field.placeholder}
+            minLength={field.min_length}
+            maxLength={field.max_length}
+            pattern={field.pattern}
+            autoComplete="username"
+            isRequired
+          />
+        ) : null}
+
         <Button
           type="button"
           onPress={() => void authenticate()}

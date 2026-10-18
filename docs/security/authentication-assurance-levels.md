@@ -104,6 +104,13 @@ The AAL1 availability state follows the same reference-value shape as AAL2 avail
 Removing an AAL1 credential is a sensitive operation. The normal removal path requires recent normal
 step-up even when the actor will still have one or more AAL1 credentials afterward.
 
+Adding Google or Apple to an already-established `app` account is a post-enrollment `1 -> N`
+credential transition and requires fresh Step-Up. The provider ceremony alone does not authorize
+binding that identity to the current UMAXICA account. Initial provider enrollment remains governed
+by the sign-up transaction, and social-identity removal retains its Step-Up and no-lockout guards.
+See
+[`adr/social-identity-linking-requires-step-up.md`](../../adr/social-identity-linking-requires-step-up.md).
+
 Social-login unlink has a narrower no-lockout rule than the general AAL1 inventory. For `app`,
 removing Google or Apple social login must leave at least one verified email OTP, active passkey, or
 active social login provider other than the removed provider. Passcode remains an AAL1 method, but
@@ -228,7 +235,7 @@ strings. Server-side enforcement (`verify(..., user_verification: true)` plus ex
 | Purpose             | Flow                                          | Policy   |
 | ------------------- | --------------------------------------------- | -------- |
 | `registration`      | sign-up and settings passkey registration     | required |
-| `direct_sign_in`    | identifier-first passkey sign-in              | required |
+| `direct_sign_in`    | discoverable app/com sign-in; actor-known org sign-in | required |
 | `mfa_challenge`     | passkey as second factor after another factor | required |
 | `ordinary_step_up`  | step-up verification for sensitive settings   | required |
 | `high_risk_step_up` | reserved for future high-risk operations      | required |
@@ -238,3 +245,11 @@ The purposes are deliberately distinct so a future decision can relax exactly on
 requires updating `docs/security/webauthn-security-invariants.md` and `adr/passkey-uv-policy.md`
 first. Only a user-verified, user-present assertion supports the AAL2-aligned claim
 (`Webauthn::AuthenticationContext#aal2_aligned?`).
+
+## Delivered reconciliation (2026-10-06)
+
+The AAL strings described here remain historical labels for protocol, storage and signed evidence.
+They do not authorize a session, operation or credential mutation. Current policy travels as an
+explicit step-up requirement and is rechecked at the protected mutation. Email OTP, TOTP and
+passkey method behavior is described by `docs/security/step-up-operation-inventory.md`; a caller
+cannot substitute an AAL label for that requirement.

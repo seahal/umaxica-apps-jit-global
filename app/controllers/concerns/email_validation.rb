@@ -10,10 +10,6 @@ module EmailValidation
     JitUtilsEmailValidator.normalize(email)
   end
 
-  def valid_email_format?(email)
-    JitUtilsEmailValidator.valid?(email)
-  end
-
   def identity_email_model
     ClientEmail
   end
@@ -22,8 +18,15 @@ module EmailValidation
     target_seconds = email_lookup_timing_protection_seconds
     start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-    digest = IdentifierBlindIndex.bidx_for_email(email)
-    result = digest ? identity_email_model.find_by(address_digest: digest) : nil
+    digest = IdentifierBlindIndex.bidx_for_email(email, realm: identity_email_model.identifier_hmac_realm)
+    owner_association =
+      case identity_email_model.name
+      when ClientEmail.name then :user
+      when VisitorEmail.name then :visitor
+      else raise ArgumentError, "unsupported identity email model"
+      end
+    result =
+      digest ? identity_email_model.effective_binding.includes(owner_association).find_by(address_digest: digest) : nil
 
     elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
     remaining = target_seconds - elapsed

@@ -1,0 +1,22 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "draft" as draft
+    state "pending_approval" as pending_approval
+    state "active; ended_at null" as active
+    state "state unchanged; ended_at present (derived closed)" as closed
+    state "ended (declared; state writer UNKNOWN)" as ended
+    state "failed" as failed
+    [*] --> draft
+    [*] --> pending_approval
+    draft --> pending_approval: controller requires approval
+    draft --> active: apply operation
+    pending_approval --> active: apply operation
+    active --> failed: RecordInvalid / RecordNotUnique side-effect failure
+    draft --> closed: end operation
+    pending_approval --> closed: end operation
+    active --> closed: end operation
+    failed --> closed: end operation
+    ended --> closed: end operation
+    active --> closed: EnforcementExpiryJob
+    active --> active: reconciliation
+    closed --> closed: end reconcile / repeat

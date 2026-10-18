@@ -1,0 +1,15 @@
+# Rows inserted by db/op_base_app_migrate/20261006160000_seed_app_sign_flow_reference_data.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: ClientSignUpFlowCleanupStatus
+
+nothing:
+  id: 0
+idle:
+  id: 10
+pending:
+  id: 20
+completed:
+  id: 30
+failed:
+  id: 40

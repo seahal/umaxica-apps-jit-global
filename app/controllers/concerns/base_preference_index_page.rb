@@ -24,6 +24,9 @@ module BasePreferenceIndexPage
     pagination: :pagination_settings,
     theme: :theme_settings,
     cookie: :cookie_settings,
+    calendar: :calendar_settings,
+    clock: :clock_settings,
+    currency: :currency_settings,
     customization: :reset_settings,
   }.freeze
 
@@ -35,24 +38,31 @@ module BasePreferenceIndexPage
       description: t(preference_base_i18n_key(:preferences, :description)),
       up_link: {
         label: t(preference_base_i18n_key(:preferences, :up_link)),
-        # The overridden context here predates the Inertia migration and is carried over unchanged
-        # to keep this change behaviour preserving. See the implementation note for the follow-up.
-        href: public_send(
-          "#{preference_route_authority}_#{preference_surface_key}_root_path",
-          ct: "dr", lx: "en", ri: "us", tz: "asia/tokyo",
-        ),
+        href: preference_index_return_path,
       },
       screens: PREFERENCE_INDEX_SCREENS.map do |screen, label_key|
         {
           key: screen.to_s,
-          label: t(preference_base_i18n_key(:preferences, label_key)),
+          label: t(preference_index_screen_i18n_key(label_key)),
           href: public_send(preference_index_screen_helper_name(screen)),
         }
       end,
     }
   end
 
+  # Dashboard 404s for a guest and Home 404s for a member
+  # (adr/home-dashboard-authentication-boundary.md), so the return target follows the session.
+  def preference_index_return_path
+    destination = logged_in? ? "dashboard" : "root"
+    public_send("#{preference_route_authority}_#{preference_surface_key}_#{destination}_path")
+  end
+
   def preference_index_screen_helper_name(screen)
     "edit_#{preference_route_authority}_#{preference_surface_key}_preference_#{screen}_path"
+  end
+
+  def preference_index_screen_i18n_key(label_key)
+    segments = Array(label_key)
+    preference_base_i18n_key(:preferences, *segments)
   end
 end

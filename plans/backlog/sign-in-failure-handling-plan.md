@@ -2,6 +2,10 @@
 
 Status: backlog
 
+Lifecycle vocabulary: failure classes here use current runtime wording. Classify them with the
+canonical lifecycle terms in `docs/security/idp-flow-lifecycle.md`; the cross-flow migration is
+`plans/backlog/idp-flow-state-machine-unification.md`.
+
 ## Purpose
 
 Define how sign-in failures are handled after a credential or sign-up finalization has already

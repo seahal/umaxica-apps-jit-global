@@ -1,0 +1,324 @@
+# typed: false
+# frozen_string_literal: true
+
+# Warp owns the Rails control-plane surface.
+scope module: :warp, as: :warp do
+  # App control-plane host. Hosts listed declaratively (DRY intentionally broken).
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).warp_service.host, "warp.app.localhost"].compact do
+    # App surface controllers.
+    scope module: :app, as: :app do
+      # Thin landing endpoint.
+      root to: "roots#index"
+
+      namespace :well_known, path: ".well-known" do
+        resource :jwks, only: :show, path: "jwks.json", format: false
+      end
+
+      # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
+      # transport carries every protocol method in the JSON-RPC body, so one create action is the
+      # whole endpoint.
+      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
+      # resource :mcp, only: :create
+
+      # Deployment identifier endpoint.
+      resource :revision, only: :show, format: false
+
+      # Basic health summary.
+      resource :health, only: :show, format: false
+
+      # Machine-readable health probes.
+      namespace :health do
+        # Process liveness probe.
+        resource :liveness, only: :show, format: false
+
+        # Dependency readiness probe.
+        resource :readiness, only: :show, format: false
+
+        # Boot/startup probe.
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent. These are
+      # JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace(:api) do
+        namespace(:v0) do
+          resource(:health, only: :show, path: "health.json", format: false)
+          resource(:revision, only: :show, path: "revision.json", format: false)
+        end
+      end
+
+      # Crawler policy endpoint; keep fixed public path.
+      resources :robots, only: :index, path: "robots.txt"
+
+      # Sitemap endpoint; keep fixed public path.
+      resource :sitemap, only: :show, path: "sitemap.xml"
+
+      # Control-plane settings index.
+      resource :settings, only: :show
+
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
+        namespace :v0 do
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
+        end
+      end
+
+      # Signed-in dashboard.
+      resource :dashboard, only: :show
+
+      # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
+
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
+      namespace :oidc do
+        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
+        resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
+      end
+
+      namespace :sign do
+        # First-party RP sign-out start and completion resources.
+
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+      end
+
+      # Browser CSP report sink; keep configured report-uri path.
+      resource :csp_violation_report, only: :create, path: "csp-violation-report"
+
+      # PWA offline fallback. This is the route form Rails' own application generator emits, kept
+      # verbatim except for the leading slash on the controller, which escapes the enclosing
+      # `scope(module:)`. Approved exception to the resourceful routing rule; do not reshape it into
+      # `resource`. See adr/pwa-offline-route-exception.md.
+      get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
+      get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
+    end
+  end
+
+  # Corporate control-plane host.
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).warp_corporate.host,
+                     "warp.com.localhost",].compact do
+    # Corporate surface controllers.
+    scope module: :com, as: :com do
+      # Thin landing endpoint.
+      root to: "roots#index"
+
+      namespace :well_known, path: ".well-known" do
+        resource :jwks, only: :show, path: "jwks.json", format: false
+      end
+
+      # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
+      # transport carries every protocol method in the JSON-RPC body, so one create action is the
+      # whole endpoint.
+      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
+      # resource :mcp, only: :create
+
+      # Deployment identifier endpoint.
+      resource :revision, only: :show, format: false
+
+      # Basic health summary.
+      resource :health, only: :show, format: false
+
+      # Machine-readable health probes.
+      namespace :health do
+        # Process liveness probe.
+        resource :liveness, only: :show, format: false
+
+        # Dependency readiness probe.
+        resource :readiness, only: :show, format: false
+
+        # Boot/startup probe.
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent. These are
+      # JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace(:api) do
+        namespace(:v0) do
+          resource(:health, only: :show, path: "health.json", format: false)
+          resource(:revision, only: :show, path: "revision.json", format: false)
+        end
+      end
+
+      # Crawler policy endpoint; keep fixed public path.
+      resources :robots, only: :index, path: "robots.txt"
+
+      # Sitemap endpoint; keep fixed public path.
+      resource :sitemap, only: :show, path: "sitemap.xml"
+
+      # Control-plane settings index.
+      resource :settings, only: :show
+
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
+        namespace :v0 do
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
+        end
+      end
+
+      # Signed-in dashboard.
+      resource :dashboard, only: :show
+
+      # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
+
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
+      namespace :oidc do
+        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
+        resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
+      end
+
+      namespace :sign do
+        # First-party RP sign-out start and completion resources.
+
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+      end
+
+      # Browser CSP report sink; keep configured report-uri path.
+      resource :csp_violation_report, only: :create, path: "csp-violation-report"
+
+      # PWA offline fallback. This is the route form Rails' own application generator emits, kept
+      # verbatim except for the leading slash on the controller, which escapes the enclosing
+      # `scope(module:)`. Approved exception to the resourceful routing rule; do not reshape it into
+      # `resource`. See adr/pwa-offline-route-exception.md.
+      get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
+      get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
+    end
+  end
+
+  # Staff control-plane host.
+  constraints host: [Rails.configuration.x.boot_config.fetch(:hosts).warp_staff.host, "warp.org.localhost"].compact do
+    # Staff surface controllers.
+    scope module: :org, as: :org do
+      # Thin landing endpoint.
+      root to: "roots#index"
+
+      namespace :well_known, path: ".well-known" do
+        resource :jwks, only: :show, path: "jwks.json", format: false
+      end
+
+      # Model Context Protocol endpoint. The MCP spec requires a single path serving POST; the
+      # transport carries every protocol method in the JSON-RPC body, so one create action is the
+      # whole endpoint.
+      # Disabled pending an implementation review; see adr/mcp-endpoint-withdrawal.md.
+      # resource :mcp, only: :create
+
+      # Deployment identifier endpoint.
+      resource :revision, only: :show, format: false
+
+      # Basic health summary.
+      resource :health, only: :show, format: false
+
+      # Machine-readable health probes.
+      namespace :health do
+        # Process liveness probe.
+        resource :liveness, only: :show, format: false
+
+        # Dependency readiness probe.
+        resource :readiness, only: :show, format: false
+
+        # Boot/startup probe.
+        resource :startup, only: :show, format: false
+      end
+
+      # Machine-readable health and revision. The literal ".json" is part of the path, not a Rails
+      # format token (`format: false`), mirroring the `.well-known/jwks.json` precedent. These are
+      # JSON-only; the controllers answer 406 to any other `Accept`.
+      namespace(:api) do
+        namespace(:v0) do
+          resource(:health, only: :show, path: "health.json", format: false)
+          resource(:revision, only: :show, path: "revision.json", format: false)
+        end
+      end
+
+      # Crawler policy endpoint; keep fixed public path.
+      resources :robots, only: :index, path: "robots.txt"
+
+      # Sitemap endpoint; keep fixed public path.
+      resource :sitemap, only: :show, path: "sitemap.xml"
+
+      # Control-plane settings index.
+      resource :settings, only: :show
+
+      # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
+      # contract as Core: see adr/preference-browser-transport-family-capability.md. GET + PATCH only:
+      # `resource ... only: :update` would also map PUT (adr/api-route-vocabulary-consolidation.md,
+      # 2026-10-02 amendment).
+      namespace :api do
+        namespace :v0 do
+          namespace :preferences do
+            get :cookie, to: "cookies#show"
+            patch :cookie, to: "cookies#update"
+            get :theme, to: "themes#show"
+            patch :theme, to: "themes#update"
+          end
+        end
+      end
+
+      # Signed-in dashboard.
+      resource :dashboard, only: :show
+
+      # Canonical browser sign-out ceremony (see config/routes/auth.rb for the pattern).
+      scope path: "sign", as: :sign do
+        get "", to: "sign/entries#show", as: :show
+        post "", to: "sign/entries#create", as: :create
+      end
+
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
+      namespace :oidc do
+        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
+        resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
+      end
+
+      namespace :sign do
+        # First-party RP sign-out start and completion resources.
+
+        resource :termination, only: %i(show new edit create), path: "out", controller: :outs, as: :out
+        resource :out_completion, only: %i(show create), path: "out/completion", controller: :outs
+      end
+
+      # Browser CSP report sink; keep configured report-uri path.
+      resource :csp_violation_report, only: :create, path: "csp-violation-report"
+
+      # PWA offline fallback. This is the route form Rails' own application generator emits, kept
+      # verbatim except for the leading slash on the controller, which escapes the enclosing
+      # `scope(module:)`. Approved exception to the resourceful routing rule; do not reshape it into
+      # `resource`. See adr/pwa-offline-route-exception.md.
+      get("service-worker", to: "/rails/pwa#service_worker", as: :pwa_service_worker)
+      get("offline", to: "/rails/pwa#offline", as: :pwa_offline)
+    end
+  end
+end

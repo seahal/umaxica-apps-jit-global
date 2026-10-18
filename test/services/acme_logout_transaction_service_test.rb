@@ -12,7 +12,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "core-next-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: completion_url,
         actor_ref: "actor_xxx",
         session_ref: "session_xxx",
@@ -30,7 +30,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "core-next-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: completion_url,
         ri: "jp",
       )
@@ -46,7 +46,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
-        initiating_client_id: "core-next-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: completion_url,
         ri: "us",
       )
@@ -62,7 +62,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "base",
-        initiating_client_id: "base-rails-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: completion_url,
         ri: "us",
       )
@@ -76,7 +76,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: completion_url,
       ).transaction
 
@@ -99,7 +99,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: completion_url,
       ).transaction
 
@@ -120,7 +120,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: "https://attacker.example/signed-out",
       )
 
@@ -136,7 +136,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "sign-rp",
+        initiating_client_id: "core-app-jp",
         completion_url: completion_url,
         ri: "xx",
       )

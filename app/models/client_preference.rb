@@ -38,7 +38,15 @@
 #  fk_rails_...  (user_id => clients.id) ON DELETE => cascade
 #
 class ClientPreference < AppPrincipalRecord
+  include ::PublicId
   include ::PreferenceExplicitFields
+
+  DESTROY_DEPENDENT_ASSOCIATIONS = %i(
+    user_preference_language user_preference_timezone user_preference_region user_preference_theme
+    client_preference_currency client_preference_date_format client_preference_time_format
+    client_preference_motion client_preference_density client_preference_page_size
+    client_preference_adult_content_gate
+  ).freeze
 
   belongs_to :user, class_name: "Client", inverse_of: :user_preference
 
@@ -92,10 +100,8 @@ class ClientPreference < AppPrincipalRecord
   validates :functional, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
-  validates :public_id, length: { maximum: 21 }, uniqueness: true, allow_blank: true
-
   after_initialize :set_defaults
-  before_validation :generate_public_id, on: :create
+  before_destroy :preload_dependent_associations, prepend: true
 
   def adult_content_gate
     client_preference_adult_content_gate&.option&.name || "nothing"
@@ -103,8 +109,10 @@ class ClientPreference < AppPrincipalRecord
 
   private
 
-  def generate_public_id
-    self.public_id = Nanoid.generate(size: 21) if public_id.blank?
+  def preload_dependent_associations
+    ActiveRecord::Associations::Preloader.new(
+      records: [self], associations: DESTROY_DEPENDENT_ASSOCIATIONS,
+    ).call
   end
 
   def set_defaults

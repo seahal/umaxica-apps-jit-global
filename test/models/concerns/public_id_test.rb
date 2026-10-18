@@ -68,4 +68,30 @@ class PublicIdTest < ActiveSupport::TestCase
 
     assert_equal "existingid123456789", dummy_instance.public_id
   end
+
+  test "existing public_id may use the twenty-five character storage capacity" do
+    value = "legacy-compatible-public"[0, 25]
+    dummy_instance = DummyModel.new(public_id: value)
+
+    dummy_instance.save!
+
+    assert_equal value, dummy_instance.public_id
+  end
+
+  test "public_id rejects values above the storage capacity" do
+    dummy_instance = DummyModel.new(public_id: "a" * 26)
+
+    assert_not dummy_instance.valid?
+    assert dummy_instance.errors.key?(:public_id)
+  end
+
+  test "persisted public_id cannot be changed through the record update boundary" do
+    dummy_instance = DummyModel.create!
+    dummy_instance.public_id = "replacementid123456"
+
+    error = assert_raises(ActiveRecord::RecordInvalid) { dummy_instance.save! }
+
+    assert_equal "cannot be changed after creation", error.record.errors[:public_id].first
+    assert_equal "testpublicid123456789", dummy_instance.reload.public_id
+  end
 end

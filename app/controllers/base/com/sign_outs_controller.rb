@@ -6,57 +6,61 @@ module Base
     class SignOutsController < Base::Com::ApplicationController
       include ::AuthenticationLogoutable
       include ::SignOutNotice
-      include ::SignOidcLogout
+      include ::OidcRpLogoutLauncher
+      include ::BaseSignOutDestination
       include ::SurfaceInertiaPage
 
+      prepend_before_action :apply_default_no_store
+
       AUTHENTICATION_MODE = :open
+      skip_before_action :set_preferences_cookie, only: %i(new edit)
       # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`
       # ERB template, which needs the surface ERB layout; the Inertia shell renders only an Inertia
       # response body.
       layout -> { @render_surface_erb_layout ? "base/com/application" : "base/com/inertia" }
 
       declare_authentication_mode! :open
-      after_action :sign_out_notice_cache_headers!, only: %i(edit complete)
+      before_action :authenticate_oidc_rp_session!, only: :create,
+                                                    unless: -> { params[:logout_challenge].present? }
+      after_action :sign_out_notice_cache_headers!, only: %i(edit create)
+
+      public
+
+      def show
+        return continue_browser_rp_logout! if params[:logout_challenge].present?
+
+        complete_oidc_rp_logout!
+      end
 
       def new
         redirect_to(sign_out_edit_path, status: :see_other)
       end
 
       def edit
-        render inertia: "base/com/sign_outs/edit", props: sign_out_edit_page_props
+        render inertia: "base/com/sign_outs/edit", props: sign_out_edit_page_props(back_to_dashboard: true)
       end
 
       def create
-        if current_resource.blank? && current_session_public_id.blank?
-          return render_oidc_logout_completion
-        end
+        return continue_browser_rp_logout! if params[:logout_challenge].present?
 
-        prepare_sign_out_completion_notice!
-        logout_current_session!(reason: "user_logout")
-        issue_sign_out_notice!
-        redirect_to(sign_out_complete_path, status: :see_other)
+        launch_oidc_rp_logout!(
+          client_id: "base-com-ww",
+          issuer_resource_type: "visitor",
+          token_issuer: "visitor",
+        )
       end
 
-      def complete
-        render_oidc_logout_completion
+      protected
+
+      def track_authenticated_session_activity?
+        return false if (request.get? || request.head?) && %w(new edit).include?(action_name)
+
+        super
       end
 
       private
 
-      def reject_oidc_logout_challenge!(reason)
-        @render_surface_erb_layout = true
-        super
-      end
-
-      def render_oidc_logout_completion
-        @sign_out_notice = consume_sign_out_notice
-        render inertia: "base/com/sign_outs/complete",
-               props: sign_out_complete_page_props,
-               status: :ok,
-               clear_history: true
-      end
-
-      def sign_out_edit_page_props
+      def sign_out_edit_page_props(back_to_dashboard: false)
         active = sign_out_active_context_present?
 
         {
@@ -65,7 +69,7 @@ module Base
           description: active ? t("sign.shared.sign_out.confirm_description") :
             t("sign.shared.sign_out.already_signed_out"),
           form: active ? sign_out_confirmation_form : nil,
-          home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path },
+          **sign_out_return_link_props(back_to_dashboard: back_to_dashboard),
         }
       end
 
@@ -74,15 +78,10 @@ module Base
           action: sign_out_post_path,
           submit: t("sign.shared.sign_out.button"),
           logout_challenge: params[:logout_challenge].presence,
+          logout_intent_proof: if params[:logout_challenge].present?
+                                 browser_rp_logout_intent_proof_for(@logout_transaction)
+                               end,
           confirm_description: t("sign.shared.sign_out.confirm_description"),
-        }
-      end
-
-      def sign_out_complete_page_props
-        {
-          title: t("sign.shared.sign_out.completed_title"),
-          description: sign_out_completed_description,
-          home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path },
         }
       end
 

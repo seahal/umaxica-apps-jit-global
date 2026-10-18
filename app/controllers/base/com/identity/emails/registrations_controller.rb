@@ -10,24 +10,25 @@ module Base
           include ::TurnstilePageProps
           include ::CloudflareTurnstile
 
-          include CommonOtp
-
           include CommonRedirect
-          include SignSettingsEmailRegistration
+          # `preserve_pt` and `retrieve_pt` below come from here; BrowserRpAuthentication does not
+          # bring them in.
+          include ::AuthenticationRedirects
 
           include EnforcementIdentifierGate
 
           include ::VerificationVisitor
+          include BaseStepUpTransactionMarker
 
           AUTHENTICATION_MODE = :private
 
-          before_action :authenticate_visitor!
           # Object-level authorization (ActionPolicy): registering an email is a fresh-record action
           # for the authenticated visitor, so gate by actor type. Each flow step builds/looks up the
           # email through current_visitor.visitor_emails (owner-scoped). Step-up/turnstile remain below.
           before_action :authorize_email_registration!, only: %i(new create edit update)
           before_action :preserve_email_registration_redirect_parameter, only: %i(new create edit update)
           step_up only: %i(new create edit update), bootstrap: true
+          before_action :require_email_bootstrap_when_unconfigured!, only: %i(new create edit update)
 
           def new
             @user_email = VisitorEmail.new
@@ -45,7 +46,9 @@ module Base
           end
 
           def create
-            email_params = params(visitor_email: %i(raw_address address notifiable))
+            email_params = params.slice(:visitor_email).permit(visitor_email: %i(raw_address address notifiable)).fetch(
+              :visitor_email, {},
+            )
             email_address = email_params[:raw_address] || email_params[:address]
 
             # adr/unified-enforcement.md, Identifier attachment enforcement: an in-force
@@ -70,12 +73,6 @@ module Base
             end
 
             session[registration_email_session_key] = @user_email.public_id
-            start_email_ceremony!(
-              surface: "com",
-              actor: current_visitor,
-              session_ref: current_session_public_id,
-              candidate: @user_email,
-            )
             redirect_params = build_notice_params(
               t("sign.app.registration.email.create.verification_code_sent"),
               email_registration_pt_session_key,
@@ -100,38 +97,32 @@ module Base
               return
             end
 
-            result = verify_otp_code(@user_email, submitted_code)
-            unless result[:success]
-              increment_otp_attempts!(@user_email)
-              if @user_email.locked?
-                @user_email.destroy!
-                reset_email_registration_flow!
-                redirect_to(new_base_com_identity_emails_registration_path(ri: params[:ri]))
-                return
-              end
-
+            result = EmailCredentialRegistrationOtpVerificationCommitter.call(
+              actor: current_visitor, token: current_session_token, email: @user_email,
+              transaction: registration_email_otp_transaction,
+              browser_nonce: base_admission_browser_nonce, code: submitted_code,
+            )
+            unless result.verified_evidence?
               @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
               render_registration_edit_failure
               return
             end
 
-            clear_otp(@user_email)
-            @user_email.save! if @user_email.changed?
             finish_email_ceremony!(
               surface: "com",
               actor: current_visitor,
               session_ref: current_session_public_id,
               candidate: @user_email,
+              code: submitted_code,
             )
-            session.delete(registration_email_session_key)
-            redirect_to(
+            reset_email_registration_flow!
+            redirect_to_surface_url(
               email_registration_return_path(
                 base_com_identity_emails_url(
                   ri: params[:ri],
                   host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
                 ),
               ),
-              allow_other_host: cross_host_redirect_allowed?,
             )
           end
 
@@ -222,17 +213,25 @@ module Base
               { raw_address: email_address, confirm_policy: "1" }.merge(email_preferences),
             )
             @user_email.visitor_email_status_id = VisitorEmailStatus::UNVERIFIED
-            otp_code = generate_otp_attributes(@user_email)
             return false unless @user_email.valid?
 
-            remove_existing_unverified_visitor_emails!
-            @user_email.otp_last_sent_at = Time.current
             @user_email.save!
-            OtpAdapter.for(surface: :com, channel: :email).deliver(
+            issued = EmailCredentialRegistrationOtpIssuer.call(
+              actor: current_visitor, token: current_session_token, email: @user_email,
+              browser_nonce: ensure_base_admission_browser_nonce!,
+              bootstrap_transaction: open_email_bootstrap_transaction,
+            )
+            return false unless issued.success?
+
+            session[:com_settings_email_registration_transaction_ref] = issued.transaction.transaction_id
+            Notify::Com::OtpNotifier.issue(
               record: @user_email,
-              otp_code: otp_code,
+              otp_code: issued.code,
               verification_token: nil,
               public_id: @user_email.public_id,
+              purpose: "credential_registration",
+              contact_ceremony_transaction_ref: issued.transaction.transaction_id,
+              contact_otp_generation: issued.transaction.otp_generation,
             )
 
             true
@@ -241,27 +240,122 @@ module Base
             false
           end
 
-          def remove_existing_unverified_visitor_emails!
-            return if @user_email.address_digest.blank?
-
-            current_visitor
-              .visitor_emails
-              .where(
-                address_digest: @user_email.address_digest,
-                visitor_email_status_id: VisitorEmailStatus::UNVERIFIED,
-              )
-              .where.not(id: @user_email.id)
-              .find_each(&:destroy!)
-          end
-
           def current_registration_email
             current_visitor.visitor_emails.find_by(public_id: session[registration_email_session_key])
           end
 
+          def require_email_bootstrap_when_unconfigured!
+            return unless step_up_bootstrap_unconfigured?
+            return if open_email_bootstrap_transaction
+
+            redirect_to(
+              base_com_verification_setup_path(
+                scope: "settings_email", ri: params[:ri],
+                pt: encoded_relative_pt(base_com_identity_emails_path(ri: params[:ri])),
+              ), status: :see_other,
+            )
+          end
+
+          def open_email_bootstrap_transaction
+            step_up_session = VisitorStepUpSession.find_by(visitor_token_id: current_session_token.id)
+            reference = step_up_session&.step_up_ceremony_transaction_ref
+            return unless reference.is_a?(String) && reference.present? &&
+              base_step_up_transaction_marker(
+                reference:, surface: "com", actor: current_visitor, token: current_session_token,
+              )
+
+            VisitorStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
+              transaction = VisitorStepUpCeremonyTransaction.find_by(
+                transaction_id: reference, purpose: "bootstrap", status: "pending",
+                actor_ref: current_visitor.public_id, session_ref: current_session_token.public_id,
+              )
+              next unless transaction && transaction.allowed_methods_array == ["email_otp"] &&
+                !transaction.expired?(now: VisitorStepUpCeremonyTransaction.database_now)
+
+              transaction
+            end
+          end
+
           def valid_registration_email_session?
-            @user_email.present? &&
-              !@user_email.otp_expired? &&
-              @user_email.visitor_email_status_id == VisitorEmailStatus::UNVERIFIED
+            EmailCredentialRegistrationOtpFormQuery.call(
+              actor: current_visitor, token: current_session_token, email: @user_email,
+              transaction: registration_email_otp_transaction, browser_nonce: base_admission_browser_nonce,
+            )
+          end
+
+          def registration_email_otp_transaction
+            reference = session[:com_settings_email_registration_transaction_ref]
+            return unless reference
+
+            VisitorEmailCeremonyTransaction.find_by(transaction_id: reference)
+          end
+
+          def finish_email_ceremony!(surface:, actor:, session_ref:, candidate:, code:)
+            unless surface == "com" && actor == current_visitor && session_ref == current_session_token.public_id
+              raise IdentityEmailCeremonyContract::Error, "registration controller binding mismatch"
+            end
+
+            bootstrap = registration_email_bootstrap_transaction
+            status = EmailCredentialRegistrationOtpFinalizer.call!(
+              actor:, actor_context: current_actor.with(surface: :base),
+              token: current_session_token, email: candidate,
+              transaction: registration_email_otp_transaction,
+              browser_nonce: base_admission_browser_nonce, code: code,
+              requirement: step_up_requirement(scope: verification_scope),
+              bootstrap_transaction: bootstrap,
+            )
+            unless status == :finalized
+              raise IdentityEmailCeremonyContract::Error, "registration finalization is unavailable"
+            end
+
+            on_email_registration_verified!(user_email: candidate, target_user: actor)
+            candidate
+          end
+
+          def require_step_up_unless_bootstrap!(scope:, **policy)
+            return true if scope == "settings_email" && policy.empty? && bootstrap_receipt_recoverable?
+
+            super
+          end
+
+          def verification_satisfied?
+            return true if bootstrap_receipt_recoverable?
+
+            super
+          end
+
+          def bootstrap_receipt_recoverable?
+            return false unless action_name == "update"
+
+            @user_email = current_registration_email
+            bootstrap = registration_email_bootstrap_transaction
+            flow = registration_email_otp_transaction
+            return false unless @user_email && bootstrap && flow
+
+            EmailCredentialRegistrationOtpFinalizer.bootstrap_receipt_pending?(
+              actor: current_visitor, actor_context: current_actor.with(surface: :base),
+              token: current_session_token, email: @user_email, transaction: flow,
+              browser_nonce: base_admission_browser_nonce,
+              code: params.dig(:visitor_email, :pass_code),
+              requirement: step_up_requirement(scope: "settings_email"), bootstrap_transaction: bootstrap,
+            )
+          end
+
+          def registration_email_bootstrap_transaction
+            reference = registration_email_otp_transaction&.bootstrap_ceremony_transaction_ref
+            return unless reference
+
+            VisitorStepUpCeremonyTransaction.find_by(transaction_id: reference)
+          end
+
+          def step_up_requirement(scope:)
+            unless scope == "settings_email"
+              raise StepUpRequirement::Invalid, "registration operation scope mismatch"
+            end
+
+            contact = @user_email || VisitorEmail.new(visitor: current_visitor)
+            VisitorEmailPolicy.new(contact, user: current_visitor)
+              .credential_registration_requirement(token: current_session_token)
           end
 
           def registration_email_session_key
@@ -270,7 +364,7 @@ module Base
 
           def reset_email_registration_flow!
             session.delete(registration_email_session_key)
-            reset_email_ceremony_session!
+            session.delete(:com_settings_email_registration_transaction_ref)
           end
 
           def new_registration_path_with_notice
@@ -310,6 +404,17 @@ module Base
 
           def verification_required_action?
             step_up_bootstrap_active?
+          end
+
+          def on_email_registration_verified!(*)
+            CredentialSecurityTransition.call(
+              actor: current_visitor,
+              current_session: current_session,
+              reason: :email_address_verified,
+              affected_surface: "com",
+              revoke_other_sessions: false,
+              request: request,
+            )
           end
 
           def verification_scope

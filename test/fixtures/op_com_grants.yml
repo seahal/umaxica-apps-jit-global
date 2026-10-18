@@ -1,0 +1,4 @@
+# Empty fixture — ensures the table is truncated during fixture loading.
+# Fixture loading empties visitor_device_sessions with foreign keys suspended, so an RP session left
+# by an interrupted non-transactional test survives its device session and then collides, on the
+# one-active-session-per-device index, with a later device session that reuses the primary key.

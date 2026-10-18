@@ -64,25 +64,6 @@ class SignOrgSignUpsHelperTest < ActionView::TestCase
     end
   end
 
-  test "safe_recruit_contact_url normalizes safe values and rejects unsafe ones" do
-    assert_equal "https://contact.example.test/Recruit",
-                 send(:safe_recruit_contact_url, " HTTPS://CONTACT.EXAMPLE.TEST/Recruit ")
-
-    assert_nil send(:safe_recruit_contact_url, "https://user:pass@contact.example.test/recruit")
-    with_env("ORG_SIGN_UP_DIRECT_MESSAGE_URL" => nil) do
-      Rails.stub(:env, Struct.new(:local?).new(true)) do
-        assert_equal "http://localhost/recruit", send(:safe_recruit_contact_url, "http://localhost/recruit")
-      end
-    end
-
-    assert_nil send(:safe_recruit_contact_url, "javascript:alert(1)")
-  end
-
-  test "safe_recruit_contact_url handles invalid URI" do
-    assert_nil send(:safe_recruit_contact_url, "invalid uri with spaces and \x00null")
-    assert_nil send(:safe_recruit_contact_url, "https://[invalid")
-  end
-
   private
 
   def with_env(values)

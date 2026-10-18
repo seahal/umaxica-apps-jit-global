@@ -5,47 +5,38 @@ module Base
   module Org
     module Support
       module EnforcementCases
-        # adr/unified-enforcement.md, Break-glass / State machine. Ends an
-        # active Case. Break-glass release (permanently_frozen Method Effect,
-        # non-appealed permanent_ban) requires the Case to already carry
-        # break_glass_approved_by_operator_public_id -- enforced by the CHECK
-        # constraint at Case creation, not re-derived here.
+        # adr/unified-enforcement.md, Administrative Access Lock integration / Break-glass, and
+        # adr/operator-capability-authorization.md. Ending a Case releases the principal's access
+        # lock only when no other in-force Case still blocks them (EnforcementCaseEndOperation's
+        # refcount), and never revives a session, token, or Step-Up freshness.
+        #
+        # A permanent ban and a break-glass-only Case need a break-glass release with a second
+        # approver. That flow is not provided through the console, so those Cases are refused here
+        # rather than released under a weaker control than the one that applied them.
         class ReleasesController < Base::Org::ApplicationController
-          include EnforcementCaseRealmResolvable
+          include ::OrgOwnerPageRelay
 
           AUTHENTICATION_MODE = :private
-
           declare_authentication_mode! :private
-          before_action :require_enforcement_step_up!
-          before_action :set_enforcement_case
 
+          before_action :no_store
+
+          public
+
+          # R5-WU12: decided, written and composed by the Enforcement owner over HTTPS.
+          def new
+            relay_owner_page!
+          end
+
+          # R5-WU12: decided, written and composed by the Enforcement owner over HTTPS.
           def create
-            authorize!(@enforcement_case, with: EnforcementCasePolicy, to: :release?)
-
-            EnforcementCaseEndOperation.call(
-              enforcement_case: @enforcement_case, reason: release_reason,
-              ended_by_operator_public_id: current_operator.public_id,
-            )
-            render json: { public_id: @enforcement_case.public_id, state: @enforcement_case.state }, status: :ok
-          rescue ActiveRecord::RecordInvalid, ArgumentError => e
-            render json: { error: e.message }, status: :unprocessable_content
+            relay_owner_page!
           end
 
           private
 
-          def require_enforcement_step_up!
-            require_step_up!(scope: "enforcement_case_release")
-          end
-
-          def set_enforcement_case
-            @enforcement_case = enforcement_case_class.find_by!(public_id: params.expect(:enforcement_case_id))
-          end
-
-          def release_reason
-            requested = params[:reason].to_s
-            return requested if EnforcementCaseApplicable::END_REASONS.include?(requested)
-
-            "revoked"
+          def no_store
+            response.headers["Cache-Control"] = "private, no-store"
           end
         end
       end

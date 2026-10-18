@@ -11,13 +11,13 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
     PersonaMembershipRevokeReason.ensure_defaults!
   end
 
-  test "account and collective concerns are included" do
-    assert_includes Persona.included_modules, Account
-    assert_includes Enterprise.included_modules, Collective
+  test "persona and organization concerns are included" do
+    assert_includes ClientPersona.included_modules, Persona
+    assert_includes Enterprise.included_modules, Organization
   end
 
-  test "account title validation rejects blank invalid and long values" do
-    persona = Persona.new(client_identity: client_identity("persona-title-validation"), title: "bad title!")
+  test "persona title validation rejects blank invalid and long values" do
+    persona = ClientPersona.new(client_identity: client_identity("persona-title-validation"), title: "bad title!")
 
     assert_not persona.valid?
     assert persona.errors.of_kind?(:title, :invalid)
@@ -33,7 +33,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
     assert persona.errors.of_kind?(:title, :too_long)
   end
 
-  test "collective title validation rejects blank invalid and long values" do
+  test "organization title validation rejects blank invalid and long values" do
     enterprise = Enterprise.new(name: "Acme", title: "bad title!")
 
     assert_not enterprise.valid?
@@ -96,7 +96,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "membership validates unit enterprise" do
-    persona = Persona.create!(client_identity: client_identity("persona-membership-mismatch"), title: "P1")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-membership-mismatch"), title: "P1")
     enterprise = Enterprise.create!(name: "Acme", title: "Acme")
     other = Enterprise.create!(name: "Other", title: "Other")
     other_unit = EnterpriseUnit.create!(enterprise: other, name: "Other Root")
@@ -113,7 +113,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "allows only one active primary membership per persona" do
-    persona = Persona.create!(client_identity: client_identity("persona-primary"), title: "P2")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-primary"), title: "P2")
     enterprise = Enterprise.create!(name: "Acme", title: "Acme")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
     attrs = {
@@ -132,8 +132,8 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
     assert duplicate.errors.of_kind?(:primary, :taken)
   end
 
-  test "account exposes current membership and collective interface" do
-    persona = Persona.create!(client_identity: client_identity("persona-interface"), title: "P3")
+  test "persona exposes current membership and organization protocol" do
+    persona = ClientPersona.create!(client_identity: client_identity("persona-interface"), title: "P3")
     enterprise = Enterprise.create!(name: "Acme", title: "Acme")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
     membership = PersonaMembership.create!(
@@ -145,7 +145,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
       primary: true,
     )
 
-    assert_equal :persona_memberships, Persona.membership_association_name
+    assert_equal :persona_memberships, ClientPersona.membership_association_name
     assert_equal membership, persona.primary_membership
     assert_equal membership, persona.current_membership
     assert_equal [membership], persona.current_memberships.to_a
@@ -160,11 +160,11 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
 
   test "database rejects a second persona for the same client identity" do
     identity = client_identity("persona-identity-unique")
-    Persona.create!(client_identity: identity, title: "P4")
+    ClientPersona.create!(client_identity: identity, title: "P4")
 
     assert_raises(ActiveRecord::RecordNotUnique) do
-      Persona.transaction(requires_new: true) do
-        Persona.insert_all!(
+      ClientPersona.transaction(requires_new: true) do
+        ClientPersona.insert_all!(
           [
             {
               client_identity_id: identity.id,
@@ -203,7 +203,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "database rejects membership whose unit belongs to another enterprise" do
-    persona = Persona.create!(client_identity: client_identity("persona-db-membership-mismatch"), title: "P5")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-db-membership-mismatch"), title: "P5")
     enterprise = Enterprise.create!(name: "Acme", title: "Acme")
     other = Enterprise.create!(name: "Other", title: "Other")
     other_unit = EnterpriseUnit.create!(enterprise: other, name: "Other Root")
@@ -250,7 +250,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "accepts a pending membership and records its approver" do
-    persona = Persona.create!(client_identity: client_identity("persona-accept"), title: "Accept")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-accept"), title: "Accept")
     enterprise = Enterprise.create!(name: "Accept Enterprise", title: "Accept")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
     membership = PersonaMembership.create!(
@@ -270,7 +270,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "suspends an active membership and clears primary status" do
-    persona = Persona.create!(client_identity: client_identity("persona-suspend"), title: "Suspend")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-suspend"), title: "Suspend")
     enterprise = Enterprise.create!(name: "Suspend Enterprise", title: "Suspend")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
     membership = PersonaMembership.create!(
@@ -290,7 +290,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "revokes an active membership and is idempotent after revocation" do
-    persona = Persona.create!(client_identity: client_identity("persona-revoke"), title: "Revoke")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-revoke"), title: "Revoke")
     enterprise = Enterprise.create!(name: "Revoke Enterprise", title: "Revoke")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
     membership = PersonaMembership.create!(
@@ -314,7 +314,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "transfers an active membership to another unit in the same enterprise" do
-    persona = Persona.create!(client_identity: client_identity("persona-transfer"), title: "Transfer")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-transfer"), title: "Transfer")
     enterprise = Enterprise.create!(name: "Transfer Enterprise", title: "Transfer")
     first_unit = EnterpriseUnit.create!(enterprise:, name: "First")
     second_unit = EnterpriseUnit.create!(enterprise:, name: "Second")
@@ -333,7 +333,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "rejects transferring an active membership to another enterprise" do
-    persona = Persona.create!(client_identity: client_identity("persona-transfer-invalid"), title: "Transfer")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-transfer-invalid"), title: "Transfer")
     enterprise = Enterprise.create!(name: "Transfer Enterprise", title: "Transfer")
     other = Enterprise.create!(name: "Other Enterprise", title: "Other")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
@@ -356,7 +356,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "makes an active membership primary and demotes the previous primary" do
-    persona = Persona.create!(client_identity: client_identity("persona-primary-service"), title: "Primary")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-primary-service"), title: "Primary")
     enterprise = Enterprise.create!(name: "Primary Enterprise", title: "Primary")
     first_unit = EnterpriseUnit.create!(enterprise:, name: "First")
     second_unit = EnterpriseUnit.create!(enterprise:, name: "Second")
@@ -385,7 +385,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "grants a new active membership" do
-    persona = Persona.create!(client_identity: client_identity("persona-grant"), title: "Grant")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-grant"), title: "Grant")
     enterprise = Enterprise.create!(name: "Grant Enterprise", title: "Grant")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
 
@@ -408,7 +408,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "rejects granting a duplicate active membership" do
-    persona = Persona.create!(client_identity: client_identity("persona-grant-duplicate"), title: "Grant")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-grant-duplicate"), title: "Grant")
     enterprise = Enterprise.create!(name: "Grant Enterprise", title: "Grant")
     unit = EnterpriseUnit.create!(enterprise:, name: "Root")
     PersonaMembership.create!(
@@ -433,7 +433,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "rejects granting a duplicate active primary membership" do
-    persona = Persona.create!(client_identity: client_identity("persona-grant-primary"), title: "Grant")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-grant-primary"), title: "Grant")
     first = Enterprise.create!(name: "First Grant Enterprise", title: "First")
     second = Enterprise.create!(name: "Second Grant Enterprise", title: "Second")
     first_unit = EnterpriseUnit.create!(enterprise: first, name: "First Root")
@@ -462,7 +462,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
   end
 
   test "rejects granting a membership to a unit in another enterprise" do
-    persona = Persona.create!(client_identity: client_identity("persona-grant-unit"), title: "Grant")
+    persona = ClientPersona.create!(client_identity: client_identity("persona-grant-unit"), title: "Grant")
     enterprise = Enterprise.create!(name: "Grant Enterprise", title: "Grant")
     other = Enterprise.create!(name: "Other Enterprise", title: "Other")
     other_unit = EnterpriseUnit.create!(enterprise: other, name: "Other Root")

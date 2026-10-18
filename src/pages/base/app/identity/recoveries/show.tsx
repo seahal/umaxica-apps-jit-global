@@ -65,7 +65,9 @@ function AppealSection({ form, casePublicId }: { form: AppealForm; casePublicId:
         label={form.reason_label}
         options={form.reason_codes}
         value={reasonCode}
-        onChange={(value) => setReasonCode(value === null ? "" : String(value))}
+        onChange={(value) => {
+          setReasonCode(value);
+        }}
       />
 
       <TextField

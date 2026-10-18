@@ -48,10 +48,7 @@ class AcmeRefreshTokenIssuer
       return failure(:invalid_digest, token: token) unless token.refresh_token_digest_matches?(verifier)
 
       digest = token.class.digest_refresh_token(verifier)
-      result = token.class.rotate_refresh!(
-        presented_refresh_digest: digest,
-        now: Time.current,
-      )
+      result = token.class.rotate_refresh!(presented_refresh_digest: digest)
     end
 
     case result[:status]
@@ -77,7 +74,8 @@ class AcmeRefreshTokenIssuer
 
     ActiveRecord::Base.connected_to(role: :writing) do
       # rubocop:disable Rails/SkipsModelValidations
-      token.oidc_connection&.update_columns(last_used_at: Time.current, updated_at: Time.current)
+      now = token.class.database_now
+      token.oidc_connection&.update_columns(last_used_at: now, updated_at: now)
       # rubocop:enable Rails/SkipsModelValidations
     end
   end
@@ -99,9 +97,9 @@ class AcmeRefreshTokenIssuer
   def handle_refresh_token_reuse(token)
     with_token_writing_connection(token) do
       family_scope = refresh_token_family_scope(token)
-      now = Time.current
+      now = token.class.database_now
       # rubocop:disable Rails/SkipsModelValidations
-      family_scope.update_all(discarded_at: now)
+      family_scope.update_all(discard_at: now)
       # rubocop:enable Rails/SkipsModelValidations
 
       actor_key = actor_identifier_column(token) || :user_id
@@ -112,9 +110,21 @@ class AcmeRefreshTokenIssuer
       )
     end
 
+    RefreshTokenReuseActivityRecorder.call(token: token, result: "token_family_revoked")
+
+    Rails.logger.warn(
+      # This is an internal diagnostic, not user-facing copy.
+      # rubocop:disable I18n/RailsI18n/DecorateString
+      "Refresh token reuse detected; the refresh token family was revoked so the user can sign in again.",
+      # rubocop:enable I18n/RailsI18n/DecorateString
+    )
     Rails.logger.info(
       JitLogEvent.format(
         "authentication.refresh.reuse_detected",
+        # This is an internal diagnostic, not user-facing copy.
+        # rubocop:disable I18n/RailsI18n/DecorateString
+        message: "Refresh token reuse detected; the refresh token family was revoked.",
+        # rubocop:enable I18n/RailsI18n/DecorateString
         token_id: token.public_id,
         refresh_token_family_id: token.refresh_token_family_id,
         actor_type: actor_type_label(token),

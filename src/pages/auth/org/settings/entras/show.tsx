@@ -29,8 +29,8 @@ export default function OrgEntraSettingsShow({
       width="narrow"
     >
       <Card>
-        <p className="text-sm text-fg">{status}</p>
-        <p className="text-sm">
+        <p className="text-base text-fg">{status}</p>
+        <p className="text-base">
           <TextLink href={editLink.href}>{editLink.label}</TextLink>
         </p>
       </Card>

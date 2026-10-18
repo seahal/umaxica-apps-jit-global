@@ -27,7 +27,9 @@ class EnforcementIdentifierDigestTest < ActiveSupport::TestCase
   teardown do
     ENV["ENFORCEMENT_APP_IDENTIFIER_HMAC_KEY"] = @previous_app_key
     ENV["ENFORCEMENT_COM_IDENTIFIER_HMAC_KEY"] = @previous_com_key
-    Rails.application.envs.instance_variable_set(:@envs, @previous_env_snapshot)
+    # A failure before setup (fixture loading) leaves no snapshot; writing nil back would break
+    # every later credential read in this worker.
+    Rails.application.envs.instance_variable_set(:@envs, @previous_env_snapshot) if @previous_env_snapshot
   end
 
   test "for_email normalizes, digests, and stamps current versions" do

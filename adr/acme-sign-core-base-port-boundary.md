@@ -1,12 +1,24 @@
 # Acme, Sign, Core, Base, And Palm Boundary
 
+> **Palm handoff supersession (2026-10-01):**
+> [Jump directed Rails handoff contract](jump-directed-rails-handoff-contract.md) supersedes the
+> prohibition on a Palm browser launcher and temporary browser continuity state. Native API
+> bearer-token authentication remains separate. The canonical Palm origin is
+> `https://palm-jp.umaxica.app`; Base owns authorization and token issuance.
+
+> **Supersession (2026-09-13):** Physical Rails authority is Base (sole IdP/AS). Auth is a ceremony
+> service, not a special RP. Seven first-party RPs replace shared browser clients. See
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`. Acme remains conceptual vocabulary.
+> The authority and client-registration decisions in the body below are historical and must not be
+> used to restore Acme/Sign-issued browser sessions or the retired shared browser client IDs.
+
 > Core browser credential transport update:
 > `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` supersedes this ADR's
 > `__Host-core_sid`-only Core browser credential model in the Web Boundary and Guardrails sections.
 
 ## Status
 
-Accepted (2026-06-12)
+Accepted; partially superseded (2026-09-13) (2026-06-12)
 
 ## Context
 
@@ -111,8 +123,8 @@ iOS / Android -> Acme /authorize -> Acme /token -> Palm API
 ```
 
 Native applications are expected to use Acme-issued credentials when they call Palm. Authorization
-Code + PKCE is the expected OAuth/OIDC building block when the native RP flow is implemented, but
-the concrete iOS/Android flow is still open. Palm must not issue OAuth/OIDC Access Tokens, Refresh
+Code + PKCE is implemented through the approved Palm browser relay described in
+`adr/jump-directed-rails-handoff-contract.md`. Palm must not issue OAuth/OIDC Access Tokens, Refresh
 Tokens, or ID Tokens.
 
 ```json
@@ -155,6 +167,13 @@ must remain inert: no token exchange, no state mutation, no durable account/sess
 secret reflection, and no cookie issuance. Do not delete them until native app registration,
 provider console settings, external documentation, and access logs have been checked. They are
 deletion or consolidation candidates, not the formal Palm OAuth/OIDC entry point.
+
+Palm is an approved first-party RP. Its browser-facing native authorization entry is `GET /sign`
+followed by `POST /sign`, like every other first-party RP,
+using `Palm -> Base -> Auth -> Base -> Palm`, S256 PKCE, state and nonce. Palm verifies the Jump
+return at its HTTPS `/oidc/callback` before delivery to a fixed native completion URI. It does
+not exchange OAuth tokens or authenticate its bearer API with browser cookies. See the directed
+handoff ADR for the implemented contract and native deployment prerequisites.
 
 Future Palm device and token transport APIs should use explicit API namespaces such as:
 
@@ -212,11 +231,9 @@ The URL direction is:
 - Sign: `sign.example.com` or equivalent.
 - Core: `jp.example.com`.
 - Base: `www.jp.example.com` or another Rails foundation/control-plane subdomain.
-- Palm: `palm.jp.umaxica.app` in the current Rails route configuration; final production URL shape
-  remains open.
+- Palm: `palm-jp.umaxica.app`, an approved first-party RP in the directed Jump graph.
 
-Palm URL selection remains separately adjustable. The responsibility, `palm-api` token audience, and
-bearer-token boundary are decided first.
+The `palm-api` audience and bearer-token API boundary remain independent from browser relay state.
 
 ## Supersession
 
@@ -252,7 +269,7 @@ Do not:
 - `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md`
 - `adr/core-browser-credential-transport.md`
 - `docs/architecture/acme-sign-core-base-port.md`
-- `plans/active/acme-sign-core-base-port-implementation.md`
+- GH issue #829
 - `adr/identity-authority-boundary.md`
 - `adr/acme-session-and-token-authority.md`
 - `adr/sign-residual-idp-surface-retirement.md`

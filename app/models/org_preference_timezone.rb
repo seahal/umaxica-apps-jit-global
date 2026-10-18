@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_timezones
@@ -21,17 +23,15 @@
 #  fk_rails_...                              (preference_id => org_preferences.id)
 #
 
-# frozen_string_literal: true
-
 class OrgPreferenceTimezone < OrgSettingRecord
   belongs_to :preference, class_name: "OrgPreference", inverse_of: :org_preference_timezone
   belongs_to :option,
              class_name: "OrgPreferenceTimezoneOption",
              inverse_of: :org_preference_timezones
 
-  before_validation :set_option_id
-
   validates :preference_id, uniqueness: true
+
+  before_validation :set_option_id
 
   private
 

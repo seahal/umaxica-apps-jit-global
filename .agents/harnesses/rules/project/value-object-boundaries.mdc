@@ -109,7 +109,7 @@ When a model appears to need a service, the usual cause is that the object is no
 and is filed in the wrong root. Reclassify it before adding a dependency.
 
 **Known deviations, both under review.** Neither is a callback, which is how they were first
-described; see `memos/2026-08-29-chronicle-and-enforcement-write-dependencies.md`.
+described; see `research/2026-08-29-chronicle-and-enforcement-write-dependencies.md`.
 
 - `app/models/concerns/chronicle_capturable.rb` calls the Chronicle writers from an explicit
   block-taking class method. Those operations write `Chronicle` rows, so this is the audit model

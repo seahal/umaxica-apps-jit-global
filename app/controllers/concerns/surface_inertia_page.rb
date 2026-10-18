@@ -15,6 +15,7 @@ module SurfaceInertiaPage
 
   include SurfaceChrome
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     family, surface = controller_path.to_s.split("/").first(2)
 
@@ -34,5 +35,23 @@ module SurfaceInertiaPage
   # way `SurfaceChrome#chrome_t` does for the chrome props.
   def page_t(key, **)
     t(key, **)
+  end
+
+  # Parent of signed-in self-service screens is Dashboard on Base and Warp. Auth uses Root.
+  # The href is a route helper so
+  # PreferenceGlobal can attach the request region (`ri`) and any other context params.
+  def dashboard_up_link(label: t("actions.up"))
+    family, surface = controller_path.to_s.split("/").first(2)
+    helper =
+      if family == "auth"
+        "#{family}_#{surface}_root_path"
+      else
+        "#{family}_#{surface}_dashboard_path"
+      end
+
+    {
+      label: label,
+      href: public_send(helper, ri: params[:ri]),
+    }
   end
 end

@@ -1,8 +1,21 @@
 # typed: false
 # frozen_string_literal: true
 
-class IdentitySocialCeremonyCandidate < AppTicketRecord
+class IdentitySocialCeremonyCandidate < OpBaseAppRecord
   include IdentityCeremonyCandidateRecord
+
+  NANOID_REFERENCE_PATTERN = /\A[A-Za-z0-9_-]{21}\z/.freeze
+  LEGACY_UUID_REFERENCE_PATTERN =
+    /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.freeze
+
+  class << self
+    public
+
+    def valid_reference?(value)
+      value.is_a?(String) &&
+        (NANOID_REFERENCE_PATTERN.match?(value) || LEGACY_UUID_REFERENCE_PATTERN.match?(value))
+    end
+  end
 
   encrypts :auth_hash
 

@@ -8,10 +8,15 @@ module Auth
         module Passkey
           class VerificationsController < ::Auth::Com::ApplicationController
             include ::PasskeySignInFlow
-            include EmailValidation
-            include IdentifierDetection
+            include ::AuthenticationModeSwitchGuard
+            include ::SignInPhaseBindingControllerSupport
 
             AUTHENTICATION_MODE = :guest
+
+            prepend_before_action :require_sign_in_ceremony_admission!
+            ensure_fqdn_gate_first!
+            prepend_before_action :apply_default_no_store
+            before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
             declare_authentication_mode! :guest
             before_action :start_minimum_response_budget
             after_action :enforce_minimum_response_budget
@@ -43,29 +48,9 @@ module Auth
 
             private
 
-            def identity_email_model
-              VisitorEmail
-            end
-
-            def identity_telephone_model
-              VisitorTelephone
-            end
-
-            def identity_from_email_record(record)
-              record&.visitor
-            end
-
-            def identity_from_telephone_record(record)
-              record&.visitor
-            end
-
-            def find_active_passkey_actor(identifier)
-              visitor = find_user_by_identifier(identifier)
-              visitor if visitor&.active?
-            end
-
             def allow_passkey_sign_in?(passkey)
-              return true if passkey.visitor.has_verified_pii?
+              actor = Visitor.find(passkey.visitor_id)
+              return true if actor.has_verified_pii?
 
               Rails.logger.info(
                 JitLogEvent.format(
@@ -81,9 +66,10 @@ module Auth
             end
 
             def perform_passkey_sign_in(passkey)
+              actor = Visitor.find(passkey.visitor_id)
               pt = retrieve_pt_for_checkpoint
               establish_signed_in_session!(
-                passkey.visitor, pt: pt, ri: current_region_identifier, auth_method: "passkey",
+                actor, pt: pt, ri: current_region_identifier, auth_method: "passkey",
               )
             end
 
@@ -92,26 +78,22 @@ module Auth
               when :mfa_required
                 render json: { status: "mfa_required", redirect_url: result[:redirect_path] }, status: :ok
                 true
-              when :session_limit_hard_reject
-                render_session_limit_hard_reject(message: result[:message], http_status: result[:http_status])
+              when :session_limit_conflict
+                render_sign_in_refusal(
+                  message: result[:message], http_status: result[:http_status],
+                  error_code: "session_limit_conflict",
+                )
                 true
               else
                 false
               end
             end
 
-            def render_passkey_restricted_success(_result)
-              render json: {
-                status: "session_restricted",
-                redirect_url: auth_com_sign_in_session_path,
-                message: I18n.t("sign.app.in.session.restricted_notice"),
-              }, status: :ok
-            end
-
             def passkey_checkpoint_redirect_url
               auth_com_sign_in_check_path(
                 pt: retrieve_pt_for_checkpoint,
                 ri: current_region_identifier,
+                **sign_in_flow_binding_params(sign_in_phase_binding_current_flow),
               )
             end
 

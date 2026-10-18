@@ -49,7 +49,7 @@ The current repository shows these product signals:
 Primary repository sources used for this triage:
 
 - `docs/spec/srs.md`
-- `config/routes/sign.rb`
+- `config/routes/auth.rb`
 - `config/routes/core.rb`
 
 ## Reading Rule

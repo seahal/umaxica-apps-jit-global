@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../lib/avatar_legacy_client_id_detector"
 
 module Security
   module Invariants
@@ -94,21 +95,16 @@ module Security
       end
 
       test "new code does not add canonical avatars client_id writes beyond known violations" do
+        detector = AvatarLegacyClientIdDetector.new
         offenders =
           production_ruby_paths.flat_map do |path|
             relative_path = path.relative_path_from(Rails.root).to_s
-            File.readlines(path, chomp: true).each_with_index.filter_map do |line, index|
-              next unless line.match?(
-                # rubocop:disable Layout/LineLength -- splitting this regex corrupts it
-                /\bclient_id:\s*(?:(?:current_client|principal|actor|user|client|@user|@client)\.id|legacy_compatibility_client_id)\b/,
-                # rubocop:enable Layout/LineLength
-              )
-              next if [AVATAR_PROVISIONING_CREATE_PATH,
-                       AVATAR_BACKFILL_LEGACY_CLIENT_BINDINGS_PATH,].include?(relative_path)
+            next [] if [AVATAR_PROVISIONING_CREATE_PATH,
+                        AVATAR_BACKFILL_LEGACY_CLIENT_BINDINGS_PATH,].include?(relative_path)
 
-              location = "#{relative_path}:#{index + 1}"
-
-              "#{location}: #{line.strip}"
+            source = File.read(path)
+            detector.offending_lines(source).map do |line|
+              "#{relative_path}:#{line}: #{source.lines[line - 1].strip}"
             end
           end
 

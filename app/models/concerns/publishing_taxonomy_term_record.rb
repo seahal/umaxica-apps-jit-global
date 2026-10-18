@@ -5,6 +5,7 @@ module PublishingTaxonomyTermRecord
 
   MAX_DEPTH = 8
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include PublicId
 
@@ -39,10 +40,13 @@ module PublishingTaxonomyTermRecord
 
   def ancestors
     chain = []
-    node = parent
-    while node
+    parent_id = self[:parent_id]
+    while parent_id
+      node = self.class.find_by(id: parent_id)
+      break unless node
+
       chain.unshift(node)
-      node = node.parent
+      parent_id = node[:parent_id]
     end
     chain
   end

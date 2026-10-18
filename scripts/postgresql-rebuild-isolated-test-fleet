@@ -1,0 +1,239 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Rebuild only the manifest-verified, disposable test fleet. PostgreSQL roles are
+# cluster-wide, so dropping a database leaves its identifier HMAC roles behind.
+# This command removes only roles proven to belong to the dropped fleet.
+require "digest"
+require "json"
+require "pg"
+require "rake"
+require "tempfile"
+
+abort "only --verify-only is supported" unless ARGV.empty? || ARGV == ["--verify-only"]
+verify_only = ARGV == ["--verify-only"]
+
+root = File.expand_path("..", __dir__)
+abort "run from the repository root" unless Dir.pwd == root
+abort "test environment is required" unless ENV.fetch("RAILS_ENV") == "test"
+abort "one test worker is required" unless ENV.fetch("PARALLEL_WORKERS") == "1"
+
+run_id = ENV.fetch("POSTGRESQL_ISOLATED_TEST_RUN_ID")
+abort "invalid isolated run ID" unless run_id.match?(/\A[0-9]{8}[a-z0-9]{0,12}\z/)
+# Share the suite's lifetime lock; a catalog snapshot must not authorize a
+# rebuild while another process is creating or using this run's worker clones.
+File.open("#{root}/tmp/parallel-test-databases-#{run_id}.lock", File::RDWR | File::CREAT, 0o644) do |fleet_lock|
+  abort "isolated test run is active; rebuild refused" unless fleet_lock.flock(File::LOCK_EX | File::LOCK_NB)
+  manifest_path = File.realpath(ENV.fetch("POSTGRESQL_ISOLATED_TEST_MANIFEST"))
+  abort "manifest must be under tmp/" unless manifest_path.start_with?("#{root}/tmp/")
+  manifest = JSON.parse(File.read(manifest_path))
+  host = ENV.fetch("POSTGRESQL_TEST_HOST")
+  port = Integer(ENV.fetch("POSTGRESQL_PORT"), 10)
+  user = ENV.fetch("POSTGRESQL_USER")
+  admin_database = ENV.fetch("POSTGRESQL_DATABASE")
+  abort "unsafe administration database" if admin_database.match?(/\A(?:development|production)(?:_|\z)/)
+  abort "manifest target mismatch" unless manifest.fetch("run_id") == run_id &&
+    manifest.fetch("host") == host && manifest.fetch("port") == port && manifest.fetch("user") == user
+
+  logical =
+    Dir.glob("db/*structure.sql").map do |path|
+      name = File.basename(path)
+      (name == "structure.sql") ? "primary" : name.delete_suffix("_structure.sql")
+    end
+  logical.sort!
+  abort "expected exactly 32 schema owners" unless logical.length == 32
+  names = logical.map { |name| "codex_integrity_#{run_id}_#{name}" }
+  listed = manifest.fetch("databases").map { |entry| entry.fetch("name") }
+  listed.sort!
+  abort "manifest database list mismatch" unless listed == names.sort
+  abort "admin database is in target fleet" if names.include?(admin_database)
+  ENV.fetch("POSTGRESQL_TEST_PREPARE_DATABASES").then do |selected|
+    abort "migration scope differs from fleet" unless selected.split(",").sort == names.sort
+  end
+
+  require_relative "../config/environment"
+  Rails.application.load_tasks
+  Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!
+  ActiveRecord::Base.connection_handler.clear_all_connections!
+
+  admin = PG.connect(
+    host:, port:, user:, password: ENV.fetch("POSTGRESQL_PASSWORD"),
+    dbname: admin_database, connect_timeout: 3,
+  )
+  expected_comment = "Disposable isolated Codex PostgreSQL integrity verification 2026-09-24"
+  lock_key = Digest::SHA256.hexdigest("isolated-rebuild:#{run_id}")[0, 15].to_i(16)
+  abort "another rebuild owns this run" unless
+    admin.exec_params("SELECT pg_try_advisory_lock($1::bigint) AS acquired", [lock_key]).first.fetch("acquired") == "t"
+  catalog = admin.exec_params(<<~SQL.squish, ["{#{names.join(",")}}"])
+    SELECT datname, oid::text AS oid, pg_get_userbyid(datdba) AS owner,
+           shobj_description(oid, 'pg_database') AS comment
+    FROM pg_database WHERE datname = ANY($1::text[])
+  SQL
+  abort "database catalog count mismatch" unless catalog.ntuples == names.length
+  databases = catalog.to_a.index_by { |row| row.fetch("datname") }
+  manifest.fetch("databases").each do |entry|
+    row = databases.fetch(entry.fetch("name"))
+    abort "database identity mismatch" unless row.fetch("oid") == entry.fetch("oid").to_s &&
+      row.fetch("owner") == user && row.fetch("comment") == expected_comment
+  end
+  active = admin.exec_params(<<~SQL.squish, ["{#{names.join(",")}}"])
+    SELECT datname FROM pg_stat_activity
+    WHERE datname = ANY($1::text[]) AND pid <> pg_backend_pid()
+  SQL
+  abort "target database has active sessions" unless active.ntuples.zero?
+
+  channels = %w(email telephone).freeze
+  kinds = %w(definer caller).freeze
+  roles = %w(app com org).flat_map do |surface|
+    database = "codex_integrity_#{run_id}_#{surface}_zenith"
+    suffix = Digest::SHA256.hexdigest(database)[0, 12]
+    channels.flat_map do |channel|
+      kinds.map { |kind| ["umaxica_#{surface}_#{channel}_hmac_#{kind}_#{suffix}", database] }
+    end
+  end.to_h
+  role_names = roles.keys
+  role_facts = admin.exec_params(<<~SQL.squish, ["{#{role_names.join(",")}}"])
+    SELECT rolname, oid::text AS oid, rolcanlogin, rolsuper, rolcreatedb,
+           rolcreaterole, rolinherit, rolreplication, rolbypassrls, rolconfig
+    FROM pg_roles WHERE rolname = ANY($1::text[])
+  SQL
+  # Naming and database dependencies do not prove that this run created a cluster role.
+  # Fresh provisioning records successful CREATE ROLE evidence and the resulting role OIDs.
+  unless role_facts.ntuples.zero?
+    recorded_roles = manifest["created_roles"]
+    creation_hash = manifest["role_creation_log_sha256"]
+    abort "role creation ownership metadata is required before role deletion" unless
+      recorded_roles.is_a?(Array) && creation_hash.is_a?(String) && creation_hash.match?(/\A[0-9a-f]{64}\z/)
+
+    creation_path = manifest["role_creation_log_path"]
+    if creation_path.nil?
+      creation_path = ENV.fetch("POSTGRESQL_ISOLATED_ROLE_CREATION_LOG")
+    end
+    creation_path = File.realpath(creation_path)
+    abort "role creation record checksum mismatch" unless Digest::SHA256.file(creation_path).hexdigest == creation_hash
+    created_names = File.read(creation_path).scan(
+      /CREATE ROLE\s+[\\"]*(umaxica_(?:app|com|org)_(?:email|telephone)_hmac_(?:definer|caller)_[0-9a-f]{12})/,
+    ).flatten
+    recorded_names = recorded_roles.map { |row| row.fetch("name") }
+    recorded_names.sort!
+    abort "role creation record does not prove the recorded fleet" unless
+      created_names.sort == recorded_names
+
+    identities = recorded_roles.to_h { |row| [row.fetch("name"), row.fetch("oid").to_s] }
+    actual_names = role_facts.map { |row| row.fetch("rolname") }
+    actual_names.sort!
+    abort "recorded role set does not match the fleet" unless identities.keys.sort == actual_names &&
+      recorded_roles.length == identities.length
+    role_facts.each do |row|
+      abort "role identity changed since creation: #{row.fetch("rolname")}" unless
+        identities.fetch(row.fetch("rolname")) == row.fetch("oid")
+    end
+  end
+
+  authority_fields = %w(rolcanlogin rolsuper rolcreatedb rolcreaterole rolinherit rolreplication rolbypassrls).freeze
+  role_facts.each do |row|
+    abort "unexpected role authority: #{row.fetch("rolname")}" unless
+      authority_fields.all? { |field| row.fetch(field) == "f" }
+    abort "unexpected role configuration: #{row.fetch("rolname")}" unless row.fetch("rolconfig").nil?
+  end
+  role_ids = role_facts.map { |row| row.fetch("oid") }
+  unless role_ids.empty?
+    memberships = admin.exec_params(<<~SQL.squish, ["{#{role_ids.join(",")}}"])
+      SELECT roleid FROM pg_auth_members
+      WHERE roleid = ANY($1::oid[]) OR member = ANY($1::oid[]) OR grantor = ANY($1::oid[])
+    SQL
+    abort "isolated HMAC role has a membership" unless memberships.ntuples.zero?
+    dependencies = admin.exec_params(<<~SQL.squish, ["{#{role_ids.join(",")}}"])
+      SELECT r.rolname, sd.dbid::text AS dbid
+      FROM pg_shdepend sd JOIN pg_roles r ON r.oid = sd.refobjid
+      WHERE sd.refclassid = 'pg_authid'::regclass AND sd.refobjid = ANY($1::oid[])
+    SQL
+    dependencies.each do |row|
+      target = roles.fetch(row.fetch("rolname"))
+      abort "role has a foreign or shared dependency: #{row.fetch("rolname")}" unless
+        row.fetch("dbid") == databases.fetch(target).fetch("oid")
+    end
+  end
+
+  puts "Verified #{names.length} disposable databases and #{role_facts.ntuples} scoped HMAC roles"
+  if verify_only
+    admin.close
+    exit 0
+  end
+  Rake::Task["db:drop"].invoke
+  remaining = admin.exec_params(
+    "SELECT datname FROM pg_database WHERE datname = ANY($1::text[])",
+    ["{#{names.join(",")}}"],
+  )
+  abort "db:drop left target databases" unless remaining.ntuples.zero?
+
+  admin.exec("BEGIN")
+  begin
+    role_facts.each do |row|
+      role = row.fetch("rolname")
+      references = admin.exec_params(<<~SQL.squish, [row.fetch("oid")])
+        SELECT 1 FROM pg_shdepend
+        WHERE refclassid = 'pg_authid'::regclass AND refobjid = $1::oid LIMIT 1
+      SQL
+      abort("role still has dependencies: #{role}") unless references.ntuples.zero?
+      admin.exec("DROP ROLE #{PG::Connection.quote_ident(role)}")
+    end
+    admin.exec("COMMIT")
+  rescue StandardError
+    admin.exec("ROLLBACK")
+    raise
+  end
+  puts "Dropped #{role_facts.ntuples} orphaned fleet HMAC roles"
+
+  Rake::Task["db:create"].invoke
+  names.each do |name|
+    admin.exec("COMMENT ON DATABASE #{PG::Connection.quote_ident(name)} IS #{admin.escape_literal(expected_comment)}")
+  end
+  created = admin.exec_params(<<~SQL.squish, ["{#{names.join(",")}}"])
+    SELECT datname AS name, oid::text AS oid, pg_get_userbyid(datdba) AS owner,
+           shobj_description(oid, 'pg_database') AS comment
+    FROM pg_database WHERE datname = ANY($1::text[]) ORDER BY datname
+  SQL
+  abort "db:create did not restore the fleet" unless created.ntuples == names.length && created.all? do |row|
+    names.include?(row.fetch("name")) && row.fetch("owner") == user && row.fetch("comment") == expected_comment
+  end
+  manifest["databases"] = created.map(&:to_h)
+  File.write(manifest_path, JSON.pretty_generate(manifest))
+  Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!
+  puts "Created and re-identified #{names.length} databases; migrating from source files"
+  # A real creation transcript and fresh OIDs replace the old receipt. Names alone
+  # cannot authorize removal of cluster roles on the next rebuild.
+  creation_log = Tempfile.create(["isolated-#{run_id}-role-creation-", ".log"], "#{root}/tmp")
+  creation_log.chmod(0o600)
+  status = nil
+  %w(db:test:prepare db:migrate).each do |task|
+    pid = Process.spawn("bundle", "exec", "rails", task, out: creation_log, err: creation_log)
+    _, status = Process.wait2(pid)
+    break unless status.success?
+
+    puts "#{task} completed"
+  end
+  creation_log.flush
+  replacement_roles = admin.exec_params(<<~SQL.squish, ["{#{role_names.join(",")}}"])
+    SELECT rolname AS name, oid::text AS oid FROM pg_roles
+    WHERE rolname = ANY($1::text[]) ORDER BY rolname
+  SQL
+  creation_names = File.read(creation_log.path).scan(
+    /CREATE ROLE\s+[\\"]*(umaxica_(?:app|com|org)_(?:email|telephone)_hmac_(?:definer|caller)_[0-9a-f]{12})/,
+  ).flatten
+  replacement_names = replacement_roles.map { |row| row.fetch("name") }
+  replacement_names.sort!
+  abort "replacement roles lack matching CREATE ROLE evidence; preserve the fleet for review" unless
+    replacement_names == creation_names.sort
+  if status.success? && replacement_names != role_names.sort
+    abort "successful migration did not create the complete HMAC role set"
+  end
+  manifest["created_roles"] = replacement_roles.to_a
+  manifest["role_creation_log_sha256"] = Digest::SHA256.file(creation_log.path).hexdigest
+  manifest["role_creation_log_path"] = creation_log.path
+  File.write(manifest_path, JSON.pretty_generate(manifest))
+  creation_log.close
+  admin.close
+  abort "normal migration failed; retained fresh resource receipts and creation log" unless status.success?
+  puts "Recorded fresh creation receipts for #{replacement_roles.ntuples} roles"
+end

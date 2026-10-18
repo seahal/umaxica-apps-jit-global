@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (#{controller.class.name.split("::").fetch(1).upcase})",
+                          title: t("sign.shared.sign_out.title"), separator: "—", reverse: true %>
+<h1><%= t("sign.shared.sign_out.title") %></h1>
+<p><%= t("sign.shared.sign_out.confirm_description") %></p>
+<%= form_with url: request.path, method: :post, data: { turbo: false } do %>
+  <%= hidden_field_tag :logout_challenge, @logout_transaction.logout_challenge %>
+  <%= hidden_field_tag :ri, params[:ri] if params[:ri].present? %>
+  <%= submit_tag t("sign.shared.sign_out.button") %>
+<% end %>

@@ -1,8 +1,7 @@
-import { Link } from "@inertiajs/react";
-
 import ButtonLink from "@/components/ui/ButtonLink";
 import Page from "@/components/ui/Page";
 import Table from "@/components/ui/Table";
+import TextLink from "@/components/ui/TextLink";
 import type { PageLink } from "@/features/base_com/identity/types";
 
 // Replaces `app/views/base/com/identity/telephones/index.html.erb`.
@@ -23,7 +22,6 @@ export type TelephonesIndexProps = {
   telephones: TelephoneRow[];
 };
 
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
 export default function TelephonesIndex({
   title,
   back_link: backLink,
@@ -37,17 +35,17 @@ export default function TelephonesIndex({
       title={title}
       up={backLink}
       upVisit="inertia"
-    >
-      <div>
+      width="wide"
+      actions={
         <ButtonLink
           href={newLink.href}
           inertia
         >
           {newLink.label}
         </ButtonLink>
-      </div>
-
-      <Table>
+      }
+    >
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{columns.number}</th>
@@ -68,12 +66,13 @@ export default function TelephonesIndex({
                 <span>{telephone.status_label}</span>
               </td>
               <td>
-                <Link
+                <TextLink
                   href={telephone.edit_link.href}
-                  className={LINK}
+                  inertia
+                  tone="muted"
                 >
                   {telephone.edit_link.label}
-                </Link>
+                </TextLink>
               </td>
             </tr>
           ))}

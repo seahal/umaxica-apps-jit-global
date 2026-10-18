@@ -105,7 +105,7 @@ export default function OtpResendButton({
       >
         {remaining > 0 ? `${messages.too_soon_message} (${remaining}s)` : messages.button_label}
       </Button>
-      <p className="text-sm text-fg-muted">{status}</p>
+      <p className="text-base text-fg-muted">{status}</p>
     </div>
   );
 }

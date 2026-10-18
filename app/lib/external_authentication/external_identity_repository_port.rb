@@ -3,11 +3,21 @@
 
 module ExternalAuthentication
   module ExternalIdentityRepositoryPort
+    public
+
     def find_by_subject(subject, lock:)
       raise NotImplementedError
     end
 
     def find_for_user(user)
+      raise NotImplementedError
+    end
+
+    def find_by_subject_for_link(subject, lock:)
+      raise NotImplementedError
+    end
+
+    def find_for_user_for_link(user)
       raise NotImplementedError
     end
 

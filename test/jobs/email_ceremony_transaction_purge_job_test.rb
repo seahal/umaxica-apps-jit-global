@@ -5,6 +5,10 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class EmailCeremonyTransactionPurgeJobTest < ActiveJob::TestCase
+  test "uses the isolated retention queue" do
+    assert_equal "retention", EmailCeremonyTransactionPurgeJob.queue_name
+  end
+
   test "calls purger service with default batch size" do
     mock_purger = Minitest::Mock.new
     mock_purger.expect(:call, nil)

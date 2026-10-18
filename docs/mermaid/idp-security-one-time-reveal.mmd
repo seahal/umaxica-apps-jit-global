@@ -1,0 +1,7 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "unused (consumed_at null)" as unused
+    state "consumed_at present" as consumed
+    [*] --> unused
+    unused --> consumed: IdentityOneTimeReveal.consume!
+    consumed --> [*]

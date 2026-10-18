@@ -18,6 +18,7 @@
 #
 # Indexes
 #
+#  idx_avatar_ownership_periods_avatar_id_all_rows               (avatar_id)
 #  index_avatar_ownership_periods_on_avatar_id                   (avatar_id) UNIQUE WHERE (valid_to = 'infinity'::timestamp with time zone)
 #  index_avatar_ownership_periods_on_avatar_ownership_status_id  (avatar_ownership_status_id)
 #  index_avatar_ownership_periods_on_owner_organization_id       (owner_organization_id) WHERE (valid_to = 'infinity'::timestamp with time zone)
@@ -31,12 +32,21 @@
 class AvatarOwnershipPeriod < AvatarRecord
   self.belongs_to_required_by_default = false
 
+  OWNER_SURFACES = %w(app org).freeze
+
   belongs_to :avatar
   belongs_to :avatar_ownership_status
 
   validates :avatar_id,
             uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } }
-  validates :owner_organization_id, presence: true
+  validates :owner_surface, inclusion: { in: OWNER_SURFACES }
+  validates :owner_collective_public_id, presence: true
   validates :valid_from, presence: true
   validates :id, length: { maximum: 255 }
+
+  scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
+
+  def current?
+    valid_to == Float::INFINITY && avatar_ownership_status_id == AvatarOwnershipStatus::ACTIVE
+  end
 end

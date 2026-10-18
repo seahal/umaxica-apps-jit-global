@@ -44,7 +44,18 @@ module JitSecurityJwtLocalKeysetInstaller
     end
 
     write_store(store_path, store) if changed
+    drop_private_keys_outside_rp_cell!
     true
+  end
+
+  # An RP cell process (R5-WU03A/WU17) keeps only the private keys RuntimeRole assigns to it; every
+  # other private key the local store just exported (OP/Auth access-token signers, sibling client
+  # keys, other surfaces' Jump RT keys) is removed from its environment. Other roles are unchanged.
+  def drop_private_keys_outside_rp_cell!
+    return unless RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+
+    allowed = RuntimeRole.rp_private_env_names
+    ENV.keys.grep(/_PRIVATE_KEY(SET)?\z/).each { |name| ENV.delete(name) unless allowed.include?(name) }
   end
 
   def install_keyset_issuer!(store, prefix:, kid:)
@@ -68,16 +79,30 @@ module JitSecurityJwtLocalKeysetInstaller
     true
   end
 
+  # Surface keys sign Jump RTs, so in local environments they come only from this installer's
+  # store. An ENV value that did not come from the store (for example copied production signing
+  # material) is a configuration error rather than something to keep or silently replace. Values
+  # this installer exported on an earlier call in the same process match the store and pass.
   def install_surface_issuer!(store, namespace:, kid:)
-    active_name = "JWT_#{namespace}_ACTIVE_KID"
-    private_name = "JWT_#{namespace}_PRIVATE_KEY"
-    public_name = "JWT_#{namespace}_PUBLIC_KEYSET"
-    return false if complete_env?(active_name, private_name, public_name)
-
     store_key = "JWT_#{namespace}"
+    names = {
+      "active_kid" => "JWT_#{namespace}_ACTIVE_KID",
+      "private_key" => "JWT_#{namespace}_PRIVATE_KEY",
+      "public_keyset" => "JWT_#{namespace}_PUBLIC_KEYSET",
+    }
+    preset = names.select { |_field, name| ENV.key?(name) }
+    stored = store[store_key]
+    unless preset.empty? || (stored && preset.all? { |field, name| ENV[name] == stored[field] })
+      raise ArgumentError,
+            "#{preset.values.join(", ")} must not be set in #{Rails.env}; local surface signing keys are owned by " \
+            "#{DEFAULT_STORE_PATH.basename}"
+    end
+    active_name = names.fetch("active_kid")
+    private_name = names.fetch("private_key")
+    public_name = names.fetch("public_keyset")
     env_values =
-      if store.key?(store_key)
-        store.fetch(store_key)
+      if stored
+        stored
       else
         warn_local_keyset_regenerated(issuer: store_key, kid: kid)
         surface_issuer_env(kid)
@@ -182,4 +207,8 @@ module JitSecurityJwtLocalKeysetInstaller
   def base64_der(key)
     Base64.strict_encode64(key.to_der)
   end
+
+  private_class_method :install_keyset_issuer!, :install_surface_issuer!, :install_oidc_client_issuer!,
+                       :complete_env?, :warn_local_keyset_regenerated, :load_store, :write_store, :keyset_issuer_env,
+                       :surface_issuer_env
 end

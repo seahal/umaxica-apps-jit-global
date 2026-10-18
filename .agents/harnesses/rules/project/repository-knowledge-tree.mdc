@@ -1,52 +1,23 @@
 ---
 name: repository-knowledge-tree
-description: This repo's knowledge directories, decision priority, and note locations and promotion.
+description: Select knowledge by scope and distinguish intended contracts from observed implementation.
 ---
 
 # Repository Knowledge Tree
 
-Repository knowledge is separated by purpose. Use these as required context inputs, not optional
-background.
+Use `docs/reference/repository-knowledge-architecture.md` for directory ownership and
+`specs/README.md` for change lifecycle. Load the affected material, not every knowledge directory.
 
-- `adr/` — accepted architecture and design decisions.
-- `plans/` — implementation plans, active work, proposals, and backlog items.
-- `docs/` — current stable documentation for implemented behavior and operations.
-- `docs/dictionary/` — DDD ubiquitous-language definitions for this application.
-- `notes/` — non-authoritative, ADR-adjacent notes and implementation handoff context.
-- `memos/` — exploratory observations that do not affect implementation.
+1. Find the applicable accepted ADR, open spec, current docs and durable checklist.
+2. Compare their scoped requirements with the actual code and observations. A code defect does not
+   supersede a contract; a desired design does not prove implementation. Report concrete conflicts
+   and resolve them within the user's authorization before choosing a conflicting implementation.
+3. Consult backlog and research for rationale, rejected approaches and constraints when useful.
+   Revalidate facts used in a current decision. Historical instructions are context, not new tasks.
+4. Promote accepted decisions to ADRs, accepted changes to specs, delivered explanations to docs,
+   and lasting acceptance to checklists. Preserve useful negative knowledge in research.
 
-Only `adr/`, `docs/`, and current `plans/` are source-of-truth decision material. Do not treat
-`notes/`, `memos/`, or `plans/archive/` as source of truth.
-
-## Decision priority when sources disagree
-
-1. Explicit user instruction in the current conversation.
-2. Current code and tests.
-3. Accepted ADRs in `adr/`.
-4. Stable docs in `docs/`.
-5. Active plans in `plans/active/`.
-6. Backlog notes in `plans/backlog/`.
-7. Notes in `notes/`.
-8. Archived plans in `plans/archive/`.
-
-If an ADR or doc conflicts with current code, call out the conflict before choosing an
-implementation path.
-
-## Where notes and memos go
-
-- Use `notes/implementation/YYYY-MM-DD-<task-slug>.md` for durable implementation decisions, plan
-  deviations, compromises, and handoff context discovered while carrying out a plan. For the
-  contents and discipline of a note, see `implementation-notes`.
-- Use `memos/` for exploratory field notes from investigation, audit, planning, surprising
-  repository behavior, and failed approaches that are not yet handoff context.
-- Keep notes and memos out of stable docs, plans, and ADRs until they are ready to be promoted.
-
-## Promotion
-
-Before finishing, review any notes created for the task and promote stable content out of `notes/`:
-
-- accepted design decisions → `adr/`
-- future work → `plans/active/` or `plans/backlog/`
-- implemented stable behavior → `docs/`
-
-Leave only provisional or handoff context in `notes/`.
+Research has no general maintenance obligation. Change-specific research may live in
+`specs/<feature>/research.md` and remains non-normative. Other implementation notes belong in
+`research/implementation/`; see `generic/implementation-notes.mdc`. Evidence records only actual
+observations against a stated revision and never substitutes for a current contract.

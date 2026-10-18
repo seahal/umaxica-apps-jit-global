@@ -6,29 +6,111 @@ require "test_helper"
 
 class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients, :client_statuses, :client_passkey_statuses,
-           :client_secret_credential_kinds, :client_secret_credential_statuses,
            :client_email_statuses, :client_totp_credential_statuses
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    https!
+    ClientSignInFlowState.ensure_defaults!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @user = Client.create!(mfa_level_enabled: true)
     @email = "challenge_hub_#{SecureRandom.hex(4)}@example.com".freeze
-    @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+    @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+    @email_record.finalize_binding!
     ClientTotpCredential.create!(
       user: @user,
       private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
       title: "totp",
     )
-    _secret_credential, @raw_secret_credential = ClientSecretCredential.issue!(
-      name: "Hub secret_credential",
-      user_id: @user.id,
-      user_secret_kind_id: ClientSecretCredentialKind::PERMANENT,
-      uses: 10,
-      status: :active,
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
+    get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+    assert_response :see_other
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: ClientSignInFlow.find_by!(
+        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
+      ),
+      surface: "app", phase: "PRIMARY_PENDING",
+    )
+  end
+
+  test "contradictory MFA GET and HEAD preserve the original app flow and issue no session" do
+    flow = ClientSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    before = flow.attributes
+    path = auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+
+    assert_no_difference -> { ClientToken.count } do
+      get path
+
+      assert_response :conflict
+      assert_equal "text/plain", response.media_type
+      assert_equal "戻るはだめです", response.body
+      assert_nil response.headers["Location"]
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal before, flow.reload.attributes
+
+      head path
+
+      assert_response :conflict
+      assert_empty response.body
+      assert_nil response.headers["Location"]
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal before, flow.reload.attributes
+    end
+  end
+
+  test "missing malformed and wrong-surface MFA bindings cannot halt the app flow" do
+    flow = ClientSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    wrong_surface = SignInFlowBindingCodec.encode(flow: flow, surface: "com", phase: "PRIMARY_PENDING")
+    before = flow.attributes
+
+    [nil, "", "invalid", wrong_surface].each do |binding|
+      assert_no_difference -> { ClientToken.count } do
+        delete auth_app_sign_in_challenge_path(ri: "jp", fb: binding)
+      end
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal before, flow.reload.attributes
+    end
+  end
+
+  test "a contradictory app mutation halts once and replay cannot issue a session" do
+    flow = ClientSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    path = auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+
+    assert_no_difference -> { ClientToken.count } do
+      delete path
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal ClientSignInFlowState::HALTED, flow.reload.state_id
+      terminal = flow.attributes
+
+      delete path
+
+      assert_response :conflict
+      assert_equal terminal, flow.reload.attributes
+    end
   end
 
   teardown do
@@ -36,23 +118,70 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     TurnstileVerifierStub.challenge_response = nil
   end
 
-  test "show requires pending_mfa and redirects to sign in" do
-    get auth_app_sign_in_challenge_path(ri: "jp")
+  test "show refuses an MFA request whose binding is ahead of the active phase" do
+    flow = ClientSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
 
-    assert_response :see_other
-    assert_redirected_to auth_app_sign_in_path(ri: "jp")
+    translation_called = false
+    original_translate = I18n.method(:t)
+
+    I18n.stub(
+      :t,
+      ->(key, *args, **options) {
+        unless key == "errors.messages.phase_violation_refused"
+          next original_translate.call(key, *args, **options)
+        end
+
+        translation_called = true
+
+        assert_equal :ja, options.fetch(:locale)
+        "戻るはだめです"
+      },
+    ) do
+      get auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+    end
+
+    assert_response :conflict
+    assert translation_called
+    assert_equal "戻るはだめです", response.body
+    assert_equal ClientSignInFlowState::PRIMARY_PENDING, flow.reload.state_id
+  end
+
+  test "show refuses a binding whose flow has expired without mutating the flow" do
+    flow = ClientSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    flow.update!(expires_at: flow.issued_at + 1.second)
+    expired_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
+
+    travel_to(flow.expires_at + 1.second) do
+      get auth_app_sign_in_challenge_path(ri: "jp", fb: expired_binding)
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal ClientSignInFlowState::PRIMARY_PENDING, flow.reload.state_id
+    end
+  end
+
+  test "a state-changing request bound to this flow but the wrong phase halts the active flow" do
+    flow = ClientSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+
+    delete auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+    assert_equal ClientSignInFlowState::HALTED, flow.reload.state_id
   end
 
   test "show renders for pending_mfa user with MFA enabled" do
-    post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @email,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
+    establish_pending_mfa_via_email!
 
-    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+    assert_match(/\A[A-Za-z0-9_-]{21}\z/, session[:pending_mfa].fetch("public_id"))
 
     follow_redirect!
 
@@ -67,15 +196,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   test "show does not display totp method when disabled" do
     @user.client_totp_credentials.delete_all
 
-    post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @email,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+    establish_pending_mfa_via_email!
 
     follow_redirect!
 
@@ -87,20 +208,174 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   test "show does not display passkey method when disabled" do
     @user.client_passkeys.delete_all
 
-    post auth_app_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @email,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+    establish_pending_mfa_via_email!
 
     follow_redirect!
 
     assert_response :success
     assert_not_includes inertia_props.fetch("methods").map { |method| method.fetch("label") },
                         I18n.t("sign.app.in.mfa.methods.passkey")
+  end
+
+  # ===================================================================
+  # MFA cancellation (DELETE /sign/in/challenge)
+  # ===================================================================
+
+  test "destroy ends the pending MFA ceremony and returns to the sign-in entry point" do
+    establish_pending_mfa_via_email!
+    cycle = ClientSignInFlow.where(principal_id: @user.id).order(:id).last
+
+    assert_predicate cycle, :sign_in_mfa_pending?
+
+    assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
+      delete mfa_challenge_path
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_app_sign_in_path(ri: "jp")
+    assert_predicate cycle.reload, :sign_in_halted?
+    assert_nil session[:pending_mfa]
+    assert_nil session[:mfa_user_id]
+    assert_nil session[:pending_login_user_id]
+    assert_nil session[:app_sign_in_flow_locator]
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY].presence
+  end
+
+  test "a cancelled MFA challenge cannot be resumed or answered" do
+    establish_pending_mfa_via_email!
+    delete mfa_challenge_path
+
+    get mfa_totp_path
+
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+
+    assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
+      post mfa_totp_submit_path,
+           params: { totp_challenge_form: { token: "123456" }, "cf-turnstile-response": "test_token" }
+    end
+
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+  end
+
+  test "destroy without a pending MFA ceremony changes nothing and returns to sign-in" do
+    assert_no_difference -> { ClientToken.count } do
+      delete mfa_challenge_path
+    end
+
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+    assert_nil response.location
+  end
+
+  test "the method selection page offers cancellation and no back link" do
+    establish_pending_mfa_via_email!
+    follow_redirect!
+
+    cancel = inertia_props.fetch("cancel")
+
+    assert_equal I18n.t("actions.cancel"), cancel.fetch("label")
+    assert_equal URI.parse(mfa_challenge_path).path, URI.parse(cancel.fetch("action")).path
+    assert_equal "delete", cancel.fetch("method")
+    assert_not inertia_props.key?("back_link")
+  end
+
+  test "with no usable method the page keeps cancellation as the only exit" do
+    @user.client_totp_credentials.delete_all
+    @user.client_passkeys.delete_all
+    establish_pending_mfa_via_email!
+    follow_redirect!
+
+    assert_empty inertia_props.fetch("methods")
+    assert_predicate inertia_props.fetch("no_methods_notice"), :present?
+    assert_not inertia_props.key?("back_link")
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+  end
+
+  test "the TOTP challenge keeps back to method selection separate from cancellation" do
+    establish_pending_mfa_via_email!
+
+    get mfa_totp_path
+
+    assert_response :success
+    assert_equal URI.parse(mfa_challenge_path).path, URI.parse(inertia_props.fetch("back_link").fetch("href")).path
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+    assert_equal URI.parse(mfa_challenge_path).path, URI.parse(inertia_props.fetch("cancel").fetch("action")).path
+
+    # Following Back is a GET and leaves the ceremony running.
+    get mfa_challenge_path
+
+    assert_response :success
+    assert_predicate session[:pending_mfa], :present?
+  end
+
+  test "cancelling on the com host leaves the app ceremony untouched" do
+    establish_pending_mfa_via_email!
+
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    delete auth_com_sign_in_challenge_path(ri: "jp")
+
+    assert_response :see_other
+
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    get mfa_challenge_path
+
+    assert_response :success
+    assert_predicate ClientSignInFlow.where(principal_id: @user.id).order(:id).last, :sign_in_mfa_pending?
+  end
+
+  private
+
+  def establish_pending_mfa_via_email!
+    post(
+      auth_app_sign_in_email_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+        user_email: { address: @email },
+        "cf-turnstile-response": "test_token",
+      },
+    )
+
+    assert_response :found
+
+    delivery =
+      ActiveJob::Base.queue_adapter.enqueued_jobs.reverse.find do |entry|
+        entry.fetch(:job) == OtpNotifierEmailDeliveryJob
+      end
+    payload = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last.fetch(:params)
+    ceremony = ClientAuthCeremonySession.find(payload.fetch(:auth_ceremony_session_ref))
+
+    assert_equal @email_record.public_id, ceremony.email_otp_context.fetch("contact_ref")
+    assert_equal payload.fetch(:auth_email_otp_generation), ceremony.email_otp_context.fetch("generation")
+    pass_code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
+
+    patch(
+      auth_app_sign_in_email_path(ri: "jp", fb: @primary_sign_in_binding), params: {
+        user_email: { pass_code: pass_code },
+      },
+    )
+
+    assert_response :found
+    assert_equal auth_app_sign_in_challenge_path, URI.parse(response.location).path
+  end
+
+  def mfa_binding_params
+    locator = session[:app_sign_in_flow_locator]
+    cycle = ClientSignInFlow.find_by(public_id: locator&.[]("public_id"))
+    cycle ||= ClientSignInFlow.where(principal_id: @user.id).order(:id).last
+    return {} unless cycle
+
+    { fb: SignInFlowBindingCodec.encode(flow: cycle, surface: "app", phase: "MFA_PENDING") }
+  end
+
+  def mfa_challenge_path
+    auth_app_sign_in_challenge_path(ri: "jp", **mfa_binding_params)
+  end
+
+  def mfa_totp_path
+    new_auth_app_sign_in_challenge_totp_path(ri: "jp", **mfa_binding_params)
+  end
+
+  def mfa_totp_submit_path
+    auth_app_sign_in_challenge_totp_path(ri: "jp", **mfa_binding_params)
   end
 end

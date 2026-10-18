@@ -40,6 +40,14 @@ surface authentication-aware controller lifecycle.
 Surface-local `ApplicationController` inherits directly from `ActionController::Base` and owns the
 authentication-aware request lifecycle.
 
+Base additionally separates its protocol Authority from its self-RP application lifecycle.
+`Base::{App,Com,Org}::AuthorityController` explicitly inherits `::ApplicationController`, not the
+same-namespace self-RP controller. It declares its own root-session lifecycle and standard CSRF
+protection. The leading `::` is security-relevant: an unqualified parent resolves to the local
+RP base and inherits RP authentication and refresh callbacks alongside root authentication.
+The self-RP `Base::{App,Com,Org}::ApplicationController` retains Browser RP concerns and no root
+authentication concern. See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
+
 Authentication modes that are more specific than this base split, including bare endpoints,
 guest-only flows, optional access, and step-up requirements, must be declared and audited explicitly
 by concrete controller/action metadata and policy. They must not be inferred from legacy
@@ -70,7 +78,6 @@ The target authenticated lifecycle is:
 ```text
 rate limit
 -> verify/decode access token
--> refresh preference token from DB for logged-in HTML preference edit entry when applicable
 -> initialize Actor from token state
 -> overlay valid request-local lx/ct/tz onto Actor.preferences
 -> apply locale/timezone/theme from Actor.preferences
@@ -86,24 +93,27 @@ order:
 3. `set_current_actor`
 4. `touch_session_activity!` inside current-resource resolution
 
-`set_preferences_cookie` may write during preference bootstrap, preference refresh rotation,
-refresh-token lifetime updates, and logged-in preference edit entry refresh. These writes are
-allowed only as lifecycle exceptions.
+`set_preferences_cookie` reads the current preference credential and record on `GET`/`HEAD`. Those
+requests do not bootstrap preference rows, rotate or issue preference tokens, refresh token
+lifetime, clear cookies, or copy resource values into persistent preference state. Preference
+bootstrap, token rotation, and preference writes happen at their explicit non-GET boundaries.
 
-`transparent_refresh_access_token` may write when a valid auth refresh cookie is present and the
-HTML request lacks an access cookie. That path rotates or refreshes auth session/token state before
-the Actor snapshot is finalized.
+`transparent_refresh_access_token` remains in the authenticated controller lifecycle, but browser
+navigation does not use it: `transparent_refresh_allowed?` is false for `GET`/`HEAD`. Authentication
+refresh remains on its explicit POST protocol endpoint and does not update session/token state during
+ordinary navigation.
 
 `set_current_actor` should install the immutable request Actor snapshot. It must not create
 preference rows, rotate tokens, or repair malformed preference JWTs.
 
-`touch_session_activity!` may write a throttled `last_used_at` update to the token/session row while
-resolving the current authenticated resource. This is a session-lifecycle write, not a product data
-write.
+`track_authenticated_session_activity?` defaults to false for `GET`/`HEAD`, so
+`touch_session_activity!` does not update the token/session row during ordinary navigation. A
+surface action that intentionally opts into activity tracking must declare and test that boundary.
 
-The GET/HEAD write categories above are allowlisted in
-[`docs/security/db-write-allowlist.md`](../security/db-write-allowlist.md). New read-side writes
-must be added there before tests or CI allow them.
+The current read-side protocol callback writes are listed in
+[`docs/security/db-write-allowlist.md`](../security/db-write-allowlist.md). Ordinary page
+navigation and preference reads are not lifecycle write exceptions. A new read-side write requires
+an explicit reviewed contract and test before the allowlist changes.
 
 The request-local `lx`, `ct`, and `tz` overlay changes only the current request's
 `Actor.preferences`. It must not write the database, reissue JWTs, or update the persistent
@@ -111,10 +121,9 @@ preference snapshot. Locale, timezone, theme, observability, and similar request
 applied after the Actor snapshot and request overlay are resolved. Runtime reads should use
 `Actor.preferences`.
 
-The logged-in HTML preference edit entry refresh is a bounded preference-screen exception. It exists
-so preference edit screens can pick up actor-local DB changes made in another browser or device
-before rendering. It must run before `set_current_actor`, and it must not be used as a generic
-database fallback for normal pages or broken JWTs.
+Do not add a database refresh of actor-local preference values to an HTML edit-page GET. If a future
+flow needs cross-device reconciliation, give it an explicit write boundary and document its
+authority and concurrency behavior.
 
 Actor cleanup should use the domain-facing `Actor.clear` API. Prefer a prepended `around_action`
 with `ensure` for new lifecycle code so redirects, renders, and exceptions do not leave stale
@@ -180,10 +189,8 @@ registers no callbacks from `included do`; controllers that need locale/timezone
 `before_action :apply_localization_preferences` explicitly in their base class. All surface
 `ApplicationController`s now also run `set_color_theme` after `set_current_actor`, so theme
 reflection can rely on `Actor.preferences` being complete. These two gaps are resolved as of the
-2026-07-17 controller-layer audit (`memos/2026-07-17-controller-layer-problem-audit.md`).
+2026-07-17 controller-layer audit.
 
 Some preference setup code still has deliberate side effects, including preference token reissue,
 cookie writes, refresh token lifetime updates, and login-time adoption. Those effects should remain
 inside preference/authentication concerns and must not be moved into `set_current_context`.
-
-Exception controllers are tracked by `plans/active/controller-boundary-lifecycle-unification.md`.

@@ -1,7 +1,6 @@
 # typed: false
 # frozen_string_literal: true
 
-require "set"
 require "jit_security_jwt_issuer_record"
 require "jit_security_jwt_key_material"
 require "jit_security_jwt_jwk"
@@ -159,4 +158,6 @@ module JitSecurityJwtIssuerBuilder
   rescue JitSecurityJwtJwk::Error => e
     raise Error, e.message
   end
+
+  private_class_method :key_state_for
 end

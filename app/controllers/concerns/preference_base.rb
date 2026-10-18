@@ -84,69 +84,30 @@ module PreferenceBase
     raise ResolutionError.new("Preference #{component} resolution failed"), cause: exception
   end
 
-  # ==========================================================================
-  # 2) Preference request entrypoints (Request/Cookie I/O boundary)
-  # ==========================================================================
-  def cookie_banner_endpoint_url
-    return nil unless cookie_banner_endpoint_available_for_request?
-
-    @cookie_banner_endpoint_url ||=
-      begin
-        endpoint_url = nil
-        %i(
-          base_app_web_v0_cookie_url
-          base_com_web_v0_cookie_url
-          base_org_web_v0_cookie_url
-        ).each do |helper_name|
-          next unless respond_to?(helper_name, true)
-
-          endpoint_url = public_send(helper_name)
-          break
-        rescue ActionController::UrlGenerationError
-          next
-        end
-        endpoint_url
-      end
-  end
-
-  def cookie_banner_endpoint_available_for_request?
-    expected_host =
-      case ::CoreSurface.current(request)
-      when :app then ENV.fetch("PRIVATE_BASE_SERVICE_URL")
-      when :com then ENV.fetch("PRIVATE_BASE_CORPORATE_URL")
-      when :org then ENV.fetch("PRIVATE_BASE_STAFF_URL")
-      end
-    return false if expected_host.blank?
-
-    request.host == expected_host
-  end
-
-  def extract_cookie_banner_consent(payload)
-    return nil unless payload.is_a?(Hash)
-
-    preferences = payload["preferences"]
-    return nil unless preferences.is_a?(Hash)
-    return preferences["consent"] if preferences.key?("consent")
-    return preferences["consented"] if preferences.key?("consented")
-
-    nil
-  end
-
   def set_color_theme
-    theme = normalize_theme(actor_preference_theme)
-    theme ||= "sy"
+    source = color_theme_preference_source
+    theme = normalize_theme(public_option_cookie_value(source, THEME_COOKIE_KEY, :theme))
 
-    write_preference_cookie(THEME_COOKIE_KEY, theme)
-    write_public_option_cookies(Actor.preferences)
+    # Display defaults used after detaching a credential are not the visitor's settings, so they
+    # must not overwrite the public option cookies.
+    if preference_state_write_request? && !preference_credential_detached?
+      write_preference_cookie(THEME_COOKIE_KEY, theme)
+      write_public_option_cookies(source)
+    end
     @color_theme = theme
     nil
   end
 
-  def actor_preference_theme
-    preference = Actor.preferences
-    return if preference.null?
+  def preference_state_write_request?
+    !request.get? && !request.head?
+  end
 
-    preference.theme
+  def color_theme_preference_source
+    load_access_token_payload if respond_to?(:load_access_token_payload, true)
+    payload = preference_payload_preferences if respond_to?(:preference_payload_preferences, true)
+    return payload if payload.is_a?(Hash) && payload.present?
+
+    Actor.preferences
   end
 
   def write_public_option_cookies(source)
@@ -170,13 +131,6 @@ module PreferenceBase
     elsif source.respond_to?(method_name)
       source.public_send(method_name)
     end
-  end
-
-  def preference_record_theme
-    return if @preferences.blank?
-
-    option_id = @preferences.public_send(preference_theme_association)&.option_id
-    theme_short_code(option_id_to_theme(option_id, preference_prefix))
   end
 
   def create_preference_options(preference, params_hash = {})
@@ -208,20 +162,12 @@ module PreferenceBase
     end
   end
 
-  def preference_option_classes(prefix)
-    classes =
-      PreferenceClassRegistry::CHILD_RECORD_TYPES.index_with do |type|
-        PreferenceClassRegistry.option_class(prefix, type)
-      end
-    classes
-  end
-
   def create_preference_cookie(prefix, preference)
     klass = PreferenceClassRegistry.cookie_class(prefix)
     with_model_writing_connection(klass) do
       create_preference_association!(
         preference,
-        "#{prefix.underscore}_preference_cookie",
+        klass,
         targetable: false,
         performant: false,
         functional: false,
@@ -243,19 +189,17 @@ module PreferenceBase
       with_model_writing_connection(klass) do
         create_preference_association!(
           preference,
-          "#{prefix.underscore}_preference_#{type}",
+          klass,
           option_id: option_ids[type],
         )
       end
     end
   end
 
-  def create_preference_association!(preference, association_name, attributes)
-    creator = :"create_#{association_name}!"
-    return preference.public_send(creator, attributes) if preference.respond_to?(creator)
-
-    association = preference.association(association_name.to_sym)
-    association.klass.create!(attributes.merge(preference: preference))
+  def create_preference_association!(preference, record_class, attributes)
+    record_class.find_or_create_by!(preference_id: preference.id) do |record|
+      record.assign_attributes(attributes)
+    end
   end
 
   def preference_param_value(params_hash, type)
@@ -308,10 +252,6 @@ module PreferenceBase
       end
   end
 
-  def set_timezone_from_session
-    Time.zone = session[:timezone] if session[:timezone].present?
-  end
-
   def preference_class
     @preference_class ||=
       begin
@@ -345,21 +285,28 @@ module PreferenceBase
   end
 
   def ensure_preferences_record
+    if request.get? || request.head?
+      load_access_token_preference_record!(clear_invalid_cookie: false)
+      return @preferences if @preferences.present?
+
+      # A screen render may read a current preference token, but an ordinary
+      # navigation must not create its server-side record. Explicit preference
+      # writes bootstrap a persisted record through set_preferences_cookie.
+      return @preferences = preference_class.new
+    end
+
+    # A credential refused earlier in this request keeps its refusal: creating a fresh record here
+    # would turn an invalid credential into a successful write. Callers treat nil as a failed
+    # preference operation.
+    return if preference_refresh_failed? || preference_credential_detached?
+
     load_access_token_preference_record!
     return @preferences if @preferences.present?
 
     preference, = load_preference_record_from_refresh_token!(create_if_missing: true)
-    if preference.present?
-      @preferences = preference
-      return @preferences
-    end
-    return create_new_preference_record! unless @preference_refresh_failed
+    return if preference_refresh_failed?
 
-    @preference_refresh_failed = false
-    @refresh_token_value = nil
-    @refresh_presented_digest = nil
-    @refresh_public_id = nil
-    create_new_preference_record!
+    @preferences = preference
   end
 
   def create_audit_log(event_id:, context:, expires_at: nil)
@@ -368,10 +315,9 @@ module PreferenceBase
 
     ChronicleRecord.connected_to(role: :writing) do
       ensure_model_defaults!(preference_audit_level_class)
-
-      if normalized_event_id.present?
-        preference_audit_event_class.find_or_create_by!(id: normalized_event_id)
-      end
+      # Seed the full event catalog once. Per-id find_or_create_by! N+1s when a
+      # region change writes language, date format, clock, and currency as one bundle.
+      ensure_model_defaults!(preference_audit_event_class) if normalized_event_id.present?
 
       preference_audit_class.create!(
         subject_id: @preferences.id.to_s,
@@ -379,7 +325,7 @@ module PreferenceBase
         event_id: normalized_event_id,
         level_id: preference_audit_level_class::INFO,
         occurred_at: Time.current,
-        discarded_at: expires_at_value,
+        discard_at: expires_at_value,
         ip_address: request.remote_ip || default_audit_ip,
         context: context,
       )
@@ -401,10 +347,6 @@ module PreferenceBase
     # current IPAddr raises IPAddr::AddressFamilyError instead of returning the
     # IPv4 loopback address this fallback exists to produce.
     IPAddr.new((127 << 24) + 1, Socket::AF_INET).to_s
-  end
-
-  def preference_theme_association
-    @preference_theme_association ||= "#{preference_prefix_underscore}_theme"
   end
 
   def update_preference_child_with_audit(child, attributes, audit_event)
@@ -526,17 +468,13 @@ module PreferenceBase
     connection_owner.connected_to(role: :writing) { yield }
   end
 
+  # Only Active Record classes own a connection; callers write plain objects directly.
   def model_connection_owner(klass)
-    klass.ancestors.find do |ancestor|
-      ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-    end
+    klass.connection_class_for_self if klass.is_a?(Class) && klass < ActiveRecord::Base
   end
 
   def preference_connection_owner
-    @preference_connection_owner ||=
-      preference_class.ancestors.find do |ancestor|
-        ancestor.is_a?(Class) && ancestor < ActiveRecord::Base && ancestor.abstract_class?
-      end
+    @preference_connection_owner ||= model_connection_owner(preference_class)
   end
 
   def with_preference_connection(role)
@@ -657,10 +595,9 @@ module PreferenceBase
   end
 
   def build_preferences_payload(preference)
-    association_prefix = preference.class.name.underscore
     option_prefix = preference.class.name.sub("Preference", "")
-    option_ids = preference_payload_option_ids(preference, association_prefix)
-    consent_state = preference_cookie_consent_state(preference, association_prefix)
+    option_ids = preference_payload_option_ids(preference)
+    consent_state = preference_cookie_consent_state(preference)
 
     {
       "ver" => Actor::Preference::SCHEMA_VERSION,
@@ -684,13 +621,13 @@ module PreferenceBase
     { "explicit" => preference.explicit_field_names }
   end
 
-  def preference_payload_option_ids(preference, association_prefix)
+  def preference_payload_option_ids(preference)
     %i(language region timezone theme currency date_format time_format motion density
        page_size).index_with do |type|
-      association_name = "#{association_prefix}_#{type}"
-      next unless preference.respond_to?(association_name)
-
-      preference.public_send(association_name)&.option_id
+      PreferenceClassRegistry.record_class(
+        preference_prefix(preference),
+        type,
+      ).where(preference_id: preference.id).pick(:option_id)
     end
   end
 
@@ -714,14 +651,10 @@ module PreferenceBase
     }
   end
 
-  def preference_cookie_consent_state(preference, association_prefix)
-    cookie_name = "#{association_prefix}_cookie"
-    return { consented: false,
-             functional: false,
-             performant: false,
-             targetable: false, } unless preference.respond_to?(cookie_name)
-
-    cookie = preference.public_send(cookie_name)
+  def preference_cookie_consent_state(preference)
+    cookie = PreferenceClassRegistry.cookie_class(
+      preference_prefix(preference),
+    ).find_by(preference_id: preference.id)
     return { consented: false, functional: false, performant: false, targetable: false } if cookie.blank?
 
     {
@@ -730,8 +663,6 @@ module PreferenceBase
       performant: !!cookie.performant,
       targetable: !!cookie.targetable,
     }
-  rescue NoMethodError
-    { consented: false, functional: false, performant: false, targetable: false }
   end
 
   def option_id_to_language(option_id, prefix)
@@ -785,18 +716,6 @@ module PreferenceBase
     PreferenceToken.extract_preferences(@preference_payload)
   end
 
-  def preference_payload_value(key)
-    preference_payload_preferences[key.to_s]
-  end
-
-  def preference_payload_public_id
-    PreferenceToken.extract_public_id(@preference_payload)
-  end
-
-  def preference_payload_jti
-    PreferenceToken.extract_jti(@preference_payload)
-  end
-
   def clear_preference_refresh_failure!
     @preference_refresh_failed = false
   end
@@ -818,7 +737,7 @@ module PreferenceBase
     end
 
     dbsc_cookie = preference_dbsc_cookie_names.lazy.filter_map { |cookie_name|
-      cookies[cookie_name].to_s.presence
+      BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
     }.first
     if dbsc_cookie.blank?
       @preference_refresh_binding_reason = "missing_bound_cookie"
@@ -837,6 +756,7 @@ module PreferenceBase
     clear_preference_auth_cookies!
     @preference_refresh_failed = true
     @preference_refresh_binding_denied = true
+    @preference_credential_failure = :binding_denied
 
     Rails.logger.warn(
       JitLogEvent.format(
@@ -850,6 +770,8 @@ module PreferenceBase
   def handle_preference_refresh_failed(preference, refresh_public_id)
     clear_preference_auth_cookies!
     @preference_refresh_failed = true
+    @preference_credential_failure ||=
+      classify_refresh_credential_failure(preference, refresh_public_id, @refresh_presented_digest)
 
     Rails.logger.warn(
       JitLogEvent.format(
@@ -887,20 +809,14 @@ module PreferenceBase
   end
 
   def handle_preference_refresh_replay!(preference)
-    replacement = preference_refresh_grace_replacement(preference)
-    if replacement
-      adopt_preference_refresh_grace!(preference, replacement)
-      return :grace
-    end
-
     now = Time.current
 
     with_preference_connection(:writing) do
-      updates = { discarded_at: now }
+      updates = { discard_at: now }
       updates[:compromised_at] = now if preference.respond_to?(:compromised_at=)
       updates[:revoked_at] = now if preference.respond_to?(:revoked_at=)
 
-      lapses_at_value = preference.discarded_at
+      lapses_at_value = preference.discard_at
       is_infinite = lapses_at_value.respond_to?(:infinite?) && lapses_at_value.infinite?
       already_handled =
         if preference.respond_to?(:compromised_at)
@@ -913,6 +829,7 @@ module PreferenceBase
 
     clear_preference_auth_cookies!
     @preference_refresh_failed = true
+    @preference_credential_failure = :replay_detected
 
     Rails.logger.info(
       JitLogEvent.format(
@@ -922,47 +839,6 @@ module PreferenceBase
       ),
     )
     :compromised
-  end
-
-  # Concurrency grace: when a just-rotated parent refresh token is presented
-  # again within the grace window by a sibling request from the same page
-  # load, return its still-usable replacement so the request can be served
-  # without tripping compromise handling. Returns nil for genuine replays
-  # (no replacement, replacement no longer usable, or outside the window).
-  def preference_refresh_grace_replacement(preference)
-    return nil unless preference.respond_to?(:rotated_within_grace?)
-    return nil unless preference.rotated_within_grace?
-
-    replacement =
-      with_preference_connection(:writing) do
-        preference_class
-          .includes(preference_associations_to_preload)
-          .find_by(id: preference.replaced_by_id)
-      end
-
-    valid_refresh_preference?(replacement) ? replacement : nil
-  end
-
-  # Adopt the rotated replacement read-only. We deliberately do NOT issue a
-  # new refresh cookie here: the replacement's raw token is only available to
-  # the request that performed the rotation, and the winning sibling already
-  # set the new cookie. Mutating cookies here would race and clobber it.
-  def adopt_preference_refresh_grace!(preference, replacement)
-    @preferences = replacement
-    @preference_refresh_grace = true
-
-    if respond_to?(:preference_current_resource, true) && respond_to?(:adopt_rotated_preference!, true)
-      resource = preference_current_resource
-      adopt_rotated_preference!(resource, replacement) if resource
-    end
-
-    Rails.logger.info(
-      JitLogEvent.format(
-        "preference.token.refresh.grace_reuse",
-        replaced_by_id: preference.replaced_by_id,
-        **preference_refresh_log_context(replacement, preference.public_id),
-      ),
-    )
   end
 
   def log_preference_refresh_rotation_failed(preference, refresh_public_id)
@@ -1152,15 +1028,15 @@ module PreferenceBase
   # 7) Child-record lazy helpers
   # ==========================================================================
   def load_or_create_preference_child(child_type, default_attributes = {})
-    association_name = "#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
-    child = @preferences.public_send(association_name)
+    record_class = preference_child_record_class(child_type)
+    relation = record_class.where(preference_id: @preferences.id)
+    child = relation.first
     return child if child.present?
 
     begin
-      @preferences.public_send("create_#{association_name}!", default_attributes)
+      relation.create!(default_attributes)
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid
-      @preferences.reload
-      @preferences.public_send(association_name)
+      relation.first!
     end
   end
 
@@ -1170,14 +1046,22 @@ module PreferenceBase
   # persists every CHILD_RECORD_TYPES row for a new preference, so a missing
   # row here means a pre-bootstrap-completeness legacy record; the row is
   # backfilled at the next legitimate write point (PATCH/update), not on GET.
-  def load_or_build_preference_child(child_type)
-    association_name = "#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
-    child = @preferences.public_send(association_name)
+  def load_or_build_preference_child(child_type, default_attributes = {})
+    record_class = preference_child_record_class(child_type)
+    child = record_class.find_by(preference_id: @preferences.id)
     return child if child.present?
 
-    PreferenceClassRegistry.record_class(preference_prefix, child_type).new(
-      preference: @preferences,
-      option_id: PreferenceClassRegistry.default_option_id(preference_prefix, child_type),
-    )
+    attributes = { preference_id: @preferences.id }.merge(default_attributes)
+    unless child_type.to_s == "Cookie"
+      attributes[:option_id] = PreferenceClassRegistry.default_option_id(preference_prefix, child_type)
+    end
+
+    record_class.new(attributes)
+  end
+
+  def preference_child_record_class(child_type)
+    return PreferenceClassRegistry.cookie_class(preference_prefix) if child_type.to_s == "Cookie"
+
+    PreferenceClassRegistry.record_class(preference_prefix, child_type)
   end
 end

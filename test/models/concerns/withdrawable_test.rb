@@ -9,8 +9,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
-      discarded_at: 31.days.ago,
-      purged_at: Time.current,
+      discard_at: 31.days.ago,
+      purge_eligible_at: Time.current,
     )
 
     assert_not user.can_recover?, "Client should not be able to recover at exact boundary"
@@ -73,8 +73,8 @@ class WithdrawableTest < ActiveSupport::TestCase
   test "suspended? returns true between deactivation and purge" do
     user = Client.find_by!(public_id: "one_id")
     user.update!(
-      withdrawn_at: nil, deactivated_at: Time.current, discarded_at: Time.current,
-      purged_at: 31.days.from_now,
+      withdrawn_at: nil, deactivated_at: Time.current, discard_at: Time.current,
+      purge_eligible_at: 31.days.from_now,
     )
 
     assert_predicate user, :suspended?
@@ -95,13 +95,13 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 30.minutes.ago,
-      discarded_at: 30.minutes.ago,
-      purged_at: 30.days.from_now,
+      discard_at: 30.minutes.ago,
+      purge_eligible_at: 30.days.from_now,
     )
 
     assert_not user.can_recover?
 
-    user.update_columns(deactivated_at: 61.minutes.ago, discarded_at: 61.minutes.ago)
+    user.update_columns(deactivated_at: 61.minutes.ago, discard_at: 61.minutes.ago)
 
     assert_predicate user, :can_recover?
   end
@@ -111,13 +111,13 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 6.days.ago,
-      discarded_at: 6.days.ago,
-      purged_at: 25.days.from_now,
+      discard_at: 6.days.ago,
+      purge_eligible_at: 25.days.from_now,
     )
 
     assert_not user.early_terminatable?
 
-    user.update_columns(deactivated_at: 8.days.ago, discarded_at: 8.days.ago)
+    user.update_columns(deactivated_at: 8.days.ago, discard_at: 8.days.ago)
 
     assert_predicate user, :early_terminatable?
   end
@@ -127,8 +127,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 32.days.ago,
-      discarded_at: 32.days.ago,
-      purged_at: 1.day.ago,
+      discard_at: 32.days.ago,
+      purge_eligible_at: 1.day.ago,
     )
 
     assert_predicate user, :terminated?
@@ -145,14 +145,14 @@ class WithdrawableTest < ActiveSupport::TestCase
     assert_nil user.recovery_deadline
   end
 
-  test "recovery_deadline returns purged_at while suspended" do
+  test "recovery_deadline returns purge_eligible_at while suspended" do
     user = Client.find_by!(public_id: "one_id")
     deadline = 30.days.from_now
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 1.hour.ago,
-      discarded_at: 1.hour.ago,
-      purged_at: deadline,
+      discard_at: 1.hour.ago,
+      purge_eligible_at: deadline,
     )
 
     assert_in_delta deadline.to_i, user.recovery_deadline.to_i, 1
@@ -164,8 +164,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 2.hours.ago,
-      discarded_at: 2.hours.ago,
-      purged_at: 30.days.from_now,
+      discard_at: 2.hours.ago,
+      purge_eligible_at: 30.days.from_now,
     )
 
     assert_predicate user, :can_recover?
@@ -183,8 +183,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
-      discarded_at: 31.days.ago,
-      purged_at: Time.current,
+      discard_at: 31.days.ago,
+      purge_eligible_at: Time.current,
     )
 
     assert_not user.can_recover?
@@ -195,8 +195,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 32.days.ago,
-      discarded_at: 32.days.ago,
-      purged_at: 1.day.ago,
+      discard_at: 32.days.ago,
+      purge_eligible_at: 1.day.ago,
     )
 
     assert_not user.can_recover?
@@ -207,8 +207,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
-      discarded_at: 31.days.ago,
-      purged_at: 1.second.from_now,
+      discard_at: 31.days.ago,
+      purge_eligible_at: 1.second.from_now,
     )
 
     assert_predicate user, :can_recover?
@@ -234,8 +234,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
-      discarded_at: 31.days.ago,
-      purged_at: Time.current,
+      discard_at: 31.days.ago,
+      purge_eligible_at: Time.current,
     )
 
     assert_predicate user, :permanently_deletable?
@@ -246,8 +246,8 @@ class WithdrawableTest < ActiveSupport::TestCase
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 32.days.ago,
-      discarded_at: 32.days.ago,
-      purged_at: 1.day.ago,
+      discard_at: 32.days.ago,
+      purge_eligible_at: 1.day.ago,
     )
 
     assert_predicate user, :permanently_deletable?
@@ -300,29 +300,29 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   test "staff can_recover? works correctly" do
     staff = Operator.create!
-    staff.update_columns(deactivated_at: 15.days.ago, discarded_at: 15.days.ago, purged_at: 16.days.from_now)
+    staff.update_columns(deactivated_at: 15.days.ago, discard_at: 15.days.ago, purge_eligible_at: 16.days.from_now)
 
     assert_predicate staff, :can_recover?
 
-    staff.update_columns(deactivated_at: 32.days.ago, discarded_at: 32.days.ago, purged_at: 1.day.ago)
+    staff.update_columns(deactivated_at: 32.days.ago, discard_at: 32.days.ago, purge_eligible_at: 1.day.ago)
 
     assert_not staff.can_recover?
   end
 
   test "staff permanently_deletable? works correctly" do
     staff = Operator.create!
-    staff.update_columns(deactivated_at: 15.days.ago, discarded_at: 15.days.ago, purged_at: 16.days.from_now)
+    staff.update_columns(deactivated_at: 15.days.ago, discard_at: 15.days.ago, purge_eligible_at: 16.days.from_now)
 
     assert_not staff.permanently_deletable?
 
-    staff.update_columns(deactivated_at: 32.days.ago, discarded_at: 32.days.ago, purged_at: 1.day.ago)
+    staff.update_columns(deactivated_at: 32.days.ago, discard_at: 32.days.ago, purge_eligible_at: 1.day.ago)
 
     assert_predicate staff, :permanently_deletable?
   end
 
   test "staff suspended? works with the same retention columns as app and com actors" do
     staff = Operator.create!
-    staff.update_columns(deactivated_at: 2.hours.ago, discarded_at: 2.hours.ago, purged_at: 31.days.from_now)
+    staff.update_columns(deactivated_at: 2.hours.ago, discard_at: 2.hours.ago, purge_eligible_at: 31.days.from_now)
 
     assert_predicate staff, :suspended?
     assert_not staff.active?
@@ -347,8 +347,8 @@ class WithdrawableTest < ActiveSupport::TestCase
   test "withdrawal_in_progress? returns true when suspended" do
     user = Client.find_by!(public_id: "one_id")
     user.update!(
-      withdrawn_at: nil, deactivated_at: Time.current, discarded_at: Time.current,
-      purged_at: 31.days.from_now,
+      withdrawn_at: nil, deactivated_at: Time.current, discard_at: Time.current,
+      purge_eligible_at: 31.days.from_now,
     )
 
     assert_predicate user, :withdrawal_in_progress?

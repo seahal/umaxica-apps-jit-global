@@ -26,6 +26,25 @@ class RefreshTokenableTest < ActiveSupport::TestCase
     assert_equal 0, token.refresh_token_generation
     assert_predicate token.device_session_id, :present?
     assert_predicate token.device_session, :present?
+    assert_equal token.id, token.device_session.current_refresh_token_id
+  end
+
+  test "rotation makes the replacement token current for the same device session" do
+    token = ClientToken.create!(
+      user: @user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      refresh_token: "rotation-current-pointer-verifier",
+    )
+    session = token.device_session
+    result = ClientToken.rotate_refresh!(
+      presented_refresh_digest: ClientToken.digest_refresh_token("rotation-current-pointer-verifier"),
+    )
+    replacement = result.fetch(:token)
+
+    assert_equal :rotated, result.fetch(:status)
+    assert_not_equal token.id, replacement.id
+    assert_equal session.id, replacement.device_session_id
+    assert_equal replacement.id, session.reload.current_refresh_token_id
   end
 
   test "refresh_token= stores a digest and clears it when blank" do
@@ -82,14 +101,73 @@ class RefreshTokenableTest < ActiveSupport::TestCase
     assert_nil original.reload.dbsc_session_id
   end
 
+  test "rotation preserves the authentication event time" do
+    event_at = Time.utc(2026, 1, 2, 3, 4, 5)
+    token = ClientToken.create!(user: clients(:one), authentication_event_at: event_at)
+
+    replacement = token.rotate_refresh_token!
+
+    assert_equal event_at, token.reload.authentication_event_at
+    assert_equal event_at, ClientToken.find_by!(public_id: replacement.split(".", 2).first).authentication_event_at
+  end
+
+  test "rotation uses the writer database clock for usage timestamps" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    database_time = 1.hour.from_now
+
+    ClientToken.stub(:database_now, database_time) do
+      token.rotate_refresh_token!(now: nil)
+    end
+
+    assert_equal database_time.to_i, token.reload.last_used_at.to_i
+    assert_equal database_time.to_i, token.device_session.reload.last_seen_at.to_i
+  end
+
+  test "class rotation accepts a writer-clock decision time" do
+    ClientToken.create!(
+      user: @user,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      refresh_token: "class-rotation-verifier",
+    )
+    digest = ClientToken.digest_refresh_token("class-rotation-verifier")
+    database_time = 1.hour.from_now
+
+    result =
+      ClientToken.stub(:database_now, database_time) do
+        ClientToken.rotate_refresh!(presented_refresh_digest: digest, now: nil)
+      end
+
+    assert_equal :rotated, result.fetch(:status)
+    assert_equal database_time.to_i, result.fetch(:previous_token).reload.last_used_at.to_i
+  end
+
   test "expired_refresh? and active? reflect discarding time" do
     token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    token.define_singleton_method(:discarded_at) { 1.day.from_now }
+    token.define_singleton_method(:discard_at) { 1.day.from_now }
 
     assert_not_predicate token, :expired_refresh?
     assert_predicate token, :active?
 
-    token.define_singleton_method(:discarded_at) { 1.minute.ago }
+    token.define_singleton_method(:discard_at) { 1.minute.ago }
+
+    assert_predicate token, :expired_refresh?
+    assert_not_predicate token, :active?
+  end
+
+  test "missing or infinite expiry cannot make a refresh token active" do
+    token = ClientToken.new(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    token.define_singleton_method(:discard_at) { -Float::INFINITY }
+
+    assert_predicate token, :expired_refresh?
+    assert_not_predicate token, :active?
+
+    token.define_singleton_method(:discard_at) { Float::INFINITY }
+
+    assert_predicate token, :expired_refresh?
+    assert_not_predicate token, :active?
+
+    token.define_singleton_method(:discard_at) { nil }
 
     assert_predicate token, :expired_refresh?
     assert_not_predicate token, :active?

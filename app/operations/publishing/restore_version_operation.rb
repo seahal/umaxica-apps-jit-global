@@ -7,10 +7,11 @@ module Publishing
       super()
       @version = version
       @operator_public_id = operator_public_id
+      @cell = ContentFamilies.cell_for_version(version)
     end
 
     def call
-      entry = version.entry
+      entry = cell.fetch(:entry).find(version.entry_id)
 
       entry.with_lock do
         revision = create_revision(entry)
@@ -23,7 +24,7 @@ module Publishing
 
     private
 
-    attr_reader :version, :operator_public_id
+    attr_reader :version, :operator_public_id, :cell
 
     def create_revision(entry)
       entry.revisions.create!(
@@ -44,8 +45,9 @@ module Publishing
     end
 
     def copy_taxonomy_assignments(revision)
-      version.single_taxonomy_assignments.each do |assignment|
-        revision.single_taxonomy_assignments.create!(
+      cell.fetch(:version_single).where(entry_version_id: version.id).find_each do |assignment|
+        cell.fetch(:revision_single).create!(
+          entry_revision_id: revision.id,
           vocabulary_id: assignment.vocabulary_id,
           vocabulary_kind: assignment.vocabulary_kind,
           taxonomy_term_id: assignment.taxonomy_term_id,
@@ -53,8 +55,9 @@ module Publishing
         )
       end
 
-      version.multiple_taxonomy_assignments.ordered.each do |assignment|
-        revision.multiple_taxonomy_assignments.create!(
+      cell.fetch(:version_multiple).where(entry_version_id: version.id).order(:position).find_each do |assignment|
+        cell.fetch(:revision_multiple).create!(
+          entry_revision_id: revision.id,
           vocabulary_id: assignment.vocabulary_id,
           vocabulary_kind: assignment.vocabulary_kind,
           taxonomy_term_id: assignment.taxonomy_term_id,
@@ -65,8 +68,9 @@ module Publishing
     end
 
     def copy_media_usages(revision)
-      version.media_usages.find_each do |usage|
-        revision.media_usages.create!(
+      cell.fetch(:version_media).where(entry_version_id: version.id).find_each do |usage|
+        cell.fetch(:revision_media).create!(
+          entry_revision_id: revision.id,
           media_file_id: usage.media_file_id,
           role: usage.role,
           field_path: usage.field_path,

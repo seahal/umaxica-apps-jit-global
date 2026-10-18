@@ -57,7 +57,6 @@ class AccountSessionRevocation < ApplicationService
         token: token,
         reason: logout_reason,
       )
-      token.reload.revoke! if token.currently_usable?
     end
 
     event = create_event!(

@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_device_sessions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                         :bigint           not null, primary key
 #  dbsc_bound_at              :datetime
@@ -32,7 +32,7 @@
 #  index_visitor_device_sessions_on_revoked_at                (revoked_at)
 #  index_visitor_device_sessions_on_visitor_id                (visitor_id)
 #
-class VisitorDeviceSession < ComTicketRecord
+class VisitorDeviceSession < OpBaseComRecord
   include DeviceSessionable
 
   belongs_to :visitor, inverse_of: :visitor_device_sessions
@@ -40,5 +40,10 @@ class VisitorDeviceSession < ComTicketRecord
   # sessions and before the first refresh rotation; requiring it made `revoke!`
   # fail validation, so sign-out could not revoke such sessions.
   belongs_to :current_refresh_token, class_name: "VisitorToken", optional: true
-  has_many :visitor_tokens, foreign_key: :device_session_id, dependent: :nullify, inverse_of: :device_session
+  has_many :visitor_tokens, foreign_key: :device_session_id,
+                            dependent: :restrict_with_exception,
+                            inverse_of: :device_session
+  has_many :op_com_grants, foreign_key: :device_session_id,
+                           dependent: :restrict_with_exception,
+                           inverse_of: :visitor_device_session
 end

@@ -41,9 +41,11 @@ class AdministrativeAccessLock < ApplicationService
         admin_locked_reason_note: reason_note,
         token_valid_after_at: now,
       )
+      @stop_event = IdentityAuthenticationStopRecorder.call(actor: account, reason: "administrative_access_lock")
     end
 
-    revoke_sessions!
+    # Zenith committed the stop; the OP now revokes the authority issued before it (one.md 7.5).
+    OpIdentityEventInvalidator.deliver(event: @stop_event)
     create_event!(
       event_type: lock_event_type(previous_state),
       previous_state: previous_state,
@@ -103,10 +105,6 @@ class AdministrativeAccessLock < ApplicationService
     AccountAccessEvent::EVENT_TYPE_ADMIN_LOCK
   end
 
-  def revoke_sessions!
-    AuthenticationSessionRevoker.tokens_for(account).not_revoked.find_each(&:revoke!)
-  end
-
   def create_event!(event_type:, previous_state:, next_state:, occurred_at:)
     ChronicleRecord.connected_to(role: :writing) do
       AccountAccessEvent.create!(
@@ -132,7 +130,7 @@ class AdministrativeAccessLock < ApplicationService
       Operator
         .where(access_state: AdministrativeAccessLockable::ACCESS_STATE_ENABLED)
         .where(deactivated_at: nil, withdrawn_at: nil)
-        .where(Operator.arel_table[:discarded_at].gt(Time.current))
+        .where(Operator.arel_table[:discard_at].gt(Time.current))
         .where.not(id: account.id)
         .exists?
     return if remaining_enabled_operator_exists

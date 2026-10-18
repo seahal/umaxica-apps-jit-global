@@ -1,0 +1,9 @@
+# OIDC admission transfer to a second Auth browser
+
+- Date: 2026-10-09 UTC.
+- Reviewed HEAD: `c9fdaf813e15d4b2680375b71e2b1054cf313c04`. The worktree had uncommitted changes affecting the result, including the test change described here and the existing authentication implementation.
+- Scope: Phase 16.5 and 16.6 browser-binding slice for app, com, and org OIDC sign-in.
+- Added public HTTP assertions in `test/controllers/base/oidc_result_browser_binding_test.rb`: a second Auth browser obtains its own valid local CSRF token before the first browser attaches the admission, then posts the same entry reference after attachment. A second Base browser also obtains its own valid local CSRF token and posts the confirmation URL. After the original Base browser confirms, the second Auth browser posts the redemption URL with its valid local CSRF token. All three realms return HTTP 400 with no redirect at each transfer point, preserve the original Auth attachment, and leave confirmation or redemption unset as appropriate. The original browsers continue to confirm and redeem the binding; the test then refuses the authenticated result in a different Base browser and finalizes it in the original Base browser.
+- `ruby /tmp/four-social3-run-tests.rb test/controllers/base/oidc_result_browser_binding_test.rb` on the verified disposable 20-database manifest: latest run 1 test, 36 assertions, 0 failures, 0 errors, 0 skips. The command without the isolated manifest could not run because the repository's shared test databases have five pending migrations; it was not used as passing evidence.
+- `bundle exec rubocop test/controllers/base/oidc_result_browser_binding_test.rb`: one file inspected, no offenses. `git diff --check`: exit 0.
+- This is one browser-transfer slice. The complete Phase 16.5/16.6 matrices and the integrated acceptance verdict remain open.

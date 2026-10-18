@@ -1,0 +1,16 @@
+<% page_title(t("tech.org.access_denial.title")) %>
+<div class="ui-page ui-page--narrow">
+  <div>
+    <h1><%= t("tech.org.access_denial.heading") %></h1>
+    <p><%= t("tech.org.access_denial.description") %></p>
+  </div>
+  <nav aria-label="<%= t("tech.org.navigation.label") %>">
+    <% if browser_rp_authenticated? %>
+      <%= form_with url: tech_org_sign_out_path, method: :post, local: true do |form| %>
+        <%= form.submit t("tech.org.access_denial.sign_out"), class: "ui-button ui-button--secondary" %>
+      <% end %>
+    <% else %>
+      <%= link_to t("tech.org.access_denial.return_to_sign_in"), tech_org_sign_show_path %>
+    <% end %>
+  </nav>
+</div>

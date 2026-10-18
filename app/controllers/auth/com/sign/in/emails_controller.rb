@@ -12,13 +12,22 @@ module Auth
 
           include CommonRedirect
 
-          include CommonOtp
+          include EmailOtpResponseTiming
 
           include SessionLimitGate
           include ::SurfaceInertiaPage
           include ::TurnstilePageProps
+          include ::AuthenticationModeSwitchGuard
+          include ::SignInPhaseBindingControllerSupport
 
           AUTHENTICATION_MODE = :guest
+
+          prepend_before_action :require_sign_in_ceremony_admission!
+          ensure_fqdn_gate_first!
+          prepend_before_action :apply_default_no_store
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") }
+
+          before_action :cache_sign_in_turnstile_validation, only: :create
 
           rate_limit(
             to: 5,
@@ -39,6 +48,19 @@ module Auth
             store: rate_limit_store,
             only: :create,
             with: -> { render_rate_limited(retry_after: 900) },
+          )
+          rate_limit(
+            to: 1,
+            within: EmailOtpPolicy::SEND_COOLDOWN,
+            by: -> { sign_in_identifier_rate_limit_key },
+            scope: "auth_com_sign_in",
+            name: "email_create_identifier_cooldown",
+            store: rate_limit_store,
+            only: :create,
+            with: -> {
+              render plain: I18n.t("sign.app.authentication.email.create.cooldown"),
+                     status: :too_many_requests
+            },
           )
           declare_authentication_mode!(
             :guest,
@@ -68,7 +90,7 @@ module Auth
           def create
             address_params = params.slice(:user_email).permit(user_email: [:address])[:user_email] || {}
             address = address_params[:address]
-            unless cloudflare_turnstile_validation["success"] && address.present?
+            unless sign_in_turnstile_valid? && address.present?
               @user_email = VisitorEmail.new(address: address)
               return render_sign_in_email_new_with_errors
             end
@@ -95,40 +117,41 @@ module Auth
               return
             end
 
-            return render_session_limit_hard_reject if @session_limit_hard_reject
-
             record_sign_in_email_cooldown!(normalized_address)
             preserve_pt
 
-            redirect_to(edit_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+            redirect_to(
+              edit_auth_com_sign_in_email_path(
+                pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+              ),
+            )
           end
 
           def update
+            start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            return unless verify_email_otp_turnstile
+
             @user_email.pass_code = update_pass_code_params[:pass_code]
+            return reject_dummy_email_otp if session[:user_email_authentication_id].blank?
+
             unless @user_email.valid?
-              @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
-              return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
-                            status: :unprocessable_content
+              return reject_invalid_email_otp
             end
 
-            result = verify_otp_code(@user_email, @user_email.pass_code)
-            unless result[:success] && @user_email.visitor&.login_allowed?
-              increment_otp_attempts!(@user_email) unless result[:success]
-              @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
-              return render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
-                            status: :unprocessable_content
+            verification = admitted_auth_ceremony_session.verify_email_otp!(code: @user_email.pass_code)
+            visitor = Visitor.find_by(id: verification.contact&.visitor_id)
+            unless verification.verified_evidence?
+              return reject_invalid_email_otp
             end
 
-            visitor = @user_email.visitor
-            clear_otp(@user_email)
             session.delete(:user_email_authentication_id)
             session.delete(:user_email_authentication_address)
             result = AuthenticationSessionCommitter.call(
               controller: self, resource: visitor, pt: peek_pt, ri: current_region_identifier, auth_method: "email",
             )
             sign_in_result = sign_in_result_from_session_result(result, actor: visitor)
-            unless sign_in_result.success? || sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
-              return render_session_limit_hard_reject(
+            unless sign_in_result.proceed? || sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
+              return render_sign_in_refusal(
                 message: sign_in_result.message,
                 http_status: sign_in_result.response_status,
               )
@@ -144,9 +167,55 @@ module Auth
             else
               redirect_to_jump_url(destination, status: :see_other)
             end
+          ensure
+            ensure_email_auth_verification_elapsed(start_time, code: @user_email&.pass_code)
+          end
+
+          public
+
+          def destroy
+            admitted_auth_ceremony_session.cancel_email_otp_challenge!
+            session.delete(:user_email_authentication_id)
+            session.delete(:user_email_authentication_address)
+            redirect_to(
+              new_auth_com_sign_in_email_path(
+                pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+              ),
+              status: :see_other,
+            )
           end
 
           private
+
+          def cache_sign_in_turnstile_validation
+            @sign_in_turnstile_valid = cloudflare_turnstile_validation["success"] == true
+          end
+
+          def sign_in_turnstile_valid?
+            @sign_in_turnstile_valid == true
+          end
+
+          def sign_in_identifier_rate_limit_key
+            return "invalid:#{request.remote_ip}" unless sign_in_turnstile_valid?
+
+            raw_address = params.dig(:user_email, :address).to_s
+            normalized_address = validate_and_normalize_email(raw_address)
+            return "invalid:#{request.remote_ip}" if normalized_address.blank?
+
+            "email:#{IdentifierBlindIndex.bidx_for_email(normalized_address, realm: :com)}"
+          end
+
+          def verify_email_otp_turnstile
+            return true if cloudflare_turnstile_validation["success"]
+
+            @user_email.errors.add(:base, t("turnstile_error"))
+            render(
+              inertia: "auth/com/sign/in/emails/edit",
+              props: sign_in_email_edit_props,
+              status: :unprocessable_content,
+            )
+            false
+          end
 
           # A rejected submission re-renders this page with 422 and the errors the page reads.
           # Which guard rejected the submission, and what it says, is unchanged.
@@ -162,11 +231,12 @@ module Auth
 
           def sign_in_email_new_props
             pt = signed_pt_param
+            binding = sign_in_flow_binding_params(sign_in_phase_binding_current_flow, phase: "PRIMARY_PENDING")
 
             {
               title: t("sign.app.authentication.email.new.page_title"),
               description: t("sign.app.registration.new.social.disclaimer", product: "UMAXICA"),
-              action: auth_com_sign_in_email_path,
+              action: auth_com_sign_in_email_path(**binding),
               pt: pt,
               field_label: VisitorEmail.human_attribute_name(:address),
               submit_label: t("actions.submit"),
@@ -181,14 +251,13 @@ module Auth
             {
               title: t("sign.app.authentication.email.edit.page_title"),
               description: t("sign.app.authentication.email.edit.description"),
-              action: auth_com_sign_in_email_path,
+              action: auth_com_sign_in_email_path(**sign_in_primary_binding_params),
               pt: pt,
               field_label: t("sign.app.authentication.email.edit.code_label"),
               field_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
               submit_label: t("sign.app.authentication.email.edit.submit"),
               delivery_help: t("sign.app.authentication.email.edit.delivery_help"),
-              return_link: { label: t("sign.app.authentication.email.edit.return_page"),
-                             href: new_auth_com_sign_in_email_path(pt: pt), },
+              return_link: { label: t("sign.app.authentication.email.edit.return_page") },
               resend: {
                 endpoint: auth_com_web_v0_in_email_otp_path,
                 state: @otp_resend_state.to_s,
@@ -200,7 +269,12 @@ module Auth
                 },
               },
               turnstile: turnstile_visible_props,
+              form_errors: form_error_messages(@user_email),
             }
+          end
+
+          def form_error_messages(record)
+            record&.errors&.map(&:full_message) || []
           end
 
           def load_user_email
@@ -208,24 +282,61 @@ module Auth
               @user_email = load_session_record(
                 :user_email_authentication_id,
                 VisitorEmail,
-                check_otp_expiry: false,
-                custom: ->(email) { email.present? && !email.otp_expired? },
+                custom: lambda { |email|
+                  email.present? && admitted_auth_ceremony_session.email_otp_challenge_current?(contact: email)
+                },
               )
 
               unless @user_email
-                redirect_to(new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+                redirect_to(
+                  new_auth_com_sign_in_email_path(
+                    pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+                  ),
+                )
                 return
               end
-              @otp_resend_state = SignInOtpResendState.issue(kind: :email, target: @user_email.address)
+              @otp_resend_state = SignInOtpResendState.issue(
+                kind: :email, target: @user_email.address, surface: :com,
+                contact: @user_email,
+                browser_binding: admitted_auth_ceremony_session.sid_digest,
+              )
             elsif session[:user_email_authentication_address].present?
+              unless admitted_auth_ceremony_session.email_otp_challenge_current?(contact: nil)
+                redirect_to(
+                  new_auth_com_sign_in_email_path(
+                    pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+                  ),
+                )
+                return
+              end
+
               @user_email = VisitorEmail.new(address: session[:user_email_authentication_address])
               @otp_resend_state = SignInOtpResendState.issue(
                 kind: :email,
                 target: session[:user_email_authentication_address],
+                contact: nil,
+                surface: :com,
+                browser_binding: admitted_auth_ceremony_session.sid_digest,
               )
             else
-              redirect_to(new_auth_com_sign_in_email_path(pt: peek_pt, ri: current_region_identifier))
+              redirect_to(
+                new_auth_com_sign_in_email_path(
+                  pt: peek_pt, ri: current_region_identifier, **sign_in_primary_binding_params,
+                ),
+              )
             end
+          end
+
+          def reject_dummy_email_otp
+            verify_dummy_otp(@user_email.pass_code)
+            admitted_auth_ceremony_session.verify_email_otp!(code: @user_email.pass_code)
+            reject_invalid_email_otp
+          end
+
+          def reject_invalid_email_otp
+            @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
+            render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
+                   status: :unprocessable_content
           end
 
           # Slice before permitting, as the app surface does: `permit` on the whole
@@ -242,35 +353,36 @@ module Auth
           end
 
           def process_email_authentication(normalized_address)
+            started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             existing_email = find_email_with_timing_protection(normalized_address)
 
             if existing_email&.visitor&.login_allowed?
-              visitor = existing_email.visitor
-              if session_limit_hard_reject_for?(visitor)
-                @session_limit_hard_reject = true
-                return
-              end
-
               session[:user_email_authentication_id] = existing_email.id
               session[:user_email_authentication_address] = nil
 
-              return :ok if existing_email.locked?
+              otp_code = admitted_auth_ceremony_session.issue_email_otp!(
+                contact: existing_email, destination: normalized_address,
+              )
+              return :ok if otp_code.nil?
               return :cooldown if otp_request_rate_limited?(existing_email)
-
-              otp_code = generate_otp_for(existing_email)
 
               OtpAdapter.for(surface: :com, channel: :email).deliver(
                 record: existing_email,
                 otp_code: otp_code,
+                purpose: :sign_in,
+                auth_ceremony_session_ref: admitted_auth_ceremony_session.id.to_s,
+                auth_email_otp_generation: admitted_auth_ceremony_session.email_otp_context.fetch("generation"),
               )
             else
-              perform_dummy_otp_generation
+              admitted_auth_ceremony_session.issue_email_otp!(contact: nil, destination: normalized_address)
 
               session[:user_email_authentication_id] = nil
               session[:user_email_authentication_address] = normalized_address
             end
 
             :ok
+          ensure
+            ensure_min_elapsed(started, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
           end
 
           def otp_request_rate_limited?(user_email)
@@ -283,7 +395,7 @@ module Auth
             last_sent_at = session[:sign_in_email_cooldown_at]
             return false if last_sent_at.blank?
 
-            last_sent_at.to_i > CommonOtpPolicy::SEND_COOLDOWN.ago.to_i
+            last_sent_at.to_i > EmailOtpPolicy::SEND_COOLDOWN.ago.to_i
           end
 
           def record_sign_in_email_cooldown!(normalized_address)

@@ -8,8 +8,53 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
   fixtures :client_email_statuses, :client_statuses
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     cookies["csrf_token"] = csrf_token_value
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_up"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     # Use the solid_queue adapter for this test to verify DB persistence
     @previous_adapter = ActiveJob::Base.queue_adapter
@@ -32,7 +77,7 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
     # Use a unique email to potentially avoid collisions (though db is cleaned)
     email = "delivery_test_#{SecureRandom.hex(4)}@example.com"
 
-    assert_difference -> { SolidQueue::Job.where(class_name: "ActionMailer::MailDeliveryJob").count }, 1 do
+    assert_difference -> { SolidQueue::Job.where(class_name: "OtpNotifierEmailDeliveryJob").count }, 1 do
       post auth_app_sign_up_email_url(ri: "jp"),
            params: {
              user_email: {
@@ -47,9 +92,9 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
     end
 
     # Find the job and verify it's a mail delivery job
-    job = SolidQueue::Job.where(class_name: "ActionMailer::MailDeliveryJob").order(:created_at).last
+    job = SolidQueue::Job.where(class_name: "OtpNotifierEmailDeliveryJob").order(:created_at).last
 
-    assert_equal "ActionMailer::MailDeliveryJob", job.class_name
+    assert_equal "OtpNotifierEmailDeliveryJob", job.class_name
     assert_equal "default", job.queue_name
 
     # Verify the job is for our email
@@ -66,7 +111,7 @@ class EmailDeliveryTest < ActionDispatch::IntegrationTest
 
   def default_headers
     {
-      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
+      "Host" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
       "HTTPS" => "on",
       "X-CSRF-Token" => csrf_token_value,
     }

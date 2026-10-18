@@ -6,7 +6,7 @@ class ExternalAuthenticationSignupUseCase
     new(...).call
   end
 
-  def initialize(principal:, credential_candidate:, birthdate:)
+  def initialize(principal:, credential_candidate:, birthdate:, ceremony_started_at:)
     unless principal.is_a?(ExternalAuthentication::VerifiedPrincipal)
       raise ArgumentError, "verified principal is required"
     end
@@ -14,6 +14,7 @@ class ExternalAuthenticationSignupUseCase
     @principal = principal
     @credential_candidate = credential_candidate
     @birthdate = birthdate
+    @ceremony_started_at = ceremony_started_at
   end
 
   def call
@@ -21,6 +22,7 @@ class ExternalAuthenticationSignupUseCase
       principal: principal,
       credential_candidate: credential_candidate,
       birthdate: birthdate,
+      ceremony_started_at: ceremony_started_at,
     )
     ExternalAuthentication::SignupResult.new(
       status: :created,
@@ -31,5 +33,5 @@ class ExternalAuthenticationSignupUseCase
 
   private
 
-  attr_reader :principal, :credential_candidate, :birthdate
+  attr_reader :principal, :credential_candidate, :birthdate, :ceremony_started_at
 end

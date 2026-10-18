@@ -14,15 +14,15 @@ module Auth
 
           include CommonRedirect
 
-          include CommonOtp
-
           include EnforcementIdentifierGate
 
           include SignUpSuspensionGuard
           include AppSignUpEntryPage
+          include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
+          before_action :require_sign_up_ceremony_admission!
           before_action :reject_suspended_sign_up!
 
           declare_authentication_mode! :guest, status: :unauthorized,
@@ -43,6 +43,8 @@ module Auth
           end
 
           def create
+            supersede_active_sign_up_flow!
+
             log_sign_signup_event(
               "sign.signup.telephone.create.received",
               sign_signup_request_flags.merge(step: "telephone_otp"),
@@ -97,12 +99,9 @@ module Auth
 
             @user_telephone.validate
 
-            existing_telephone = find_existing_telephone_by_digest
-            uniqueness_only = telephone_uniqueness_only_error?(@user_telephone)
-
             has_errors = @user_telephone.errors.details.except(:user, :user_id).any?
 
-            if has_errors && !uniqueness_only
+            if has_errors
               log_signup_telephone_errors
               log_sign_signup_event(
                 "sign.signup.telephone.create.rejected",
@@ -112,42 +111,33 @@ module Auth
               return
             end
 
-            if existing_telephone &&
-                existing_telephone.user_telephone_status_id != ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-              if existing_telephone.locked?
-                return render_otp_resend_too_soon
-              end
-
-              cleanup_pending_telephone_signup!
-              dispatch_existing_telephone_verification!(existing_telephone)
-              return
-            end
-
-            if existing_telephone&.locked?
-              return render_otp_resend_too_soon
-            end
-
-            if existing_telephone&.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP &&
-                existing_telephone.reregistration_window_active?
-              return render_otp_resend_too_soon
-            end
-
             begin
-              result = SignAppUpTelephoneSignupCreator.call(
+              result = TelephoneSignUpCandidateCreator.call(
                 telephone: @user_telephone,
-                existing_telephone: existing_telephone,
-                pending_public_id: session_public_id_from_registration,
               )
 
-              if result.status == :rate_limited
-                return render_otp_resend_too_soon
-              end
-
               @user_telephone = result.telephone
+              if result.status == :rate_limited
+                render_sign_up_telephone_new(status: :too_many_requests)
+                return
+              end
+              raise ArgumentError, "unsupported telephone signup outcome" unless result.status == :created
+
               session[:user_telephone_registration] = result.session_payload
               bind_sign_up_flow_to_telephone!(@user_telephone)
+              issued = TelephoneSignUpOtpDeliveryIssuer.call(
+                flow: current_sign_up_flow, telephone: @user_telephone,
+                session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+              )
+              unless issued.success?
+                render_sign_up_telephone_new(status: :unprocessable_content)
+                return
+              end
+              session[:user_telephone_registration] = result.session_payload.merge(
+                expires_at: issued.transaction.otp_expires_at.to_i,
+              )
               redirect_to(
-                auth_app_sign_up_check_telephone_otp_path,
+                auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params),
               )
             rescue ActiveRecord::RecordInvalid => e
               @user_telephone = e.record
@@ -230,7 +220,7 @@ module Auth
             {
               title: t("sign.app.registration.telephone.edit.page_title"),
               description: t("sign.app.registration.telephone.create.verification_code_sent"),
-              action: auth_app_sign_up_check_telephone_otp_path(ri: params[:ri]),
+              action: auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
               scope: "client_telephone",
               code_label: t("sign.app.registration.telephone.edit.code_label"),
               code_placeholder: t("sign.app.registration.telephone.edit.code_placeholder"),
@@ -238,10 +228,14 @@ module Auth
               delivery_help: t("sign.app.registration.telephone.edit.delivery_help"),
               error_heading: errors.any? ? sign_up_telephone_error_heading(errors.count) : nil,
               errors: errors,
-              return_link: {
-                label: t("controller.sign.app.registration.telephone.edit.return_page"),
-                href: auth_app_sign_up_path,
-              },
+              # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
+              # ends the sign-up through the existing DELETE cancellation.
+              cancel: { label: t("actions.cancel"),
+                        action: auth_app_sign_up_check_telephone_otp_path(
+                          **sign_up_flow_binding_params,
+                          ri: params[:ri],
+                        ),
+                        method: "delete", },
             }
           end
 
@@ -264,15 +258,10 @@ module Auth
           end
 
           def valid_telephone_session?
-            return dummy_existing_telephone_session_valid? if dummy_existing_telephone_flow?
-            return false unless @user_telephone.present? && !@user_telephone.otp_expired?
-
-            if existing_signup_telephone_flow?(session[:user_telephone_registration])
-              session_public_id = session_public_id_from_registration
-              session_public_id.to_s == @user_telephone.public_id.to_s
-            else
-              @user_telephone.user_telephone_status_id == ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
-            end
+            TelephoneSignUpOtpFormQuery.call(
+              flow: @sign_up_ticket, telephone: @user_telephone,
+              session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+            )
           end
 
           def redirect_telephone_session_expired
@@ -303,70 +292,7 @@ module Auth
             last_sent_at = session[:user_telephone_otp_last_sent_at]
             return false if last_sent_at.blank?
 
-            last_sent_at.to_i > CommonOtpPolicy::SEND_COOLDOWN.ago.to_i
-          end
-
-          def cleanup_pending_telephone_signup!
-            pending_public_id =
-              session.dig(:user_telephone_registration, "public_id") ||
-              session.dig(:user_telephone_registration, :public_id)
-            sign_up_flow_locator.clear!
-            return if pending_public_id.blank?
-
-            pending_telephone = ClientTelephone.find_by(public_id: pending_public_id)
-            return unless pending_telephone
-
-            pending_user = pending_telephone.user
-            pending_telephone.destroy!
-            pending_user.destroy! if pending_user&.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
-          end
-
-          def existing_signup_telephone_flow?(registration_session)
-            registration_session&.dig(:existing) == true || registration_session&.dig("existing") == true
-          end
-
-          def dummy_existing_telephone_flow?(registration_session = session[:user_telephone_registration])
-            registration_session&.dig(:dummy) == true || registration_session&.dig("dummy") == true
-          end
-
-          def dummy_existing_telephone_session_valid?
-            registration_session = session[:user_telephone_registration]
-            return false unless dummy_existing_telephone_flow?(registration_session)
-
-            registration_session["expires_at"].to_i > Time.current.to_i
-          end
-
-          def dispatch_existing_telephone_verification!(_existing_telephone)
-            sign_up_flow_locator.clear!
-            @user_telephone = ClientTelephone.new
-
-            session[:user_telephone_registration] = {
-              expires_at: CommonOtp::OTP_EXPIRATION_MINUTES.minutes.from_now.to_i,
-              existing: true,
-              dummy: true,
-            }
-
-            redirect_to(
-              auth_app_sign_up_check_telephone_otp_path(ri: params[:ri]),
-            )
-          end
-
-          def telephone_uniqueness_only_error?(user_telephone)
-            # ignore :user and :user_id error
-            errors_to_check = user_telephone.errors.details.except(:user, :user_id)
-            return false if errors_to_check.empty?
-
-            # Fields that can have uniqueness errors
-            uniqueness_fields = %i(number raw_number number_digest)
-
-            # Check if all errors are :taken errors on the uniqueness fields
-            errors_to_check.each do |field, errors|
-              return false unless uniqueness_fields.include?(field)
-              return false unless errors.all? { |error| error[:error] == :taken }
-            end
-
-            # Ensure at least one uniqueness error is present
-            user_telephone.errors.details.any?
+            last_sent_at.to_i > TelephoneOtpPolicy::SEND_COOLDOWN.ago.to_i
           end
 
           def log_signup_telephone_errors
@@ -380,17 +306,7 @@ module Auth
             )
           end
 
-          def find_existing_telephone_by_digest
-            return nil if @user_telephone.number_digest.blank?
-
-            ClientTelephone.find_by(number_digest: @user_telephone.number_digest)
-          end
-
           def issue_sign_up_flow!
-            AppTicketRecord.connected_to(role: :writing) do
-              ClientSignUpFlowStatus.ensure_defaults!
-            end
-
             sign_up_flow_locator.issue!(
               ClientSignUpFlow.create!(
                 principal_id: nil,
@@ -432,8 +348,6 @@ module Auth
           end
 
           def current_registration_telephone
-            return ClientTelephone.new if dummy_existing_telephone_flow?
-
             public_id = session_public_id_from_registration
             return if public_id.blank?
 
@@ -444,3 +358,4 @@ module Auth
     end
   end
 end
+# rubocop:enable Metrics/AbcSize, Metrics/MethodLength

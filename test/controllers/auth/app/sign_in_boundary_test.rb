@@ -18,21 +18,9 @@ class Auth::App::SignInBoundaryTest < ActiveSupport::TestCase
       /establish_signed_in_session!/,
     ]
 
-    paths = [
-      "app/controllers/auth/app/sign/in/emails_controller.rb",
-      "app/controllers/auth/app/sign/in/passkeys_controller.rb",
-      "app/controllers/auth/app/sign/in/passkey/options_controller.rb",
-      "app/controllers/auth/app/sign/in/passkey/verifications_controller.rb",
-      "app/controllers/auth/app/sign/in/secrets_controller.rb",
-      "app/controllers/auth/app/sign/in/challenges_controller.rb",
-      "app/controllers/auth/app/sign/in/challenge/totps_controller.rb",
-      "app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb",
-      "app/controllers/auth/app/sign/in/guards_controller.rb",
-      "app/controllers/auth/app/sign/in/sessions_controller.rb",
-      "app/controllers/auth/app/social/sessions_controller.rb",
-      "app/controllers/auth/app/social/registrations_controller.rb",
-      "app/controllers/auth/app/omniauth/omniauth_callbacks_controller.rb",
-    ]
+    paths = Dir.glob("app/controllers/auth/app/{sign/in,social,omniauth}/**/*_controller.rb")
+
+    assert_operator paths.size, :>=, 10, "the sign-in controller set went missing"
 
     matches =
       paths.flat_map do |path|
@@ -53,15 +41,9 @@ class Auth::App::SignInBoundaryTest < ActiveSupport::TestCase
       /bootstrap_actor:\s*true/,
     ]
 
-    paths = [
-      "app/controllers/auth/app/verification/base_controller.rb",
-      "app/controllers/auth/app/verification/cancellations_controller.rb",
-      "app/controllers/auth/app/verification/emails_controller.rb",
-      "app/controllers/auth/app/verification/passkeys_controller.rb",
-      "app/controllers/auth/app/verification/redeliveries_controller.rb",
-      "app/controllers/auth/app/verification/setups_controller.rb",
-      "app/controllers/auth/app/verification/totps_controller.rb",
-    ]
+    paths = Dir.glob("app/controllers/auth/app/verification/**/*_controller.rb")
+
+    assert_operator paths.size, :>=, 6, "the step-up controller set went missing"
 
     matches =
       paths.flat_map do |path|

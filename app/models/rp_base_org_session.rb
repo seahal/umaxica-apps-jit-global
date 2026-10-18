@@ -1,0 +1,36 @@
+# typed: false
+# frozen_string_literal: true
+
+class RpBaseOrgSession < RpBaseOrgRecord
+  self.table_name = "rp_sessions"
+
+  CELL = RpCellBinding.fetch("rp_base_org")
+  REALM = CELL.realm
+  CLIENT_ID = CELL.client_id
+
+  include PublicId
+
+  belongs_to :op_session_binding, class_name: "RpBaseOrgOpSessionBinding", inverse_of: :sessions
+  has_many :refresh_attempts, class_name: "RpBaseOrgRefreshAttempt", foreign_key: :session_id,
+                              inverse_of: :session,
+                              dependent: :restrict_with_error
+
+  validates :absolute_expires_at, :contract_epoch, presence: true
+  validates :installed_generation, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }
+  validate :identity_binding_must_be_resolved
+
+  public
+
+  def active?(now: Time.current)
+    revoked_at.nil? && op_session_binding&.revoked_at.nil? && absolute_expires_at.present? && absolute_expires_at > now
+  end
+
+  private
+
+  def identity_binding_must_be_resolved
+    return if op_session_binding&.identity_binding_id.present?
+
+    errors.add(:op_session_binding, "must have a resolved identity binding")
+  end
+end

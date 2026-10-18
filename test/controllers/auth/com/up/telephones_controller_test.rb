@@ -1,6 +1,8 @@
 # typed: false
 # frozen_string_literal: true
 
+# Snapshot diffs would expose OTP material and token state on assertion failure.
+
 require "test_helper"
 # require "helpers/global_test_support"
 
@@ -14,10 +16,41 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     cookies["csrf_token"] = csrf_token_value
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+    https!
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
+    post(
+      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
+                            headers: admission_headers,
+    )
+
+    assert_response :see_other
+    # Public confirmation isolates this leaf's setup; separate HTTP tests exercise the Base receiver.
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
+                                       headers: admission_headers,
+    )
+
+    assert_response :see_other
     Prosopite.pause do
       [1, 2, 3].each { |id| VisitorStatus.find_or_create_by!(id: id) }
       [0, 1, 2, 3].each { |id| VisitorVisibility.find_or_create_by!(id: id) }
@@ -45,45 +78,69 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_response :success
   end
 
-  test "new rejects when visitor is already logged in" do
-    visitor = create_verified_visitor_with_email(email_address: "logged-in-com-up-telephone@example.com")
-    visitor.visitor_telephones.create!(
-      number: "+15550002222",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+  test "new keeps an admitted ceremony independent of a presented root token" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    token = VisitorToken.create!(
+      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
+      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
+      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
     )
-
-    get new_auth_com_sign_up_telephone_url(ri: "jp"),
-        headers: as_visitor_headers(visitor, host: host)
-
-    assert_response :redirect
-    assert_redirected_to base_com_dashboard_url(
-      ri: "jp",
-      host: ENV.fetch(
-        "PUBLIC_BASE_CORPORATE_URL", Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host,
-      ),
+    original_token_facts = token.attributes
+    credential = AuthenticationToken.encode(
+      visitor, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+               session_public_id: token.public_id, resource_type: "visitor",
     )
+    headers = { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+                "HTTPS" => "on",
+                "Authorization" => "Bearer #{credential}", }
+
+    assert_no_difference(["VisitorToken.count", "VisitorTelephone.count"]) do
+      get new_auth_com_sign_up_telephone_url(ri: "jp"), headers: headers
+    end
+
+    assert_response :success
+    assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
   end
 
-  test "create rejects when visitor is already logged in" do
+  test "create keeps an admitted ceremony independent of a presented root token" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    token = VisitorToken.create!(
+      visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
+      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
+      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+    )
+    original_token_facts = token.attributes
+    credential = AuthenticationToken.encode(
+      visitor, host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+               session_public_id: token.public_id, resource_type: "visitor",
+    )
+    headers = { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+                "HTTPS" => "on",
+                "Authorization" => "Bearer #{credential}", }
 
-    assert_no_difference("VisitorTelephone.count") do
-      post auth_com_sign_up_telephone_url(ri: "jp"),
-           params: {
-             visitor_telephone: {
-               raw_number: "+819012300099",
-               confirm_policy: "1",
-               confirm_using_mfa: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: as_visitor_headers(visitor, host: host)
+    assert_difference("VisitorTelephone.count", 1) do
+      assert_no_difference("VisitorToken.count") do
+        post auth_com_sign_up_telephone_url(ri: "jp"),
+             params: { visitor_telephone: { raw_number: "+819012300099", confirm_policy: "1", confirm_using_mfa: "1" },
+                       "cf-turnstile-response": "test", }, headers: headers
+      end
     end
 
     assert_response :redirect
-    URI.parse(response.location)
+    target = URI.parse(response.location)
 
-    assert_includes response.location, "rt="
+    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), target.host
+    assert_equal URI.parse(auth_com_sign_up_check_telephone_otp_path(ri: "jp")).path, target.path
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorTelephone.find(flow.pending_contact_id)
+
+    assert_not_equal visitor.id, candidate.visitor_id
+    assert_nil candidate.binding_finalized_at
+    assert_equal flow.public_id,
+                 SignFlowBindingCodec.decode(Rack::Utils.parse_query(target.query).fetch("fb")).flow_public_id
+    assert_withheld("protected record facts remain unchanged") { original_token_facts == token.reload.attributes }
   end
 
   test "create redirects to edit and creates pending visitor telephone" do
@@ -119,18 +176,26 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
            },
            "cf-turnstile-response": "test",
          },
-         headers: default_headers
+         headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
-    get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    assert_response :redirect
+    target = URI.parse(response.location)
+
+    assert_equal "/sign/up/check/telephone/otp", target.path
+    assert_predicate Rack::Utils.parse_query(target.query).fetch("fb"), :present?
+    get target.request_uri
 
     assert_response :success
-    assert_equal "auth/com/sign/up/telephones/edit", inertia_component
-    assert_equal I18n.t("sign.app.registration.telephone.edit.page_title"), inertia_props.fetch("title")
-    assert_equal I18n.t("sign.app.registration.telephone.edit.code_label"), inertia_props.fetch("code_label")
+    page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
+    props = page.fetch("props")
+
+    assert_equal "auth/com/sign/up/telephones/edit", page.fetch("component")
+    assert_equal I18n.t("sign.app.registration.telephone.edit.page_title"), props.fetch("title")
+    assert_equal I18n.t("sign.app.registration.telephone.edit.code_label"), props.fetch("code_label")
     assert_equal I18n.t("sign.app.registration.telephone.edit.code_placeholder"),
-                 inertia_props.fetch("code_placeholder")
-    assert_equal "visitor_telephone", inertia_props.fetch("scope")
-    assert_equal I18n.t("sign.app.registration.telephone.edit.submit"), inertia_props.fetch("submit_label")
+                 props.fetch("code_placeholder")
+    assert_equal "visitor_telephone", props.fetch("scope")
+    assert_equal I18n.t("sign.app.registration.telephone.edit.submit"), props.fetch("submit_label")
     assert_includes response.body, "電話番号"
     assert_includes response.body, "SMS"
     assert_includes response.body, I18n.t("sign.app.registration.telephone.edit.delivery_help")
@@ -151,7 +216,10 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     )
     digest = EnforcementIdentifierDigest.for_telephone(realm: "com", value: "+819099999999")
     the_case.identifier_effects.build(**digest, registration_blocked: true, effective_at: Time.current)
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_enqueued_jobs 0, only: Outbound::SmsDeliveryJob do
       assert_no_difference("VisitorTelephone.count") do
@@ -217,128 +285,320 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_response :unprocessable_content
   end
 
-  test "create rejects duplicate unverified telephone inside overwrite window" do
+  test "a replacement flow owns a new telephone candidate without deleting the earlier candidate" do
+    destination = "+819012300004"
     post auth_com_sign_up_telephone_url(ri: "jp"),
-         params: {
-           visitor_telephone: {
-             raw_number: "+819012300004",
-             confirm_policy: "1",
-             confirm_using_mfa: "1",
-           },
-           "cf-turnstile-response": "test",
-         },
-         headers: default_headers
+         params: { visitor_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+                   "cf-turnstile-response": "test", },
+         headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
-    first_public_id = VisitorTelephone.order(:created_at).last.public_id
-    first_telephone = VisitorTelephone.find_by!(public_id: first_public_id)
-    first_visitor = first_telephone.visitor
+    assert_response :redirect
+    first_target = URI.parse(response.location)
+    first_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    first_candidate = VisitorTelephone.find(first_flow.pending_contact_id)
+    first_facts = first_candidate.reload.attributes.slice(
+      "visitor_id", "number_digest", "binding_finalized_at",
+      "binding_released_at",
+    )
+    first_owner = contact_owner_for_test(first_candidate).reload
 
-    assert_no_difference("VisitorTelephone.count") do
-      assert_no_difference("Visitor.count") do
+    assert_difference("VisitorTelephone.count", 1) do
+      assert_difference("Visitor.count", 1) do
         post auth_com_sign_up_telephone_url(ri: "jp"),
-             params: {
-               visitor_telephone: {
-                 raw_number: "+819012300004",
-                 confirm_policy: "1",
-                 confirm_using_mfa: "1",
-               },
-               "cf-turnstile-response": "test",
-             },
-             headers: default_headers
+             params: { visitor_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+                       "cf-turnstile-response": "test", },
+             headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
       end
     end
 
-    assert_response :too_many_requests
-    assert VisitorTelephone.exists?(first_telephone.id)
-    assert Visitor.exists?(first_visitor.id)
+    assert_response :redirect
+    second_target = URI.parse(response.location)
+    second_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    second_candidate = VisitorTelephone.find(second_flow.pending_contact_id)
+
+    assert_not_equal first_flow.id, second_flow.id
+    assert_not_equal first_candidate.id, second_candidate.id
+    assert_not_equal contact_owner_for_test(first_candidate).id, second_candidate.visitor_id
+    assert_equal first_candidate.number_digest, second_candidate.number_digest
+    assert_nil first_candidate.binding_finalized_at
+    assert_nil second_candidate.binding_finalized_at
+    assert_withheld("owned supersession preserves binding facts") {
+      first_facts == first_candidate.reload.attributes.slice(
+        "visitor_id", "number_digest", "binding_finalized_at",
+        "binding_released_at",
+      )
+    }
+    assert_predicate first_flow.reload, :sign_up_halted?
+    assert_predicate first_flow, :cleanup_completed?
+    assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator first_owner.reload.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator first_owner.purge_eligible_at, :>, first_owner.discard_at
+    assert_predicate first_flow.reload, :sign_up_halted?
+    second_facts = second_flow.attributes
+    second_candidate_facts = second_candidate.attributes
+    get first_target.request_uri
+
+    assert_response :conflict
+    assert_withheld("protected record facts remain unchanged") { second_facts == second_flow.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") {
+      second_candidate_facts == second_candidate.reload.attributes
+    }
+    get second_target.request_uri
+
+    assert_response :success
   end
 
-  test "create after overwrite window replaces duplicate unverified telephone" do
+  test "fresh sessions cannot distinguish pending and registered telephone sign-up" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    existing = VisitorTelephone.create!(
+      visitor: visitor, raw_number: "+819012300006", confirm_policy: true,
+      confirm_using_mfa: true,
+      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+      binding_finalized_at: VisitorTelephone.database_now,
+    )
+    existing_facts = existing.attributes
+    existing_owner_facts = visitor.attributes
+    responses = []
+    candidates = []
+    browsers = []
+    targets = []
+
+    [existing.number, "+819012300007"].each do |destination|
+      2.times do
+        browser = open_session
+        browser.host!(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"))
+        browser.https!
+        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+        )
+        binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+        browser.get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+        assert_equal 200, browser.response.status
+        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        headers = { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}", "Sec-Fetch-Site" => "same-origin" }
+        browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf }, headers: headers,
+        )
+
+        assert_equal 303, browser.response.status
+        binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+        browser.get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        browser.post(
+          auth_com_sign_up_path(ri: "jp"),
+          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: headers,
+        )
+
+        assert_equal 303, browser.response.status
+        assert_difference("VisitorTelephone.count", 1) do
+          browser.post(
+            auth_com_sign_up_telephone_url(ri: "jp"),
+            params: { visitor_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+                      "cf-turnstile-response": "test", }, headers: headers,
+          )
+        end
+
+        assert_equal 302, browser.response.status
+        target = URI.parse(browser.response.location)
+        query = Rack::Utils.parse_query(target.query)
+
+        assert_equal %w(fb ri), query.keys.sort
+        assert_equal "jp", query.fetch("ri")
+        responses << [browser.response.status, target.scheme, target.host, target.path, query.keys.sort]
+        candidate = VisitorTelephone.order(:created_at, :id).last
+        candidates << candidate
+        browsers << browser
+        targets << target
+
+        assert_equal destination, candidate.number
+        assert_nil candidate.binding_finalized_at
+      end
+    end
+
+    assert_equal 1, responses.uniq.length
+    assert_equal 4, candidates.map(&:id).uniq.length
+    assert_equal 4, candidates.map(&:visitor_id).uniq.length
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { existing_owner_facts == visitor.reload.attributes }
+    own_candidate_facts = candidates.last.attributes
+    foreign_candidate_facts = candidates.first.attributes
+    browsers.last.get(targets.first.request_uri)
+
+    assert_equal 409, browsers.last.response.status
+    assert_withheld("protected record facts remain unchanged") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("protected record facts remain unchanged") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
+    transaction_ref =
+      VisitorTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: candidates.first.public_id,
+      ).transaction_id
+    queued =
+      enqueued_jobs.reverse.find do |job|
+        next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:otp_binding)[3] == transaction_ref
+      end
+    foreign_code =
+      OutboundSensitivePayload.decrypt_sms_delivery(
+        queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
+      ).fetch(:otp_code)
+    assert_no_difference("VisitorToken.count") do
+      browsers.last.patch(
+        targets.first.request_uri,
+        params: { visitor_telephone: { pass_code: foreign_code }, "cf-turnstile-response": "test" },
+        headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}", "Sec-Fetch-Site" => "same-origin" },
+      )
+    end
+
+    assert_equal 409, browsers.last.response.status
+    assert_withheld("foreign proof cannot affect this candidate") {
+      own_candidate_facts == candidates.last.reload.attributes
+    }
+    assert_withheld("foreign proof cannot consume its candidate") {
+      foreign_candidate_facts == candidates.first.reload.attributes
+    }
+    browsers.last.get(targets.last.request_uri)
+
+    assert_equal 200, browsers.last.response.status
+  end
+
+  test "replacing an owned telephone signup retains the halted flow candidate and owner until purge" do
+    destination = "+819012300005"
     post auth_com_sign_up_telephone_url(ri: "jp"),
-         params: {
-           visitor_telephone: {
-             raw_number: "+819012300005",
-             confirm_policy: "1",
-             confirm_using_mfa: "1",
-           },
-           "cf-turnstile-response": "test",
-         },
-         headers: default_headers
+         params: { visitor_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+                   "cf-turnstile-response": "test", },
+         headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
 
-    first_public_id = VisitorTelephone.order(:created_at).last.public_id
-    first_telephone = VisitorTelephone.find_by!(public_id: first_public_id)
-    first_visitor = first_telephone.visitor
+    assert_response :redirect
+    first_flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    first_candidate = VisitorTelephone.find(first_flow.pending_contact_id)
+    first_binding_facts = first_candidate.reload.attributes.slice(
+      "visitor_id", "number_digest",
+      "binding_finalized_at", "binding_released_at",
+    )
 
-    travel CommonOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
-      post auth_com_sign_up_telephone_url(ri: "jp"),
-           params: {
-             visitor_telephone: {
-               raw_number: "+819012300005",
-               confirm_policy: "1",
-               confirm_using_mfa: "1",
-             },
-             "cf-turnstile-response": "test",
-           },
-           headers: default_headers
+    travel TelephoneOtpPolicy::REREGISTRATION_OVERWRITE_WINDOW + 1.second do
+      assert_difference("VisitorTelephone.count", 1) do
+        assert_difference("Visitor.count", 1) do
+          post auth_com_sign_up_telephone_url(ri: "jp"),
+               params: { visitor_telephone: { raw_number: destination, confirm_policy: "1", confirm_using_mfa: "1" },
+                         "cf-turnstile-response": "test", },
+               headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
+        end
+      end
     end
 
     assert_response :redirect
-    assert_not VisitorTelephone.exists?(first_telephone.id)
-    assert_not Visitor.exists?(first_visitor.id)
-    new_public_id = VisitorTelephone.order(:created_at).last.public_id
+    current = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    replacement = VisitorTelephone.find(current.pending_contact_id)
 
-    assert VisitorTelephone.exists?(public_id: new_public_id)
+    assert_not_equal first_candidate.id, replacement.id
+    assert_not_equal contact_owner_for_test(first_candidate).id, replacement.visitor_id
+    assert_equal first_candidate.number_digest, replacement.number_digest
+    assert_withheld("original candidate binding facts remain unchanged") {
+      first_binding_facts == first_candidate.reload.attributes.slice(
+        "visitor_id", "number_digest", "binding_finalized_at",
+        "binding_released_at",
+      )
+    }
+    assert_predicate first_flow.reload, :sign_up_halted?
+    assert_predicate first_flow, :cleanup_completed?
+    assert_operator first_candidate.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator first_candidate.purge_eligible_at, :>, first_candidate.discard_at
+    retained_owner = contact_owner_for_test(first_candidate).reload
+
+    assert_operator retained_owner.discard_at, :<=, first_flow.cleanup_completed_at
+    assert_operator retained_owner.purge_eligible_at, :>, retained_owner.discard_at
+    assert_nil replacement.binding_finalized_at
   end
 
-  test "create is refused while a verified telephone of the same number is locked out" do
+  test "a verified telephone candidate lock cannot mutate an independent signup candidate" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    existing = visitor.visitor_telephones.create!(
-      raw_number: "+819012377901",
-      confirm_policy: true,
-      confirm_using_mfa: true,
+    existing = VisitorTelephone.create!(
+      visitor: visitor, raw_number: "+819012377901",
+      confirm_policy: true, confirm_using_mfa: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+      binding_finalized_at: VisitorTelephone.database_now,
+      locked_at: 10.minutes.from_now,
     )
-    existing.update!(locked_at: 10.minutes.from_now)
+    original_facts = existing.attributes
+    owner_facts = visitor.attributes
 
-    assert_no_difference("VisitorTelephone.count") do
-      post auth_com_sign_up_telephone_url(ri: "jp"),
-           params: {
-             visitor_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
-             "cf-turnstile-response": "test",
-           }, headers: default_headers
+    assert_difference("VisitorTelephone.count", 1) do
+      assert_difference("Visitor.count", 1) do
+        post auth_com_sign_up_telephone_url(ri: "jp"),
+             params: { visitor_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
+                       "cf-turnstile-response": "test", },
+             headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
+      end
     end
 
-    assert_response :too_many_requests
-    assert_equal I18n.t("sign.app.registration.email.create.otp_resend_too_soon"), response.body
+    assert_response :redirect
+    target = URI.parse(response.location)
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorTelephone.find(flow.pending_contact_id)
+
+    assert_not_equal existing.id, candidate.id
+    assert_not_equal existing.visitor_id, candidate.visitor_id
+    assert_equal existing.number_digest, candidate.number_digest
+    assert_nil candidate.binding_finalized_at
+    assert_not_predicate candidate, :locked?
+    assert_withheld("protected record facts remain unchanged") { original_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { owner_facts == visitor.reload.attributes }
+    get target.request_uri
+
+    assert_response :success
   end
 
-  test "create is refused while a pending sign-up telephone of the same number is locked out" do
+  test "a pending sign-up telephone candidate lock cannot mutate an independent signup candidate" do
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
-    existing = visitor.visitor_telephones.create!(
-      raw_number: "+819012377902",
-      confirm_policy: true,
-      confirm_using_mfa: true,
+    existing = VisitorTelephone.create!(
+      visitor: visitor, raw_number: "+819012377902",
+      confirm_policy: true, confirm_using_mfa: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
+      locked_at: 10.minutes.from_now,
     )
-    existing.update!(locked_at: 10.minutes.from_now)
+    original_facts = existing.attributes
+    owner_facts = visitor.attributes
 
-    assert_no_difference("VisitorTelephone.count") do
-      post auth_com_sign_up_telephone_url(ri: "jp"),
-           params: {
-             visitor_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
-             "cf-turnstile-response": "test",
-           }, headers: default_headers
+    assert_difference("VisitorTelephone.count", 1) do
+      assert_difference("Visitor.count", 1) do
+        post auth_com_sign_up_telephone_url(ri: "jp"),
+             params: { visitor_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
+                       "cf-turnstile-response": "test", },
+             headers: { "Host" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "HTTPS" => "on" }
+      end
     end
 
-    assert_response :too_many_requests
+    assert_response :redirect
+    target = URI.parse(response.location)
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorTelephone.find(flow.pending_contact_id)
+
+    assert_not_equal existing.id, candidate.id
+    assert_not_equal existing.visitor_id, candidate.visitor_id
+    assert_equal existing.number_digest, candidate.number_digest
+    assert_nil candidate.binding_finalized_at
+    assert_not_predicate candidate, :locked?
+    assert_withheld("protected record facts remain unchanged") { original_facts == existing.reload.attributes }
+    assert_withheld("protected record facts remain unchanged") { owner_facts == visitor.reload.attributes }
+    get target.request_uri
+
+    assert_response :success
   end
 
   test "create is refused when the creator reports the number rate limited under its own lock" do
-    rate_limited = SignComUpTelephoneSignupCreator::Result.new(
+    rate_limited = TelephoneSignUpCandidateResult.new(
       status: :rate_limited, telephone: VisitorTelephone.new, session_payload: nil,
     )
 
-    SignComUpTelephoneSignupCreator.stub(:call, rate_limited) do
+    TelephoneSignUpCandidateCreator.stub(:call, rate_limited) do
       post auth_com_sign_up_telephone_url(ri: "jp"),
            params: {
              visitor_telephone: { raw_number: "+819012377903", confirm_policy: "1", confirm_using_mfa: "1" },
@@ -355,7 +615,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
         raise ActiveRecord::RecordInvalid, VisitorTelephone.new
       end
 
-    SignComUpTelephoneSignupCreator.stub(:call, raiser) do
+    TelephoneSignUpCandidateCreator.stub(:call, raiser) do
       post auth_com_sign_up_telephone_url(ri: "jp"),
            params: {
              visitor_telephone: { raw_number: "+819012377904", confirm_policy: "1", confirm_using_mfa: "1" },
@@ -366,17 +626,19 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_response :unprocessable_content
   end
 
-  test "sign-up with an already verified telephone answers the otp page without creating records" do
+  test "sign-up beside an effective telephone creates only its own pending candidate" do
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
     existing = visitor.visitor_telephones.create!(
       raw_number: "+819012377001",
       confirm_policy: true,
       confirm_using_mfa: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+      binding_finalized_at: VisitorTelephone.database_now,
     )
+    existing_facts = existing.attributes
 
-    assert_no_difference("Visitor.count") do
-      assert_no_difference("VisitorTelephone.count") do
+    assert_difference("Visitor.count", 1) do
+      assert_difference("VisitorTelephone.count", 1) do
         post auth_com_sign_up_telephone_url(ri: "jp"),
              params: {
                visitor_telephone: {
@@ -390,10 +652,18 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
     assert_response :redirect
     assert_includes response.location, "/sign/up/check/telephone/otp"
 
-    get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    target = URI.parse(response.location)
+    get target.request_uri, headers: default_headers
 
     assert_response :success
     assert_not_includes response.body, I18n.t("errors.messages.taken")
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
+    candidate = VisitorTelephone.order(:created_at, :id).last
+
+    assert_not_equal existing.id, candidate.id
+    assert_not_equal existing.visitor_id, candidate.visitor_id
+    assert_equal existing.number_digest, candidate.number_digest
+    assert_nil candidate.binding_finalized_at
   end
 
   test "resending the code for an already verified telephone answers without creating records" do
@@ -403,7 +673,9 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
       confirm_policy: true,
       confirm_using_mfa: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+      binding_finalized_at: VisitorTelephone.database_now,
     )
+    existing_facts = existing.attributes
 
     post auth_com_sign_up_telephone_url(ri: "jp"),
          params: {
@@ -412,9 +684,17 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
          }, headers: default_headers
 
     assert_response :redirect
+    target = URI.parse(response.location)
 
-    assert_no_difference("VisitorTelephone.count") do
-      post auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorTelephone.find(flow.pending_contact_id)
+    decision_time = candidate.otp_last_sent_at + TelephoneOtpPolicy::SEND_COOLDOWN + 1.second
+    travel_to decision_time do
+      VisitorTelephone.stub(:database_now, decision_time) do
+        assert_no_difference("VisitorTelephone.count") do
+          post target.request_uri, headers: default_headers
+        end
+      end
     end
 
     assert_response :redirect
@@ -422,10 +702,12 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
 
     # The second resend lands inside the send cooldown and must be refused with the
     # same message a real pending registration gets, so the two cannot be told apart.
-    post auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    target = URI.parse(response.location)
+    post target.request_uri, headers: default_headers
 
     assert_response :too_many_requests
     assert_equal I18n.t("sign.app.registration.email.create.otp_resend_too_soon"), response.body
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
   end
 
   test "the code page for an already verified telephone stops answering once the window closes" do
@@ -435,6 +717,7 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
       confirm_policy: true,
       confirm_using_mfa: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+      binding_finalized_at: VisitorTelephone.database_now,
     )
 
     post auth_com_sign_up_telephone_url(ri: "jp"),
@@ -444,12 +727,24 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
          }, headers: default_headers
 
     assert_response :redirect
+    target = URI.parse(response.location)
 
-    travel CommonOtp::OTP_EXPIRATION_MINUTES.minutes + 1.minute do
-      get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    flow = VisitorSignUpFlow.find_by!(public_id: session.dig(:com_sign_up_flow_locator, "public_id"))
+    candidate = VisitorTelephone.find(flow.pending_contact_id)
+    original_facts = candidate.attributes
+    original_existing_facts = existing.attributes
+    travel TelephoneOtpPolicy::AUTHENTICATION_TTL + 1.minute do
+      VisitorTelephoneCeremonyTransaction.stub(
+        :database_now,
+        VisitorTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: candidate.public_id).otp_expires_at,
+      ) do
+        get target.request_uri, headers: default_headers
+      end
     end
 
     assert_response :unprocessable_content
+    assert_withheld("expired evidence is not revived") { original_facts == candidate.reload.attributes }
+    assert_withheld("effective binding is unchanged") { original_existing_facts == existing.reload.attributes }
   end
 
   test "a code submitted against an already verified telephone never starts an account" do
@@ -459,27 +754,39 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
       confirm_policy: true,
       confirm_using_mfa: true,
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+      binding_finalized_at: VisitorTelephone.database_now,
     )
+    existing_facts = existing.attributes
     post auth_com_sign_up_telephone_url(ri: "jp"),
          params: {
            visitor_telephone: { raw_number: existing.number, confirm_policy: "1", confirm_using_mfa: "1" },
            "cf-turnstile-response": "test",
          }, headers: default_headers
-    get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+
+    assert_response :redirect
+    target = URI.parse(response.location)
+    get target.request_uri, headers: default_headers
+
+    assert_response :success
 
     assert_no_difference("Visitor.count") do
-      patch auth_com_sign_up_check_telephone_otp_url(ri: "jp"),
-            params: { visitor_telephone: { pass_code: "123456" } }, headers: default_headers
+      patch target.request_uri,
+            params: { visitor_telephone: { pass_code: "123456" }, "cf-turnstile-response": "test" },
+            headers: default_headers
     end
 
     assert_response :unprocessable_content
     assert_equal VisitorTelephoneStatus::VERIFIED, existing.reload.visitor_telephone_status_id
+    assert_withheld("protected record facts remain unchanged") { existing_facts == existing.reload.attributes }
   end
 
-  test "the otp entry page redirects to the telephone form when no registration is in progress" do
-    get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+  test "the OTP page without a flow locator refuses without creating state" do
+    assert_no_difference(["VisitorSignUpFlow.count", "VisitorTelephone.count", "VisitorToken.count"]) do
+      get auth_com_sign_up_check_telephone_otp_url(ri: "jp"), headers: default_headers
+    end
 
-    assert_response :redirect
+    assert_response :conflict
+    assert_nil response.headers["Location"]
   end
 
   private
@@ -489,12 +796,24 @@ class Auth::Com::Sign::Up::TelephonesControllerTest < ActionDispatch::Integratio
   end
 
   def host
-    ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
   end
 
   def otp_code_for(telephone)
-    otp_data = telephone.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter])
+    transaction_ref =
+      VisitorTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: telephone.public_id,
+      ).transaction_id
+    queued =
+      enqueued_jobs.reverse.find do |job|
+        next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:otp_binding)[3] == transaction_ref
+      end
+    OutboundSensitivePayload.decrypt_sms_delivery(
+      queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
+    ).fetch(:otp_code)
   end
   private
 end
@@ -517,31 +836,11 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -601,10 +900,8 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -616,10 +913,8 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -840,75 +1135,6 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-    )
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-    )
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -928,10 +1154,8 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -951,12 +1175,12 @@ class Auth::Com::Sign::Up::TelephonesControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

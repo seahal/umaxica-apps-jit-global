@@ -63,13 +63,13 @@ module Jit
             preference_type: "OrgPreference",
             public_id: "org-pref-public",
             jti: "org-pref-jti",
-            jwt_issuer_id: "surface:SIGN_ORG",
+            jwt_issuer_id: "surface:AUTH_ORG",
           )
 
           assert_not_nil PreferenceToken.decode(
             token,
             host: "log.umaxica.org",
-            jwt_issuer_id: "surface:SIGN_ORG",
+            jwt_issuer_id: "surface:AUTH_ORG",
           )
 
           clear_local_jwt_env!
@@ -80,7 +80,7 @@ module Jit
           decoded = PreferenceToken.decode(
             token,
             host: "log.umaxica.org",
-            jwt_issuer_id: "surface:SIGN_ORG",
+            jwt_issuer_id: "surface:AUTH_ORG",
           )
 
           assert_not_nil decoded
@@ -103,19 +103,19 @@ module Jit
 
         test "partial surface env is repaired from local store as one matching set" do
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
-          original_private_key = ENV.fetch("JWT_SIGN_APP_PRIVATE_KEY")
-          original_public_keyset = ENV.fetch("JWT_SIGN_APP_PUBLIC_KEYSET")
+          original_private_key = ENV.fetch("JWT_AUTH_APP_PRIVATE_KEY")
+          original_public_keyset = ENV.fetch("JWT_AUTH_APP_PUBLIC_KEYSET")
 
-          ENV["JWT_SIGN_APP_PRIVATE_KEY"] = nil
+          ENV["JWT_AUTH_APP_PRIVATE_KEY"] = nil
 
           JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
 
-          assert_equal original_private_key, ENV["JWT_SIGN_APP_PRIVATE_KEY"]
-          assert_equal original_public_keyset, ENV["JWT_SIGN_APP_PUBLIC_KEYSET"]
+          assert_equal original_private_key, ENV["JWT_AUTH_APP_PRIVATE_KEY"]
+          assert_equal original_public_keyset, ENV["JWT_AUTH_APP_PUBLIC_KEYSET"]
           JitSecurityJwtRegistry.reload!
 
-          assert JitSecurityJwtRegistry.private_key_for("surface:SIGN_APP")
-          assert JitSecurityJwtRegistry.public_key_for("surface:SIGN_APP", ENV.fetch("JWT_SIGN_APP_ACTIVE_KID"))
+          assert JitSecurityJwtRegistry.private_key_for("surface:AUTH_APP")
+          assert JitSecurityJwtRegistry.public_key_for("surface:AUTH_APP", ENV.fetch("JWT_AUTH_APP_ACTIVE_KID"))
         end
 
         test "partial oidc client env is repaired from local store as one matching set" do
@@ -217,6 +217,50 @@ module Jit
 
           assert_empty warnings.select { |message| message.include?("jwt.local_keyset.regenerated") },
                        "reusing persisted keys must not look like a key rotation"
+        end
+
+        test "a surface signing key preset in ENV is refused instead of being used as a local Jump key" do
+          foreign = OpenSSL::PKey::EC.generate("secp384r1")
+          ENV["JWT_BASE_APP_PRIVATE_KEY"] = Base64.strict_encode64(foreign.to_der)
+
+          error =
+            assert_raises(ArgumentError) do
+              JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+            end
+
+          assert_match(/JWT_BASE_APP_PRIVATE_KEY must not be set/, error.message)
+          assert_not_includes error.message, ENV.fetch("JWT_BASE_APP_PRIVATE_KEY")
+        end
+
+        test "a surface kid preset in ENV is refused even when a store already exists" do
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          ENV["JWT_PALM_APP_ACTIVE_KID"] = "production-palm-app-es384-a"
+
+          assert_raises(ArgumentError) do
+            JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          end
+        end
+
+        test "a restart reuses the persisted surface Jump key from the local store" do
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          kid = ENV.fetch("JWT_BASE_APP_ACTIVE_KID")
+          private_key = ENV.fetch("JWT_BASE_APP_PRIVATE_KEY")
+          clear_local_jwt_env!
+
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+
+          assert_equal kid, ENV.fetch("JWT_BASE_APP_ACTIVE_KID")
+          assert_equal private_key, ENV.fetch("JWT_BASE_APP_PRIVATE_KEY")
+          assert_equal "#{Rails.env}-base-app-es384-a", kid
+        end
+
+        test "installing twice in one process accepts the values the installer exported" do
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+          kid = ENV.fetch("JWT_AUTH_ORG_ACTIVE_KID")
+
+          JitSecurityJwtLocalKeysetInstaller.install!(store_path: @store_path)
+
+          assert_equal kid, ENV.fetch("JWT_AUTH_ORG_ACTIVE_KID")
         end
 
         test "explicit local jwt env values are not replaced" do

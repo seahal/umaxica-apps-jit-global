@@ -95,7 +95,7 @@ export default function SocialLinkManage({
               </div>
             </form>
             {unlink.blocked_notice ? (
-              <p className="text-sm text-fg-muted">{unlink.blocked_notice}</p>
+              <p className="text-base text-fg-muted">{unlink.blocked_notice}</p>
             ) : null}
           </div>
         ) : null}

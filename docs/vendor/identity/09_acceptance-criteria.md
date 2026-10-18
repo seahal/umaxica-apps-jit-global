@@ -12,6 +12,13 @@ source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
 ---
 
+> **Current-contract supersession (2026-09-23):** These acceptance rows were authored for the
+> historical Acme/Sign authority model. They remain evidence of the earlier vendor-review scope,
+> but they are not frozen requirements for the current Rails implementation. For current authority,
+> RP, logout, and ceremony acceptance, use `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
+> the current route/security contracts. A row that names Acme as the Authorization Server must not
+> be used to require Acme routes or shared RP registrations after the Base/Auth decision.
+
 # Purpose
 
 Define the acceptance criteria for reviewing identity docs and current implementation evidence.
@@ -51,7 +58,7 @@ This task does not require test changes.
 | ACC-006 | sign-out/logout acceptance               | Browser logout remains a ceremony UI on multiple hosts, while authority remains Acme.                       | Logout sequence doc and route contracts.            | `docs/security/logout-sequence.md`, route tests                                                              | Implementation team    | Pass                                               |
 | ACC-007 | OTP acceptance                           | OTP flows are protected by challenge expiry, retry handling, and anti-automation controls.                  | OTP-related docs and route evidence.                | `docs/security/turnstile.md`, `docs/security/sign-in-sequence.md`, `docs/security/sign-up-sequence.md`       | Implementation team    | Pass / gap where per-flow tests missing            |
 | ACC-008 | passkey/WebAuthn acceptance              | Passkey flows have challenge/verification boundaries and replay awareness.                                  | Credential gateway docs and route evidence.         | `docs/security/credential-gateway.md`, sign route contract                                                   | Implementation team    | Pass / gap where specific replay test missing      |
-| ACC-009 | social linking acceptance                | Social linking uses provider subject as the identity key and does not auto-link by email.                   | Social linking policy docs and evidence.            | `docs/vendor/identity/07_social-linking-policy.md`, `docs/auth-ceremony/EVIDENCE-LEDGER.md`                  | Implementation team    | Pass                                               |
+| ACC-009 | social linking acceptance                | Social linking uses provider subject as the identity key and does not auto-link by email.                   | Social linking policy docs and evidence.            | `docs/vendor/identity/07_social-linking-policy.md`                                                           | Implementation team    | Pass                                               |
 | ACC-010 | session limitation acceptance            | Session limitation is Acme-owned and surfaced through the documented limitation flow.                       | Acme route contract and sign-in sequence docs.      | `config/routes/acme.rb`, `docs/security/sign-in-sequence.md`                                                 | Implementation team    | Pass / gap where UI not centralized                |
 | ACC-011 | session revocation acceptance            | Session revocation remains authority-bound to Acme even when the UI host varies.                            | Logout and session-token authority docs.            | `docs/security/logout-sequence.md`, `docs/security/session-token-authority.md`                               | Implementation team    | Pass                                               |
 | ACC-012 | cookie/session/token matrix acceptance   | The matrix distinguishes authority, issuer, consumer, transport, and revocation.                            | This package plus authority docs.                   | `docs/vendor/identity/04_cookie-session-token-matrix.md`                                                     | Implementation team    | Pass                                               |

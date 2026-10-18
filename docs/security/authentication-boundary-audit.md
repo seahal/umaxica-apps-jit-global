@@ -10,7 +10,7 @@ document; where an accepted ADR governs a behavior, the ADR remains authoritativ
 
 ## Authentication architecture
 
-Rails 8.2.0.alpha on Ruby 4.0.6. There is no Devise, Warden, Pundit, or Rodauth. Authentication is
+Rails 8.2.0.alpha on Ruby 4.0.7. There is no Devise, Warden, Pundit, or Rodauth. Authentication is
 implemented in-repository in `app/controllers/concerns/authentication_base.rb`; authorization is
 Action Policy.
 
@@ -74,8 +74,13 @@ Protocol posture, as implemented:
 - Discovery is disabled. The org surface federates a **single tenant**, whose tenant id and client
   id are named on the `ExternalAuthentication::ProviderRegistry` entry and read from Rails
   credentials, so endpoints are tenant-fixed rather than `common`, `organizations`, or `consumers`.
-- Client authentication is `client_secret_basic`, with the secret in Rails encrypted credentials. No
+- Client authentication is `client_secret_post`: the client id and secret go in the token request
+  body and no `Authorization` header is sent. The secret lives in Rails encrypted credentials; no
   Entra secret is stored in the database.
+- All three Entra credentials (`OMNI_AUTH_ENTRA_ORG_TENANT_ID`, `OMNI_AUTH_ENTRA_ORG_CLIENT_ID`,
+  `OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET`) are required at boot outside development and test, and the
+  two identifiers must be UUIDs. Validation is presence and shape only and performs no network I/O;
+  no credential value reaches an exception or a log.
 - The callback is normalized by `ExternalAuthentication::EntraProviderAdapter` into the same
   `CallbackResult`/`VerifiedPrincipal` shape the app surface's Apple and Google adapters produce,
   carrying an `EntraTenantContext` rather than an opaque subject.
@@ -157,9 +162,10 @@ events, which provides the measurement needed to decide when the fallback can be
 `:header_only`. Both are framework features, not local implementations.
 
 Every `allow_other_host: true` redirect site was traced to its target. The targets are
-route-helper-generated URLs or `resume_url`, which `acme_resume_url` builds from the configured
-`boot_config` host rather than from request input. No open redirect was found. `return_to` values
-are carried as signed `pt` tokens and rejected by `unsafe_guard_return_to?` when unsigned.
+route-helper-generated URLs or fixed, surface-local handoff paths; the retired OIDC transaction
+`resume_url`/`acme_resume_url` query transport is no longer available. No open redirect was found.
+`return_to` values are carried as signed `pt` tokens and rejected by `unsafe_guard_return_to?` when
+unsigned.
 
 Secrets: no `.env` file and no `*.key` file is tracked; credentials are committed only in encrypted
 `.enc` form; gitleaks runs in CI alongside Brakeman and bundler-audit.
@@ -211,11 +217,13 @@ application logging boundary and was not changed here.
 - `config/environments/test.rb` defaults `allow_forgery_protection` to false, with per-test opt-in.
   This matches the Rails-generated default for the test environment
   (`railties/.../templates/config/environments/test.rb.tt`) and is not a deviation, so no change was
-  warranted. Under the 8.2 verification strategies described below, blanket-enabling it would also
-  not be the improvement it appears to be: with `:header_only`, a request with no `Sec-Fetch-Site`
-  header over a non-SSL connection verifies successfully, which is exactly the shape of a test
-  request, so most tests would pass without exercising anything. Targeted CSRF boundary tests are
-  the meaningful coverage, and they exist —
+  warranted. Note that the `:header_only` shortcut - a request with no `Sec-Fetch-Site` header over
+  a non-SSL connection verifies successfully - does not apply here, because every surface root
+  overrides the strategy to `:header_or_legacy_token`, under which such a request falls back to the
+  legacy authenticity token and is rejected without one. Blanket-enabling the flag would therefore
+  exercise CSRF for real; the objection is the cost of threading tokens through tests whose subject
+  is not CSRF, not futility. Targeted CSRF boundary tests remain the meaningful coverage, and they
+  exist —
   `test/controllers/protocol_controller_csrf_boundary_test.rb`,
   `test/integration/social_completion_cross_host_csrf_test.rb`,
   `test/integration/csrf_notification_emission_test.rb`, and

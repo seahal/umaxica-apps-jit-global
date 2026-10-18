@@ -14,11 +14,12 @@ module Base
 
         AUTHENTICATION_MODE = :private
 
-        before_action :authenticate_operator!
         # Object-level authorization (ActionPolicy): new/create gate the actor type; edit
         # authorize the owned record (find is owner-scoped, so a non-owner gets 404 first).
         # Verification guards remain in place.
         before_action :authorize_telephone_registration!, only: %i(new create)
+
+        public
 
         def index
           authorize!(OperatorTelephone, to: :index?)
@@ -32,13 +33,15 @@ module Base
         end
 
         def edit
-          @staff_telephone = current_operator.staff_telephones.find(params.expect(:id))
+          @staff_telephone = owned_telephone_from_route!
           authorize!(@staff_telephone)
           render inertia: true, props: edit_page_props
         end
 
         def create
-          tel_params = params(staff_telephone: [:raw_number, :number])
+          tel_params = params.slice(:staff_telephone).permit(staff_telephone: [:raw_number, :number]).fetch(
+            :staff_telephone, {},
+          )
           number = tel_params[:raw_number] || tel_params[:number]
 
           unless initiate_staff_telephone_verification(current_operator, number)
@@ -46,21 +49,20 @@ module Base
             return
           end
 
+          session[:staff_telephone_registration_id] = @staff_telephone.id
           redirect_to(edit_base_org_identity_telephones_registration_path(ri: params[:ri]))
         end
 
         def destroy
-          telephone = current_operator.staff_telephones.find(params.expect(:id))
+          telephone = owned_telephone_from_route!
           authorize!(telephone)
 
-          unless AuthMethodGuard.can_remove_telephone?(current_operator, telephone)
-            redirect_to(
-              base_org_identity_telephones_path(ri: params[:ri]),
-            )
-            return
+          current_operator.with_lock do
+            telephone = OperatorTelephone.lock.find_by!(id: telephone.id, staff_id: current_operator.id)
+            if AuthMethodGuard.can_remove_telephone?(current_operator, telephone)
+              telephone.destroy_without_dead_history!
+            end
           end
-
-          telephone.destroy!
           redirect_to(
             base_org_identity_telephones_path(ri: params[:ri]),
             status: :see_other,
@@ -68,6 +70,21 @@ module Base
         end
 
         private
+
+        def owned_telephone_from_route!
+          reference = params.expect(:id)
+          column =
+            if reference.is_a?(String) && reference.match?(/\A[A-Za-z0-9_-]{21}\z/)
+              :public_id
+            elsif reference.is_a?(String) && reference.match?(/\A[1-9][0-9]{0,18}\z/)
+              # ID-3b: existing numeric URLs remain a bounded migration contract.
+              # Classification is explicit; a failed public lookup never retries by PK.
+              :id
+            else
+              raise ActiveRecord::RecordNotFound
+            end
+          current_operator.staff_telephones.find_by!(column => reference)
+        end
 
         def render_new_failure
           render inertia: "base/org/identity/telephones/new",
@@ -98,7 +115,7 @@ module Base
             .include?(telephone.staff_telephone_status_id)
 
           {
-            public_id: telephone.id.to_s,
+            public_id: telephone.public_id,
             value: telephone.number,
             status: verified ? t("views.sign.org.settings.telephones.index.verified") :
               t("views.sign.org.settings.telephones.index.unverified"),
@@ -133,7 +150,7 @@ module Base
             number: @staff_telephone.number,
             delete: {
               label: t("sign.org.settings.telephone.index.delete"),
-              href: base_org_identity_telephone_path(@staff_telephone.id, ri: params[:ri]),
+              href: base_org_identity_telephone_path(@staff_telephone, ri: params[:ri]),
               confirm: t("sign.org.settings.telephone.index.delete_confirm"),
             },
             cancel_link: {

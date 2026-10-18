@@ -1,0 +1,21 @@
+stateDiagram-v2
+    %% Derived Email policy predicates for Operator records; the canonical ceremony axis is
+    %% idp-sign-up-otp-challenge or idp-credential-registration-otp-challenge.
+    state "No active Email lock" as available
+    state "Email lockout active" as locked
+    [*] --> available
+    available --> available: wrong code below threshold / EmailOtpPolicy#increment_attempts!
+    available --> locked: wrong code reaches MAX / lockout deadline recorded
+    locked --> locked: comparison, resend, expiry or cancellation / failure count preserved
+    locked --> available: lockout and attempt-window predicates become false
+    available --> available: issuance records otp_last_sent_at / failure count preserved
+    note right of available
+        This is a derived channel-policy axis, not a persisted OTP workflow enum.
+        Email policy is independent from Telephone policy.
+        Failure counts survive issuance, replacement, expiry and cancellation.
+        Only successful ceremony proof consumption may reset the channel failure state.
+        The six-digit verifier is owned by the bound ceremony transaction; no identifier
+        HOTP secret, counter or identifier-owned proof lifecycle exists.
+        Candidate owner, Ticket, browser, purpose, generation and expiry are checked by
+        the concrete ceremony issuer/verifier/finalizer paths.
+    end note

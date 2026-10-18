@@ -38,7 +38,7 @@ class OrgOperatorLifecycleRequestCreateTest < ActiveSupport::TestCase
   end
 
   test "creates join request when actor owns the organization" do
-    org = Organization.create!(
+    org = OperatorOrganization.create!(
       name: "Owned Corp",
       domain: "owned-corp-#{SecureRandom.hex(4)}",
       operator_id: operators(:one).id,
@@ -62,7 +62,7 @@ class OrgOperatorLifecycleRequestCreateTest < ActiveSupport::TestCase
   end
 
   test "join request is rejected when actor does not own the organization" do
-    org = Organization.create!(
+    org = OperatorOrganization.create!(
       name: "Foreign Corp",
       domain: "foreign-corp-#{SecureRandom.hex(4)}",
       operator_id: operators(:two).id,

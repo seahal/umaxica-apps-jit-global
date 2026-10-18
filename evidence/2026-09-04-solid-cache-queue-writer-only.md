@@ -22,7 +22,7 @@ replica entries were removed from the development, test, and production database
 
 ## Incomplete check
 
-Production boot verification could not complete because the available environment did not define
-the required `BASE_SERVICE_URL`. The first attempt also confirmed that `.env` cannot be sourced as a
-shell file because it assigns the Bash read-only variable `UID`. No production connection was
-opened during these failed boot attempts.
+Production boot verification could not complete because the available environment did not define the
+required `BASE_SERVICE_URL`. The first attempt also confirmed that `.env` cannot be sourced as a
+shell file because it assigns the Bash read-only variable `UID`. No production connection was opened
+during these failed boot attempts.

@@ -8,8 +8,9 @@ class ChronicleRecordTest < ActiveSupport::TestCase
     config = ChronicleRecord.connection_db_config
 
     assert_equal "chronicle", config.name
-    assert_match(/^test_chronicle_db(_\d+)?$/, config.database)
-    assert_match(/^test_chronicle_db(_\d+)?$/, ChronicleRecord.connection.select_value("SELECT current_database()"))
+    assert_equal ActiveRecord::Base.configurations.configs_for(env_name: "test", name: "chronicle").database,
+                 config.database
+    assert_equal config.database, ChronicleRecord.connection.select_value("SELECT current_database()")
   end
 
   test "can perform basic write and read via chronicle model" do

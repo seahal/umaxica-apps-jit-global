@@ -3,73 +3,77 @@
 
 module Base
   module App
-    # Group resource surface for Avatar containers. Groups are not posting actors.
+    # Group resource surface for Avatar containers. Groups are not posting actors. Reads and writes
+    # go to the Avatar owner (R5-WU14).
     class GroupsController < Base::App::FullAccessController
       include ::SurfaceInertiaPage
 
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_client!
-      before_action :set_group, only: %i(show update destroy)
+      public
 
       def index
-        authorize!(AvatarGroup, to: :index?)
-        groups = AvatarGroup.where(account_surface: "app", account_public_id: Actor.selection.account_public_id)
-          .order(:created_at, :id)
+        result = relay!(avatar_authority.groups)
+        return unless result
+
         render inertia: true, props: {
           title: "Groups",
-          groups: groups.map { |group| serialize_group(group) },
+          empty_message: t("base.app.navigation.groups_empty"),
+          up_link: dashboard_up_link,
+          groups: result.data.fetch("groups").map { |group|
+            group.merge("href" => base_app_group_path(group.fetch("public_id"), ri: params[:ri]))
+          },
         }
       end
 
       def show
-        authorize!(@group, to: :show?)
-        render json: { group: serialize_group(@group) }
+        result = relay!(avatar_authority.group(params.expect(:id)))
+        render(json: result.data) if result
       end
 
       def create
-        authorize!(AvatarGroup, to: :create?)
-        group = GroupManagement::Create.call(
-          account_surface: "app",
-          account_public_id: Actor.selection.account_public_id,
-          name: group_params.fetch(:name),
-          description: group_params[:description],
-        )
-        render json: { group: serialize_group(group) }, status: :created
+        result = relay!(avatar_authority.create_group(group_params.to_h))
+        render(json: result.data, status: :created) if result
       end
 
       def update
-        authorize!(@group, to: :update?)
-        group = GroupManagement::Update.call(group: @group, attributes: group_params)
-        render json: { group: serialize_group(group) }
+        result = relay!(avatar_authority.update_group(params.expect(:id), group_params.to_h))
+        render(json: result.data) if result
       end
 
       def destroy
-        authorize!(@group, to: :destroy?)
-        GroupManagement::Archive.call(group: @group)
-        head :no_content
+        head(:no_content) if relay!(avatar_authority.archive_group(params.expect(:id)))
       end
 
       private
 
-      def set_group
-        @group = AvatarGroup.find_by!(public_id: params.expect(:id))
+      # R5-WU14: the Avatar owner decides and writes; this Base Self-RP relays its answer.
+      def avatar_authority
+        @avatar_authority ||= AvatarAuthorityClient.new(
+          surface: "app",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
+        )
+      end
+
+      # Owner-lock denials stay 403 as before; policy refusals go through the authorization handler.
+      def relay!(result)
+        if result.status == :forbidden && result.data.to_h["error"] == "owner_denied"
+          authorize!(result, to: :relay?, with: AvatarRemoteResultPolicy)
+          head :forbidden
+          return
+        end
+        authorize!(result, to: :show?, with: AvatarRemoteResultPolicy)
+        raise ActiveRecord::RecordNotFound, "not found" if result.status == :not_found
+        return head(:service_unavailable) if result.status == :dependency
+        return head(:unprocessable_content) if result.status == :unprocessable
+
+        result
       end
 
       def group_params
         params.expect(group: [:name, :description])
-      end
-
-      def serialize_group(group)
-        {
-          public_id: group.public_id,
-          account_surface: group.account_surface,
-          account_public_id: group.account_public_id,
-          name: group.name,
-          description: group.description,
-          state: group.state,
-        }
       end
     end
   end

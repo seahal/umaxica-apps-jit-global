@@ -8,5 +8,5 @@ class VisitorWithdrawalCeremony < ComPrincipalRecord
 
   def self.subject_association_name = :visitor
 
-  def subject = visitor
+  def subject = Visitor.find(visitor_id)
 end

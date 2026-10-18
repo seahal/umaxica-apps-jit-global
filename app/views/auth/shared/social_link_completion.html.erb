@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="<%= I18n.locale %>">
+  <head>
+    <%= display_meta_tags title: I18n.t("actions.continue") %>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="referrer" content="no-referrer">
+  </head>
+  <body>
+    <%= form_with id: "social-completion-form", url: auth_app_social_link_completion_path,
+                  method: :post, local: true, data: { turbo: false } do %>
+      <%= hidden_field_tag :candidate_ref, candidate_ref %>
+      <%= hidden_field_tag :ri, ri if ri.present? %>
+      <%= submit_tag t("actions.continue") %>
+    <% end %>
+  </body>
+</html>

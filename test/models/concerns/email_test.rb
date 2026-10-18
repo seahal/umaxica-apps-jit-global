@@ -9,6 +9,16 @@ class EmailTest < ActiveSupport::TestCase
 
   setup do
     @user = clients(:none_user)
+    @otp_actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    @otp_token = ClientToken.create!(user: @otp_actor)
+    @otp_token.rotate_refresh_token!
+    @otp_email = ClientEmail.create!(user: @otp_actor, raw_address: "ceremony-model@example.test", confirm_policy: true)
+    @otp_browser_nonce = SecureRandom.urlsafe_base64(32)
+    issued = EmailCredentialRegistrationOtpIssuer.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, browser_nonce: @otp_browser_nonce,
+    )
+    @otp_transaction = issued.transaction
+    @otp_code = issued.code
   end
 
   def build_email(attrs = {})
@@ -58,6 +68,14 @@ class EmailTest < ActiveSupport::TestCase
     ).first
 
     assert_not_equal raw1["address"], raw2["address"]
+  end
+
+  test "durable Email ceremony stores a keyed verifier rather than a plaintext code or reconstructible secret" do
+    raw = ClientEmailCeremonyTransaction.where(transaction_id: @otp_transaction.transaction_id).pick(:otp_verifier)
+
+    assert_equal @otp_transaction.reload.otp_verifier, raw
+    assert_not_equal @otp_code, raw
+    assert_not_includes @otp_transaction.attributes.values, @otp_code
   end
 
   test "validates email format with basic formats" do
@@ -114,12 +132,15 @@ class EmailTest < ActiveSupport::TestCase
     assert_predicate email.errors[:address], :any?
   end
 
-  test "validates uniqueness of address case insensitively" do
-    create_email(address: "test@example.com", confirm_policy: true)
-    duplicate = build_email(address: "TEST@EXAMPLE.COM", confirm_policy: true)
+  test "effective Email bindings enforce address uniqueness case insensitively at finalization" do
+    existing = ClientEmail.create!(user: @user, address: "test@example.com", confirm_policy: true).finalize_binding!
+    duplicate = ClientEmail.create!(user: @user, address: "TEST@EXAMPLE.COM", confirm_policy: true)
 
-    assert_not duplicate.valid?
-    assert_predicate duplicate.errors[:address], :any?
+    assert_equal existing.address_digest, duplicate.address_digest
+    assert_predicate duplicate, :valid?
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.finalize_binding! }
+    assert_nil duplicate.reload.binding_finalized_at
+    assert_predicate existing.reload, :binding_effective?
   end
 
   test "validates confirm_policy acceptance" do
@@ -221,7 +242,7 @@ class EmailTest < ActiveSupport::TestCase
     assert_not email.locked?
   end
 
-  test "attempts outside observation window reset before lockout" do
+  test "attempts outside observation window are retained and still reach lockout" do
     email = create_email(address: "test@example.com", confirm_policy: true)
     email.update!(
       otp_attempts_count: Email::MAX_OTP_ATTEMPTS - 1,
@@ -230,19 +251,25 @@ class EmailTest < ActiveSupport::TestCase
 
     email.increment_attempts!
 
-    assert_equal 1, email.reload.otp_attempts_count
-    assert_not email.locked?
+    assert_equal Email::MAX_OTP_ATTEMPTS, email.reload.otp_attempts_count
+    assert_predicate email, :locked?
   end
 
-  test "clear_otp resets attempts and locked_at" do
-    email = create_email(address: "test@example.com", confirm_policy: true)
-    Email::MAX_OTP_ATTEMPTS.times { email.increment_attempts! }
-    email.update!(locked_at: 1.minute.from_now)
+  test "fresh Email proof consumption after finite lockout expiry resets failures and lock state" do
+    Email::MAX_OTP_ATTEMPTS.times { @otp_email.increment_attempts! }
+    deadline = ClientEmail.database_now + 1.minute
+    @otp_email.update!(locked_at: deadline)
+    verified =
+      ClientEmail.stub(:database_now, deadline + Rational(1, 1_000_000)) do
+        EmailCredentialRegistrationOtpVerificationCommitter.call(
+          actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+          browser_nonce: @otp_browser_nonce, code: @otp_code,
+        )
+      end
 
-    email.clear_otp
-
-    assert_equal 0, email.otp_attempts_count
-    assert_not email.locked?
+    assert_predicate verified, :success?
+    assert_equal 0, @otp_email.reload.otp_attempts_count
+    assert_not @otp_email.locked?
   end
 
   test "increment_attempts! is thread-safe under concurrent access" do
@@ -268,128 +295,137 @@ class EmailTest < ActiveSupport::TestCase
 
   # OTP method tests
 
-  test "store_otp stores OTP configuration" do
-    email = create_email(address: "otp@example.com", confirm_policy: true)
-    otp_key = "secret_key_123"
-    otp_counter = 10
-    expires_at = 1.hour.from_now.to_i
-
-    email.store_otp(otp_key, otp_counter, expires_at)
-
-    assert_equal otp_key, email.otp_private_key
-    assert_equal otp_counter.to_s, email.otp_counter.to_s
-    assert_equal 0, email.otp_attempts_count
-    assert_not email.locked?
+  test "own Email issuance stores keyed verifier generation and bounded expiry without resetting failures" do
+    assert_match(/\A[0-9]{6}\z/, @otp_code)
+    assert_predicate @otp_transaction.otp_verifier, :present?
+    assert_predicate @otp_transaction.otp_generation, :present?
+    assert_equal @otp_email.public_id, @otp_transaction.email_candidate_ref
+    assert_operator @otp_transaction.otp_expires_at, :<=, @otp_transaction.expires_at
+    assert_equal 0, @otp_email.otp_attempts_count
+    assert_not @otp_email.locked?
   end
 
-  test "get_otp returns OTP configuration when valid" do
-    email = create_email(address: "otp2@example.com", confirm_policy: true)
-    otp_key = "secret_key_456"
-    otp_counter = 20
-    expires_at = 1.hour.from_now.to_i
-
-    email.store_otp(otp_key, otp_counter, expires_at)
-    otp_data = email.get_otp
-
-    assert_not_nil otp_data
-    assert_equal otp_key, otp_data[:otp_private_key]
-    assert_equal otp_counter, otp_data[:otp_counter]
-  end
-
-  test "get_otp returns nil when OTP is expired" do
-    email = create_email(address: "otp3@example.com", confirm_policy: true)
-    otp_key = "secret_key_789"
-    otp_counter = 30
-    expires_at = 1.hour.ago.to_i # Already expired
-
-    email.store_otp(otp_key, otp_counter, expires_at)
-    otp_data = email.get_otp
-
-    assert_nil otp_data
-  end
-
-  test "get_otp returns nil when OTP is locked" do
-    email = create_email(address: "otp4@example.com", confirm_policy: true)
-    otp_key = "secret_key_101"
-    otp_counter = 40
-    expires_at = 1.hour.from_now.to_i
-
-    email.store_otp(otp_key, otp_counter, expires_at)
-    email.update!(locked_at: 1.minute.from_now)
-
-    otp_data = email.get_otp
-
-    assert_nil otp_data
-  end
-
-  test "get_otp returns nil when otp_private_key is blank" do
-    email = create_email(address: "otp5@example.com", confirm_policy: true)
-
-    otp_data = email.get_otp
-
-    assert_nil otp_data
-  end
-
-  test "otp_expired? returns true when otp_expires_at is nil" do
-    email = create_email(address: "otp6@example.com", confirm_policy: true)
-
-    assert_predicate email, :otp_expired?
-  end
-
-  test "otp_expired? returns true when otp_expires_at is in the past" do
-    email = create_email(address: "otp7@example.com", confirm_policy: true)
-    email.update!(otp_expires_at: 1.hour.ago)
-
-    assert_predicate email, :otp_expired?
-  end
-
-  test "otp_expired? returns false when otp_expires_at is in the future" do
-    email = create_email(address: "otp8@example.com", confirm_policy: true)
-    email.update!(otp_expires_at: 1.hour.from_now)
-
-    assert_not email.otp_expired?
-  end
-
-  test "otp_active? returns true when OTP is not expired and not locked" do
-    email = create_email(address: "otp9@example.com", confirm_policy: true)
-    email.update!(otp_expires_at: 1.hour.from_now, locked_at: -Float::INFINITY) # Use sentinel
-
-    assert_predicate email, :otp_active?
-  end
-
-  test "otp_active? returns false when OTP is expired" do
-    email = create_email(address: "otp10@example.com", confirm_policy: true)
-    email.update!(otp_expires_at: 1.hour.ago)
-
-    assert_not email.otp_active?
-  end
-
-  test "otp_active? returns false when OTP is locked" do
-    email = create_email(address: "otp11@example.com", confirm_policy: true)
-    email.update!(otp_expires_at: 1.hour.from_now, locked_at: 1.minute.from_now)
-
-    assert_not email.otp_active?
-  end
-
-  test "clear_otp clears all OTP data" do
-    email = create_email(address: "otp12@example.com", confirm_policy: true)
-    email.store_otp("key", 50, 1.hour.from_now.to_i)
-    email.update!(locked_at: 1.minute.from_now, otp_attempts_count: 2)
-
-    email.clear_otp
-
-    # clear_otp resets counter, expiry, attempts, and lock state but intentionally
-    # keeps otp_private_key (the column is NOT NULL, and the key is safe to reuse).
-    assert_equal "key", email.otp_private_key
-    assert_equal "0", email.otp_counter
-    # otp_expires_at is reset to the "-infinity" sentinel ("never valid").
-    assert(
-      email.otp_expires_at.is_a?(Time) ||
-      email.otp_expires_at.to_s == "-infinity" ||
-      (email.otp_expires_at.is_a?(Float) && email.otp_expires_at == -Float::INFINITY),
+  test "own Email form admits the original current typed ceremony proof" do
+    assert EmailCredentialRegistrationOtpFormQuery.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+      browser_nonce: @otp_browser_nonce,
     )
-    assert_equal 0, email.otp_attempts_count
-    assert_not email.locked?
+    assert_equal @otp_actor.public_id, @otp_transaction.actor_ref
+    assert_equal @otp_email.public_id, @otp_transaction.email_candidate_ref
+  end
+
+  test "own Email form refuses expired proof at the exact OTP deadline" do
+    ClientEmailCeremonyTransaction.stub(:database_now, @otp_transaction.otp_expires_at) do
+      assert_not EmailCredentialRegistrationOtpFormQuery.call(
+        actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+        browser_nonce: @otp_browser_nonce,
+      )
+    end
+  end
+
+  test "own Email verifier refuses a locked candidate without consuming proof" do
+    @otp_email.update!(locked_at: 1.minute.from_now)
+    refused = EmailCredentialRegistrationOtpVerificationCommitter.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+      browser_nonce: @otp_browser_nonce, code: @otp_code,
+    )
+
+    assert_equal :locked, refused.status
+    assert_nil @otp_transaction.reload.otp_consumed_at
+  end
+
+  test "own Email form refuses canceled proof because the database forbids a missing active verifier" do
+    assert_raises(ActiveRecord::StatementInvalid) do
+      ClientEmailCeremonyTransaction.transaction(requires_new: true) { @otp_transaction.update!(otp_verifier: nil) }
+    end
+    @otp_transaction.reload.cancel_email_otp!
+
+    assert_not EmailCredentialRegistrationOtpFormQuery.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+      browser_nonce: @otp_browser_nonce,
+    )
+  end
+
+  test "unissued Email ceremony has nil expiry and cannot be delivered because issued nil expiry is forbidden" do
+    unissued = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: @otp_actor.public_id, session_ref: "unissued-email-model-browser", operation: "registration",
+      email_candidate_ref: @otp_email.public_id, normalized_email_digest: @otp_email.address_digest,
+    )
+
+    assert_nil unissued.otp_expires_at
+    assert_not unissued.email_otp_deliverable?(generation: nil, at: ClientEmailCeremonyTransaction.database_now)
+  end
+
+  test "Email ceremony proof is expired immediately above its finite expiry" do
+    assert_not @otp_transaction.email_otp_deliverable?(
+      generation: @otp_transaction.otp_generation, at: @otp_transaction.otp_expires_at + Rational(1, 1_000_000),
+    )
+  end
+
+  test "Email ceremony proof is active immediately below its finite expiry" do
+    assert @otp_transaction.email_otp_deliverable?(
+      generation: @otp_transaction.otp_generation, at: @otp_transaction.otp_expires_at - Rational(1, 1_000_000),
+    )
+  end
+
+  test "own Email verifier consumes current unlocked proof exactly once" do
+    verified = EmailCredentialRegistrationOtpVerificationCommitter.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+      browser_nonce: @otp_browser_nonce, code: @otp_code,
+    )
+    retained = EmailCredentialRegistrationOtpVerificationCommitter.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+      browser_nonce: @otp_browser_nonce, code: @otp_code,
+    )
+
+    assert_predicate verified, :success?
+    assert_not retained.success?
+    assert_predicate retained, :verified_evidence?
+  end
+
+  test "own Email verification at exact OTP expiry refuses consumption without adding failures" do
+    refused =
+      ClientEmailCeremonyTransaction.stub(:database_now, @otp_transaction.otp_expires_at) do
+        EmailCredentialRegistrationOtpVerificationCommitter.call(
+          actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+          browser_nonce: @otp_browser_nonce, code: @otp_code,
+        )
+      end
+
+    assert_not refused.success?
+    assert_nil @otp_transaction.reload.otp_consumed_at
+    assert_equal 0, @otp_email.reload.otp_attempts_count
+  end
+
+  test "own Email issuance refuses active lockout without replacing proof or resetting failures" do
+    @otp_email.update!(locked_at: 1.minute.from_now, otp_attempts_count: 2)
+    facts = @otp_transaction.attributes.slice("otp_generation", "otp_verifier", "otp_expires_at")
+    refused = EmailCredentialRegistrationOtpIssuer.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, browser_nonce: @otp_browser_nonce,
+    )
+
+    assert_equal :locked, refused.status
+    assert_nil refused.code
+    assert_equal facts, @otp_transaction.reload.attributes.slice(*facts.keys)
+    assert_equal 2, @otp_email.reload.otp_attempts_count
+    assert_predicate @otp_email, :locked?
+  end
+
+  test "fresh Email consumption clears active verifier and failures while retaining a bounded receipt" do
+    @otp_email.update!(otp_attempts_count: 2)
+    generation = @otp_transaction.otp_generation
+    verified = EmailCredentialRegistrationOtpVerificationCommitter.call(
+      actor: @otp_actor, token: @otp_token, email: @otp_email, transaction: @otp_transaction,
+      browser_nonce: @otp_browser_nonce, code: @otp_code,
+    )
+
+    assert_predicate verified, :success?
+    assert_nil @otp_transaction.reload.otp_verifier
+    assert_equal generation, @otp_transaction.otp_generation
+    assert_predicate @otp_transaction.otp_receipt_verifier, :present?
+    assert_equal @otp_transaction.otp_consumed_at + 60.seconds, @otp_transaction.otp_result_expires_at
+    assert_equal 0, @otp_email.reload.otp_attempts_count
+    assert_not @otp_email.locked?
   end
 
   test "validates pass_code presence when pass_code is not nil" do

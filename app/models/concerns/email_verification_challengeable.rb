@@ -46,6 +46,7 @@ module EmailVerificationChallengeable
   ExpiredError = Class.new(Error)
   ReplayError = Class.new(Error)
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     validates :evp_outcome, inclusion: { in: OUTCOMES }, allow_nil: true
     validates :evp_failure_reason, inclusion: { in: FAILURE_REASONS }, allow_nil: true

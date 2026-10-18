@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_oidc_connections
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id           :bigint           not null, primary key
 #  last_used_at :datetime
@@ -21,7 +21,7 @@
 #  index_visitor_oidc_connections_on_public_id                 (public_id) UNIQUE
 #  index_visitor_oidc_connections_on_visitor_id_and_client_id  (visitor_id,client_id) UNIQUE
 #
-class VisitorOidcConnection < ComTicketRecord
+class VisitorOidcConnection < OpBaseComRecord
   include OidcConnectionRecord
 
   belongs_to :visitor

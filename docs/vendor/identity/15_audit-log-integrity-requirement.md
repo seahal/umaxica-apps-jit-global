@@ -11,7 +11,7 @@ owner: internal-architecture-owner
 last-reviewed: 2026-06-24
 source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
-related-audit-ledger: plans/umaxica-immutable-pinwheel.md
+related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
 
 # Purpose
@@ -55,14 +55,14 @@ has not yet been selected. See §8 for candidate comparison.
 
 # 1. Document Status
 
-| Field           | Value                                                                     |
-| --------------- | ------------------------------------------------------------------------- |
-| Status          | rfi-draft                                                                 |
-| Owner           | internal-architecture-owner                                               |
-| Audience        | SIer, security-vendor, internal-architecture, operations                  |
-| Confidentiality | internal-vendor-shareable                                                 |
-| Last reviewed   | 2026-06-24 (Round 4 audit)                                                |
-| Related         | `plans/umaxica-immutable-pinwheel.md` (DEC-013, NR-004, GAP-002, RSK-003) |
+| Field           | Value                                                                              |
+| --------------- | ---------------------------------------------------------------------------------- |
+| Status          | rfi-draft                                                                          |
+| Owner           | internal-architecture-owner                                                        |
+| Audience        | SIer, security-vendor, internal-architecture, operations                           |
+| Confidentiality | internal-vendor-shareable                                                          |
+| Last reviewed   | 2026-06-24 (Round 4 audit)                                                         |
+| Related         | `docs/vendor/identity/11_decision-register.md` (DEC-013, NR-004, GAP-002, RSK-003) |
 
 ---
 
@@ -98,7 +98,7 @@ Token, cookie, OTP, passcode, private key, secret values MUST NOT be logged.
 Audit retention and export policy MUST be documented.
 ```
 
-**Source:** `plans/umaxica-immutable-pinwheel.md` §3, DEC-013 (Round 3 audit, 2026-06-24)
+**Source:** `docs/vendor/identity/11_decision-register.md` §3, DEC-013 (Round 3 audit, 2026-06-24)
 
 NR-004 is a binding requirement. It is not advisory. Compliance is required before RFP and before
 any SIer-implemented flow is accepted into production.
@@ -689,4 +689,4 @@ critical audit event classes. ACC-AUD-001〜005 additionally apply to current ba
 | `docs/vendor/identity/13_normative-baseline.md`          | §11: Audit/logging baseline. This document is the detailed expansion                                                                            |
 | `docs/vendor/identity/14_account-recovery-procedure.md`  | §8: Audit requirements for recovery lifecycle. This document is the system-wide integrity authority                                             |
 | `docs/vendor/identity/08_threat-model.md`                | Threat model contains audit-relevant scenarios. This document's §6 (Integrity Threat Scenarios) is the identity-audit-specific subset           |
-| `plans/umaxica-immutable-pinwheel.md`                    | DEC-013 (Audit log integrity = required), NR-004 (verbatim requirement), GAP-002 (Chronicle immutability absent), RSK-003 (risk register entry) |
+| `docs/vendor/identity/11_decision-register.md`           | DEC-013 (Audit log integrity = required), NR-004 (verbatim requirement), GAP-002 (Chronicle immutability absent), RSK-003 (risk register entry) |

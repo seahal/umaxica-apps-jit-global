@@ -5,7 +5,7 @@
 # that the raw `SignUpStateMachine` does not own:
 #
 # 1. Acquire row lock on the cycle (in a transaction -- see FlowBase).
-# 2. Drive the state machine to the terminal status (CANCELLED/EXPIRED/FAILED).
+# 2. Drive the state machine to the terminal status (CANCELLED/EXPIRED/HALTED).
 # 3. Schedule retention (discard now, purge after PHYSICAL_PURGE_DELAY) on the
 #    cycle row via Retainable#discard_now!.
 # 4. Mark `cleanup_status_id = PENDING` so the worker -- or the synchronous
@@ -17,7 +17,7 @@
 # Replays on already-terminal cycles are idempotent: cleanup is re-enqueued if
 # it never completed; otherwise the call is a no-op and the cycle is reloaded.
 #
-# Direct `SignUpStateMachine.call(event: :cancel | :expire | :fail, ...)`
+# Direct `SignUpStateMachine.call(event: :cancel | :expire | :halt, ...)`
 # WITHOUT going through this service will skip retention scheduling and
 # cleanup -- pending dependent rows will not be tidied and the cycle will
 # never be physically purged. Production callers must use SignUpTermination (or one
@@ -25,17 +25,30 @@
 class SignUpTermination
   PHYSICAL_PURGE_DELAY = 30.minutes
 
-  TERMINAL_EVENTS = %i(cancel expire fail).freeze
+  TERMINAL_EVENTS = %i(cancel expire halt).freeze
 
   def self.call(...)
     new(...).call
   end
+  public_class_method :call
+
+  # Evaluate a system-only halt predicate and, when it matches, perform the halt while the
+  # predicate's row lock is still held. This is intentionally narrower than `call`: callers cannot
+  # supply an arbitrary transition or lifecycle status, and the predicate receives the reloaded
+  # cycle that owns the lock. Cleanup remains after commit, but the decision and HALTED transition
+  # are one database transaction.
+  def self.halt_if_phase_violation(cycle:, &)
+    new(cycle: cycle, event: :halt).halt_if_phase_violation(&)
+  end
+  public_class_method :halt_if_phase_violation
 
   def initialize(cycle:, event:, actor_context: nil)
     @cycle = cycle
     @event = event.to_sym
     @actor_context = actor_context
   end
+
+  public
 
   def call
     return SignUpResult.build(status: :blocked, ticket: cycle, errors: ["ticket is required"]) unless cycle
@@ -63,15 +76,50 @@ class SignUpTermination
     SignUpResult.build(status: (event == :cancel) ? :ok : result.status, ticket: cycle.reload, cleanup_required: true)
   end
 
+  def halt_if_phase_violation
+    raise ArgumentError, "phase-violation predicate required" unless block_given?
+    return nil unless cycle
+
+    decision = nil
+    cycle.with_cycle_lock do
+      cycle.reload
+      decision = yield(cycle)
+      next unless decision.is_a?(Hash) && decision[:halt]
+
+      SignUpStateMachine.call(ticket: cycle, event: :halt, actor_context: nil)
+      cycle.reload
+      schedule_terminal_retention! if terminal_status_reached?
+      decision = decision.merge(
+        halted: cycle.respond_to?(:sign_up_halted?) && cycle.sign_up_halted?,
+        subject: sign_up_principal,
+      )
+    end
+
+    return decision unless decision.is_a?(Hash) && decision[:halted]
+
+    run_artifact_cleanup
+    decision
+  end
+
   private
 
   attr_reader :cycle, :event, :actor_context
+
+  def sign_up_principal
+    return if cycle.principal_id.blank?
+
+    case cycle
+    when ClientSignUpFlow then Client.find(cycle.principal_id)
+    when VisitorSignUpFlow then Visitor.find(cycle.principal_id)
+    else raise ArgumentError, "unsupported sign-up cycle realm"
+    end
+  end
 
   def already_terminal_for_event?
     case event
     when :cancel then cycle.respond_to?(:sign_up_cancelled?) && cycle.sign_up_cancelled?
     when :expire then cycle_status_name == "EXPIRED"
-    when :fail   then cycle_status_name == "FAILED"
+    when :halt   then cycle_status_name == "HALTED"
     end
   end
 
@@ -79,7 +127,7 @@ class SignUpTermination
     case event
     when :cancel then cycle.respond_to?(:sign_up_cancelled?) && cycle.sign_up_cancelled?
     when :expire then cycle_status_name == "EXPIRED"
-    when :fail   then cycle_status_name == "FAILED"
+    when :halt   then cycle_status_name == "HALTED"
     end
   end
 
@@ -117,6 +165,11 @@ class SignUpTermination
   end
 
   def run_artifact_cleanup
+    if cycle.is_a?(ClientSignUpFlow) && ClientSecretIssuance.exists?(sign_up_flow_ref: cycle.public_id)
+      ClientSecretPasskeyReservationIssuer.terminate_sign_up!(
+        flow: cycle, purge_after: ClientSecretLifetimesValue.purge_delay,
+      )
+    end
     return unless cleanup_supported?
     return if cycle.cleanup_completed?
 

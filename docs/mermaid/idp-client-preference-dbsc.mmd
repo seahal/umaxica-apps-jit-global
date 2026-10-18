@@ -1,0 +1,22 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=0" as NOTHING
+    state "ACTIVE id=1" as ACTIVE
+    state "PENDING id=2" as PENDING
+    state "FAILED id=3 (reference only)" as FAILED
+    state "REVOKE id=4 (reference only)" as REVOKE
+    [*] --> NOTHING
+    NOTHING --> ACTIVE: verified DbscRegistrationService.call
+    ACTIVE --> ACTIVE: verified DbscRegistrationService.call
+    ACTIVE --> NOTHING: downgrade_dbsc_status_to_nothing!
+    PENDING --> ACTIVE: verified DbscRegistrationService.call
+    PENDING --> NOTHING: downgrade_dbsc_status_to_nothing!
+    FAILED --> ACTIVE: verified DbscRegistrationService.call
+    FAILED --> NOTHING: downgrade_dbsc_status_to_nothing!
+    REVOKE --> ACTIVE: verified DbscRegistrationService.call
+    REVOKE --> NOTHING: downgrade_dbsc_status_to_nothing!
+    note right of NOTHING
+        Reference states FAILED and REVOKE lack located setters.
+        Verification failure preserves current state.
+        No terminal source guard in registration or downgrade.
+    end note

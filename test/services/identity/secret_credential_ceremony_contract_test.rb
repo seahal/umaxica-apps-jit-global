@@ -134,6 +134,7 @@ class IdentitySecretCredentialCeremonyContractTest < ActiveSupport::TestCase
 
       fetched = IdentitySecretCredentialCeremonyCandidateStore.fetch!(candidate.ref)
 
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, candidate.ref)
       assert_equal candidate.ref, fetched.ref
       assert_equal candidate.digest, fetched.digest
       assert_equal "password-digest", fetched.password_digest
@@ -186,6 +187,20 @@ class IdentitySecretCredentialCeremonyContractTest < ActiveSupport::TestCase
           IdentitySecretCredentialCeremonyCandidateStore.fetch!(deleted.ref)
         end
       assert_includes deleted_error.message, "candidate is not found"
+    end
+  end
+
+  test "decode_unverified_payload rejects a token whose payload is not a JSON object" do
+    header = Base64.urlsafe_encode64(%q({"alg":"none"}), padding: false)
+
+    ["[1]", "5", %q("surface")].each do |body|
+      token = "#{header}.#{Base64.urlsafe_encode64(body, padding: false)}."
+
+      error =
+        assert_raises(IdentitySecretCredentialCeremonyContract::Error) do
+          IdentitySecretCredentialCeremonyContract.decode_unverified_payload(token)
+        end
+      assert_includes error.message, "must be a JSON object", "payload #{body}"
     end
   end
 

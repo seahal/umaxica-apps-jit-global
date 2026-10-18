@@ -1,57 +1,182 @@
-# typed: false
 # frozen_string_literal: true
 
+# Concrete Base controllers supply transaction loading and receiver-local CSRF protection.
+# The original Base browser nonce and transaction marker are independent of the result reference.
 module BaseStepUpCompletion
-  extend ActiveSupport::Concern
+  include StepUpCeremonyLogging
+  include BaseStepUpTransactionMarker
+
+  public
+
+  def show
+    apply_base_browser_continuation_headers!
+    result_reference_param
+    transaction = completion_step_up_transaction(transaction_reference_param)
+    validate_completion_browser!(
+      transaction:, surface: self.class.base_admission_surface_name, actor: Actor.subject, token: current_session_token,
+    )
+    render "base/shared/result_continuation", layout: false,
+                                              locals: { action_url: request.path,
+                                                        result_ref: params[:result_ref],
+                                                        transaction_ref: params[:transaction_ref],
+                                                        ri: params[:ri], }
+  rescue ActionController::BadRequest, ArgumentError, BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  end
 
   private
 
-  def complete_step_up_ceremony!(surface:, actor:, token:, fallback:)
-    now = Time.current
-    result_token = params.require(:step_up_ceremony_result)
-    payload = IdentityStepUpCeremonyContract.decode_unverified_payload(result_token)
-    raise ActionController::BadRequest, "surface mismatch" unless payload["surface"].to_s == surface.to_s
+  def complete_step_up_ceremony!(surface:, actor:, token:)
+    transaction = nil
+    reference = transaction_reference_param
+    result_reference = result_reference_param
+    transaction = completion_step_up_transaction(reference)
+    validate_completion_browser!(transaction:, surface:, actor:, token:)
+    # The destination is checked before the result is consumed: an invalid target must not leave
+    # the transaction terminal.
+    unless transaction.surface == surface && completion_return_target_valid?(transaction)
+      raise BaseAuthAdmissionCoordinator::Denied.new("step-up destination invalid", code: "return_binding_mismatch")
+    end
 
-    transaction =
-      IdentityStepUpCeremonyReplayStore
-        .for(surface)
-        .find_transaction!(payload.fetch("transaction_id"))
-    raise IdentityStepUpCeremonyContract::Error,
-          "transaction actor mismatch" unless transaction.actor_ref == actor.public_id
-    raise IdentityStepUpCeremonyContract::Error,
-          "transaction session mismatch" unless transaction.session_ref == token.public_id
+    return unless ensure_base_self_rp_refreshable!(transaction: transaction, actor: actor)
 
-    consumption = IdentityStepUpCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
+    state_before = transaction.status
+    finalized = finalize_completion_transaction!(
+      actor: actor, token: token, transaction: transaction, result_reference: result_reference,
+    )
+    # A consumed transaction can be a lost-response retry. The reissuer is idempotent: it
+    # redelivers the retained receipt when the RP claims still need the event, and skips the
+    # exchange when the claims already reflect it.
+    reissue_base_self_rp_credentials!(actor:, transaction:)
+    log_step_up_ceremony(
+      "completed", transaction: finalized, outcome: "completed", method: finalized.method,
+                   state_before: state_before, state_after: finalized.status,
+    )
+    log_step_up_return_target(
+      finalized.return_to, reason: "transaction_return_to", protected_flow: true, transaction: finalized,
+    )
+    session[:inertia_clear_history] = true
+    redirect_to(completion_redirect_target(finalized), status: :see_other, allow_other_host: false)
+  rescue ActionController::BadRequest, BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
+         IdentityStepUpCeremonyContract::Error,
+         KeyError, ArgumentError => e
+    log_step_up_refusal(
+      e, transaction: transaction, session_public_id: token.public_id, stage: "base_completion",
+    )
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+  rescue BaseSelfRpCredentialIssuer::DependencyError, Umaxica::Valkey::Unavailable,
+         Umaxica::Valkey::OperationError
+    render plain: I18n.t("errors.rate_limit.backend_unavailable"), status: :service_unavailable
+  rescue BaseSelfRpCredentialIssuer::CredentialUnavailable
+    render_browser_rp_unauthenticated! unless performed?
+  end
+
+  def validate_completion_browser!(transaction:, surface:, actor:, token:)
+    validate_base_result_browser_binding!(transaction)
+    return if transaction.surface == surface.to_s && base_step_up_transaction_marker(
+      reference: transaction.transaction_id, surface:, actor:, token:,
+      allow_root_replacement: transaction.purpose == "reauthentication" && transaction.consumed?,
+    )
+
+    raise BaseAuthAdmissionCoordinator::Denied.new("Base browser binding missing", code: "return_binding_mismatch")
+  end
+
+  def result_reference_param
+    value = params[:result_ref]
+    raise ActionController::BadRequest unless
+      value.is_a?(String) && value.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
+
+    value
+  end
+
+  def transaction_reference_param
+    value = params[:transaction_ref]
+    raise ActionController::BadRequest unless value.is_a?(String) && value.present?
+
+    value
+  end
+
+  # The same rule the issuer applied when it stored the target: a path of the transaction's scope.
+  def completion_return_target_valid?(transaction)
+    catalog =
+      case transaction.surface
+      when "app" then StepUpScopeCatalog::APP
+      when "com" then StepUpScopeCatalog::COM
+      when "org" then StepUpScopeCatalog::ORG
+      else raise ArgumentError, "unsupported step-up surface: #{transaction.surface.inspect}"
+      end
+    pattern = catalog[transaction.required_scope]
+    return_to = transaction.return_to
+    pattern.present? && return_to.is_a?(String) && !return_to.match?(/[\x00-\x1F\x7F]/) && pattern.match?(return_to)
+  end
+
+  def finalize_completion_transaction!(actor:, token:, transaction:, result_reference:)
+    requirement = step_up_requirement(
+      scope: transaction.required_scope,
+      purpose: transaction.purpose,
+      resource_ref: transaction.resource_ref,
+      tenant_ref: transaction.tenant_ref,
+    )
     IdentityStepUpCeremonyFreshnessCommitter.call!(
-      result_token: result_token,
-      token: token,
-      expected_scope: consumption.transaction.required_scope,
-      expected_aal: consumption.transaction.required_aal,
-      expected_method: consumption.transaction.method,
-      expected_phishing_resistant: consumption.transaction.phishing_resistant_required,
-      audience: step_up_audience,
-      now: now,
+      actor: actor, token: token, transaction: transaction, requirement: requirement,
+      result_reference: result_reference,
+    )
+  end
+
+  def ensure_base_self_rp_refreshable!(transaction:, actor:)
+    return true unless %w(step_up reauthentication bootstrap credential_registration credential_change).include?(
+      transaction.purpose,
     )
 
-    Actor.install_context!(
-      step_up: StepUpResolver.call(
-        token: token,
-        requirement: step_up_requirement(scope: consumption.transaction.required_scope),
-        now: now,
-      ),
-    ) if defined?(Actor)
-
-    return_to = consumption.transaction.return_to.presence
-    flash[:notice] = I18n.t("auth.step_up.completed")
-    safe_redirect_to(return_to, fallback: fallback, status: :see_other)
-  rescue KeyError, ActiveRecord::RecordNotFound, IdentityStepUpCeremonyContract::Error => e
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.step_up.completion_failed",
-        surface: surface,
-        reason: e.class.name,
-      ),
+    rp_session = browser_rp_access_state.rp_session
+    raw_refresh_token = BrowserCredentialCookie.read(
+      cookies, OidcRpBrowserCredentialContract::REFRESH_COOKIE,
     )
-    raise ActionController::BadRequest, "invalid step-up completion"
+    return true if BaseSelfRpCredentialIssuer.refreshable?(
+      resource: actor, rp_session:, raw_refresh_token:, client_id: browser_rp_client_id,
+    )
+
+    render_browser_rp_unauthenticated!
+    false
+  end
+
+  def reissue_base_self_rp_credentials!(actor:, transaction:)
+    return unless %w(step_up reauthentication).include?(transaction.purpose)
+
+    rp_session = browser_rp_access_state.rp_session
+    return if base_self_rp_claims_reflect_transaction?(rp_session:, transaction:)
+
+    raw_refresh_token = BrowserCredentialCookie.read(
+      cookies, OidcRpBrowserCredentialContract::REFRESH_COOKIE,
+    )
+    result = BaseSelfRpCredentialIssuer.call!(
+      resource: actor, rp_session:, raw_refresh_token:, client_id: browser_rp_client_id,
+      authentication_event_at: transaction.verified_at,
+      acr: transaction.aal,
+      amr: base_self_rp_amr_for(transaction.method),
+    )
+    install_browser_rp_token_response!(result)
+  end
+
+  def base_self_rp_claims_reflect_transaction?(rp_session:, transaction:)
+    return false unless rp_session&.oidc_auth_time && rp_session.oidc_auth_time >= transaction.verified_at
+    return false unless rp_session.oidc_acr.to_s == transaction.aal.to_s
+
+    JSON.parse(rp_session.oidc_amr.to_s) == base_self_rp_amr_for(transaction.method)
+  rescue JSON::ParserError
+    false
+  end
+
+  def base_self_rp_amr_for(method)
+    case method.to_s
+    when "totp" then ["otp"]
+    when "email_otp" then ["email_otp"]
+    when "passkey" then ["passkey"]
+    else [method.to_s]
+    end
+  end
+
+  def completion_redirect_target(transaction)
+    transaction.return_to
   end
 end

@@ -13,21 +13,36 @@ export type ButtonSize = "sm" | "md";
 export type ButtonStateSource = "aria" | "css";
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors " +
+  "inline-flex items-center justify-center gap-2 min-w-11 rounded-md text-center whitespace-normal font-medium transition-colors " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-4 py-2 text-sm",
+  sm: "min-h-11 px-3 py-2 text-base",
+  md: "min-h-12 px-4 py-2.5 text-base",
 };
 
-// The resting appearance, and the colour hover moves it to. The prefix is applied below rather
-// than written into these strings, so the two elements cannot drift to different hover colours.
-const VARIANTS: Record<ButtonVariant, { rest: string; hover: string }> = {
-  primary: { rest: "bg-accent text-accent-fg", hover: "bg-accent-hover" },
-  secondary: { rest: "border border-line bg-surface text-fg", hover: "bg-surface-muted" },
-  danger: { rest: "bg-danger text-danger-fg", hover: "bg-danger-hover" },
-  ghost: { rest: "text-fg", hover: "bg-surface-muted" },
+// Complete utility names keep every interaction state in Tailwind's per-surface build.
+const VARIANTS: Record<ButtonVariant, { rest: string; aria: string; css: string }> = {
+  primary: {
+    rest: "bg-accent text-accent-fg",
+    aria: "hovered:bg-accent-hover pressed:bg-accent-hover",
+    css: "hover:bg-accent-hover active:bg-accent-hover",
+  },
+  secondary: {
+    rest: "border border-control bg-surface text-fg",
+    aria: "hovered:bg-surface-muted pressed:bg-surface-muted",
+    css: "hover:bg-surface-muted active:bg-surface-muted",
+  },
+  danger: {
+    rest: "bg-danger text-danger-fg",
+    aria: "hovered:bg-danger-hover pressed:bg-danger-hover",
+    css: "hover:bg-danger-hover active:bg-danger-hover",
+  },
+  ghost: {
+    rest: "text-fg",
+    aria: "hovered:bg-surface-muted pressed:bg-surface-muted",
+    css: "hover:bg-surface-muted active:bg-surface-muted",
+  },
 };
 
 export function buttonClass(
@@ -35,9 +50,6 @@ export function buttonClass(
   size: ButtonSize,
   states: ButtonStateSource,
 ): string {
-  const { rest, hover } = VARIANTS[variant];
-  const prefix = states === "aria" ? "hovered:" : "hover:";
-  const pressed = states === "aria" ? " pressed:opacity-90" : " active:opacity-90";
-
-  return `${BASE}${pressed} ${SIZES[size]} ${rest} ${prefix}${hover}`;
+  const appearance = VARIANTS[variant];
+  return `${BASE} ${SIZES[size]} ${appearance.rest} ${appearance[states]}`;
 }

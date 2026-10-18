@@ -7,11 +7,16 @@ module Auth
       module In
         class ChecksController < ::Auth::Org::ApplicationController
           include SignOrgInCheckControllerSupport
+          include SignInPhaseBindingControllerSupport
 
-          AUTHENTICATION_MODE = :private
-          declare_authentication_mode! :private
+          AUTHENTICATION_MODE = :open
+          declare_authentication_mode! :open
 
-          before_action :authenticate_operator!
+          prepend_before_action :authenticate_sign_in_sequence_actor!
+          ensure_fqdn_gate_first!
+          # Restores the inherited default no-store ahead of the gate (DefaultNoStore).
+          prepend_before_action :apply_default_no_store
+          before_action -> { enforce_sign_in_phase_binding!(expected_phase: %w(GUARDRAIL_PENDING CHECKPOINT_PENDING)) }
           before_action :continue_checkpoint_sequence_without_content!
 
           def show = super

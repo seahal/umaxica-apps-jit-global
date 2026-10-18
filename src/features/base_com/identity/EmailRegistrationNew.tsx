@@ -1,10 +1,12 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Checkbox from "@/components/ui/Checkbox";
 import ErrorList from "@/components/ui/ErrorList";
+import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import TextLink from "@/components/ui/TextLink";
 import type { PageLink, TurnstileProps } from "@/features/base_com/identity/types";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
@@ -21,8 +23,6 @@ export type EmailRegistrationNewProps = {
   cancel_link: PageLink;
   turnstile: TurnstileProps;
 };
-
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
 
 export default function EmailRegistrationNew({
   title,
@@ -56,15 +56,11 @@ export default function EmailRegistrationNew({
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <Link
-        href={backLink.href}
-        className={LINK}
-      >
-        {backLink.label}
-      </Link>
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-
+    <Page
+      title={title}
+      up={backLink}
+      upVisit="inertia"
+    >
       <form
         onSubmit={submit}
         className="flex flex-col gap-4"
@@ -85,12 +81,18 @@ export default function EmailRegistrationNew({
         <div className="flex flex-col gap-1">
           <Checkbox
             id={`${form.scope}_notifiable`}
+            aria-describedby={`${form.scope}_notifiable_description`}
             isSelected={notifiableChecked}
             onChange={setNotifiableChecked}
           >
             {notifiable.label}
           </Checkbox>
-          <p className="pl-6 text-xs text-fg-muted">{notifiable.description}</p>
+          <p
+            id={`${form.scope}_notifiable_description`}
+            className="pl-6 text-sm text-fg-muted"
+          >
+            {notifiable.description}
+          </p>
         </div>
 
         <TurnstileWidget
@@ -98,21 +100,22 @@ export default function EmailRegistrationNew({
           onToken={setToken}
         />
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <Button
             type="submit"
             isDisabled={processing}
           >
             {form.submit_label}
           </Button>
-          <Link
+          <TextLink
             href={cancelLink.href}
-            className={LINK}
+            inertia
+            tone="muted"
           >
             {cancelLink.label}
-          </Link>
+          </TextLink>
         </div>
       </form>
-    </section>
+    </Page>
   );
 }

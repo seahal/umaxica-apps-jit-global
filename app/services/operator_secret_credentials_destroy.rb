@@ -17,18 +17,25 @@ class OperatorSecretCredentialsDestroy
   def call
     OperatorChronicle.transaction do
       OperatorSecretCredential.transaction do
-        ensure_audit_dependencies!
-        @secret_credential.discard_now!(purge_after: 1.day)
-        @secret_credential.staff_secret_status_id = OperatorSecretCredential.status_id_for(:deleted)
-        OperatorChronicle.create!(
-          actor: @actor,
-          subject_type: "OperatorSecretCredential",
-          subject_id: @secret_credential.id.to_s,
-          event_id: EVENT_ID,
-          occurred_at: Time.current,
-          context: { action: ACTION },
-        )
-        @secret_credential.save!
+        @actor.with_lock do
+          @secret_credential = OperatorSecretCredential.lock.find_by!(id: @secret_credential.id, staff_id: @actor.id)
+          unless AuthMethodGuard.can_remove_secret_credential?(@actor, @secret_credential)
+            raise ActiveRecord::RecordInvalid, @secret_credential
+          end
+
+          ensure_audit_dependencies!
+          @secret_credential.discard_now!(purge_after: 1.day)
+          @secret_credential.staff_secret_status_id = OperatorSecretCredential.status_id_for(:deleted)
+          OperatorChronicle.create!(
+            actor: @actor,
+            subject_type: "OperatorSecretCredential",
+            subject_id: @secret_credential.id.to_s,
+            event_id: EVENT_ID,
+            occurred_at: Time.current,
+            context: { action: ACTION },
+          )
+          @secret_credential.save!
+        end
       end
     end
   end

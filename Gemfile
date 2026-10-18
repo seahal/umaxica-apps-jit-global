@@ -2,7 +2,7 @@
 
 source "https://rubygems.org", cooldown: 3
 
-ruby "4.0.6"
+ruby "4.0.7"
 
 # Type signatures for Ruby libraries.
 gem "rbs", "~> 4.0", require: false
@@ -40,6 +40,7 @@ gem "pg_search"
 # PostgreSQL database inspection helpers.
 gem "rails-pg-extras", require: false
 # Redis client.
+gem "hiredis-client"
 gem "redis"
 # HTTP client for hand-written outbound requests. Already resolved transitively
 # through the OIDC and OAuth gem chain; declared here because application code
@@ -131,16 +132,17 @@ gem "store_attribute"
 gem "store_model"
 # Stripe API client.
 gem "stripe", require: false
-# dependency
-gem "ruby-vips"
+# Loaded explicitly only by image-processing paths. Host-native test runs do not
+# require libvips merely to boot Rails.
+gem "ruby-vips", require: false
 # log
 gem "lograge"
 # json
 gem "json-canonicalization"
 # ?
-gem "svix"
 gem "mcp"
 gem "rubydex", require: false
+gem "svix"
 
 # Switch
 # Sourced from git rather than the 1.4.2 release: that release calls
@@ -150,6 +152,12 @@ gem "rubydex", require: false
 # released gems once a version above 1.4.2 ships.
 gem "flipper", github: "flippercloud/flipper", branch: "main"
 gem "flipper-active_record", github: "flippercloud/flipper", branch: "main"
+# config/initializers/flipper.rb requires "flipper/ui" in every environment, so the test suite needs
+# it installed too; a development/production-only group hid that while CI installed every group.
+gem "flipper-ui", github: "flippercloud/flipper", branch: "main"
+
+# Schema verification is also an operational task in production deployments.
+gem "pg_query", require: false
 
 group :development, :test do
   # Test coverage reporting.
@@ -160,10 +168,6 @@ group :development, :test do
   gem "test-prof", require: false
   # N+1 query detector alternative.
   gem "prosopite"
-  # SQL query parser.
-  gem "pg_query", require: false
-  # Database consistency checks.
-  gem "database_consistency", require: false
   # OpenAPI contract checker.
   gem "committee-rails", require: false
   # Dead code detector.
@@ -187,8 +191,6 @@ group :development, :test do
   gem "rubocop-rake", require: false
   # RuboCop Minitest rules.
   gem "rubocop-minitest", require: false
-  # RuboCop Rails omakase rules.
-  gem "rubocop-rails-omakase", require: false
   # RuboCop i18n rules.
   gem "rubocop-i18n", require: false
   # Locale auditing and normalization.
@@ -197,6 +199,8 @@ group :development, :test do
   gem "rubocop-rubycw", require: false
   # RuboCop Rails rules.
   gem "rubocop-rails", require: false
+  # ERB linter. A CI gate alongside RuboCop, so it installs with the test group.
+  gem "erb_lint", require: false
   # Type for ruby.
   gem "sorbet"
 end
@@ -229,10 +233,6 @@ group :development do
   gem "foreman", require: false
   # Documentation generator.
   gem "yard", require: false
-  # Browser email previewer.
-  gem "letter_opener", require: false
-  # Web UI for email previews.
-  gem "letter_opener_web", require: false
   # Hotwire live reload helper.
   gem "hotwire-spark"
   # Rails live reload helper.
@@ -251,10 +251,23 @@ group :development do
   # arbitrary-SQL endpoint. test/security/invariants/mounted_engine_invariant_test.rb
   # guards this.
   gem "rails_db"
-  # Package boundary enforcement.
-  gem "packwerk", require: false
-  # ERB linter.
-  gem "erb_lint", require: false
+  # Server-side request performance dashboard, on performance.umaxica.dev. Development only: the
+  # gem's own config/routes.rb ends with an unguarded
+  # `Rails.application.routes.draw { mount RailsPerformance::Engine => RailsPerformance.mount_at }`
+  # with no flag to disable it, which would put the dashboard on every host. config/application.rb
+  # drops the engine's routing path to suppress that; config/routes/performance.rb draws the routes
+  # and mounts the engine behind the host constraint instead.
+  gem "rails_performance", require: false
+  # Runtime code-execution coverage (which Ruby actually ran), on coverband.umaxica.dev. Kept to
+  # `group :development` alongside the other mounted dashboards, so it observes development
+  # execution rather than production -- see adr/diagnostic-surfaces-performance-coverband-swagger.md
+  # for what that costs. Distinct from SimpleCov, which measures test coverage and is unaffected.
+  gem "coverband", require: false
+  # Swagger UI and the OpenAPI document endpoint it reads, on swagger.umaxica.dev. `rswag-specs` is
+  # deliberately absent: it is RSpec-only, and this application's contract tests are Minitest +
+  # Committee against the same descriptions (test/support/openapi_contract.rb).
+  gem "rswag-api", require: false
+  gem "rswag-ui", require: false
   # Model and route annotation tool.
   gem "annotaterb", require: false
   # Ruby language server.
@@ -266,7 +279,7 @@ group :development do
 end
 
 group :development, :production do
-  # Solid Queue operations UI.
+  # Solid Queue operations UI. Deliberately not loaded in test: config/routes/mission.rb mounts it
+  # only when the constant is defined.
   gem "mission_control-jobs"
-  gem "flipper-ui", github: "flippercloud/flipper", branch: "main"
 end

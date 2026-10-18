@@ -4,57 +4,84 @@
 module AvatarProvisioning
   class Create < ApplicationService
     Result =
-      Data.define(:avatar, :handle, :binding, :assignment, :errors) do
+      Data.define(:avatar, :handle, :binding, :errors) do
         def success? = errors.empty?
       end
 
-    SUPPORTED_SUBJECT_TYPES = %w(persona agent individual).freeze
-    DEFAULT_ASSIGNMENT_ROLE = "owner"
+    Unauthorized = AvatarOwnerMembershipLockService::AuthorizationDenied
+
+    SUPPORTED_SUBJECT_TYPES = %w(persona agent).freeze
 
     def initialize(actor:, subject_type:, subject:, avatar_params:, handle_params: {},
-                   assignment_role: DEFAULT_ASSIGNMENT_ROLE, organization_public_id: nil)
+                   owner_surface:, owner_collective_public_id:)
       super()
       @actor = actor
       @subject_type = subject_type.to_s
       @subject = subject
       @avatar_params = avatar_params.to_h.symbolize_keys
       @handle_params = handle_params.to_h.symbolize_keys
-      @assignment_role = assignment_role.to_s
-      @organization_public_id = organization_public_id
+      @owner_surface = owner_surface.to_s
+      @owner_collective_public_id = owner_collective_public_id
     end
 
     def call
       validate_inputs!
-
       avatar = nil
       handle = nil
       binding = nil
-      assignment = nil
 
-      Avatar.transaction do
-        ensure_reference_rows!
-        handle = create_handle!
-        avatar = create_avatar!(handle)
-        binding = create_binding!(avatar)
-        assignment = avatar.avatar_assignments.create!(user: actor, role: assignment_role)
+      AvatarOwnerMembershipLockService.call(
+        actor: actor,
+        surface: owner_surface,
+        subject_public_id: subject.public_id,
+        owner_collective_public_id: owner_collective_public_id,
+        permission: "avatar.update",
+      ) do
+        Avatar.transaction do
+          ensure_reference_rows!
+          handle = create_handle!
+          avatar = create_avatar!(handle)
+          create_ownership_period!(avatar)
+          moniker_result = AvatarMonikerWriterOperation.call(
+            avatar: avatar,
+            moniker: avatar_params[:moniker],
+            expected_current: :absent,
+          )
+          raise ActiveRecord::RecordInvalid.new(moniker_result.avatar_moniker) unless moniker_result.success?
+
+          binding = create_binding!(avatar)
+        end
       end
 
-      Result.new(avatar: avatar, handle: handle, binding: binding, assignment: assignment, errors: [])
+      Result.new(avatar: avatar, handle: handle, binding: binding, errors: [])
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
-      Result.new(avatar: avatar, handle: handle, binding: binding, assignment: assignment, errors: [e])
+      Result.new(avatar: avatar, handle: handle, binding: binding, errors: [e])
     end
 
     private
 
-    attr_reader :actor, :subject_type, :subject, :avatar_params, :handle_params, :assignment_role,
-                :organization_public_id
+    attr_reader :actor, :subject_type, :subject, :avatar_params, :handle_params,
+                :owner_surface, :owner_collective_public_id
 
     def validate_inputs!
-      raise ArgumentError, "actor is required" unless actor.is_a?(Client)
+      raise ArgumentError, "actor is required" unless actor.is_a?(Client) || actor.is_a?(Operator)
       raise ArgumentError, "unsupported subject_type: #{subject_type.inspect}" unless
         SUPPORTED_SUBJECT_TYPES.include?(subject_type)
       raise ArgumentError, "subject is required" if subject.blank?
-      raise ArgumentError, "assignment_role is required" if assignment_role.blank?
+      raise ArgumentError, "owner_collective_public_id is required" if owner_collective_public_id.blank?
+
+      case owner_surface
+      when "app"
+        raise ArgumentError, "app Avatar creation requires the selected Client Persona" unless
+          actor.is_a?(Client) && subject_type == "persona" && subject.is_a?(ClientPersona) &&
+            ClientIdentity.exists?(id: subject.client_identity_id, source_record_id: actor.id)
+      when "org"
+        raise ArgumentError, "org Avatar creation requires the selected Operator Agent" unless
+          actor.is_a?(Operator) && subject_type == "agent" && subject.is_a?(Agent) &&
+            OperatorIdentity.exists?(id: subject.operator_identity_id, source_record_id: actor.id)
+      else
+        raise ArgumentError, "unsupported Avatar owner surface: #{owner_surface.inspect}"
+      end
     end
 
     def ensure_reference_rows!
@@ -74,14 +101,31 @@ module AvatarProvisioning
 
     def create_avatar!(handle)
       Avatar.create!(
-        moniker: avatar_params[:moniker],
         active_handle: handle,
         capability_id: AvatarCapability::NORMAL,
         lifecycle_state: AvatarLifecycleState.find_by!(key: "active"),
-        client_id: legacy_compatibility_client_id,
-        owner_organization_id: organization_public_id,
-        representing_organization_id: organization_public_id,
       )
+    end
+
+    def create_ownership_period!(avatar)
+      AvatarOwnershipPeriodSource.create!(
+        avatar: avatar,
+        owner_surface: owner_surface,
+        owner_collective_public_id: owner_collective_public_id,
+        valid_from: avatar.created_at,
+      )
+      return unless AvatarOwnershipPeriodSource.legacy?
+
+      # Before cutover the concrete copy is retained for backfill/reconciliation, while the
+      # legacy table remains authoritative. After cutover the source selector has already written
+      # the concrete table and no legacy row is allowed to be created.
+      attributes = { avatar: avatar, valid_from: avatar.created_at }
+      case owner_surface
+      when "app"
+        AvatarEnterpriseOwnershipPeriod.create!(**attributes, enterprise_public_id: owner_collective_public_id)
+      when "org"
+        AvatarBureauOwnershipPeriod.create!(**attributes, bureau_public_id: owner_collective_public_id)
+      end
     end
 
     def create_binding!(avatar)
@@ -98,14 +142,8 @@ module AvatarProvisioning
     end
 
     def avatar_handle
-      base = handle_params[:handle].presence || avatar_params.fetch(:moniker)
+      base = handle_params[:handle].presence || avatar_params.fetch(:moniker, "")
       "#{base.to_s.parameterize.presence || "avatar"}-#{SecureRandom.alphanumeric(8).downcase}"
-    end
-
-    # Migration compatibility only. Ownership, authorization, and canonical subject relation
-    # come from AvatarAssignment plus the surface binding tables, not avatars.client_id.
-    def legacy_compatibility_client_id
-      actor.id
     end
   end
 end

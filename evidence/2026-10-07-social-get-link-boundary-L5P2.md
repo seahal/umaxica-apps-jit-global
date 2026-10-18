@@ -1,0 +1,10 @@
+# Social GET link mutation reproduction
+
+- Commit: `6fa6867d44b5499632079775cb0fb22cbfddd339`; inherited and task uncommitted changes affect this result.
+- Scope: existing disposable TEST manifest, one Rails worker. No migrations, shared data changes or production implementation changes in this reproduction.
+- The existing Google link integration test now asserts no Source binding creation during the provider GET, followed by a receiver-local POST creating one identity. Existing fixture helpers are retained; this is not a complete independent-browser or real-forgery acceptance test.
+- RED: `bin/rails test test/integration/social_auth_link_test.rb -n /Google_link_callback_stages/`: one run / two assertions / one failure, seed 40550. GET created one ClientGoogleIdentity instead of zero. Root path: callback -> SocialAuth -> ExternalAuthenticationLinkUseCase -> SocialAuthLinkHandler. This violates Task 16.1 / D-81 in current implementation; it was not reproduced against the Phase 0 baseline.
+- Earlier line-157 invocations selected the neighboring expired-intent test, not the link test. Their passing results do not establish successful link behavior.
+- Control targets: `bin/rails test test/integration/social_completion_cross_host_csrf_test.rb test/controllers/protocol_controller_csrf_boundary_test.rb test/controllers/auth/token_csrf_test.rb test/controllers/security/csrf_route_coverage_test.rb test/controllers/base/app/oidc/callbacks_controller_test.rb test/controllers/base/com/oidc/callbacks_controller_test.rb test/controllers/base/org/oidc/callbacks_controller_test.rb`: 10 runs / 64 assertions, zero failures/errors/skips, seed 8416.
+- Scoped `git diff --check -- app test adr docs evidence five.md two.md` passed before this evidence write. Final Verification was not run; no Task checkbox completed.
+- Production correction awaits explicit approval of the proposed candidate-reference POST/session shape, required by `generic/data-shape-design.mdc`. No new provider response mode, external configuration or silent fallback has been introduced.

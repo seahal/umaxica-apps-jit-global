@@ -48,7 +48,7 @@ class BaseSwitcherAuthority
     raise InvalidSwitch, "invalid_switch" if candidate.blank?
 
     persist_selection!(candidate)
-    { status: "switched", next: "/dashboard" }
+    { status: "switched", next: "/" }
   end
 
   # --- Read helpers for entity CRUD controllers (scoped to the principal's available set) ---
@@ -68,19 +68,41 @@ class BaseSwitcherAuthority
   def available_avatars
     result = selectable_candidates.filter_map { |candidate| candidate.fetch(:avatar) }
     result.uniq!(&:id)
+    ActiveRecord::Associations::Preloader.new(
+      records: result,
+      associations: :current_avatar_moniker,
+    ).call if result.any?
     result
   end
 
   def find_account(public_id)
-    public_id.present? && available_accounts.find { |account| account.public_id == public_id }
+    return if public_id.blank?
+
+    available_accounts.find { |account| account.public_id == public_id }
   end
 
   def find_organization(public_id)
-    public_id.present? && available_organizations.find { |organization| organization.public_id == public_id }
+    return if public_id.blank?
+
+    available_organizations.find { |organization| organization.public_id == public_id }
   end
 
   def find_avatar(public_id)
-    public_id.present? && available_avatars.find { |avatar| avatar.public_id == public_id }
+    return if public_id.blank?
+
+    available_avatars.find { |avatar| avatar.public_id == public_id }
+  end
+
+  public
+
+  # The Avatar of the session's whole current selection (Persona, organization, unit, Avatar),
+  # re-validated against the real candidates. A selection that is no longer a candidate raises;
+  # nil means the valid candidate has no Avatar slot (org optional, com none).
+  def selected_avatar
+    candidate = candidate_for_public_ids(current_selection || {})
+    raise ActiveRecord::RecordNotFound, "selected context is not available to this principal" if candidate.blank?
+
+    candidate.fetch(:avatar)
   end
 
   private

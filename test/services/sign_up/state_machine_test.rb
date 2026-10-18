@@ -18,14 +18,14 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
     assert_equal :enter_guardrail, verify.next_event
   end
 
-  test "expired tickets reject mutation before side effects" do
+  test "expired tickets become terminal before rejecting mutation" do
     ticket = create_cycle(ClientSignUpFlow, issued_at: 2.minutes.ago, expires_at: 1.minute.ago)
 
     result = SignUpStateMachine.call(ticket: ticket, event: :submit_contact, actor_context: nil)
 
     assert_equal :expired, result.status
-    assert_equal ClientSignUpFlowStatus::STARTED, ticket.reload.status_id
-    assert_equal "start", ticket.step
+    assert_equal ClientSignUpFlowStatus::EXPIRED, ticket.reload.status_id
+    assert_equal "expired", ticket.step
   end
 
   test "terminal tickets reject mutation" do
@@ -63,6 +63,21 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
     assert_equal :clear_requirement, complete.next_event
   end
 
+  test "contact-verified tickets cannot enter the checkpoint without the guardrail" do
+    ticket = create_cycle(
+      ClientSignUpFlow,
+      entry_method: "email",
+      status_id: ClientSignUpFlowStatus::CONTACT_VERIFIED,
+      step: "contact_verified",
+    )
+
+    result = SignUpStateMachine.call(ticket: ticket, event: :enter_checkpoint, actor_context: nil)
+
+    assert_equal :invalid_transition, result.status
+    assert_equal ClientSignUpFlowStatus::CONTACT_VERIFIED, ticket.reload.status_id
+    assert_equal "contact_verified", ticket.step
+  end
+
   test "checkpoint requirement clearing persists safe requirement state" do
     ticket = create_cycle(
       ClientSignUpFlow,
@@ -72,7 +87,6 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
       completed_requirements: {
         "otp" => { "cleared" => true },
         "passkey" => { "cleared" => true },
-        "passcode" => { "cleared" => true },
       },
     )
 
@@ -213,66 +227,53 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
 
     assert_equal :blocked, missing_result.status
     assert_equal :advanced, accepted.status
-    assert_equal ClientSignUpFlowStatus::FINALIZED, ticket.reload.status_id
-    assert_equal "finalized", ticket.step
+    assert_equal ClientSignUpFlowStatus::FINALIZING, ticket.reload.status_id
+    assert_equal "finalizing", ticket.step
   end
 
-  test "sign-in handoff accepted then complete marks sign-up completed" do
+  test "durable sign-up finalization completes directly before ordinary sign-in admission" do
     ticket = create_cycle(
       ClientSignUpFlow,
       entry_method: "email",
-      status_id: ClientSignUpFlowStatus::FINALIZED,
-      step: "finalized",
+      status_id: ClientSignUpFlowStatus::FINALIZING,
+      step: "finalizing",
       completed_requirements: { "birthdate" => { "cleared" => true } },
     )
 
-    handoff = SignUpStateMachine.call(
-      ticket: ticket,
-      event: :handoff_to_sign_in,
-      actor_context: nil,
-      payload: { sign_in_handoff_status: :accepted, sign_in_handoff: :boundary_result },
-    )
     complete = SignUpStateMachine.call(ticket: ticket.reload, event: :complete, actor_context: nil)
 
-    assert_equal :sign_in_handoff_accepted, handoff.status
-    assert_equal :complete, handoff.next_event
     assert_equal :completed, complete.status
     assert_equal ClientSignUpFlowStatus::COMPLETED, ticket.reload.status_id
     assert_equal "completed", ticket.step
     assert_predicate ticket.completed_at, :present?
   end
 
-  test "failed handoff does not mark durable sign-up completed" do
+  test "completion cannot be requested before durable account finalization" do
     ticket = create_cycle(
       ClientSignUpFlow,
       entry_method: "email",
-      status_id: ClientSignUpFlowStatus::FINALIZED,
-      step: "finalized",
+      status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
+      step: "checkpoint",
       completed_requirements: { "birthdate" => { "cleared" => true } },
     )
 
-    result = SignUpStateMachine.call(
-      ticket: ticket,
-      event: :handoff_to_sign_in,
-      actor_context: nil,
-      payload: { sign_in_handoff_status: :failed, sign_in_handoff: :boundary_result },
-    )
+    result = SignUpStateMachine.call(ticket: ticket, event: :complete, actor_context: nil)
 
-    assert_equal :sign_in_handoff_failed, result.status
-    assert_equal ClientSignUpFlowStatus::FINALIZED, ticket.reload.status_id
+    assert_equal :invalid_transition, result.status
+    assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, ticket.reload.status_id
   end
 
-  test "fail expire and cancel use terminal statuses" do
+  test "halt expire and cancel use terminal statuses" do
     failed = create_cycle(ClientSignUpFlow)
-    expired = create_cycle(ClientSignUpFlow)
+    expired = create_cycle(ClientSignUpFlow, issued_at: 2.minutes.ago, expires_at: 1.minute.ago)
     cancelled = create_cycle(ClientSignUpFlow)
 
-    fail_result = SignUpStateMachine.call(ticket: failed, event: :fail, actor_context: nil)
+    fail_result = SignUpStateMachine.call(ticket: failed, event: :halt, actor_context: nil)
     expire_result = SignUpStateMachine.call(ticket: expired, event: :expire, actor_context: nil)
     cancel_result = SignUpStateMachine.call(ticket: cancelled, event: :cancel, actor_context: nil)
 
     assert_equal :failed, fail_result.status
-    assert_equal ClientSignUpFlowStatus::FAILED, failed.reload.status_id
+    assert_equal ClientSignUpFlowStatus::HALTED, failed.reload.status_id
     assert_predicate failed.failed_at, :present?
     assert_equal :expired, expire_result.status
     assert_equal ClientSignUpFlowStatus::EXPIRED, expired.reload.status_id
@@ -306,30 +307,6 @@ class SignUpStateMachineTest < ActiveSupport::TestCase
 
     assert_equal :ok, result.status
     assert_equal ClientSignUpFlowStatus::CANCELLED, ticket.reload.status_id
-  end
-
-  test "failed helper builds failed result" do
-    ticket = create_cycle(ClientSignUpFlow)
-    machine = SignUpStateMachine.send(:new, ticket: ticket, event: :start, actor_context: nil, payload: {})
-
-    result = machine.send(:failed, "something went wrong", cleanup_required: true)
-
-    assert_equal :failed, result.status
-    assert_includes result.errors, "something went wrong"
-    assert_predicate result, :cleanup_required?
-  end
-
-  test "checkpoint_version_matches rescues invalid integer format" do
-    ticket = create_cycle(ClientSignUpFlow)
-    payload = { checkpoint_version: "not-a-number" }
-    machine = SignUpStateMachine.send(
-      :new, ticket: ticket, event: :clear_requirement,
-            actor_context: nil, payload: payload,
-    )
-
-    result = machine.send(:checkpoint_version_matches?)
-
-    assert_not result
   end
 
   private

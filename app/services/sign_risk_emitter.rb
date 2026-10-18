@@ -61,8 +61,8 @@ class SignRiskEmitter
           event_type: "risk.#{event.name}",
           context: context.merge(user_id: user_id),
           status_id: ClientOccurrenceStatus::ACTIVE,
-          discarded_at: expiry,
-          purged_at: expiry,
+          discard_at: expiry,
+          purge_eligible_at: expiry,
         )
       end
     defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
@@ -77,8 +77,8 @@ class SignRiskEmitter
           event_type: "risk.#{event.name}",
           context: context.merge(visitor_id: visitor_id),
           status_id: VisitorOccurrenceStatus::ACTIVE,
-          discarded_at: expiry,
-          purged_at: expiry,
+          discard_at: expiry,
+          purge_eligible_at: expiry,
         )
       end
     defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
@@ -93,8 +93,8 @@ class SignRiskEmitter
           event_type: "risk.#{event.name}",
           context: context.merge(staff_id: staff_id),
           status_id: OperatorOccurrenceStatus::ACTIVE,
-          discarded_at: expiry,
-          purged_at: expiry,
+          discard_at: expiry,
+          purge_eligible_at: expiry,
         )
       end
     defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call

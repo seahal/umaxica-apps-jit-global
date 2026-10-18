@@ -1,12 +1,34 @@
 # Session And Token Authority
 
-> **Supersession (2026-06-12):** Use `adr/acme-sign-core-base-port-boundary.md` and
-> `docs/architecture/acme-sign-core-base-port.md` for the target component model. Acme is the only
-> IdP / Authorization Server, Core owns the browser web session, Base does not share Core cookies or
-> sessions, and Palm uses bearer access tokens only. Older `acme/www` session/token language is
-> historical where it conflicts with that boundary.
+## Current Base/RP Authority (2026-09-20)
 
-## Current Authority
+Base is the sole physical OIDC Identity Provider and Authorization Server. Base owns the Base
+Browser Session and the surface-local RP Session beneath it. The seven first-party browser RPs
+(`core-app`, `core-com`, `core-org`, `side-app`, `side-com`, `side-org`, and `edit-org`) receive
+their Access and Refresh credentials from Base's token endpoint and store those credentials only in
+host-only RP cookies on the RP host. A browser RP callback does not call the generic root
+`log_in` path and does not create a second ClientToken, VisitorToken, or OperatorToken.
+
+Auth owns credential ceremony continuity only. Auth does not act as an OIDC RP, exchange RP codes,
+or issue Base Browser Session or RP Session authority. The RP Access JWT is validated locally at
+the browser API boundary using the exact registered RP audience/client binding. Exchanged and
+refreshed OIDC Access JWTs carry the RP Session identifier in the protocol `sid` claim and the
+parent Base Browser Session public identifier in the private `umx_base_sid` claim. Normal bearer
+validation uses the verified JWT claims, the active Base Browser Session binding, and the actor
+resource; it does not perform an RP Session database lookup. Refresh, revoke, and logout remain
+Base/RP-Session operations. Revoking only an RP Session therefore stops refresh and new issuance,
+while an already-issued Access JWT remains usable until its natural expiry and verifier clock-skew
+boundary.
+
+The older `acme/www` and `sign/id` wording below is retained as migration history. It must not be
+used to infer current physical ownership where it conflicts with the Base/Auth/RP boundary above.
+
+> **Historical note:** The earlier Acme/Core/Sign component model is retained in the lower sections
+> for migration traceability. The current physical authority is defined by
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the only IdP/Authorization Server,
+> Auth is ceremony-only, and each first-party RP owns only its host-local credential transport.
+
+## Historical Migration Authority
 
 `acme/www` owns all user sessions, refresh token families, OAuth/OIDC token authority, access-token
 issuance, downstream token issuance, session management, logout, revoke, compromise state, and
@@ -36,3 +58,11 @@ result satisfies the requested purpose and stores any resulting freshness on the
 - `docs/security/logout-session-management.md`
 - `docs/security/downstream-token-authority.md`
 - `docs/security/step-up-ceremony-delegation.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Base owns the Browser Session and the seven first-party RP credential contracts. A valid parent
+security context may authorize an OIDC request under its explicit prompt/max-age rules but never
+acts as a missing RP credential. RP sessions are parented by stable DeviceSessions; refresh uses
+device-session-first rotation and bounded encrypted coalescing. Auth owns ceremony continuity only,
+and step-up freshness is accepted by Base after the operation and current-policy checks.

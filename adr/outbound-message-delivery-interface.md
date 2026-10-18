@@ -6,11 +6,11 @@ Accepted: 2026-05-18
 
 Partially superseded by `adr/notification-orchestration-via-noticed.md` on 2026-08-07.
 
-This ADR is retained for traceability. Its payload shape (`to`, `title`, `body`), its `Outbound::Result`
-return value, and its requirement that sensitive payloads be encrypted before entering job arguments
-remain in force. Superseded are the reservation of the `Notification` name away from message delivery
-and the requirement that domain call sites address `Outbound::*` directly; notifiers are now the entry
-point, and `Outbound::*` is the transport they call.
+This ADR is retained for traceability. Its payload shape (`to`, `title`, `body`), its
+`Outbound::Result` return value, and its requirement that sensitive payloads be encrypted before
+entering job arguments remain in force. Superseded are the reservation of the `Notification` name
+away from message delivery and the requirement that domain call sites address `Outbound::*`
+directly; notifiers are now the entry point, and `Outbound::*` is the transport they call.
 
 ## Context
 
@@ -53,8 +53,10 @@ Whether a channel uses Solid Queue, Action Mailer, provider SDKs, or synchronous
 implementation detail of that channel service. Callers should not choose `deliver_later`,
 `perform_later`, or a provider-specific service directly for new external message delivery code. SMS
 delivery uses Solid Queue by default and selects the concrete provider with `SMS_PROVIDER`.
-Sensitive payloads, including SMS bodies and email OTP values, are encrypted before being placed in
-background job arguments.
+Sensitive payloads, including SMS bodies, email OTP values, and email verification tokens, are
+encrypted before being placed in background job arguments. The receiving mailer decrypts the
+verification token only while rendering the message; new producers must not pass the plaintext token
+through Action Mailer or Noticed job parameters.
 
 ## Consequences
 

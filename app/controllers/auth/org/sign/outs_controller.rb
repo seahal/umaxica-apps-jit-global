@@ -5,10 +5,8 @@ module Auth
   module Org
     module Sign
       class OutsController < ::Auth::Org::ApplicationController
-        include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::SignOutCancellation
-        include ::OidcRpLogoutLauncher
         include ::SurfaceInertiaPage
         include ::SignOutInertiaPages
 
@@ -17,7 +15,13 @@ module Auth
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
-        after_action :sign_out_notice_cache_headers!, only: %i(edit complete)
+        after_action :sign_out_notice_cache_headers!, only: %i(show edit)
+
+        def show
+          return render_sign_out_confirmation_page if params[:logout_challenge].present?
+
+          redirect_to_base_sign_out!
+        end
 
         def new
           redirect_to(sign_out_edit_path, status: :see_other)
@@ -28,18 +32,46 @@ module Auth
         end
 
         def create
-          launch_oidc_rp_logout!(
-            client_id: "sign-rp",
-            issuer_resource_type: "operator",
-            token_issuer: "operator",
-          )
-        end
+          return continue_coordinated_sign_out! if params[:logout_challenge].present?
 
-        def complete
-          complete_oidc_rp_logout!
+          clear_auth_ceremony_context!
+          redirect_to_base_sign_out!
         end
 
         private
+
+        def continue_coordinated_sign_out!
+          clear_auth_ceremony_context!
+          transaction = AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: params.expect(:logout_challenge))
+          result = AcmeLogoutTransactionCoordinator.advance!(
+            logout_challenge: transaction.logout_challenge,
+            step: "sign_cleared",
+          )
+          return render_coordinated_sign_out_unavailable unless result.success?
+
+          render_cross_origin_sign_out_handoff(
+            target_url: base_org_oidc_logout_url(
+              host: base_authority_host,
+              protocol: "https",
+            ),
+            transaction: transaction,
+          )
+        end
+
+        def redirect_to_base_sign_out!
+          redirect_to_jump_url(
+            base_org_sign_out_url(
+              host: base_authority_host,
+              protocol: "https",
+              ri: params[:ri],
+            ),
+            status: :see_other,
+          )
+        end
+
+        def render_coordinated_sign_out_unavailable
+          render "auth/shared/sign_outs/unavailable", status: :unprocessable_content, layout: false
+        end
 
         def sign_out_confirmation_form_path
           sign_out_post_path

@@ -79,11 +79,15 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   class Harness
+    include SessionLimitGate
+    include Rails.application.routes.url_helpers
+
+    include CommonRedirect
     include AuthenticationSequenceGate
 
     attr_accessor :session_hash, :params_hash, :request_obj, :rendered, :redirected, :current_resource,
                   :cycle, :guardrail_result, :checkpoint_result, :allowed_policy, :current_session_value,
-                  :selector_result
+                  :selector_result, :oidc_authorization_login_challenge
 
     def initialize
       @session_hash = {}
@@ -102,6 +106,12 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     def request = @request_obj
 
     def logged_in? = current_resource.present?
+
+    def current_authentication_event_at = nil
+
+    # This harness exercises the Base/OIDC sequence contract. Auth-local admission is covered by
+    # local_authentication_boundary_test through the HTTP boundary.
+    def local_authentication_ceremony? = false
 
     def current_session
       @current_session_value
@@ -146,6 +156,12 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
     alias allowed_to? allow_to?
 
+    def authorize!(_record, to:)
+      raise ActionPolicy::Unauthorized unless allowed_to?(to)
+
+      true
+    end
+
     def current_db_sign_in_flow_for_sequence = @cycle
 
     def sign_in_sequence_carrier
@@ -181,15 +197,20 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
       end.new(false, false)
     end
 
-    def sign_in_selector_path(pt: nil) = super
+    def sign_in_selector_path(pt: nil, cycle: nil)
+      _ = cycle
+      super(pt: pt)
+    end
 
-    def sign_in_session_limit_path(pt: nil) = super
+    def sign_in_checkpoint_path(pt: nil, cycle: nil)
+      _ = cycle
+      "/checkpoint?pt=#{pt}"
+    end
 
-    def sign_in_checkpoint_path(pt: nil) = "/checkpoint?pt=#{pt}"
-
-    def sign_in_welcome_path(pt: nil) = "/welcome?pt=#{pt}"
-
-    def sign_app_sign_in_session_path(**attrs) = "/app/session?#{attrs.compact.to_query}"
+    def sign_in_welcome_path(pt: nil, cycle: nil)
+      _ = cycle
+      "/welcome?pt=#{pt}"
+    end
 
     def sign_app_selector_path(**attrs) = "/app/selector?#{attrs.compact.to_query}"
 
@@ -205,28 +226,25 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   class ExternalDashboardHarness < Harness
-    def after_dashboard_path = "https://www.umaxica.app/dashboard?ri=jp"
+    def after_dashboard_path = "https://www.umaxica.app/?ri=jp"
   end
 
   class FallbackHarness < Harness
-    undef_method :sign_app_sign_in_session_path
     undef_method :sign_app_selector_path
   end
 
   class OrgHarness < Harness
-    undef_method :sign_app_sign_in_session_path
     undef_method :sign_app_selector_path
 
-    def sign_org_sign_in_session_path(**attrs) = "/org/session?#{attrs.compact.to_query}"
+    def sign_in_sequence_surface = :org
 
     def sign_org_selector_path(**attrs) = "/org/selector?#{attrs.compact.to_query}"
   end
 
   class ComHarness < Harness
-    undef_method :sign_app_sign_in_session_path
     undef_method :sign_app_selector_path
 
-    def sign_com_sign_in_session_path(**attrs) = "/com/session?#{attrs.compact.to_query}"
+    def sign_in_sequence_surface = :com
 
     def sign_com_selector_path(**attrs) = "/com/selector?#{attrs.compact.to_query}"
   end
@@ -253,15 +271,15 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness = Harness.new
   end
 
-  test "sign_in_session_limit_path prefers surface helper and falls back to generic path" do
-    assert_equal "/app/session?pt=pt%3Atarget&ri=jp", @harness.sign_in_session_limit_path(pt: "target")
+  test "sign_in_session_limit_path names the Base limitation page of each surface and refuses an unknown one" do
+    assert_equal "/sign/in/limitation?ri=jp", @harness.sign_in_session_limit_path
+    assert_equal "/sign/in/limitation?ri=jp", OrgHarness.new.sign_in_session_limit_path
+    assert_equal "/sign/in/limitation?ri=jp", ComHarness.new.sign_in_session_limit_path
 
-    fallback = FallbackHarness.new
+    unknown = Harness.new
+    unknown.define_singleton_method(:sign_in_sequence_surface) { :net }
 
-    assert_equal "/in/session?pt=pt%3Atarget&ri=jp", fallback.sign_in_session_limit_path(pt: "target")
-
-    assert_equal "/org/session?pt=pt%3Atarget&ri=jp", OrgHarness.new.sign_in_session_limit_path(pt: "target")
-    assert_equal "/com/session?pt=pt%3Atarget&ri=jp", ComHarness.new.sign_in_session_limit_path(pt: "target")
+    assert_raises(ArgumentError) { unknown.sign_in_session_limit_path }
   end
 
   test "legacy bulletin session state does not hold an otherwise clear checkpoint" do
@@ -286,7 +304,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     harness = FallbackHarness.new
     harness.params_hash = { ri: "https://evil.example" }
 
-    assert_equal "/in/session?pt=pt%3Atarget&ri=jp", harness.sign_in_session_limit_path(pt: "target")
+    assert_equal "/sign/in/limitation?ri=jp", harness.sign_in_session_limit_path
     assert_equal "/selector?pt=pt%3Atarget&ri=jp", harness.sign_in_selector_path(pt: "target")
   end
 
@@ -295,12 +313,12 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     harness.define_singleton_method(:sign_in_sequence_redirect_path) do |pt: nil, default_path: after_dashboard_path|
       _ = pt
       _ = default_path
-      "https://www.umaxica.app/dashboard?ri=jp"
+      "https://www.umaxica.app/?ri=jp"
     end
 
     harness.redirect_to_sign_in_sequence!
 
-    assert_equal ["jump:https://www.umaxica.app/dashboard?ri=jp", {}], harness.redirected
+    assert_equal ["jump:https://www.umaxica.app/?ri=jp", {}], harness.redirected
   end
 
   test "redirect_to_sign_in_sequence! keeps internal paths local" do
@@ -398,9 +416,13 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "sign_in_sequence_redirect_path follows cycle state branches" do
-    @harness.cycle = FakeCycle.new(states: { session_limit: true })
+    # An open resolution, not a flow state, sends the browser to the limitation page (D-30).
+    @harness.cycle = FakeCycle.new
+    @harness.define_singleton_method(:session_limit_resolution) { Object.new }
 
-    assert_equal "/app/session?pt=pt%3Apt%3A%2Freturn&ri=jp", @harness.sign_in_sequence_redirect_path
+    assert_equal "/sign/in/limitation?ri=jp", @harness.sign_in_sequence_redirect_path
+
+    @harness.define_singleton_method(:session_limit_resolution) { nil }
 
     @harness.cycle = FakeCycle.new(states: { checkpoint: true })
 
@@ -470,28 +492,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     end
   end
 
-  test "dashboard_sequence_step_required? and sign_in_sequence_required_for_participant? default to true" do
-    plain_harness = Class.new { include AuthenticationSequenceGate }.new
-
-    assert plain_harness.send(:dashboard_sequence_step_required?)
-    assert plain_harness.send(:sign_in_sequence_required_for_participant?, :checkpoint)
-  end
-
-  test "begin_sign_in_sequence! returns a success result when current resource is present" do
-    @harness.current_resource = Client.new(id: 123)
-    @harness.current_session = Struct.new(:id).new(1)
-
-    actor_authn = Struct.new(:amr).new(["pwd"])
-
-    Actor.stub(:authn, actor_authn) do
-      result = @harness.send(:begin_sign_in_sequence!, pt: "/settings", checkpoint_required: true)
-
-      assert_equal :success, result.status
-      assert_equal 123, result.actor.id
-      assert_equal :found, result.response_status
-    end
-  end
-
   test "require_sign_in_sequence_participant! renders bad request when policy denies" do
     sequence = Struct.new(:expired?, :state, :actor_type).new(false, "CHECKPOINT_PENDING", "client")
     @harness.allowed_policy = false
@@ -544,7 +544,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_nil @harness.send(:current_db_sign_in_flow_for_sequence)
   end
 
-  test "current_db_sign_in_flow_for_sequence resolves pending actors before token issuance" do
+  test "current_db_sign_in_flow_for_sequence resumes an actorless flow only for an OIDC-started ceremony" do
     [
       [:app, Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE),
        ClientSignInFlow, :pending_login_user_id,],
@@ -555,12 +555,36 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     ].each do |surface, actor, cycle_class, pending_key|
       harness = LocatorHarness.new
       harness.surface = surface
-      cycle = create_session_limit_cycle(cycle_class, actor)
+      cycle =
+        begin
+          fv5001 = cycle_class
+          fv5002 = actor
+          fv5000 = fv5001.database_now
+          fv5001.create!(
+            principal_id: fv5002.id,
+            state_id: fv5001.state_id_for("SESSION_ISSUANCE_PENDING"),
+            return_to: "/dashboard",
+            nonce_digest: fv5001.digest_nonce("unused"),
+            issued_at: fv5000,
+            expires_at: fv5000 + 15.minutes,
+            authentication_method: "email",
+            authentication_event_at: fv5000,
+            authentication_context: AuthenticationContextValue::NORMAL_KEY,
+          )
+        end
 
       SignInCycleLocator.new(harness.session, surface: surface, actor: actor).issue!(cycle, nonce: "pending-#{surface}")
+      # A retired pending-actor session key names no one: it must not locate the flow.
       harness.session[pending_key] = actor.id
 
-      assert_equal cycle, harness.send(:current_db_sign_in_flow_for_sequence)
+      assert_nil harness.send(:current_db_sign_in_flow_for_sequence)
+
+      resumed = LocatorHarness.new
+      resumed.surface = surface
+      resumed.session_hash = harness.session_hash
+      resumed.oidc_authorization_login_challenge = "login-challenge"
+
+      assert_equal cycle, resumed.send(:current_db_sign_in_flow_for_sequence)
     end
   end
 
@@ -570,7 +594,8 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness.checkpoint_result = Result.new(false)
 
     issued = []
-    @harness.define_singleton_method(:issue_welcome_gate_and_path) do |pt:, sequence_id:|
+    @harness.define_singleton_method(:issue_welcome_gate_and_path) do |pt:, sequence_id:, cycle: nil|
+      _ = cycle
       issued << [pt, sequence_id]
       "/welcome?pt=#{pt}"
     end
@@ -585,7 +610,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness.current_resource = Client.new(id: 123)
     @harness.cycle = FakeCycle.new(states: { checkpoint: true, dashboard: true }, return_to: "/after")
     @harness.checkpoint_result = Result.new(false)
-    @harness.session[:oidc_authorization_login_challenge] = "challenge-1"
+    @harness.oidc_authorization_login_challenge = "challenge-1"
     @harness.define_singleton_method(:after_login_path) { "/after-login" }
 
     @harness.continue_checkpoint_sequence_without_content!
@@ -617,68 +642,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_equal "/after", @harness.instance_variable_get(:@welcome_next_path)
   end
 
-  test "start_sign_in_flow_for! stores a cycle with the derived return path" do
-    cycle_class =
-      Class.new do
-        class << self
-          def created
-            @created
-          end
-
-          def created=(val)
-            @created = val
-          end
-        end
-
-        def self.create!(**attrs)
-          self.created = attrs
-          Struct.new(:id).new(77)
-        end
-
-        def self.status_id_for(value)
-          "status:#{value}"
-        end
-
-        def self.digest_nonce(nonce)
-          "digest:#{nonce}"
-        end
-      end
-
-    @harness.define_singleton_method(:sign_in_flow_class_for) { |_resource| cycle_class }
-    @harness.define_singleton_method(:path_from_signed_pt) { |value| value&.sub(/\Apt:/, "") }
-    @harness.define_singleton_method(:signed_pt_token) { |value| value && "pt:#{value}" }
-
-    result = @harness.send(:start_sign_in_flow_for!, Client.new(id: 42), pt: "/return")
-
-    created = cycle_class.created
-
-    assert_equal 42, created[:principal_id]
-    assert_equal "/return", created[:return_to]
-    assert_equal "status:PRIMARY_PENDING", created[:status_id]
-    assert_equal 77, result.id
-  end
-
-  test "bind_current_session_to_sign_in_flow! skips completed tokens and binds missing ones" do
-    cycle = Struct.new(:token_id, :session_issued_at, :updated) do
-      def has_attribute?(name)
-        %i(token_id session_issued_at).include?(name)
-      end
-
-      def reload
-        self
-      end
-
-      def update!(changes)
-        self.updated = changes
-      end
-    end.new(nil, nil, nil)
-
-    @harness.current_session = "session-1"
-    @harness.send(:bind_current_session_to_sign_in_flow!, cycle)
-
-    assert_equal "session-1", cycle.updated[:token]
-  end
-
   test "sign_in_selector_allowed_request? accepts allowed routes and rejects invalid paths" do
     @harness.request.path = "/app/selector"
 
@@ -690,109 +653,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_not @harness.send(:sign_in_selector_allowed_request?)
   end
 
-  test "sign_in_sequence_surface_for_actor and sign_in_flow_class_for resolve actor types" do
-    assert_equal :app, @harness.send(:sign_in_sequence_surface_for_actor, Client.new)
-    assert_equal :com, @harness.send(:sign_in_sequence_surface_for_actor, Visitor.new)
-    assert_equal :org, @harness.send(:sign_in_sequence_surface_for_actor, Operator.new)
-    assert_equal :app, @harness.send(:sign_in_sequence_surface_for_actor, Object.new)
-
-    assert_equal ClientSignInFlow, @harness.send(:sign_in_flow_class_for, Client.new)
-    assert_equal VisitorSignInFlow, @harness.send(:sign_in_flow_class_for, Visitor.new)
-    assert_equal OperatorSignInFlow, @harness.send(:sign_in_flow_class_for, Operator.new)
-
-    assert_raises(ArgumentError) do
-      @harness.send(:sign_in_flow_class_for, Object.new)
-    end
-  end
-
-  test "issue_active_session_for_selector! issues a session and persists the cycle" do
-    cycle_class =
-      Class.new do
-        class << self
-          def transaction
-            yield
-          end
-        end
-
-        attr_reader :updates, :locks, :completed
-
-        def initialize
-          @updates = []
-          @locks = 0
-          @completed = false
-        end
-
-        def lock!
-          @locks += 1
-        end
-
-        def sign_in_completed?
-          false
-        end
-
-        def sign_in_session_issuance_pending?
-          true
-        end
-
-        def has_attribute?(name)
-          name == :session_issued_at
-        end
-
-        def token_id
-          nil
-        end
-
-        def update!(changes)
-          @updates << changes
-        end
-
-        def complete_sign_in!
-          @completed = true
-        end
-      end
-
-    cycle = cycle_class.new
-    actor = Client.new(id: 101)
-
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| actor }
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :success }, result)
-    assert_equal 1, cycle.updates.length
-    assert_predicate cycle, :completed
-    assert_equal({ token: nil }, cycle.updates.first.slice(:token))
-    assert_predicate cycle.updates.first[:session_issued_at], :present?
-  end
-
-  # The OIDC hand-off promotes a session-limited cycle only once every participant
-  # ahead of the hand-off has cleared. A blocking guardrail or checkpoint stops it,
-  # and the caller treats that as "do not hand off".
-  test "advance_oidc_session_promotion stops at a blocking guardrail" do
-    cycle = FakeCycle.new(states: { guardrail: true })
-    @harness.guardrail_result = Result.new(true)
-
-    SignInGuardrailParticipant.stub(:new, GuardrailParticipant.new(Result.new(true))) do
-      assert_not @harness.send(:advance_oidc_session_promotion!, cycle, Object.new)
-    end
-  end
-
-  test "advance_oidc_session_promotion stops at a blocking checkpoint" do
-    cycle = FakeCycle.new(states: { guardrail: false, checkpoint: true })
-    @harness.checkpoint_result = Result.new(true)
-
-    assert_not @harness.send(:advance_oidc_session_promotion!, cycle, Object.new)
-  end
-
-  test "advance_oidc_session_promotion clears when no participant blocks" do
-    cycle = FakeCycle.new(states: { guardrail: true, checkpoint: true })
-    @harness.checkpoint_result = Result.new(false)
-
-    SignInGuardrailParticipant.stub(:new, GuardrailParticipant.new(Result.new(false))) do
-      assert @harness.send(:advance_oidc_session_promotion!, cycle, Object.new)
-    end
-  end
-
   test "sign_in_sequence_redirect_path returns the default path when the guardrail participant blocks" do
     @harness.cycle = FakeCycle.new(states: { guardrail: true })
     @harness.guardrail_result = Result.new(true)
@@ -800,11 +660,10 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_equal "/dashboard", @harness.sign_in_sequence_redirect_path
   end
 
-  test "sign_in_session_limit_path and sign_in_selector_path fall back to bare paths without query attributes" do
+  test "sign_in_selector_path falls back to the bare path without query attributes" do
     fallback = FallbackHarness.new
     fallback.define_singleton_method(:current_region_identifier) { nil }
 
-    assert_equal "/in/session", fallback.sign_in_session_limit_path(pt: nil)
     assert_equal "/selector", fallback.sign_in_selector_path(pt: nil)
   end
 
@@ -815,18 +674,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness.continue_checkpoint_sequence_without_content!
 
     assert_equal :bad_request, @harness.rendered[:status]
-  end
-
-  test "continue_checkpoint_sequence_without_content! binds the active session token when it is missing" do
-    @harness.current_resource = Client.new(id: 123)
-    @harness.current_session = Struct.new(:id).new(999)
-    cycle = FakeCycle.new(states: { checkpoint: true, dashboard: true }, return_to: "/after")
-    @harness.cycle = cycle
-    @harness.checkpoint_result = Result.new(false)
-
-    @harness.continue_checkpoint_sequence_without_content!
-
-    assert_equal @harness.current_session, cycle.last_update_changes[:token]
   end
 
   test "continue_checkpoint_sequence_without_content! validates participant requirements when no cycle is active" do
@@ -856,7 +703,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "process_cycle_based_sequence! clears state and redirects home once sign-in is already completed" do
-    @harness.cycle = FakeCycle.new(states: { completed: true })
+    @harness.cycle = FakeCycle.new(states: { completed: true }, return_to: nil)
     gate_key = @harness.send(:welcome_gate_key)
     @harness.session[gate_key] = { "remaining" => 1 }
 
@@ -868,11 +715,14 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "continue_welcome_sequence_without_content! redirects through pending session-limit and selector states" do
-    @harness.cycle = FakeCycle.new(states: { session_limit: true }, return_to: "/limit-return")
+    @harness.cycle = FakeCycle.new(return_to: "/limit-return")
+    @harness.define_singleton_method(:session_limit_resolution) { Object.new }
 
     @harness.continue_welcome_sequence_without_content!
 
-    assert_equal "/app/session?pt=pt%3A%2Flimit-return&ri=jp", @harness.redirected.first
+    assert_equal "/sign/in/limitation?ri=jp", @harness.redirected.first
+
+    @harness.define_singleton_method(:session_limit_resolution) { nil }
 
     @harness.cycle = FakeCycle.new(states: { selector: true }, return_to: "/selector-return")
     @harness.redirected = nil
@@ -880,14 +730,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     @harness.continue_welcome_sequence_without_content!
 
     assert_equal "/app/selector?pt=pt%3A%2Fselector-return&ri=jp", @harness.redirected.first
-  end
-
-  test "continue_welcome_sequence_without_content! rejects a cycle that is neither dashboard- nor return-pending" do
-    @harness.cycle = FakeCycle.new(states: {})
-
-    @harness.continue_welcome_sequence_without_content!
-
-    assert_equal :bad_request, @harness.rendered[:status]
   end
 
   test "continue_welcome_sequence_without_content! redirects home when the welcome gate cannot be used" do
@@ -910,41 +752,23 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_equal ["/welcome", {}], @harness.redirected
   end
 
-  test "continue_welcome_sequence_without_content! stops without redirecting when the dashboard participant blocks" do
-    cycle = FakeCycle.new(states: { dashboard: true }, public_id: "seq-block")
+  test "continue_welcome_sequence_without_content! spends the gate, binds the session and shows Welcome" do
+    cycle = FakeCycle.new(public_id: "seq-shown")
     @harness.cycle = cycle
     gate_key = @harness.send(:welcome_gate_key)
     @harness.session[gate_key] = {
-      "remaining" => 2,
+      "remaining" => 1,
       "expires_at" => 1.minute.from_now.to_i,
-      "sequence_id" => "seq-block",
+      "sequence_id" => "seq-shown",
     }
     @harness.current_resource = Client.new(id: 5)
-    @harness.guardrail_result = Result.new(true)
+    @harness.current_session = Struct.new(:id).new(999)
 
     @harness.continue_welcome_sequence_without_content!
 
     assert_nil @harness.redirected
-    assert_nil @harness.instance_variable_get(:@welcome_next_path)
-  end
-
-  test "continue_welcome_sequence_without_content! completes a return-pending cycle and skips an unsafe destination" do
-    cycle = FakeCycle.new(states: { return_pending: true }, public_id: "seq-return")
-    @harness.cycle = cycle
-    gate_key = @harness.send(:welcome_gate_key)
-    @harness.session[gate_key] = {
-      "remaining" => 2,
-      "expires_at" => 1.minute.from_now.to_i,
-      "sequence_id" => "seq-return",
-    }
-    @harness.current_resource = Client.new(id: 6)
-    @harness.define_singleton_method(:safe_non_welcome_return_path) { |_path| nil }
-
-    SignInReturnParticipant.stub(:new, Struct.new(:consume!).new("/return-target")) do
-      @harness.continue_welcome_sequence_without_content!
-    end
-
-    assert_nil @harness.instance_variable_get(:@welcome_next_path)
+    assert_equal "/welcome", @harness.instance_variable_get(:@welcome_next_path)
+    assert_equal @harness.current_session, cycle.last_update_changes[:token]
     assert_nil @harness.session[gate_key]
     assert @harness.instance_variable_get(:@locator_cleared)
   end
@@ -1045,23 +869,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_nil result
   end
 
-  test "begin_sign_in_sequence! returns nil without starting a sequence when there is no current resource" do
-    @harness.current_resource = nil
-
-    assert_nil @harness.send(:begin_sign_in_sequence!, pt: "/x", checkpoint_required: false)
-  end
-
-  test "begin_sign_in_sequence! falls back to an unknown auth method when the actor reports no amr" do
-    @harness.current_resource = Client.new(id: 321)
-    actor_authn = Struct.new(:amr).new(nil)
-
-    Actor.stub(:authn, actor_authn) do
-      result = @harness.send(:begin_sign_in_sequence!, pt: "/settings", checkpoint_required: false)
-
-      assert_equal :success, result.status
-    end
-  end
-
   test "require_sign_in_sequence_participant! returns true immediately when the policy allows the participant" do
     sequence = Struct.new(:expired?, :state, :actor_type).new(false, "CHECKPOINT_PENDING", "client")
     carrier = Struct.new(:current).new(sequence)
@@ -1121,516 +928,9 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_nil harness.send(:current_db_sign_in_flow_for_sequence)
   end
 
-  test "sign_in_flow_actor falls back to the cycle principal when no resource is signed in" do
-    @harness.current_resource = nil
-    cycle = Struct.new(:principal).new(Struct.new(:id).new(99))
-
-    actor = AuthenticationSequenceGate.instance_method(:sign_in_flow_actor).bind(@harness).call(cycle)
-
-    assert_equal 99, actor.id
-  end
-
-  test "sign_in_flow_actor returns nil when the cycle has no principal association" do
-    @harness.current_resource = nil
-    cycle = Object.new
-
-    actor = AuthenticationSequenceGate.instance_method(:sign_in_flow_actor).bind(@harness).call(cycle)
-
-    assert_nil actor
-  end
-
-  test "bind_current_session_to_sign_in_flow! does nothing when the cycle lacks a token_id attribute" do
-    cycle = Class.new { def has_attribute?(_name) = false }.new
-
-    assert_nil @harness.send(:bind_current_session_to_sign_in_flow!, cycle)
-  end
-
-  test "bind_current_session_to_sign_in_flow! does nothing when there is no current session" do
-    cycle =
-      Class.new do
-        def has_attribute?(name) = name == :token_id
-
-        def token_id = nil
-      end.new
-    @harness.current_session = nil
-
-    assert_nil @harness.send(:bind_current_session_to_sign_in_flow!, cycle)
-  end
-
-  test "bind_current_session_to_sign_in_flow! binds the token without a session_issued_at write when unsupported" do
-    cycle =
-      Class.new do
-        attr_accessor :updated
-
-        def has_attribute?(name) = name == :token_id
-
-        def token_id = nil
-
-        def reload = self
-
-        def update!(changes) = self.updated = changes
-      end.new
-    @harness.current_session = "session-xyz"
-
-    @harness.send(:bind_current_session_to_sign_in_flow!, cycle)
-
-    assert_equal({ token: "session-xyz" }, cycle.updated)
-  end
-
-  test "advance_pending_sign_in_flow_after_primary! returns the result unchanged for an unpersisted cycle" do
-    result = { status: :ok }
-
-    returned = @harness.send(:advance_pending_sign_in_flow_after_primary!, nil, Client.new, result)
-
-    assert_same result, returned
-  end
-
-  test "advance_pending_sign_in_flow_after_primary! skips the session-limit transition once past primary or mfa" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    cycle.advance_sign_in_to_guardrail!
-    result = { status: :ok, session_management_required: true }
-
-    returned = @harness.send(:advance_pending_sign_in_flow_after_primary!, cycle, actor, result)
-
-    assert_equal result, returned
-    assert_predicate cycle.reload, :sign_in_guardrail_pending?
-  end
-
-  test "advance_pending_sign_in_flow_after_primary! skips the guardrail transition once past that step" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    cycle.advance_sign_in_to_guardrail!
-    cycle.advance_sign_in_to_checkpoint!
-    result = { status: :ok }
-
-    returned = @harness.send(:advance_pending_sign_in_flow_after_primary!, cycle, actor, result)
-
-    assert_equal result, returned
-    assert_predicate cycle.reload, :sign_in_checkpoint_pending?
-  end
-
-  test "advance_cycle_to_checkpoint_after_active_session! advances a primary-pending cycle and binds the token" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    token = ClientToken.create!(user: actor)
-
-    @harness.send(:advance_cycle_to_checkpoint_after_active_session!, cycle, actor, token)
-
-    reloaded = cycle.reload
-
-    assert_predicate reloaded, :sign_in_checkpoint_pending?
-    assert_equal token.id, reloaded.token_id
-  end
-
-  test "advance_cycle_to_checkpoint_after_active_session! skips already-cleared steps for a " \
-       "session-issuance-pending cycle" do
-    cycle =
-      Class.new do
-        attr_accessor :advanced_to_checkpoint, :token_id
-
-        def sign_in_primary_pending? = false
-
-        def sign_in_mfa_pending? = false
-
-        def sign_in_guardrail_pending? = false
-
-        def reload = self
-
-        def sign_in_session_issuance_pending? = true
-
-        def advance_sign_in_to_checkpoint!
-          self.advanced_to_checkpoint = true
-        end
-      end.new
-    cycle.token_id = 123
-    actor = Client.new(id: 1)
-    token = Struct.new(:id).new(999)
-
-    @harness.send(:advance_cycle_to_checkpoint_after_active_session!, cycle, actor, token)
-
-    assert cycle.advanced_to_checkpoint
-    assert_equal 123, cycle.token_id
-  end
-
-  test "promote_current_session_limit_cycle_for_oidc_handoff! returns nil when there is no active cycle at all" do
-    @harness.cycle = nil
-    @harness.session[:oidc_authorization_login_challenge] = "chal-none"
-
-    assert_nil @harness.send(
-      :promote_current_session_limit_cycle_for_oidc_handoff!, Client.new,
-      auth_method: "email",
-    )
-  end
-
-  test "issue_active_session_for_selector! returns invalid_request when the cycle is not session-issuance pending" do
-    cycle_class =
-      Class.new do
-        class << self
-          def transaction
-            yield
-          end
-        end
-
-        def lock! = nil
-
-        def sign_in_completed? = false
-
-        def sign_in_session_issuance_pending? = false
-
-        def token_id = nil
-      end
-    cycle = cycle_class.new
-    actor = Client.new(id: 55)
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| actor }
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :invalid_request }, result)
-  end
-
-  test "issue_active_session_for_selector! returns the failed session result when log_in does not succeed" do
-    cycle_class =
-      Class.new do
-        class << self
-          def transaction
-            yield
-          end
-        end
-
-        def lock! = nil
-
-        def sign_in_completed? = false
-
-        def sign_in_session_issuance_pending? = true
-
-        def token_id = nil
-      end
-    cycle = cycle_class.new
-    actor = Client.new(id: 56)
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| actor }
-    @harness.define_singleton_method(:log_in) { |*_args, **_kwargs| { status: :failed } }
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :failed }, result)
-  end
-
-  test "issue_active_session_for_selector! returns early when the cycle completes with a matching token mid-flight" do
-    cycle_class =
-      Class.new do
-        class << self
-          def transaction
-            yield
-          end
-        end
-
-        attr_accessor :sign_in_completed_flag, :token_id
-
-        def lock! = nil
-
-        def sign_in_completed? = sign_in_completed_flag
-
-        def sign_in_session_issuance_pending? = true
-      end
-    cycle = cycle_class.new
-    cycle.sign_in_completed_flag = false
-    cycle.token_id = nil
-    actor = Client.new(id: 57)
-    session_token = Struct.new(:id).new(777)
-    @harness.current_session = session_token
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| actor }
-    @harness.define_singleton_method(:log_in) do |*_args, **_kwargs|
-      cycle.sign_in_completed_flag = true
-      cycle.token_id = 777
-      { status: :success }
-    end
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :success }, result)
-  end
-
-  test "issue_active_session_for_selector! returns invalid_request when the cycle leaves issuance pending mid-flight" do
-    cycle_class =
-      Class.new do
-        class << self
-          def transaction
-            yield
-          end
-        end
-
-        attr_accessor :session_issuance_pending_flag, :token_id
-
-        def lock! = nil
-
-        def sign_in_completed? = false
-
-        def sign_in_session_issuance_pending? = session_issuance_pending_flag
-      end
-    cycle = cycle_class.new
-    cycle.session_issuance_pending_flag = true
-    cycle.token_id = nil
-    actor = Client.new(id: 58)
-    @harness.current_session = Struct.new(:id).new(888)
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| actor }
-    @harness.define_singleton_method(:log_in) do |*_args, **_kwargs|
-      cycle.session_issuance_pending_flag = false
-      { status: :success }
-    end
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :invalid_request }, result)
-  end
-
-  test "issue_active_session_for_selector! completes the cycle without a session_issued_at write when unsupported" do
-    cycle_class =
-      Class.new do
-        class << self
-          def transaction
-            yield
-          end
-        end
-
-        attr_reader :updates
-
-        def initialize
-          @updates = []
-        end
-
-        def lock! = nil
-
-        def sign_in_completed? = false
-
-        def sign_in_session_issuance_pending? = true
-
-        def has_attribute?(_name) = false
-
-        def token_id = nil
-
-        def update!(changes) = @updates << changes
-
-        def complete_sign_in! = true
-      end
-    cycle = cycle_class.new
-    actor = Client.new(id: 59)
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| actor }
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :success }, result)
-    assert_not cycle.updates.first.key?(:session_issued_at)
-  end
-
-  test "advance_oidc_session_promotion! blocks when the guardrail participant flags the actor" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::RESERVED)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    cycle.advance_sign_in_to_guardrail!
-
-    result = @harness.send(:advance_oidc_session_promotion!, cycle, actor)
-
-    assert_not result
-  end
-
-  test "advance_oidc_session_promotion! clears a guardrail-pending cycle and defers to the checkpoint participant" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    cycle.advance_sign_in_to_guardrail!
-    @harness.checkpoint_result = Result.new(false)
-
-    result = @harness.send(:advance_oidc_session_promotion!, cycle, actor)
-
-    assert result
-    assert_predicate cycle.reload, :sign_in_checkpoint_pending?
-  end
-
-  test "advance_oidc_session_promotion! returns true once the cycle is already past guardrail and checkpoint" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    cycle.advance_sign_in_to_guardrail!
-    cycle.advance_sign_in_to_checkpoint!
-    cycle.advance_sign_in_to_selector!
-
-    result = @harness.send(:advance_oidc_session_promotion!, cycle, actor)
-
-    assert result
-  end
-
-  test "advance_oidc_session_promotion! returns false when the checkpoint participant blocks the actor" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    cycle.advance_sign_in_to_guardrail!
-    @harness.checkpoint_result = Result.new(true)
-
-    result = @harness.send(:advance_oidc_session_promotion!, cycle, actor)
-
-    assert_not result
-  end
-
-  test "bind_session_and_register_oidc! persists dashboard state and registers the OIDC transaction" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
-    cycle = @harness.send(:start_sign_in_flow_for!, actor, pt: "/after")
-    cycle.advance_sign_in_to_guardrail!
-    issued_session = ClientToken.create!(user: actor)
-    @harness.session[:oidc_authorization_login_challenge] = "challenge-123"
-    issuance = Struct.new(:resume_url).new("https://resume.example/finish")
-
-    resume_url =
-      OidcAuthorizationTransactionCoordinator.stub(:register_result!, issuance) do
-        @harness.send(:bind_session_and_register_oidc!, cycle, actor, "challenge-123", "email", issued_session)
-      end
-
-    assert_equal "https://resume.example/finish", resume_url
-    assert_predicate cycle.reload, :sign_in_dashboard_pending?
-    assert_nil @harness.session[:oidc_authorization_login_challenge]
-  end
-
-  test "bind_session_and_register_oidc! skips the session_issued_at write when the cycle lacks that attribute" do
-    cycle =
-      Class.new do
-        attr_accessor :updated
-
-        def has_attribute?(name) = name == :token_id
-
-        def reload = self
-
-        def update!(changes) = self.updated = changes
-
-        def status_id_for(value) = "status:#{value}"
-      end.new
-    actor = Client.new(id: 42)
-    issued_session = Struct.new(:public_id).new("session-public-2")
-    issuance = Struct.new(:resume_url).new("https://resume.example/finish-2")
-
-    resume_url =
-      OidcAuthorizationTransactionCoordinator.stub(:register_result!, issuance) do
-        @harness.send(:bind_session_and_register_oidc!, cycle, actor, "challenge-456", "email", issued_session)
-      end
-
-    assert_equal "https://resume.example/finish-2", resume_url
-    assert_not cycle.updated.key?(:session_issued_at)
-  end
-
-  test "promote_current_session_limit_cycle_for_oidc_handoff! returns nil when no cycle is session-limit pending" do
-    @harness.cycle = FakeCycle.new(states: { session_limit: false })
-    @harness.session[:oidc_authorization_login_challenge] = "chal"
-
-    assert_nil @harness.send(
-      :promote_current_session_limit_cycle_for_oidc_handoff!, Client.new,
-      auth_method: "email",
-    )
-  end
-
-  test "promote_current_session_limit_cycle_for_oidc_handoff! returns nil without a pending OIDC login challenge" do
-    @harness.cycle = FakeCycle.new(states: { session_limit: true })
-    @harness.session.delete(:oidc_authorization_login_challenge)
-
-    assert_nil @harness.send(
-      :promote_current_session_limit_cycle_for_oidc_handoff!, Client.new,
-      auth_method: "email",
-    )
-  end
-
-  test "promote_current_session_limit_cycle_for_oidc_handoff! returns nil when oidc promotion cannot advance" do
-    @harness.cycle = FakeCycle.new(states: { session_limit: true })
-    @harness.session[:oidc_authorization_login_challenge] = "chal-1"
-    actor = Client.new(id: 7)
-    fake_result = Struct.new(:cycle).new(FakeCycle.new(states: { session_limit: true }))
-    @harness.define_singleton_method(:advance_oidc_session_promotion!) { |_cycle, _actor| false }
-
-    resume_url =
-      SignInSessionLimitManager.stub(:new, Struct.new(:promote!).new(fake_result)) do
-        @harness.send(:promote_current_session_limit_cycle_for_oidc_handoff!, actor, auth_method: "email")
-      end
-
-    assert_nil resume_url
-  end
-
-  test "promote_current_session_limit_cycle_for_oidc_handoff! returns nil when log_in does not succeed" do
-    @harness.cycle = FakeCycle.new(states: { session_limit: true })
-    @harness.session[:oidc_authorization_login_challenge] = "chal-2"
-    actor = Client.new(id: 8)
-    fake_result = Struct.new(:cycle).new(FakeCycle.new(states: { session_limit: true }))
-    @harness.define_singleton_method(:advance_oidc_session_promotion!) { |_cycle, _actor| true }
-    @harness.define_singleton_method(:log_in) { |*_args, **_kwargs| { status: :failed } }
-
-    resume_url =
-      SignInSessionLimitManager.stub(:new, Struct.new(:promote!).new(fake_result)) do
-        @harness.send(:promote_current_session_limit_cycle_for_oidc_handoff!, actor, auth_method: "email")
-      end
-
-    assert_nil resume_url
-  end
-
-  test "promote_current_session_limit_cycle_for_oidc_handoff! hands off to bind_session_and_register_oidc! on " \
-       "success" do
-    @harness.cycle = FakeCycle.new(states: { session_limit: true })
-    @harness.session[:oidc_authorization_login_challenge] = "chal-3"
-    actor = Client.new(id: 9)
-    fake_result = Struct.new(:cycle).new(FakeCycle.new(states: { session_limit: true }))
-    @harness.define_singleton_method(:advance_oidc_session_promotion!) { |_cycle, _actor| true }
-    @harness.current_session = Struct.new(:id, :public_id).new(1, "session-pub")
-    @harness.define_singleton_method(:bind_session_and_register_oidc!) do |_cycle, _actor, challenge, auth_method,
-      issued_session|
-      ["bound", challenge, auth_method, issued_session]
-    end
-
-    resume_url =
-      SignInSessionLimitManager.stub(:new, Struct.new(:promote!).new(fake_result)) do
-        @harness.send(:promote_current_session_limit_cycle_for_oidc_handoff!, actor, auth_method: "email")
-      end
-
-    assert_equal ["bound", "chal-3", "email", @harness.current_session], resume_url
-  end
-
-  test "issue_active_session_for_selector! returns invalid_request when no actor resolves for the cycle" do
-    cycle = FakeCycle.new
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| nil }
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :invalid_request }, result)
-  end
-
-  test "issue_active_session_for_selector! returns success immediately for an already completed cycle" do
-    cycle_class =
-      Class.new do
-        class << self
-          def transaction
-            yield
-          end
-        end
-
-        def lock! = nil
-
-        def sign_in_completed? = true
-
-        def token_id = 55
-      end
-    cycle = cycle_class.new
-    actor = Client.new(id: 202)
-    @harness.define_singleton_method(:sign_in_flow_actor) { |_cycle| actor }
-
-    result = AuthenticationSequenceGate.instance_method(:issue_active_session_for_selector!).bind(@harness).call(cycle)
-
-    assert_equal({ status: :success }, result)
-  end
-
   private
 
-  def create_session_limit_cycle(cycle_class, actor)
-    cycle_class.create!(
-      principal_id: actor.id,
-      status_id: cycle_class.status_id_for("SESSION_LIMIT_PENDING"),
-      state: "SESSION_LIMIT_PENDING",
-      step: "session_limit",
-      return_to: "/dashboard",
-      nonce_digest: cycle_class.digest_nonce("unused"),
-      issued_at: Time.current,
-      expires_at: 15.minutes.from_now,
-    )
-  end
+  # The parent flow waits in SESSION_ISSUANCE_PENDING while its session limit is resolved (D-30).
 end
 
 # DAMP local route helper aliases for former shared test support.

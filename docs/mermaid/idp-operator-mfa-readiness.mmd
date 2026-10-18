@@ -1,0 +1,10 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=0 placeholder" as NOTHING
+    state "ACTIVE id=1" as ACTIVE
+    state "UNCONFIGURED id=5" as UNCONFIGURED
+    [*] --> UNCONFIGURED
+    NOTHING --> ACTIVE: refresh_mfa_status! configured
+    UNCONFIGURED --> ACTIVE: refresh_mfa_status! configured
+    NOTHING --> UNCONFIGURED: refresh_mfa_status! unconfigured
+    ACTIVE --> UNCONFIGURED: refresh_mfa_status! unconfigured

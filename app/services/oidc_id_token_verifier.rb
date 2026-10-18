@@ -7,12 +7,14 @@ class OidcIdTokenVerifier < ApplicationService
       def success? = success
     end
 
-  def initialize(id_token:, client_id:, resource_type:, expected_nonce:, jwt_issuer_id: nil, issuer: nil)
+  def initialize(id_token:, client_id:, resource_type:, expected_nonce:, expected_max_age: nil,
+                 jwt_issuer_id: nil, issuer: nil)
     super()
     @id_token = id_token
     @client_id = client_id
     @resource_type = resource_type
     @expected_nonce = expected_nonce
+    @expected_max_age = expected_max_age
     @jwt_issuer_id = jwt_issuer_id
     @issuer = issuer
   end
@@ -25,6 +27,9 @@ class OidcIdTokenVerifier < ApplicationService
     canonical_audience = validate_audience!(payload)
     return failure("nonce_mismatch") unless secure_equal?(payload["nonce"], expected_nonce)
 
+    authentication_time = validate_authentication_time!(payload)
+    validate_max_age!(authentication_time)
+
     Result.new(success: true, payload: payload, canonical_audience: canonical_audience, error: nil)
   rescue JWT::DecodeError, JWT::VerificationError, OpenSSL::PKey::PKeyError, ArgumentError, TypeError
     failure("invalid_id_token")
@@ -32,7 +37,7 @@ class OidcIdTokenVerifier < ApplicationService
 
   private
 
-  attr_reader :id_token, :client_id, :resource_type, :expected_nonce, :jwt_issuer_id, :issuer
+  attr_reader :id_token, :client_id, :resource_type, :expected_nonce, :expected_max_age, :jwt_issuer_id, :issuer
 
   def decode!
     SecurityJwtOidcIdTokenCodec.decode(
@@ -69,5 +74,26 @@ class OidcIdTokenVerifier < ApplicationService
     raise ArgumentError, "invalid audience value" unless secure_equal?(canonical_audience, client_id)
 
     canonical_audience
+  end
+
+  def validate_authentication_time!(payload)
+    raw = payload["auth_time"]
+    return if raw.blank?
+
+    authentication_time = raw.is_a?(Numeric) ? raw.to_f : Float(raw)
+    raise ArgumentError, "invalid auth_time" unless authentication_time.finite?
+    raise ArgumentError, "auth_time is in the future" if authentication_time >
+      Time.current.to_f + AuthenticationJwtConfiguration.leeway_seconds
+
+    authentication_time
+  end
+
+  def validate_max_age!(authentication_time)
+    max_age = OidcAuthorizeRequestResolver.normalize_max_age(expected_max_age)
+    return if max_age.nil?
+    raise ArgumentError, "auth_time is required for max_age" if authentication_time.blank?
+
+    leeway = AuthenticationJwtConfiguration.leeway_seconds
+    raise ArgumentError, "auth_time is too old" if authentication_time < Time.current.to_f - max_age - leeway
   end
 end

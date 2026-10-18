@@ -21,13 +21,13 @@ key that is bound to the session.
 
 ## Implementation
 
-The server-side DBSC implementation lives in `app/services/dbsc/`:
+The server-side DBSC implementation lives in flat `app/services/dbsc_*.rb` files:
 
 | File                                        | Purpose                                               |
 | ------------------------------------------- | ----------------------------------------------------- |
-| `app/services/dbsc/registration_service.rb` | Registers a device key pair and binds it to a session |
-| `app/services/dbsc/verification_service.rb` | Verifies device proof-of-possession on requests       |
-| `app/services/dbsc/record_adapter.rb`       | Persistence adapter for DBSC state                    |
+| `app/services/dbsc_registration_service.rb` | Registers a device key pair and binds it to a session |
+| `app/services/dbsc_verification_service.rb` | Verifies device proof-of-possession on requests       |
+| `app/services/dbsc_record_adapter.rb`       | Persistence adapter for DBSC state                    |
 
 Token tables (`user_tokens`, `staff_tokens`) store DBSC-related columns:
 

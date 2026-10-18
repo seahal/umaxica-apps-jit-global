@@ -1,16 +1,17 @@
 ---
 name: no-compatibility-layer
-description: Replace cleanly; do not add aliases, shims, or transitional layers.
+description: Replace runtime implementations coherently; bound explicitly required migration compatibility.
 ---
 
 # No Compatibility Layer
 
-When changing or removing something, replace it cleanly. Do not leave a parallel old path alive.
+When changing or removing something, replace it coherently. Retain a parallel runtime path only
+when an explicit migration requirement needs the bounded transition described below.
 
 ## Do not add
 
 - compatibility aliases for renamed methods, constants, files, or paths
-- transitional layers that let old and new behavior coexist "for now"
+- unbounded transitional layers that let old and new behavior coexist "for now"
 - dead shims or wrappers kept only to avoid updating callers
 - default-value fallbacks introduced to tolerate the absence of the new behavior
 - legacy route aliases, redirect-only compatibility routes, duplicated namespace paths, or old
@@ -21,8 +22,9 @@ When changing or removing something, replace it cleanly. Do not leave a parallel
 ## Replace completely
 
 Prefer complete replacement when compatibility is not explicitly required. Remove old paths,
-aliases, deprecated names, historical traces, and temporary bridges so the final code reads as if
-the intended design had existed from the beginning.
+aliases and unused runtime bridges. Preserve historical evidence and decision provenance; a runtime
+rename does not authorize rewriting history. Vendor discovery adapters with one canonical source
+are not parallel implementations.
 
 Do not keep old controller inheritance paths as compatibility shims. Leaf controllers must inherit
 from the intended current base controller directly.
@@ -50,3 +52,9 @@ and makes the change reviewable.
 
 Removing the old path may surface broken references. That is the intended signal: fix them, do not
 hide them behind an alias.
+
+## Required transitions
+
+When safe migration or deployment explicitly requires compatibility, state its owner, consumers,
+verification and removal condition. Preserve the root authorization and persistence safeguards.
+Update current navigation with moves; retain historical path citations as historical citations.

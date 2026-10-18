@@ -45,7 +45,9 @@ module Publishing
 
       assert_equal 1, version.single_taxonomy_assignments.count
       assert_equal 1, version.multiple_taxonomy_assignments.count
-      assert_equal "concurrency-leaf", version.single_taxonomy_assignments.sole.term_slug_snapshot
+      assignment = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: version.id)
+
+      assert_equal "concurrency-leaf", assignment.term_slug_snapshot
     end
 
     test "a subtree move racing a promotion yields one coherent breadcrumb, never a mixed one" do
@@ -65,7 +67,8 @@ module Publishing
         end
 
       assert_empty results.grep(StandardError), "both operations must succeed"
-      path = Docs::App::EntryVersion.find_by!(entry_revision_id: revision.id).single_taxonomy_assignments.sole.term_path_snapshot
+      version = Docs::App::EntryVersion.find_by!(entry_revision_id: revision.id)
+      path = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: version.id).term_path_snapshot
       slugs = path.map { |step| step.fetch("slug") }
 
       # Either the pre-move path or the post-move path, never a half-applied mix.
@@ -80,7 +83,6 @@ module Publishing
     # Each block runs on its own checked-out connection so PostgreSQL sees
     # genuinely concurrent transactions. Real threads are the point here: a
     # simulated race on one connection would prove nothing.
-    # rubocop:disable ThreadSafety/NewThread
     def concurrently(count, &block)
       threads =
         Array.new(count) do |index|
@@ -92,7 +94,6 @@ module Publishing
         end
       threads.map(&:value)
     end
-    # rubocop:enable ThreadSafety/NewThread
 
     def destroy_publishing_fixtures
       connection = PublishingRecord.lease_connection

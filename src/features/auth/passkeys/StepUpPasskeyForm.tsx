@@ -105,12 +105,17 @@ export default function StepUpPasskeyForm({
       {error ? (
         <p
           role="alert"
-          className="text-sm text-danger"
+          className="text-base text-error"
         >
           {error}
         </p>
       ) : null}
-      {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
+      <output
+        aria-atomic="true"
+        className="text-base text-fg-muted"
+      >
+        {status}
+      </output>
     </form>
   );
 }

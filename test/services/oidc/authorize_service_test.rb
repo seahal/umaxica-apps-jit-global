@@ -10,12 +10,13 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   setup do
     @user = clients(:one)
     @user_session_token = ClientToken.create!(user: @user)
+    @authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5)
     @code_verifier = SecureRandom.urlsafe_base64(32)
     @code_challenge = Base64.urlsafe_encode64(
       Digest::SHA256.digest(@code_verifier),
       padding: false,
     )
-    @client = OidcClientRegistry.find("core-next-rp")
+    @client = OidcClientRegistry.find("core-app-jp")
     @redirect_uri = @client.redirect_uris.first
   end
 
@@ -158,58 +159,26 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
   test "fails when non-Palm client requests disallowed scopes" do
     %w(palm.read admin all write write:org).each do |scope|
-      assert_no_difference "ClientAuthorizationCode.count" do
-        result = authorize_service_call(
-          params: valid_params.merge(scope: "openid #{scope}"),
-          resource: @user,
-        )
-
-        assert_not result.success?, scope
-        assert_equal "invalid_scope", result.error
-      end
-    end
-  end
-
-  test "palm iOS client can request palm.read" do
-    client = OidcClientRegistry.find!("app-ios-rp")
-    assert_difference "ClientAuthorizationCode.count", 1 do
       result = authorize_service_call(
-        params: valid_params(
-          client_id: client.client_id,
-          redirect_uri: client.redirect_uris.first,
-          scope: "openid palm.read",
-        ),
+        params: valid_params.merge(scope: "openid #{scope}"),
         resource: @user,
       )
 
-      assert_predicate result, :success?
+      assert_not result.success?, scope
+      assert_equal "invalid_scope", result.error
     end
-
-    code = ClientAuthorizationCode.last
-
-    assert_equal "openid palm.read", code.scope
-    assert_equal client.client_id, code.client_id
   end
 
-  test "palm Android client can request palm.read" do
-    client = OidcClientRegistry.find!("app-android-rp")
-    assert_difference "ClientAuthorizationCode.count", 1 do
+  test "retired Palm native clients are refused at the authorization boundary" do
+    %w(app-ios-rp app-android-rp).each do |client_id|
       result = authorize_service_call(
-        params: valid_params(
-          client_id: client.client_id,
-          redirect_uri: client.redirect_uris.first,
-          scope: "openid palm.read",
-        ),
+        params: valid_params.merge(client_id: client_id),
         resource: @user,
       )
 
-      assert_predicate result, :success?
+      assert_not result.success?, client_id
+      assert_equal "unauthorized_client", result.error, client_id
     end
-
-    code = ClientAuthorizationCode.last
-
-    assert_equal "openid palm.read", code.scope
-    assert_equal client.client_id, code.client_id
   end
 
   test "state is included in redirect URL when provided" do
@@ -239,50 +208,61 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   test "fails for inactive resource without issuing authorization code" do
     @user.update!(
       deactivated_at: Time.current,
-      discarded_at: Time.current,
-      purged_at: 1.day.from_now,
+      discard_at: Time.current,
+      purge_eligible_at: 1.day.from_now,
     )
 
-    assert_no_difference "ClientAuthorizationCode.count" do
-      result = authorize_service_call(
-        params: valid_params,
-        resource: @user,
-      )
+    result = authorize_service_call(
+      params: valid_params,
+      resource: @user,
+    )
 
-      assert_not result.success?
-      assert_equal "invalid_request", result.error
-      assert_equal "resource is not active", result.error_description
-    end
+    assert_not result.success?
+    assert_equal "invalid_request", result.error
+    assert_equal "resource is not active", result.error_description
   end
 
-  test "authorization code is stored in database" do
-    assert_difference "ClientAuthorizationCode.count", 1 do
-      authorize_service_call(
-        params: valid_params,
-        resource: @user,
-      )
-    end
+  test "authorization code is stored in Valkey auth-state" do
+    result = authorize_service_call(
+      params: valid_params,
+      resource: @user,
+    )
 
-    code = ClientAuthorizationCode.last
+    assert_predicate result, :success?
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
-    assert_equal @user.id, code.user_id
-    assert_equal "core-next-rp", code.client_id
-    assert_equal @redirect_uri, code.redirect_uri
-    assert_equal @code_challenge, code.code_challenge
-    assert_equal "S256", code.code_challenge_method
+    assert_equal OidcSubject.for(@user, resource_type: "client"), payload.fetch("subject")
+    assert_equal "core-app-jp", payload.fetch("client_id")
+    assert_equal @redirect_uri, payload.fetch("redirect_uri")
+    assert_equal @code_challenge, payload.fetch("code_challenge")
+    assert_equal "S256", payload.fetch("code_challenge_method")
+    assert_equal "issued", payload.fetch("state")
+  end
+
+  test "refuses authorization-code issuance when the authentication event time is absent" do
+    result = authorize_service_call(
+      params: valid_params,
+      resource: @user,
+      authentication_event_at: nil,
+    )
+
+    assert_not result.success?
+    assert_equal "invalid_request", result.error
+    assert_equal "authentication event time is required", result.error_description
   end
 
   # --- Operator OIDC tests ---
 
   test "issues authorization code for operator with org client" do
     staff = operators(:one)
-    org_client = OidcClientRegistry.find("core-next-rp")
+    org_client = OidcClientRegistry.find("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-org-jp",
         redirect_uri: org_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -304,40 +284,39 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
   test "operator authorization code is stored with staff_id backing column" do
     staff = operators(:one)
-    org_client = OidcClientRegistry.find("core-next-rp")
+    org_client = OidcClientRegistry.find("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
 
-    assert_difference "OperatorAuthorizationCode.count", 1 do
-      authorize_service_call(
-        params: {
-          response_type: "code",
-          client_id: "core-next-rp",
-          redirect_uri: org_redirect_uri,
-          code_challenge: @code_challenge,
-          code_challenge_method: "S256",
-          state: "staff_state",
-          nonce: "staff_nonce",
-          scope: "openid profile email",
-        },
-        resource: staff,
-      )
-    end
+    result = authorize_service_call(
+      params: {
+        response_type: "code",
+        client_id: "core-org-jp",
+        redirect_uri: org_redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "staff_state",
+        nonce: "staff_nonce",
+        scope: "openid profile email",
+      },
+      resource: staff,
+    )
 
-    code = OperatorAuthorizationCode.last
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
-    assert_equal staff.id, code.staff_id
-    assert_equal "core-next-rp", code.client_id
+    assert_equal OidcSubject.for(staff, resource_type: "operator"), payload.fetch("subject")
+    assert_equal "core-org-jp", payload.fetch("client_id")
   end
 
   test "issues authorization code for visitor with com client" do
     visitor = create_visitor!
-    com_client = OidcClientRegistry.find("core-next-rp")
+    com_client = OidcClientRegistry.find("core-com-jp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-com-jp",
         redirect_uri: com_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -358,35 +337,34 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
   test "visitor authorization code is stored with visitor_id" do
     visitor = create_visitor!
-    com_client = OidcClientRegistry.find("core-next-rp")
+    com_client = OidcClientRegistry.find("core-com-jp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
 
-    assert_difference "VisitorAuthorizationCode.count", 1 do
-      authorize_service_call(
-        params: {
-          response_type: "code",
-          client_id: "core-next-rp",
-          redirect_uri: com_redirect_uri,
-          code_challenge: @code_challenge,
-          code_challenge_method: "S256",
-          state: "visitor_state",
-          nonce: "visitor_nonce",
-          scope: "openid profile email",
-        },
-        resource: visitor,
-      )
-    end
+    result = authorize_service_call(
+      params: {
+        response_type: "code",
+        client_id: "core-com-jp",
+        redirect_uri: com_redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "visitor_state",
+        nonce: "visitor_nonce",
+        scope: "openid profile email",
+      },
+      resource: visitor,
+    )
 
-    code = VisitorAuthorizationCode.last
+    raw = URI.decode_www_form(URI.parse(result.redirect_url).query).to_h.fetch("code")
+    payload = Valkey::AuthState::AuthorizationCodeStore.new.read(raw)
 
-    assert_equal visitor.id, code.visitor_id
-    assert_equal "core-next-rp", code.client_id
+    assert_equal OidcSubject.for(visitor, resource_type: "visitor"), payload.fetch("subject")
+    assert_equal "core-com-jp", payload.fetch("client_id")
   end
 
   # --- realm/redirect_uri binding (issuer/realm must match the registered redirect_uri's realm) ---
 
-  test "BASE_APP authorize rejects an org core-next-rp redirect_uri before code issuance" do
-    org_redirect_uri = OidcClientRegistry.find("core-next-rp").redirect_uris_by_realm.fetch("operator").first
+  test "BASE_APP authorize rejects an org core-org-jp redirect_uri before code issuance" do
+    org_redirect_uri = OidcClientRegistry.find("core-org-jp").redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
       params: valid_params.merge(redirect_uri: org_redirect_uri),
@@ -395,17 +373,16 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, ClientAuthorizationCode.count
   end
 
-  test "BASE_ORG authorize rejects an app core-next-rp redirect_uri before code issuance" do
+  test "BASE_ORG authorize rejects an app core-app-jp redirect_uri before code issuance" do
     staff = operators(:one)
-    app_redirect_uri = OidcClientRegistry.find("core-next-rp").redirect_uris_by_realm.fetch("client").first
+    app_redirect_uri = OidcClientRegistry.find("core-app-jp").redirect_uris_by_realm.fetch("client").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-org-jp",
         redirect_uri: app_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -418,17 +395,16 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, OperatorAuthorizationCode.count
   end
 
-  test "BASE_COM authorize rejects an org core-next-rp redirect_uri before code issuance" do
+  test "BASE_COM authorize rejects an org core-org-jp redirect_uri before code issuance" do
     visitor = create_visitor!
-    org_redirect_uri = OidcClientRegistry.find("core-next-rp").redirect_uris_by_realm.fetch("operator").first
+    org_redirect_uri = OidcClientRegistry.find("core-org-jp").redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
+        client_id: "core-com-jp",
         redirect_uri: org_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -441,46 +417,41 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, VisitorAuthorizationCode.count
   end
 
-  test "BASE_APP authorize rejects a sign-rp org realm redirect_uri before code issuance" do
-    sign_client = OidcClientRegistry.find("sign-rp")
-    org_redirect_uri = sign_client.redirect_uris_by_realm.fetch("operator").first
+  test "BASE_APP authorize rejects a core app request with an org RP redirect_uri before code issuance" do
+    org_redirect_uri = OidcClientRegistry.find!("core-org-jp").redirect_uris_by_realm.fetch("operator").first
 
     result = authorize_service_call(
-      params: valid_params.merge(client_id: "sign-rp", redirect_uri: org_redirect_uri),
+      params: valid_params.merge(client_id: "core-app-jp", redirect_uri: org_redirect_uri),
       resource: @user,
     )
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, ClientAuthorizationCode.count
   end
 
-  test "BASE_APP authorize rejects a sign-rp com realm redirect_uri before code issuance" do
-    sign_client = OidcClientRegistry.find("sign-rp")
-    com_redirect_uri = sign_client.redirect_uris_by_realm.fetch("visitor").first
+  test "BASE_APP authorize rejects a core app request with a com RP redirect_uri before code issuance" do
+    com_redirect_uri = OidcClientRegistry.find!("core-com-jp").redirect_uris_by_realm.fetch("visitor").first
 
     result = authorize_service_call(
-      params: valid_params.merge(client_id: "sign-rp", redirect_uri: com_redirect_uri),
+      params: valid_params.merge(client_id: "core-app-jp", redirect_uri: com_redirect_uri),
       resource: @user,
     )
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, ClientAuthorizationCode.count
   end
 
-  test "BASE_ORG authorize rejects a side-rails-rp app realm redirect_uri before code issuance" do
+  test "BASE_ORG authorize rejects a warp-app-jp client before code issuance" do
     staff = operators(:one)
-    side_client = OidcClientRegistry.find("side-rails-rp")
-    app_redirect_uri = side_client.redirect_uris_by_realm.fetch("client").first
+    app_client = OidcClientRegistry.find!("warp-app-jp")
+    app_redirect_uri = app_client.redirect_uris.first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "side-rails-rp",
+        client_id: "warp-app-jp",
         redirect_uri: app_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -493,18 +464,17 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, OperatorAuthorizationCode.count
   end
 
-  test "BASE_ORG authorize rejects a side-rails-rp com realm redirect_uri before code issuance" do
+  test "BASE_ORG authorize rejects a warp-com-jp client before code issuance" do
     staff = operators(:one)
-    side_client = OidcClientRegistry.find("side-rails-rp")
-    com_redirect_uri = side_client.redirect_uris_by_realm.fetch("visitor").first
+    com_client = OidcClientRegistry.find!("warp-com-jp")
+    com_redirect_uri = com_client.redirect_uris.first
 
     result = authorize_service_call(
       params: {
         response_type: "code",
-        client_id: "side-rails-rp",
+        client_id: "warp-com-jp",
         redirect_uri: com_redirect_uri,
         code_challenge: @code_challenge,
         code_challenge_method: "S256",
@@ -517,7 +487,6 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_request", result.error
-    assert_equal 0, OperatorAuthorizationCode.count
   end
 
   private
@@ -525,7 +494,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   def valid_params(overrides = {})
     {
       response_type: "code",
-      client_id: "core-next-rp",
+      client_id: "core-app-jp",
       redirect_uri: @redirect_uri,
       code_challenge: @code_challenge,
       code_challenge_method: "S256",
@@ -542,13 +511,16 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     Visitor.create!
   end
 
-  def authorize_service_call(params:, resource:, session_token: nil, **)
+  def authorize_service_call(
+    params:, resource:, session_token: nil, authentication_event_at: @authentication_event_at, **
+  )
     session_token ||= default_session_token_for(resource)
 
     OidcAuthorizeCoordinator.call(
       params: params,
       resource: resource,
       session_token: session_token,
+      authentication_event_at: authentication_event_at,
       **,
     )
   end
@@ -586,31 +558,11 @@ class OidcAuthorizeCoordinatorTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -670,10 +622,8 @@ class OidcAuthorizeCoordinatorTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -685,10 +635,8 @@ class OidcAuthorizeCoordinatorTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -909,63 +857,6 @@ class OidcAuthorizeCoordinatorTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -981,10 +872,8 @@ class OidcAuthorizeCoordinatorTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -1004,12 +893,12 @@ class OidcAuthorizeCoordinatorTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

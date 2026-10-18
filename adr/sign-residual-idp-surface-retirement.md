@@ -1,8 +1,11 @@
 # Sign Residual IdP Surface Retirement
 
+> **Supersession (2026-09-13):** Auth is a ceremony service with no RP role. See
+> `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
+
 ## Status
 
-Accepted (2026-06-11)
+Accepted; partially superseded (2026-09-13) (2026-06-11)
 
 > **Supersession (2026-06-12):** The target component model is now defined by
 > `adr/acme-sign-core-base-port-boundary.md`. Sign is a special RP, not a credential-gateway IdP

@@ -23,19 +23,20 @@ class SurfaceDefaultWebRateLimitTest < ActionDispatch::IntegrationTest
   DEFAULT_WEB_QUOTA = 300
 
   SURFACES = {
-    "base app" => ["PUBLIC_BASE_SERVICE_URL", :base_app_dashboard_path],
-    "base com" => ["PUBLIC_BASE_CORPORATE_URL", :base_com_dashboard_path],
-    "base org" => ["PUBLIC_BASE_STAFF_URL", :base_org_dashboard_path],
+    "base app" => ["PUBLIC_BASE_SERVICE_URL", :base_app_root_path],
+    "base com" => ["PUBLIC_BASE_CORPORATE_URL", :base_com_root_path],
+    "base org" => ["PUBLIC_BASE_STAFF_URL", :base_org_root_path],
+    "edit org" => ["PUBLIC_EDIT_STAFF_URL", :edit_org_dashboard_path],
     "base developer" => [nil, :base_developer_root_path],
-    "auth app" => ["PUBLIC_AUTH_SERVICE_URL", :auth_app_dashboard_path],
-    "auth com" => ["PUBLIC_AUTH_CORPORATE_URL", :auth_com_dashboard_path],
-    "auth org" => ["PUBLIC_AUTH_STAFF_URL", :auth_org_dashboard_path],
+    "auth app" => ["PUBLIC_AUTH_SERVICE_URL", :auth_app_root_path],
+    "auth com" => ["PUBLIC_AUTH_CORPORATE_URL", :auth_com_root_path],
+    "auth org" => ["PUBLIC_AUTH_STAFF_URL", :auth_org_root_path],
     "core app" => ["PUBLIC_CORE_SERVICE_URL", :core_app_api_v0_preferences_theme_path],
     "core com" => ["PUBLIC_CORE_CORPORATE_URL", :core_com_api_v0_preferences_theme_path],
     "core org" => ["PUBLIC_CORE_STAFF_URL", :core_org_api_v0_preferences_theme_path],
-    "side app" => ["PUBLIC_SIDE_SERVICE_URL", :side_app_dashboard_path],
-    "side com" => ["PUBLIC_SIDE_CORPORATE_URL", :side_com_dashboard_path],
-    "side org" => ["PUBLIC_SIDE_STAFF_URL", :side_org_dashboard_path],
+    "warp app" => ["PUBLIC_WARP_SERVICE_URL", :warp_app_dashboard_path],
+    "warp com" => ["PUBLIC_WARP_CORPORATE_URL", :warp_com_dashboard_path],
+    "warp org" => ["PUBLIC_WARP_STAFF_URL", :warp_org_dashboard_path],
     "palm app" => ["PUBLIC_PALM_SERVICE_URL", :palm_app_sign_out_path],
   }.freeze
 

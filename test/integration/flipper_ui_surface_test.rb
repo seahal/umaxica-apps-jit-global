@@ -3,7 +3,7 @@
 
 require "test_helper"
 
-# Flipper::UI is mounted on the base developer surface only (config/routes/base.rb).
+# Flipper::UI is mounted on its own dedicated host only (config/routes/flipper.rb).
 # Two independent controls apply: the surface boundary (the mount exists on no other
 # host) and an application-level Rack::Auth::Basic guard. Cloudflare Access fronts the
 # host in production, but the mount must not depend on the edge alone - Flipper::UI
@@ -12,8 +12,8 @@ require "test_helper"
 class FlipperUiSurfaceTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  DEVELOPER_HOST = "base.dev.localhost"
-  MOUNT_PATH = "/flipper"
+  DEVELOPER_HOST = "flipper.core.dev.localhost"
+  MOUNT_PATH = "/"
   TEST_USER = "flipper-test-user"
   TEST_PASSWORD = "flipper-test-password"
 
@@ -23,7 +23,7 @@ class FlipperUiSurfaceTest < ActionDispatch::IntegrationTest
       # The mount root redirects to its features index.
       get MOUNT_PATH, headers: basic_auth_headers(TEST_USER, TEST_PASSWORD)
 
-      assert_redirected_to "http://#{DEVELOPER_HOST}#{MOUNT_PATH}/features"
+      assert_redirected_to "http://#{DEVELOPER_HOST}/features"
       follow_redirect!(headers: basic_auth_headers(TEST_USER, TEST_PASSWORD))
 
       assert_response :success
@@ -59,10 +59,11 @@ class FlipperUiSurfaceTest < ActionDispatch::IntegrationTest
     assert_response :unauthorized
   end
 
-  test "other base surfaces do not route the Flipper mount" do
-    ["base.app.localhost", "base.com.localhost", "base.org.localhost", "base.net.localhost"].each do |host|
+  test "no other surface routes the Flipper mount" do
+    ["base.app.localhost", "base.com.localhost", "base.org.localhost", "base.net.localhost",
+     "base.dev.localhost", "core.dev.localhost", "mission.core.dev.localhost",].each do |host|
       assert_raises(ActionController::RoutingError, "#{host} must not route #{MOUNT_PATH}") do
-        Rails.application.routes.recognize_path("http://#{host}#{MOUNT_PATH}", method: :get)
+        Rails.application.routes.recognize_path("http://#{host}/features", method: :get)
       end
     end
   end
@@ -73,7 +74,7 @@ class FlipperUiSurfaceTest < ActionDispatch::IntegrationTest
   test "Flipper responses carry the engine policy, not the strict-dynamic application policy" do
     with_flipper_ui_credentials do
       host! DEVELOPER_HOST
-      get "#{MOUNT_PATH}/features", headers: basic_auth_headers(TEST_USER, TEST_PASSWORD)
+      get "/features", headers: basic_auth_headers(TEST_USER, TEST_PASSWORD)
 
       policy = response.headers["Content-Security-Policy"]
 

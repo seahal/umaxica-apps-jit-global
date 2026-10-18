@@ -66,12 +66,15 @@ module Publishing
 
       next_revision = result.revision
 
-      assert_equal guide.id, next_revision.single_taxonomy_assignments.sole.taxonomy_term_id
+      assert_equal guide.id,
+                   Docs::App::RevisionSingleTaxonomyAssignment.find_by!(entry_revision_id: next_revision.id)
+                     .taxonomy_term_id
       assert_equal(
         [rails.id, ruby.id],
-        next_revision.multiple_taxonomy_assignments.ordered.map(&:taxonomy_term_id),
+        Docs::App::RevisionMultipleTaxonomyAssignment.where(entry_revision_id: next_revision.id)
+          .order(:position).map(&:taxonomy_term_id),
       )
-      usage = next_revision.media_usages.sole
+      usage = Docs::App::RevisionMediaUsage.find_by!(entry_revision_id: next_revision.id)
 
       assert_equal media_file.id, usage.media_file_id
       assert_equal "hero", usage.role

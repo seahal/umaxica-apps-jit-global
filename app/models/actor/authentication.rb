@@ -7,14 +7,13 @@ class Actor
                 :active_sign_sequence_id
 
     def initialize(login_public_id: nil, access_claims: nil, acr: nil, amr: [],
-                   actor_type: nil, actor_id: nil, restricted: false, active_sign_sequence_id: nil)
+                   actor_type: nil, actor_id: nil, active_sign_sequence_id: nil)
       @login_public_id = login_public_id
       @access_claims = immutable_claims(access_claims)
       @acr = acr
       @amr = Array(amr).freeze
       @actor_type = actor_type&.to_sym
       @actor_id = actor_id
-      @restricted = restricted
       @active_sign_sequence_id = active_sign_sequence_id
       freeze
     end
@@ -35,9 +34,31 @@ class Actor
       aal == :aal1
     end
 
-    def restricted?
-      @restricted || acr.to_s == "restricted"
+    # Which sign-in ceremony established this session, derived from the signed
+    # access token rather than passed in: every construction site already
+    # carries the claims, and a caller must not be able to assert a context the
+    # token does not.
+    #
+    def authentication_context
+      AuthenticationContextValue.from_claims(access_claims)
     end
+
+    public
+
+    # The authentication event is a typed claim reader. Token/session persistence timestamps are
+    # not interchangeable with the event that established the authentication context.
+    def authentication_event_at
+      raw = access_claims&.dig("auth_time")
+      return if raw.blank?
+      return raw if raw.is_a?(Time) || raw.is_a?(ActiveSupport::TimeWithZone)
+      return Time.at(raw).utc if raw.is_a?(Numeric)
+
+      Time.at(Integer(raw, 10)).utc
+    rescue ArgumentError, TypeError
+      nil
+    end
+
+    delegate :standby?, to: :authentication_context
 
     def verified?
       amr.present? || acr.present?
@@ -51,7 +72,6 @@ class Actor
         amr == other.amr &&
         actor_type == other.actor_type &&
         actor_id == other.actor_id &&
-        restricted? == other.restricted? &&
         active_sign_sequence_id == other.active_sign_sequence_id
     end
 
@@ -66,7 +86,6 @@ class Actor
         amr,
         actor_type,
         actor_id,
-        restricted?,
         active_sign_sequence_id,
       ].hash
     end

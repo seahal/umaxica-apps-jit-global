@@ -57,12 +57,4 @@ module ExternalAuthenticationEndpoint
       authentication_method: authentication_method,
     )
   end
-
-  def store_external_authentication_ceremony_reference(reference)
-    session[CEREMONY_REFERENCE_SESSION_KEY] = reference
-  end
-
-  def consume_external_authentication_ceremony_reference
-    session.delete(CEREMONY_REFERENCE_SESSION_KEY)
-  end
 end

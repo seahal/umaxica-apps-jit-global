@@ -24,73 +24,77 @@ module OidcSsoInitiator
       path: request&.fullpath,
       method: request&.request_method,
     )
-    url = sign_in_url_with_pt(encoded_pt(request.fullpath))
-    redirect_to_oidc_authorization_url(url)
+    redirect_to_oidc_authorization_url(sign_in_url_with_pt(encoded_pt(request.fullpath)))
   end
 
+  # A protected page, a failed callback, or an expired session is not a Sign entry of its own: the
+  # browser is pointed at this surface's passive GET /sign, and only the user's POST there starts an
+  # OIDC flow (specs/sign-fqdn-integrated-plan/plan.md section 5).
+  # Every first-party browser RP serves its neutral entry at GET /sign on its own host
+  # (test/integration/routes/neutral_rp_entry_contract_test.rb).
   def sign_in_url_with_pt(pt)
-    initiate_oidc_session!(pt: decode_pt(pt))
+    query = { ri: RequestContextContract.normalize_region(params[:ri]), pt: pt.present? ? decode_pt(pt).presence : nil }
+    "/sign?#{query.compact.to_query}"
   end
 
   private
 
-  def initiate_oidc_session!(pt: "/", screen_hint: nil)
+  def initiate_oidc_session!(pt: "/", prompt: nil, max_age: nil)
+    prompt = OidcAuthorizeRequestResolver.normalize_prompt(prompt)
+    max_age = OidcAuthorizeRequestResolver.normalize_max_age(max_age)
     verifier = SecureRandom.urlsafe_base64(48)
     challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false)
     state = SecureRandom.urlsafe_base64(32)
     nonce = SecureRandom.urlsafe_base64(32)
 
     oidc_pt = safe_oidc_pt(pt)
-    if screen_hint.present?
-      session[:oidc_code_verifier] = verifier
-      session[:oidc_state] = state
-      session[:oidc_nonce] = nonce
-      session[:oidc_pt] = oidc_pt
-    else
-      remember_oidc_pending_flow!(
-        state: state,
-        verifier: verifier,
-        nonce: nonce,
-        pt: oidc_pt,
-      )
-    end
-    log_oidc_pending_flow_created(state: state, pt: oidc_pt)
+    remember_oidc_pending_flow!(
+      state: state,
+      verifier: verifier,
+      nonce: nonce,
+      pt: oidc_pt,
+      max_age: max_age,
+    )
+    log_oidc_pending_flow_created
 
     oidc_authorization_url(
-      screen_hint: screen_hint,
       code_challenge: challenge,
       state: state,
       nonce: nonce,
+      prompt: prompt,
+      max_age: max_age,
     )
   end
 
-  def redirect_to_oidc_authorization_url(url, **)
+  def redirect_to_oidc_authorization_url(url, **options)
+    if url.start_with?("/") && !url.start_with?("//")
+      return redirect_to(url, allow_other_host: false, **options.except(:fallback_internal, :preserve_query_keys))
+    end
+
     decision = oidc_redirect_decision(url)
     log_oidc_redirect_decision(decision)
 
     case decision.kind
     when :direct
-      redirect_to(url, allow_other_host: true, **)
+      redirect_to(url, allow_other_host: true, **options)
     when :jump
-      redirect_to_jump_url(url, preserve_query_keys: ["redirect_uri"], **)
+      redirect_to_jump_url(url, preserve_query_keys: ["redirect_uri"], **options)
     else
       head :bad_request
     end
   end
 
-  def same_site_oidc_authorization_url?(url)
-    oidc_redirect_decision(url).direct?
-  end
-
-  def same_site_oidc_rejection_reason(url)
-    oidc_redirect_decision(url).reason_code
-  end
-
   def oidc_redirect_decision(url)
-    oidc_acme_service_origin.decision_for_authorize_url(url, request: request)
+    decision = oidc_acme_service_origin.decision_for_authorize_url(url, request: request)
+    return decision unless decision.direct?
+    # Edit's RP ceremony is a separate review slice; preserve its existing admission decision.
+    return decision if %w(edit-org-ww tech-org-ww).include?(oidc_client_id)
+
+    # A shared registrable domain does not merge RP and Base trust boundaries.
+    decision.with(kind: :jump, reason_code: "jump_authorize_handoff")
   end
 
-  def oidc_authorization_url(screen_hint:, code_challenge:, state:, nonce:)
+  def oidc_authorization_url(code_challenge:, state:, nonce:, prompt: nil, max_age: nil)
     query = {
       response_type: "code",
       client_id: oidc_client_id,
@@ -107,40 +111,36 @@ module OidcSsoInitiator
       # this concern is also included on controllers that do not mix in `PreferenceGlobal`.
       ri: RequestContextContract.normalize_region(params[:ri]),
     }
-    query[:screen_hint] = screen_hint if screen_hint.present?
+    query[:prompt] = prompt if prompt.present?
+    query[:max_age] = max_age if max_age.present?
     oidc_acme_service_origin.authorization_endpoint(query: query)
   end
 
-  def remember_oidc_pending_flow!(state:, verifier:, nonce:, pt:)
+  def remember_oidc_pending_flow!(state:, verifier:, nonce:, pt:, max_age: nil)
     flows = session[OIDC_PENDING_FLOWS_SESSION_KEY]
     flows = {} unless flows.is_a?(Hash)
-    flows[state] = {
-      "code_verifier" => verifier,
-      "nonce" => nonce,
-      "pt" => pt,
-      "created_at" => Time.current.to_i,
-    }
-    session[OIDC_PENDING_FLOWS_SESSION_KEY] = flows.sort_by { |_key, flow| flow["created_at"].to_i }
+    flow =
+      {
+        "code_verifier" => verifier,
+        "nonce" => nonce,
+        "pt" => pt,
+        "created_at" => Time.current.to_i,
+      }.tap { |pending_flow| pending_flow["max_age"] = max_age if max_age.present? }
+    flows[state] = flow
+    session[OIDC_PENDING_FLOWS_SESSION_KEY] = flows.sort_by { |_key, entry| entry["created_at"].to_i }
       .last(OIDC_PENDING_FLOW_LIMIT)
       .to_h
   end
 
-  def log_oidc_pending_flow_created(state:, pt:)
+  def log_oidc_pending_flow_created
     Rails.logger.info(
       JitLogEvent.format(
         "oidc.sso.pending_flow.created",
         client_id: oidc_client_id,
-        host: request.host,
-        csrf_digest12: oidc_sso_digest12(state),
-        pt_digest12: oidc_sso_digest12(pt),
-        pt_is_root: pt == "/",
-        pending_flow_count: session[OIDC_PENDING_FLOWS_SESSION_KEY].to_h.size,
+        request_id: request.request_id,
+        status: "created",
       ),
     )
-  end
-
-  def oidc_sso_digest12(value)
-    Digest::SHA256.hexdigest(value.to_s).first(12)
   end
 
   def oidc_callback_url
@@ -200,37 +200,12 @@ module OidcSsoInitiator
     Integer(ENV.fetch("PORT"), exception: false) || 3000
   end
 
-  # Tighten the OIDC pt to a same-host internal path.
-  #
-  # Mirrors the shape of CommonRedirect#safe_internal_path (path?query
-  # only, no scheme / host / userinfo / control chars). Inlined here instead
-  # of delegated because OidcSsoInitiator is included on acme application
-  # controllers that already mix in CommonRedirect via other paths, and we
-  # want this validator to be self-contained while the broader unification
-  # is planned separately. Future work: share the helper.
+  # Tighten the OIDC pt to a same-host internal path using the repository's shared resolver.
+  # The resolver also rejects nested redirect parameters, encoded host escapes, and control
+  # characters that a URI-only check would otherwise accept.
   def safe_oidc_pt(pt)
-    target = pt.to_s
-    return "/" if target.blank?
-    return "/" if target.match?(/[[:cntrl:]]/)
-
-    begin
-      uri = URI.parse(target)
-    rescue URI::InvalidURIError
-      return "/"
-    end
-
-    return "/" if uri.user.present? || uri.password.present?
-
-    if uri.scheme.present? || uri.host.present?
-      scheme_ok = %w(http https).include?(uri.scheme)
-      host_ok = uri.host.present? && uri.host == request.host
-      return "/" unless scheme_ok && host_ok
-    end
-
-    path = uri.path.presence || "/"
-    return "/" unless path.start_with?("/")
-
-    uri.query.present? ? "#{path}?#{uri.query}" : path
+    result = RedirectsPathTargetResolver.call(pt.to_s, source: :oidc_return_target)
+    result.ok? ? result.value : "/"
   end
 
   def oidc_client_id
@@ -266,10 +241,6 @@ module OidcSsoInitiator
 
   def oidc_acme_service_origin
     oidc_base_service_origin
-  end
-
-  def oidc_acme_default_scheme
-    oidc_base_default_scheme
   end
 
   def log_oidc_redirect_decision(decision)

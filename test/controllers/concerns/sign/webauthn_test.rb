@@ -46,29 +46,5 @@ module Sign
       assert_not_includes @controller.private_methods, :webauthn_surface
       assert_not_includes @controller.private_methods, :webauthn_relying_party_config
     end
-
-    test "actor global keys are scoped and reversible" do
-      actor = Struct.new(:id).new(12_345)
-
-      key = @controller.send(:passkey_actor_global_key, actor)
-
-      assert_equal "app:12345", key
-      assert_equal 12_345, @controller.send(:passkey_actor_id_from, key)
-      assert_nil @controller.send(:passkey_actor_id_from, "com:12345")
-      assert_nil @controller.send(:passkey_actor_global_key, nil)
-    end
-
-    test "credential ids accepts records and hashes" do
-      record = Struct.new(:webauthn_id).new("record-id")
-
-      assert_equal ["record-id", "hash-id"],
-                   @controller.send(:webauthn_credential_ids, [record, { id: "hash-id" }])
-    end
-
-    test "resource display name falls back to the resource id" do
-      resource = Struct.new(:id).new(42)
-
-      assert_equal "42", @controller.send(:passkey_resource_display_name, resource)
-    end
   end
 end

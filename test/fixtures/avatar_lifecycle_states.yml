@@ -38,7 +38,8 @@ active:
 suspended:
   key: suspended
   title: Suspended
-  description: Avatar cannot create content and is excluded from public surfaces until privileged restoration.
+  description:
+    Avatar cannot create content and is excluded from public surfaces until privileged restoration.
   can_create_content: false
   visible_by_default: false
   editable_by_owner: true
@@ -53,7 +54,8 @@ suspended:
 archived:
   key: archived
   title: Archived
-  description: Avatar is owner-retirable and excluded from public discovery, follow, and group attach.
+  description:
+    Avatar is owner-retirable and excluded from public discovery, follow, and group attach.
   can_create_content: false
   visible_by_default: false
   editable_by_owner: true

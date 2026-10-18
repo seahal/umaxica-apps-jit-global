@@ -10,22 +10,9 @@ class LayoutRenderedTitleSmokeTest < ActionDispatch::IntegrationTest
   BRAND = ENV.fetch("BRAND_NAME").upcase
 
   test "canonical layouts render the expected brand site title" do
+    # Auth layouts are not here: Auth pages open only from a Base-issued admission (E01), and
+    # HtmlTitleContractTest enters them that way and checks their titles.
     cases = [
-      {
-        host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
-        path: -> { auth_app_sign_in_path(ri: "jp") },
-        tld: "APP",
-      },
-      {
-        host: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"),
-        path: -> { auth_com_sign_in_path(ri: "jp") },
-        tld: "COM",
-      },
-      {
-        host: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
-        path: -> { auth_org_sign_in_path(ri: "jp") },
-        tld: "ORG",
-      },
       {
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
         path: -> { base_app_root_path(ri: "jp") },
@@ -57,18 +44,18 @@ class LayoutRenderedTitleSmokeTest < ActionDispatch::IntegrationTest
         tld: "ORG",
       },
       {
-        host: ENV.fetch("PUBLIC_SIDE_SERVICE_URL", "side.app.localhost"),
-        path: -> { new_side_app_sign_out_path(ri: "jp") },
+        host: ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
+        path: -> { new_warp_app_sign_out_path(ri: "jp") },
         tld: "APP",
       },
       {
-        host: ENV.fetch("PUBLIC_SIDE_CORPORATE_URL", "side.com.localhost"),
-        path: -> { new_side_com_sign_out_path(ri: "jp") },
+        host: ENV.fetch("PUBLIC_WARP_CORPORATE_URL", "warp.com.localhost"),
+        path: -> { new_warp_com_sign_out_path(ri: "jp") },
         tld: "COM",
       },
       {
-        host: ENV.fetch("PUBLIC_SIDE_STAFF_URL", "side.org.localhost"),
-        path: -> { new_side_org_sign_out_path(ri: "jp") },
+        host: ENV.fetch("PUBLIC_WARP_STAFF_URL", "warp.org.localhost"),
+        path: -> { new_warp_org_sign_out_path(ri: "jp") },
         tld: "ORG",
       },
       {

@@ -6,8 +6,8 @@ Accepted (2026-06-11)
 
 Supersedes section 7 ("IP / UA / device as risk signal") of
 `adr/session-token-hardening-baseline.md` for the specific case described below. Implemented in
-Phase C of `plans/active/token-theft-defense-hardening.md`; the revocation behavior ships behind a
-default-off feature flag for staged rollout (see Decision point 3).
+Phase C of the token-theft defense hardening plan (since removed); the revocation behavior ships
+behind a default-off feature flag for staged rollout (see Decision point 3).
 
 ## Context
 
@@ -15,11 +15,10 @@ default-off feature flag for staged rollout (see Decision point 3).
 and risk evaluation and "must never hard-invalidate a session on their own." That rule was chosen to
 avoid false-positive logouts from ordinary IP churn (mobile networks, NAT, carrier rotation).
 
-The token-theft audit (see `plans/active/token-theft-defense-hardening.md`) identified that an
-infostealer-stolen cookie replayed from a different network is currently only caught indirectly by
-refresh-reuse detection. The platform owner decided to add a direct signal: a same-session change of
-the client's **coarse network** should be treatable as a compromise indicator that hard-revokes the
-session, accepting the operational tradeoff.
+The token-theft audit identified that an infostealer-stolen cookie replayed from a different network
+is currently only caught indirectly by refresh-reuse detection. The platform owner decided to add a
+direct signal: a same-session change of the client's **coarse network** should be treatable as a
+compromise indicator that hard-revokes the session, accepting the operational tradeoff.
 
 This decision deliberately overrides the §7 prohibition for this narrow, coarse-grained, and
 feature-flagged case.
@@ -52,7 +51,7 @@ feature-flagged case.
 
 ## Implementation
 
-See `plans/active/token-theft-defense-hardening.md` Phase C. Touch points: device-session schema
-(additive, nullable, reversible migration for `last_network_hmac`), `OccurrenceHmac` network helper,
-`app/services/sign_risk_emitter.rb`, `app/services/sign_risk_engine.rb`,
-`app/services/sign_risk_enforcer.rb`. Tests extend `test/services/sign/risk/*`.
+Touch points: device-session schema (additive, nullable, reversible migration for
+`last_network_hmac`), `OccurrenceHmac` network helper, `app/services/sign_risk_emitter.rb`,
+`app/services/sign_risk_engine.rb`, `app/services/sign_risk_enforcer.rb`. Tests extend
+`test/services/sign/risk/*`.

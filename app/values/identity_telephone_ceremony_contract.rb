@@ -65,7 +65,7 @@ module IdentityTelephoneCeremonyContract
 
   def acme_audience(surface) = fetch_surface_value(ACME_AUDIENCES, surface)
 
-  def sign_issuer_id(surface) = "surface:SIGN_#{surface.to_s.upcase}"
+  def sign_issuer_id(surface) = "surface:AUTH_#{surface.to_s.upcase}"
 
   def acme_issuer_id(surface) = "surface:BASE_#{surface.to_s.upcase}"
 
@@ -147,6 +147,8 @@ module IdentityTelephoneCeremonyContract
 
   def decode_unverified_payload(token)
     payload, = JWT.decode(token, nil, false)
+    raise IdentityTelephoneCeremony::Error, "token payload must be a JSON object" unless payload.is_a?(Hash)
+
     payload
   rescue JWT::DecodeError => e
     raise IdentityTelephoneCeremony::Error, "token is invalid: #{e.message}"

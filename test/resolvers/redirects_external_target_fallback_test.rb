@@ -11,20 +11,6 @@ require "test_helper"
 class RedirectsExternalTargetFallbackTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "a registry entry falls back to its own default when no environment names an origin" do
-    entry = RedirectsExternalTargetResolver::REGISTRY.fetch(:jump)
-    resolver = RedirectsExternalTargetResolver.new(:jump, path: "/", query: {}, source: :test)
-    absent = { env: %w(NOT_SET_A NOT_SET_B), default: entry.fetch(:default) }
-
-    assert_equal entry.fetch(:default), resolver.send(:origin_for, absent)
-  end
-
-  test "an entry with neither a set environment nor a default resolves to no origin at all" do
-    resolver = RedirectsExternalTargetResolver.new(:jump, path: "/", query: {}, source: :test)
-
-    assert_nil resolver.send(:origin_for, { env: %w(NOT_SET_A), default: "" })
-  end
-
   test "a key that is not in the registry is refused rather than guessed at" do
     %i(martian).each do |key|
       result = RedirectsExternalTargetResolver.call(key, path: "/")

@@ -106,20 +106,36 @@ module Security
           break
         end
 
+        return 0 if old_constant.blank?
+
         stdout, _stderr, status = Open3.capture3(
-          "rg",
-          "--fixed-strings",
-          old_constant,
-          "app",
-          "lib",
-          "config",
-          "test",
+          *fixed_string_search_command(old_constant),
           chdir: Rails.root.to_s,
         )
 
+        # git grep exits 1 when there are no matches; treat that as zero hits.
+        return 0 if status.exitstatus == 1
         return 0 unless status.success?
 
         stdout.lines.count
+      end
+
+      # Prefer ripgrep when the sandbox exposes it (bin/rg or /usr/bin/rg). Fall
+      # back to `git grep` which remains available when system rg is filtered out.
+      def self.fixed_string_search_command(needle)
+        rg =
+          [
+            ENV["RG_PATH"],
+            Rails.root.join("bin/rg").to_s,
+            "/usr/bin/rg",
+            "/bin/rg",
+          ].compact.find { |candidate| File.executable?(candidate) }
+
+        if rg
+          return [rg, "--fixed-strings", needle, "app", "lib", "config", "test"]
+        end
+
+        ["git", "grep", "-F", "-n", "--", needle, "--", "app", "lib", "config", "test"]
       end
 
       def self.excluded_lib_path?(relative_path)

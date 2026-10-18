@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: client_sign_out_flow_statuses
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id :bigint           not null, primary key
 #
-class ClientSignOutFlowStatus < AppTicketRecord
+class ClientSignOutFlowStatus < OpBaseAppRecord
   include ReferenceRecord
 
   NOTHING = 0
@@ -18,6 +18,9 @@ class ClientSignOutFlowStatus < AppTicketRecord
   AWAITING_EXPIRY = 40
   COMPLETED = 100
   FAILED = 900
+  EXPIRED = 910
+  CANCELLED = 920
+  HALTED = 930
   DEFAULTS = [
     NOTHING,
     REQUESTED,
@@ -26,6 +29,9 @@ class ClientSignOutFlowStatus < AppTicketRecord
     AWAITING_EXPIRY,
     COMPLETED,
     FAILED,
+    EXPIRED,
+    CANCELLED,
+    HALTED,
   ].freeze
 
   has_many :client_sign_out_flows,

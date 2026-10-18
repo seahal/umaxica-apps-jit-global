@@ -12,147 +12,138 @@ module Auth
         include ::CloudflareTurnstile
         include ::SignAuthorityRedirect
         include ::SignSettingsTotpRegistration
-        include ::SignRequiresRecoveryPasscodes
+        include ::AuthStepUpCeremonyContext
+        include ::AuthCeremonyAdmission
 
         include ::VerificationClient
 
-        AUTHENTICATION_MODE = :private
-        MAX_TOTPS = 2
-        # `SignRequiresRecoveryPasscodes` still answers with the shared ERB template, and the slim
-        # Inertia shell has no `yield` to render one into, so the layout follows the render kind.
+        AUTHENTICATION_MODE = :open
+        declare_authentication_mode! :open
         layout :settings_totps_layout
 
-        before_action :authenticate_client!
-        step_up only: %i(new create), bootstrap: true
-        step_up only: :destroy
-        before_action :require_recovery_passcodes_for_mfa_registration!, only: %i(new create)
-
-        def index
-          authorize!(ClientTotpCredential, to: :index?)
-          @totps = current_client.client_totp_credentials.order(created_at: :asc)
-          render_inertia_page(props: index_page_props)
-        end
+        before_action :require_totp_registration_context!, only: %i(new create)
 
         def new
-          authorize!(ClientTotpCredential, to: :new?)
-          if current_client.client_totp_credentials.count >= MAX_TOTPS
-            return render plain: t("session_limit.totp_limit_reached", count: MAX_TOTPS)
+          if admission_reference_param.present?
+            return admit_or_render_sign_ceremony!(expected_intent: "credential_registration") do
+              render_invalid_admission_request!
+            end
           end
 
+          authorize!(ClientTotpCredential, to: :new?, context: { user: @step_up_ceremony_actor })
+          if @step_up_ceremony_transaction.verified?
+            return redirect_to(auth_app_settings_totps_handoff_path(ri: params[:ri]), status: :see_other)
+          end
+          if ClientTotpCredential.slot_consuming.where(user_id: @step_up_ceremony_actor.id).count >=
+              ClientTotpCredential::MAX_TOTP_SLOTS
+            return render plain: t(
+              "session_limit.totp_limit_reached", count: ClientTotpCredential::MAX_TOTP_SLOTS,
+            )
+          end
+
+          # Display only: the secret belongs to an enrolment started by POST, never to this GET.
           @totp = ClientTotpCredential.new
-          start_totp_ceremony!(_surface: "app", _actor: current_client, _session_ref: current_session_public_id)
-          generate_totp_session
+          @totp_enrollment = IdentityTotpEnrollmentQuery.call(
+            actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+            transaction: @step_up_ceremony_transaction,
+          )
+          @png = generate_qrcode(@totp_enrollment.private_key) if @totp_enrollment
           render_inertia_page(props: new_page_props)
         end
 
-        def edit
-          find_totp
-          authorize!(@totp)
-          render_inertia_page(props: edit_page_props)
-        end
-
         def create
-          authorize!(ClientTotpCredential, to: :create?)
-          initialize_totp
-
-          if @totp.private_key.blank?
-            redirect_to(
-              new_auth_app_settings_totp_path,
-            )
-            return
+          if admission_reference_param.present?
+            apply_admission_transport_headers!
+            return redeem_admission_reference_and_redirect!(expected_intent: "credential_registration")
           end
+
+          authorize!(ClientTotpCredential, to: :create?, context: { user: @step_up_ceremony_actor })
+          discard_legacy_totp_enrollment!
+          @totp_enrollment = IdentityTotpEnrollmentQuery.call(
+            actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+            transaction: @step_up_ceremony_transaction,
+          )
+          # A page from a cancelled, expired or replaced enrolment cannot confirm the current one.
+          unless @totp_enrollment && submitted_totp_enrollment_id.is_a?(String) &&
+              @totp_enrollment.ref == submitted_totp_enrollment_id
+            return render plain: t("errors.messages.invalid_request"), status: :conflict
+          end
+
+          submitted = params.expect(user_totp_credential: %i(enrollment_id first_token title))
+          @totp = ClientTotpCredential.new(title: submitted[:title], first_token: submitted[:first_token])
 
           unless cloudflare_turnstile_stealth_validation["success"]
             @totp.errors.add(:base, t("turnstile_error"))
-            render_totp_qrcode(@totp.private_key)
+            render_totp_qrcode(@totp_enrollment.private_key)
             render_new_totp_page_with_errors
             return
           end
 
-          last_otp_at = verify_totp(@totp.private_key, @totp.first_token)
-
-          if last_otp_at
-            handle_success(last_otp_at)
+          accepted = IdentityTotpEnrollmentVerificationCommitter.call!(
+            actor: @step_up_ceremony_actor, token: ceremony_session_token(@step_up_ceremony_session),
+            transaction: @step_up_ceremony_transaction, candidate_ref: @totp_enrollment.ref,
+            code: submitted[:first_token], title: submitted[:title],
+          )
+          if accepted
+            redirect_to(auth_app_settings_totps_handoff_path(ri: params[:ri]), status: :see_other)
           else
             handle_failure
           end
-        end
-
-        def initialize_totp
-          @totp = ClientTotpCredential.new(totp_params)
-          @totp.private_key = session[:private_key]
-          @totp.user = current_client
-          @totp.user_totp_credential_status_id = ClientTotpCredentialStatus::ACTIVE
-        end
-
-        def handle_success(last_otp_at)
-          last_otp_at_time = Time.zone.at(last_otp_at)
-          finish_totp_ceremony!(
-            surface: "app",
-            actor: current_client,
-            session_ref: current_session_public_id,
-            private_key: @totp.private_key,
-            title: @totp.title,
-            last_otp_at: last_otp_at_time,
-          )
-          session[:private_key] = nil
-          reset_totp_ceremony_session!
-
-          recovery_passcode_top_up = top_up_recovery_passcodes_after_totp_registration
-          redirect_url =
-            if recovery_passcode_top_up.raw_values.any?
-              recovery_passcode_reveal_url(recovery_passcode_top_up.raw_values)
-            else
-              auth_app_settings_totps_url(
-                ri: params[:ri],
-                host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-              )
-            end
-          redirect_to(
-            bootstrap_return_path(redirect_url),
-            allow_other_host: cross_host_redirect_allowed?,
-            status: :see_other,
-          )
-        end
-
-        def handle_failure
-          @totp.valid?
-          @totp.errors.add(:first_token, t("sign.app.settings.totps.invalid_code"))
-          render_totp_qrcode(@totp.private_key)
-          render_new_totp_page_with_errors
-        end
-
-        def update
-          find_totp
-          authorize!(@totp)
-
-          if @totp.update(update_params)
-            redirect_to(auth_app_settings_totp_path(@totp.public_id, ri: params[:ri]), status: :see_other)
-          else
-            render_inertia_page(
-              component: "auth/app/settings/totps/edit",
-              props: edit_page_props,
-              status: :unprocessable_content,
-            )
-          end
-        end
-
-        # DELETE /settings/totps/:id
-        def destroy
-          totp = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
-          authorize!(totp)
-          unless AuthMethodGuard.can_remove_totp?(current_client, totp)
-            redirect_to(
-              auth_app_settings_totps_path(ri: params[:ri]),
-              status: :see_other,
-            )
-            return
-          end
-          totp.destroy!
-          redirect_to(auth_app_settings_totps_path(ri: params[:ri]), status: :see_other)
+        rescue ClientTotpCredential::SlotLimitExceeded
+          render plain: t(
+            "session_limit.totp_limit_reached", count: ClientTotpCredential::MAX_TOTP_SLOTS,
+          ), status: :unprocessable_content
         end
 
         private
+
+        def auth_ceremony_entry_intent = "credential_registration"
+
+        def auth_step_up_ceremony_clean_url = new_auth_app_settings_totp_path(ri: params[:ri])
+
+        def auth_ceremony_admitted_action_url = auth_app_settings_totps_path(ri: params[:ri])
+
+        def handle_failure
+          @totp.errors.add(:first_token, t("sign.app.settings.totps.invalid_code"))
+          render_totp_qrcode(@totp_enrollment.private_key)
+          render_new_totp_page_with_errors
+        end
+
+        def current_policy_user
+          @step_up_ceremony_actor
+        end
+
+        def require_totp_registration_context!
+          return if admission_reference_param.present?
+
+          return unless load_registration_ceremony_context!
+          return render_invalid_step_up_context! unless admitted_step_up_methods.include?(:totp)
+          return if @step_up_ceremony_transaction.status == "pending" ||
+            (@step_up_ceremony_transaction.verified? && @step_up_ceremony_transaction.method == "totp")
+
+          render_invalid_step_up_context!
+        end
+
+        def ceremony_actor_model = Client
+
+        def ceremony_step_up_session_model = ClientStepUpSession
+
+        def ceremony_session_token(record) = ClientToken.find(record.user_token_id)
+
+        def ceremony_token_owned_by?(token, actor) = token.user_id == actor.id
+
+        def ceremony_supported_methods = [:totp]
+
+        def authorize_step_up_ceremony_actor!(actor)
+          authorize!(actor, to: :show?, context: { user: actor })
+        end
+
+        rescue_from IdentityTotpCeremonyContract::Error, with: :render_invalid_step_up_context!
+        rescue_from ActiveRecord::RecordNotFound, with: :render_missing_totp_record!
+
+        def render_missing_totp_record!
+          render_invalid_step_up_context!
+        end
 
         # Renders one Inertia page and tells `settings_totps_layout` that the slim Inertia shell is
         # the right layout for this response.
@@ -173,56 +164,23 @@ module Auth
           )
         end
 
-        def index_page_props
-          {
-            title: "Totps",
-            back_link: { label: t("sign.app.settings.show.back"), href: auth_app_settings_path },
-            new_link: {
-              label: t("sign.app.settings.totp.index.new_link"),
-              href: new_auth_app_settings_totp_path(ri: params[:ri]),
-            },
-            columns: {
-              title: t("activerecord.attributes.user_totp_credential.title"),
-              last_otp_at: t("activerecord.attributes.user_totp_credential.last_otp_at"),
-              actions: "Actions",
-            },
-            empty_message: t("messages.no_totp_found"),
-            edit_label: t("actions.edit"),
-            totps: @totps.map { |credential| serialize_totp_row(credential) },
-          }
-        end
-
-        def serialize_totp_row(credential)
-          {
-            public_id: credential.public_id,
-            title: credential.title.presence,
-            last_otp_at: formatted_last_otp_at(credential),
-            edit_href: edit_auth_app_settings_totp_path(credential.public_id, ri: params[:ri]),
-          }
-        end
-
-        # A credential that has never produced a code carries the epoch rather than nil, so it reads
-        # as "never used" exactly as the table did.
-        def formatted_last_otp_at(credential)
-          last_otp_at = credential.last_otp_at
-          usable =
-            (last_otp_at.is_a?(Time) || last_otp_at.is_a?(ActiveSupport::TimeWithZone)) &&
-            last_otp_at > Time.zone.at(0)
-
-          usable ? l(last_otp_at, format: :short) : "-"
-        end
-
         def new_page_props
           {
             title: t("sign.app.settings.totp.new.page_title"),
             description: t("sign.app.settings.totp.new.description"),
             back_link: {
               label: t("sign.app.settings.show.back"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
+              href: (@step_up_ceremony_transaction.purpose == "bootstrap") ?
+                new_auth_app_verification_setup_path(ri: params[:ri]) :
+                base_app_identity_url(ri: params[:ri], host: base_authority_host, protocol: "https"),
             },
-            # The provisioning QR code is the same image the enrolment page already displayed; the
-            # shared secret itself never leaves the session.
-            qr_code_image: "data:image/png;base64,#{Base64.strict_encode64(@png.to_s)}",
+            # Without an active enrolment the page offers only the explicit start. With one, the QR
+            # code carries its secret; the encrypted candidate remains on the ticket writer.
+            start: @totp_enrollment ? nil : {
+              action: auth_app_settings_totps_enrollment_path(ri: params[:ri]),
+              label: t("sign.app.settings.totp.index.new_link"),
+            },
+            qr_code_image: @totp_enrollment ? "data:image/png;base64,#{Base64.strict_encode64(@png.to_s)}" : nil,
             qr_fallback: t("views.sign.app.settings.totps.new.qr_fallback"),
             form: {
               action: auth_app_settings_totps_path(ri: params[:ri]),
@@ -231,49 +189,20 @@ module Auth
               title_placeholder: t("messages.totp_title_placeholder"),
               title_hint: t("sign.app.settings.totp.new.title_hint"),
               title: @totp.title,
+              enrollment_id: @totp_enrollment&.ref,
               first_token_label: t("views.sign.app.settings.totps.new.first_token_label"),
               first_token_placeholder: t("views.sign.app.settings.totps.new.first_token_placeholder"),
               first_token_help: t("views.sign.app.settings.totps.new.first_token_help"),
               first_token_delivery_help: t("views.sign.app.settings.totps.new.first_token_delivery_help"),
               submit_label: t("views.sign.app.settings.totps.new.submit"),
             },
-            cancel_link: {
+            cancel: @totp_enrollment ? {
               label: t("actions.cancel"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
-            },
+              action: auth_app_settings_totps_enrollment_path(ri: params[:ri]),
+              method: "delete",
+            } : nil,
             turnstile: turnstile_stealth_props,
             error_header: totp_error_header(model: true),
-            error_messages: @totp.errors.full_messages,
-          }
-        end
-
-        def edit_page_props
-          {
-            title: t("sign.app.setting.totp.edit.title"),
-            description: t("sign.app.setting.totp.edit.description"),
-            back_link: {
-              label: t("sign.app.settings.show.back"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
-            },
-            form: {
-              action: auth_app_settings_totp_path(@totp.public_id, ri: params[:ri]),
-              scope: "user_totp_credential",
-              title_label: t("activerecord.attributes.user_totp_credential.title"),
-              title_placeholder: t("messages.totp_title_placeholder"),
-              title_hint: t("sign.app.setting.totp.edit.title_hint"),
-              title: @totp.title,
-              submit_label: t("actions.save"),
-            },
-            cancel_link: {
-              label: t("actions.cancel"),
-              href: auth_app_settings_totps_path(ri: params[:ri]),
-            },
-            destroy: {
-              action: auth_app_settings_totp_path(@totp.public_id, ri: params[:ri]),
-              submit_label: t("actions.delete"),
-              confirm_message: t("messages.confirm_delete_totp"),
-            },
-            error_header: totp_error_header(model: false),
             error_messages: @totp.errors.full_messages,
           }
         end
@@ -288,15 +217,6 @@ module Auth
           end
         end
 
-        def find_totp
-          @totp = current_client.client_totp_credentials.find_by!(public_id: params.expect(:id))
-        end
-
-        def generate_totp_session
-          session[:private_key] ||= ROTP::Base32.random_base32
-          @png = generate_qrcode(session[:private_key])
-        end
-
         def render_totp_qrcode(private_key)
           @png = generate_qrcode(private_key)
         end
@@ -306,79 +226,17 @@ module Auth
           RQRCode::QRCode.new(totp.provisioning_uri(account_id)).as_png
         end
 
-        def verify_totp(private_key, token)
-          ROTP::TOTP.new(private_key).verify(normalized_totp_token(token))
-        end
-
-        def normalized_totp_token(token)
-          token.to_s.gsub(/\D/, "")
-        end
-
         def account_id
-          current_client.client_emails.first&.address || current_client.public_id
+          email = ClientEmail.find_by(user_id: @step_up_ceremony_actor.id)
+          email&.address || @step_up_ceremony_actor.public_id
         end
 
-        def totp_params
-          params(user_totp_credential: [:first_token, :title])
-        end
-
-        def update_params
-          params(user_totp_credential: [:title])
-        end
-
-        def verification_required_action?
-          step_up_bootstrap_active? && %w(new create).include?(action_name)
+        def submitted_totp_enrollment_id
+          params.dig(:user_totp_credential, :enrollment_id)
         end
 
         def verification_scope
           "settings_totp"
-        end
-
-        def recovery_passcode_requirement_active_strong_credential_count
-          current_client.client_passkeys.active.count +
-            current_client.client_totp_credentials.where(
-              user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-            ).count
-        end
-
-        def recovery_passcode_requirement_actor
-          current_client
-        end
-
-        def recovery_passcode_requirement_credential_class
-          ClientSecretCredential
-        end
-
-        def recovery_passcode_setup_url
-          base_app_identity_secrets_url(
-            ri: params[:ri],
-            host: base_authority_host,
-          )
-        end
-
-        def top_up_recovery_passcodes_after_totp_registration
-          RecoveryPasscodeTopUp.call(
-            actor: current_client,
-            credential_class: ClientSecretCredential,
-            target_count: RecoveryPasscodeTopUp::TARGET_ACTIVE_RECOVERY_PASSCODES,
-          )
-        end
-
-        def recovery_passcode_reveal_url(raw_values)
-          return if raw_values.blank?
-
-          reveal = IdentityOneTimeReveal.issue!(
-            actor: current_client,
-            session_nonce: current_client.public_id,
-            value: raw_values,
-            purpose: "client.recovery_secret_credential",
-            metadata: {},
-          )
-          base_app_identity_secrets_url(
-            ri: params[:ri],
-            token: reveal.token,
-            host: base_authority_host,
-          )
         end
       end
     end

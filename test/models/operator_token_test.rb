@@ -4,13 +4,13 @@
 # == Schema Information
 #
 # Table name: operator_tokens
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
 #  last_step_up_aal                   :string
 #  last_step_up_at                    :datetime
@@ -22,7 +22,7 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
@@ -50,12 +50,12 @@
 #  index_operator_tokens_on_created_at                     (created_at)
 #  index_operator_tokens_on_dbsc_session_id                (dbsc_session_id) UNIQUE
 #  index_operator_tokens_on_device_session_id              (device_session_id)
-#  index_operator_tokens_on_discarded_at                   (discarded_at)
+#  index_operator_tokens_on_discard_at                   (discard_at)
 #  index_operator_tokens_on_oidc_connection_id             (oidc_connection_id)
 #  index_operator_tokens_on_oidc_jti                       (oidc_jti)
 #  index_operator_tokens_on_oidc_sid                       (oidc_sid)
 #  index_operator_tokens_on_public_id                      (public_id) UNIQUE
-#  index_operator_tokens_on_purged_at                      (purged_at)
+#  index_operator_tokens_on_purge_eligible_at                      (purge_eligible_at)
 #  index_operator_tokens_on_refresh_token_digest           (refresh_token_digest) UNIQUE
 #  index_operator_tokens_on_refresh_token_family_id        (refresh_token_family_id)
 #  index_operator_tokens_on_rotated_at                     (rotated_at)
@@ -84,12 +84,8 @@ class OperatorTokenTest < ActiveSupport::TestCase
     @token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
   end
 
-  test "inherits from OrgTicketRecord" do
-    assert_operator OperatorToken, :<, OrgTicketRecord
-  end
-
-  test "signed ref lookup uses token connection owner" do
-    assert_equal OrgTicketRecord, OperatorToken.send(:connection_owner)
+  test "inherits from OpBaseOrgRecord" do
+    assert_operator OperatorToken, :<, OpBaseOrgRecord
   end
 
   test "belongs to staff" do
@@ -102,6 +98,106 @@ class OperatorTokenTest < ActiveSupport::TestCase
   test "can be created with staff" do
     assert_not_nil @token
     assert_equal @staff.id, @token.staff_id
+  end
+
+  test "device session rejects a current token owned by another session" do
+    other_token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    session = @token.device_session
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorDeviceSession.transaction(requires_new: true) do
+          session.update_column(:current_refresh_token_id, other_token.id)
+          OperatorDeviceSession.lease_connection.execute(
+            "SET CONSTRAINTS fk_operator_device_sessions_on_current_refresh_token_owner IMMEDIATE",
+          )
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_operator_device_sessions_on_current_refresh_token_owner",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "token device session reference must exist and cannot be NULL" do
+    missing_session_id = OperatorDeviceSession.lease_connection.select_value(
+      "SELECT nextval(pg_get_serial_sequence('operator_device_sessions', 'id'))",
+    )
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, missing_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_operator_tokens_on_device_session_id fk_operator_tokens_on_staff_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert_raises(ActiveRecord::NotNullViolation) do
+      OperatorToken.transaction(requires_new: true) do
+        @token.update_column(:device_session_id, nil)
+      end
+    end
+
+    assert_not_nil @token.reload.device_session_id
+  end
+
+  test "token device session must belong to the same staff" do
+    other_staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    other_token = OperatorToken.create!(staff: other_staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        OperatorToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, other_token.device_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_operator_tokens_on_staff_id_and_device_session_id",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "deleting the current token clears only its session pointer" do
+    session = @token.device_session
+    session.update!(current_refresh_token: @token)
+
+    @token.delete
+
+    assert_nil session.reload.current_refresh_token_id
+    assert_predicate session, :persisted?
+  end
+
+  test "device session cannot be destroyed while token history references it" do
+    session = @token.device_session
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
+
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        OperatorDeviceSession.transaction(requires_new: true) do
+          OperatorDeviceSession.where(id: session.id).delete_all
+        end
+      end
+    assert_equal "23001", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_operator_tokens_on_device_session_id fk_operator_tokens_on_staff_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert OperatorDeviceSession.exists?(session.id)
+    assert OperatorToken.exists?(@token.id)
+  end
+
+  test "destroying the operator removes tokens before its device sessions" do
+    session_id = @token.device_session_id
+
+    @staff = Operator.includes(
+      :staff_passkeys, :staff_tokens, :operator_device_sessions, :staff_secret_credentials, :oidc_connections,
+      :staff_operators, :operator_workspace_accounts, :staff_bulletins, :staff_banners, :rp_account,
+      :authority_lock, :staff_preference, :core_org_operator_bridge,
+    ).find(@staff.id)
+    @staff.destroy!
+
+    assert_not OperatorToken.exists?(@token.id)
+    assert_not OperatorDeviceSession.exists?(session_id)
   end
 
   test "does not expose legacy session_id column" do
@@ -203,12 +299,12 @@ class OperatorTokenTest < ActiveSupport::TestCase
       assert_predicate token, :active?
 
       travel 1.minute
-      token.update!(discarded_at: 30.seconds.from_now)
+      token.update!(discard_at: 30.seconds.from_now)
 
       assert_not token.expired_refresh?
       assert_predicate token, :active?
 
-      token.update_columns(discarded_at: 30.seconds.ago)
+      token.update_columns(discard_at: 30.seconds.ago)
 
       assert_predicate token, :expired_refresh?
       assert_not token.active?
@@ -240,8 +336,8 @@ class OperatorTokenTest < ActiveSupport::TestCase
       token = OperatorToken.create!(
         staff: @staff,
         staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-        discarded_at: 12.hours.from_now,
-        purged_at: 4.days.from_now,
+        discard_at: 12.hours.from_now,
+        purge_eligible_at: 4.days.from_now,
       )
       token.rotate_refresh_token!
 
@@ -252,8 +348,8 @@ class OperatorTokenTest < ActiveSupport::TestCase
       replacement = result[:token]
 
       assert_equal :rotated, result[:status]
-      assert_equal token.discarded_at.to_i, replacement.discarded_at.to_i
-      assert_equal token.purged_at.to_i, replacement.purged_at.to_i
+      assert_equal token.discard_at.to_i, replacement.discard_at.to_i
+      assert_equal token.purge_eligible_at.to_i, replacement.purge_eligible_at.to_i
     end
   end
 
@@ -266,39 +362,43 @@ class OperatorTokenTest < ActiveSupport::TestCase
     assert_predicate verifier, :present?
   end
 
-  test "purged_at persists on create when provided" do
-    purged_at = 2.days.from_now
+  test "purge_eligible_at persists on create when provided" do
+    purge_eligible_at = 2.days.from_now
     token = OperatorToken.create!(
       staff: @staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
-      purged_at: purged_at,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: purge_eligible_at,
     )
 
-    assert_equal purged_at.to_i, token.purged_at.to_i
+    assert_equal purge_eligible_at.to_i, token.purge_eligible_at.to_i
   end
 
-  test "purged_at is preserved when discarded_at changes" do
-    purged_at = 4.days.from_now
+  test "purge_eligible_at is preserved when discard_at changes" do
+    purge_eligible_at = 4.days.from_now
     token = OperatorToken.create!(
       staff: @staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
-      purged_at: purged_at,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: purge_eligible_at,
     )
     new_lapses_at = 2.days.from_now
 
-    token.update!(discarded_at: new_lapses_at)
+    token.update!(discard_at: new_lapses_at)
 
-    assert_equal purged_at.to_i, token.purged_at.to_i
+    assert_equal purge_eligible_at.to_i, token.purge_eligible_at.to_i
   end
 
   test "purgeability query returns only tokens purgeable at or before now" do
     staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
-    past_token = OperatorToken.create!(staff: staff, discarded_at: 20.minutes.ago, purged_at: 10.minutes.ago)
-    future_token = OperatorToken.create!(staff: staff, discarded_at: 10.minutes.ago, purged_at: 10.minutes.from_now)
+    past_token = OperatorToken.create!(staff: staff, discard_at: 20.minutes.ago, purge_eligible_at: 10.minutes.ago)
+    future_token = OperatorToken.create!(
+      staff: staff,
+      discard_at: 10.minutes.ago,
+      purge_eligible_at: 10.minutes.from_now,
+    )
 
-    purgeable_ids = OperatorToken.where(purged_at: ..Time.current).pluck(:id)
+    purgeable_ids = OperatorToken.where(purge_eligible_at: ..Time.current).pluck(:id)
 
     assert_includes purgeable_ids, past_token.id
     assert_not_includes purgeable_ids, future_token.id
@@ -377,9 +477,9 @@ class OperatorTokenTest < ActiveSupport::TestCase
     compromised_raw = compromised.rotate_refresh_token!
     expired_raw = expired.rotate_refresh_token!
     travel 1.minute do
-      revoked.update_columns(discarded_at: 30.seconds.ago)
-      expired.update_columns(discarded_at: 30.seconds.ago)
-      compromised.update!(discarded_at: Time.current)
+      revoked.update_columns(discard_at: 30.seconds.ago)
+      expired.update_columns(discard_at: 30.seconds.ago)
+      compromised.update!(discard_at: Time.current)
 
       revoked_digest = OperatorToken.digest_refresh_token(OperatorToken.parse_refresh_token(revoked_raw).last)
       compromised_digest = OperatorToken.digest_refresh_token(OperatorToken.parse_refresh_token(compromised_raw).last)

@@ -7,11 +7,10 @@
 # Database name: avatar
 #
 #  id                           :bigint           not null, primary key
-#  discarded_at                 :datetime         default(Infinity), not null
+#  discard_at                 :datetime         default(Infinity), not null
 #  image_data                   :jsonb
 #  lock_version                 :integer          default(0), not null
-#  moniker                      :string           not null
-#  purged_at                    :datetime         default(Infinity), not null
+#  purge_eligible_at                    :datetime         default(Infinity), not null
 #  created_at                   :datetime         not null
 #  updated_at                   :datetime         not null
 #  active_handle_id             :bigint           not null
@@ -29,7 +28,7 @@
 #  index_avatars_on_client_id                     (client_id)
 #  index_avatars_on_owner_organization_id         (owner_organization_id)
 #  index_avatars_on_public_id                     (public_id) UNIQUE
-#  index_avatars_on_purged_at                     (purged_at)
+#  index_avatars_on_purge_eligible_at                     (purge_eligible_at)
 #  index_avatars_on_representing_organization_id  (representing_organization_id)
 #
 # Foreign Keys
@@ -39,9 +38,10 @@
 #
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarTest < ActiveSupport::TestCase
-  fixtures :avatar_capabilities, :avatars, :handles
+  fixtures :avatar_capabilities
 
   setup do
     create_user_and_status
@@ -52,11 +52,26 @@ class AvatarTest < ActiveSupport::TestCase
     )
   end
 
+  test "current concrete organization ownership identifies one Enterprise independently of bindings" do
+    created = AvatarTestFactory.create_standard!(active_handle: AvatarTestFactory.create_handle!)
+    avatar = Avatar.preload(:avatar_persona_binding, :avatar_agent_binding).find(created.id)
+
+    assert_equal 1, avatar.enterprise_ownership_periods.current.count
+    assert_empty avatar.bureau_ownership_periods.current
+    period = avatar.enterprise_ownership_periods.current.sole
+    organization = Enterprise.find_by!(public_id: period.enterprise_public_id)
+
+    assert_equal "AvatarOrg", organization.title
+    assert_equal avatar.created_at, period.valid_from
+    assert_equal Float::INFINITY, period.valid_to
+    assert_nil avatar.avatar_persona_binding
+    assert_nil avatar.avatar_agent_binding
+  end
+
   test "valid avatar creation" do
     avatar = Avatar.new(
       capability: @capability,
       active_handle: @handle,
-      moniker: "Test Client",
       image_data: nil,
     )
 
@@ -66,51 +81,44 @@ class AvatarTest < ActiveSupport::TestCase
   end
 
   test "requires capability" do
-    avatar = Avatar.new(active_handle: @handle, moniker: "No Cap", capability_id: nil)
+    avatar = Avatar.new(active_handle: @handle, capability_id: nil)
 
     assert_not avatar.valid?
     assert_not_empty avatar.errors[:capability_id]
   end
 
   test "requires active_handle" do
-    avatar = Avatar.new(capability: @capability, moniker: "No Handle")
+    avatar = Avatar.new(capability: @capability)
 
     assert_predicate avatar, :valid?
     assert_raises(ActiveRecord::NotNullViolation) { avatar.save! }
   end
 
-  test "requires moniker" do
-    avatar = Avatar.new(capability: @capability, active_handle: @handle, moniker: "")
-
-    assert_not avatar.valid?
-    assert_not_empty avatar.errors[:moniker]
-  end
-
   test "default image_data is nil until an image is attached" do
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
+      moniker: "Default Image",
       capability: @capability,
       active_handle: @handle,
-      moniker: "Default Image",
     )
 
     assert_nil(avatar.image_data)
   end
 
   test "defaults lifecycle state to active for new avatars" do
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
+      moniker: "Default",
       capability: @capability,
       active_handle: @handle,
-      moniker: "Default Lifecycle",
     )
 
     assert_equal "active", avatar.lifecycle_state.key
   end
 
   test "requires lifecycle state id at database level" do
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
+      moniker: "Null Constraint",
       capability: @capability,
       active_handle: @handle,
-      moniker: "Lifecycle Null Constraint",
     )
 
     assert_raises(ActiveRecord::NotNullViolation) do
@@ -119,10 +127,10 @@ class AvatarTest < ActiveSupport::TestCase
   end
 
   test "rejects invalid lifecycle state id at database level" do
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
+      moniker: "FK Constraint",
       capability: @capability,
       active_handle: @handle,
-      moniker: "Lifecycle FK Constraint",
     )
 
     assert_raises(ActiveRecord::InvalidForeignKey) do
@@ -130,23 +138,15 @@ class AvatarTest < ActiveSupport::TestCase
     end
   end
 
-  test "moniker is invalid when only whitespace" do
-    avatar = Avatar.new(capability: @capability, active_handle: @handle, moniker: "   ")
-
-    assert_not avatar.valid?
-    assert_not_empty avatar.errors[:moniker]
-  end
-
   test "public_id uniqueness" do
-    @avatar = Avatar.create!(
+    @avatar = AvatarTestFactory.create!(
+      moniker: "Public ID",
       capability: @capability,
       active_handle: @handle,
-      moniker: "Public ID Uniqueness Test",
     )
     duplicate = Avatar.new(
       capability: @capability,
       active_handle: @handle,
-      moniker: "Another Moniker",
       public_id: @avatar.public_id,
     )
 
@@ -154,33 +154,37 @@ class AvatarTest < ActiveSupport::TestCase
     assert_not_empty duplicate.errors[:public_id]
   end
 
-  test "create_with_owner creates avatar and assigns owner" do
+  test "create_with_owner delegates with an explicit owner and stores the period" do
     create_user_and_status
     user = Client.find_by!(public_id: "one_id")
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
 
     avatar = nil
-    assert_difference ["Avatar.count", "AvatarAssignment.count", "AvatarPersonaBinding.active.count"], 1 do
+    assert_difference ["Avatar.count", "AvatarPersonaBinding.active.count", "AvatarOwnershipPeriod.current.count"], 1 do
       avatar = Avatar.create_with_owner(
         {
           subject_type: :persona,
           subject: bootstrap.account,
           handle_params: { handle: "owned-avatar-wrapper" },
           moniker: "Owned Avatar",
-          organization_public_id: bootstrap.collective.public_id,
+          owner_surface: "app",
+          owner_collective_public_id: bootstrap.collective.public_id,
         }, user,
       )
     end
 
-    assert_equal user, avatar.owner
-    assert_includes avatar.avatar_assignments.pluck(:role), "owner"
+    assert_equal "app", avatar.current_ownership_period.owner_surface
+    assert_equal bootstrap.collective.public_id, avatar.current_ownership_period.owner_collective_public_id
+    assert_empty avatar.avatar_assignments
     assert_equal bootstrap.account, avatar.current_persona
   end
 
   test "role associations" do
     user = Client.find_by!(public_id: "one_id")
-    avatar = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Role Test")
+    avatar = AvatarTestFactory.create!(
+      moniker: "Role Test", capability: @capability, active_handle: @handle,
+    )
 
     # Affiliation
     avatar.avatar_assignments.create!(user_id: user.id, role: "affiliation")
@@ -209,8 +213,8 @@ class AvatarTest < ActiveSupport::TestCase
   end
 
   test "social associations: follows" do
-    follower = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Follower")
-    followed = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Followed")
+    follower = AvatarTestFactory.create!(moniker: "Follower", capability: @capability, active_handle: @handle)
+    followed = AvatarTestFactory.create!(moniker: "Followed", capability: @capability, active_handle: @handle)
 
     follower.outgoing_follows.create!(followed_avatar: followed)
 
@@ -219,8 +223,8 @@ class AvatarTest < ActiveSupport::TestCase
   end
 
   test "social associations: blocks" do
-    blocker = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Blocker")
-    blocked = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Blocked")
+    blocker = AvatarTestFactory.create!(moniker: "Blocker", capability: @capability, active_handle: @handle)
+    blocked = AvatarTestFactory.create!(moniker: "Blocked", capability: @capability, active_handle: @handle)
 
     blocker.outgoing_blocks.create!(blocked_avatar: blocked)
 
@@ -228,38 +232,30 @@ class AvatarTest < ActiveSupport::TestCase
   end
 
   test "social associations: mutes" do
-    muter = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Muter")
-    muted = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Muted")
+    muter = AvatarTestFactory.create!(moniker: "Muter", capability: @capability, active_handle: @handle)
+    muted = AvatarTestFactory.create!(moniker: "Muted", capability: @capability, active_handle: @handle)
 
     muter.outgoing_mutes.create!(muted_avatar: muted)
 
     assert_includes muter.muted_avatars, muted
   end
 
-  test "dependent associations" do
-    avatar = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Dependent Test")
-    user = Client.find_by!(public_id: "one_id")
+  test "concrete ownership history prevents Avatar physical deletion" do
+    avatar = AvatarTestFactory.create!(
+      moniker: "Protected Avatar", capability: @capability, active_handle: @handle,
+    )
 
-    # Assignments
-    avatar.avatar_assignments.create!(user_id: user.id, role: "viewer")
-    # Follows
-    other = Avatar.create!(capability: @capability, active_handle: @handle, moniker: "Other")
-    avatar.outgoing_follows.create!(followed_avatar: other)
-    avatar.incoming_follows.create!(follower_avatar: other)
-    # Blocks
-    avatar.outgoing_blocks.create!(blocked_avatar: other)
-    # Mutes
-    avatar.outgoing_mutes.create!(muted_avatar: other)
-
-    assert_difference "AvatarAssignment.count", -1 do
-      assert_difference "AvatarFollow.count", -2 do
-        assert_difference "AvatarBlock.count", -1 do
-          assert_difference "AvatarMute.count", -1 do
-            Prosopite.pause { avatar.destroy }
-          end
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        Avatar.transaction(requires_new: true) do
+          Avatar.where(id: avatar.id).delete_all
         end
       end
-    end
+
+    assert_kind_of PG::RestrictViolation, error.cause
+    assert_match(/ownership|avatar_enterprise_ownership_periods/i, error.message)
+    assert Avatar.exists?(avatar.id)
+    assert AvatarEnterpriseOwnershipPeriod.exists?(avatar_id: avatar.id)
   end
 
   def create_user_and_status

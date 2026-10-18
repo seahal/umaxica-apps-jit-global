@@ -100,7 +100,9 @@ function AppealForm({
         name={`${form.scope}[reason_code]`}
         options={form.reason_codes}
         value={reasonCode}
-        onChange={(value) => setReasonCode(value === null ? "" : String(value))}
+        onChange={(value) => {
+          setReasonCode(value);
+        }}
       />
 
       <TextField
@@ -138,7 +140,7 @@ export default function EnforcementRecoveryShow({
       {appealError ? (
         <p
           role="alert"
-          className="rounded-md border border-danger bg-surface p-3 text-sm text-danger"
+          className="rounded-md border border-danger bg-surface p-3 text-base text-error"
         >
           {appealError}
         </p>
@@ -149,7 +151,7 @@ export default function EnforcementRecoveryShow({
           key={enforcementCase.public_id}
           className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-4"
         >
-          <p className="text-sm font-medium text-fg">{enforcementCase.kind_label}</p>
+          <h2 className="text-xl font-semibold text-fg">{enforcementCase.kind_label}</h2>
           <RestoreForm
             action={enforcementCase.restore}
             enforcementCaseId={enforcementCase.public_id}

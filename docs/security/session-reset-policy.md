@@ -48,7 +48,9 @@ The placement order of `reset_session` upon completion of step-up is a safety re
   already been consumed, it will not be destroyed by reset.
 - Since `return_to` / `scope` was made into a local variable before the DB transaction, it is
   retained even after reset.
-- The step-up session is DB persistent (`rs.destroy!`) and is not affected by Rails session resets.
+- The step-up session is consumed under its PostgreSQL row lock and destroyed before the completion
+  transaction commits. It is not affected by Rails session resets, and a concurrent request cannot
+  consume the same ticket twice.
 - `flash` is stored in the Rails session, so `reset_session` is `flash[:notice]` It must be placed
   **before** the assignment (if it is later, the success notification will disappear).
 

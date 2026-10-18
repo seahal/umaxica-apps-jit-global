@@ -1,0 +1,79 @@
+# typed: false
+# frozen_string_literal: true
+
+# Base-local sign-out finishes on a one-shot GET /sign/out representation rather than a
+# reloadable completion page.
+#
+# `logout_current_session!` resets the Rails session. The one-time completion marker must be
+# written after that reset so the following 303 can still read it. Rails flash is not used;
+# `SignOutNotice` is the existing presentation-only transport for this one-shot message.
+module BaseSignOutDestination
+  private
+
+  def finish_local_sign_out!
+    if current_resource.present? || current_session_public_id.present?
+      logout_current_session!(reason: "user_logout")
+    end
+
+    redirect_to(sign_out_home_path, status: :see_other)
+  end
+
+  def sign_out_finished_path
+    public_send("#{sign_out_route_helper_prefix}_sign_out_path", **sign_out_finished_route_params)
+  end
+
+  def sign_out_finished_route_params
+    { ri: sign_out_route_params[:ri] }.compact
+  end
+
+  def render_oidc_end_session_confirmation
+    @sign_out_notice = consume_sign_out_notice
+    props = sign_out_edit_page_props
+    # The confirmation title asks a question; once nothing is left to sign out of, the page states
+    # the signed-out result instead.
+    props = props.merge(title: I18n.t("sign.shared.sign_out.completed_title")) unless props[:active]
+    if @sign_out_notice.present?
+      props = props.merge(
+        title: I18n.t("sign.shared.sign_out.completed_title"),
+        notice: { title: I18n.t("sign.shared.sign_out.completed_title") },
+        description: sign_out_completed_description,
+      )
+    end
+    render inertia: "#{controller_path}/edit",
+           props: props,
+           status: :ok,
+           # The notice is a presentation-only message and can be missing (for example when its
+           # Valkey store is unavailable); the session-termination flag still decides the clear.
+           clear_history: @sign_out_notice.present? || session[:inertia_clear_history] == true
+  end
+
+  def render_browser_rp_logout_continuation!
+    render inertia: "#{controller_path}/edit",
+           props: sign_out_edit_page_props(back_to_dashboard: true),
+           status: :ok
+  end
+
+  def render_oidc_rp_logout_completion
+    render_oidc_end_session_confirmation
+  end
+
+  def render_oidc_logout_completion
+    render_oidc_end_session_confirmation
+  end
+
+  # The authenticated sign-out confirmation returns to Dashboard.
+  def sign_out_root_path
+    public_send(
+      "#{sign_out_route_helper_prefix}_dashboard_path",
+      **sign_out_route_params.slice(:ri).compact,
+    )
+  end
+
+  def sign_out_return_link_props(back_to_dashboard:)
+    if back_to_dashboard
+      { back_link: { label: t("actions.cancel"), href: sign_out_root_path } }
+    else
+      { home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path } }
+    end
+  end
+end

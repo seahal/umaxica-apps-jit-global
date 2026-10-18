@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: client_member_impersonations
@@ -20,8 +22,6 @@
 #  fk_rails_...  (member_id => members.id)
 #  fk_rails_...  (user_id => clients.id)
 #
-
-# frozen_string_literal: true
 
 class ClientMemberImpersonation < AppPrincipalRecord
   belongs_to :user, class_name: "Client", inverse_of: :client_member_impersonations

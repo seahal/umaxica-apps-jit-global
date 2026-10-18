@@ -4,12 +4,12 @@
 # == Schema Information
 #
 # Table name: client_token_statuses
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id :bigint           not null, primary key
 #
 
-class ClientTokenStatus < AppTicketRecord
+class ClientTokenStatus < OpBaseAppRecord
   include ReferenceRecord
 
   NOTHING = 0

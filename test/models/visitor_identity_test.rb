@@ -57,7 +57,7 @@ class VisitorIdentityTest < ActiveSupport::TestCase
       address: "visitor-#{SecureRandom.hex(4)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate visitor, :verified_email?
     assert_predicate visitor, :has_verified_recovery_identity?
@@ -66,7 +66,7 @@ class VisitorIdentityTest < ActiveSupport::TestCase
       number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate visitor, :verified_telephone?
   end
@@ -79,7 +79,9 @@ class VisitorIdentityTest < ActiveSupport::TestCase
     assert_includes secret_credential.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
   end
 
-  test "visitor passkey requires verified recovery identity" do
+  # D-90: a usable Identity with a usable passkey may hold zero contacts, so a passkey no longer
+  # requires a verified contact. The recovery secret above still does.
+  test "visitor passkey does not require a verified contact" do
     visitor = Visitor.create!
     passkey = VisitorPasskey.new(
       visitor: visitor,
@@ -89,8 +91,9 @@ class VisitorIdentityTest < ActiveSupport::TestCase
       description: "Visitor Passkey",
     )
 
-    assert_not passkey.valid?
-    assert_includes passkey.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
+    passkey.valid?
+
+    assert_not_includes passkey.errors[:base], Visitor::RECOVERY_IDENTITY_REQUIRED_MESSAGE
   end
 
   test "creates visitor identity mapping" do

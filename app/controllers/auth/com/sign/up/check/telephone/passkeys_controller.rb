@@ -17,7 +17,6 @@ module Auth
 
               AUTHENTICATION_MODE = :guest
 
-              before_action :hide_sign_up_auth_navigation
               before_action :load_sign_up_ticket
               before_action :load_sign_up_actor
               before_action :validate_sign_up_checkpoint_contact!
@@ -65,7 +64,10 @@ module Auth
               # The same two endpoints the Stimulus registration controller used, and the same
               # checkpoint version the server re-validates before it clears the requirement.
               def render_sign_up_passkey_page
-                path = auth_com_sign_up_check_telephone_passkey_path(ri: params[:ri], pt: signed_pt_param)
+                path = auth_com_sign_up_check_telephone_passkey_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
 
                 render inertia: "auth/com/sign/up/checkpoint/passkeys/new",
                        props: {
@@ -83,7 +85,10 @@ module Auth
               end
 
               def success_redirect_url
-                auth_com_sign_up_check_telephone_passcode_path(ri: params[:ri], pt: signed_pt_param)
+                auth_com_sign_up_check_telephone_birthdate_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
               end
 
               def load_sign_up_actor
@@ -96,7 +101,7 @@ module Auth
 
               def passkey_registration_actor = @sign_up_actor
 
-              def passkey_registration_passkeys = @sign_up_actor.visitor_passkeys
+              def passkey_registration_passkeys = VisitorPasskey.where(visitor_id: @sign_up_actor.id)
 
               def save_passkey_registration!(passkey)
                 passkey.valid?

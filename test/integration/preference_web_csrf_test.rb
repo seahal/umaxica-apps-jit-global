@@ -10,21 +10,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(ENV.fetch("PUBLIC_BASE_SERVICE_URL"))
 
     patch(
-      base_app_web_v0_theme_path, params: { theme: "dark" },
-                                  headers: {
-                                    "Accept" => "application/json",
-                                    "Sec-Fetch-Site" => "cross-site",
-                                  }, as: :json,
+      base_app_api_v0_preferences_theme_path, params: { theme: "dark" },
+                                              headers: {
+                                                "Accept" => "application/json",
+                                                "Sec-Fetch-Site" => "cross-site",
+                                              }, as: :json,
     )
 
     assert_response :forbidden
 
     patch(
-      base_app_web_v0_cookie_path, params: { consented: true },
-                                   headers: {
-                                     "Accept" => "application/json",
-                                     "Sec-Fetch-Site" => "cross-site",
-                                   }, as: :json,
+      base_app_api_v0_preferences_cookie_path, params: { consented: true },
+                                               headers: {
+                                                 "Accept" => "application/json",
+                                                 "Sec-Fetch-Site" => "cross-site",
+                                               }, as: :json,
     )
 
     assert_response :forbidden
@@ -42,21 +42,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(ENV.fetch("PUBLIC_BASE_CORPORATE_URL"))
 
     patch(
-      base_com_web_v0_theme_path, params: { theme: "dark" },
-                                  headers: {
-                                    "Accept" => "application/json",
-                                    "Sec-Fetch-Site" => "cross-site",
-                                  }, as: :json,
+      base_com_api_v0_preferences_theme_path, params: { theme: "dark" },
+                                              headers: {
+                                                "Accept" => "application/json",
+                                                "Sec-Fetch-Site" => "cross-site",
+                                              }, as: :json,
     )
 
     assert_response :forbidden
 
     patch(
-      base_com_web_v0_cookie_path, params: { consented: true },
-                                   headers: {
-                                     "Accept" => "application/json",
-                                     "Sec-Fetch-Site" => "cross-site",
-                                   }, as: :json,
+      base_com_api_v0_preferences_cookie_path, params: { consented: true },
+                                               headers: {
+                                                 "Accept" => "application/json",
+                                                 "Sec-Fetch-Site" => "cross-site",
+                                               }, as: :json,
     )
 
     assert_response :forbidden
@@ -74,21 +74,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(ENV.fetch("PUBLIC_BASE_STAFF_URL"))
 
     patch(
-      base_org_web_v0_theme_path, params: { theme: "dark" },
-                                  headers: {
-                                    "Accept" => "application/json",
-                                    "Sec-Fetch-Site" => "cross-site",
-                                  }, as: :json,
+      base_org_api_v0_preferences_theme_path, params: { theme: "dark" },
+                                              headers: {
+                                                "Accept" => "application/json",
+                                                "Sec-Fetch-Site" => "cross-site",
+                                              }, as: :json,
     )
 
     assert_response :forbidden
 
     patch(
-      base_org_web_v0_cookie_path, params: { consented: true },
-                                   headers: {
-                                     "Accept" => "application/json",
-                                     "Sec-Fetch-Site" => "cross-site",
-                                   }, as: :json,
+      base_org_api_v0_preferences_cookie_path, params: { consented: true },
+                                               headers: {
+                                                 "Accept" => "application/json",
+                                                 "Sec-Fetch-Site" => "cross-site",
+                                               }, as: :json,
     )
 
     assert_response :forbidden
@@ -100,24 +100,30 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       Rails.configuration.action_controller.allow_forgery_protection
   end
 
-  test "same-origin strict-mode POST reaches app controller without a CSRF rejection" do
+  test "same-origin preference mutations require valid tokens across Base surfaces" do
     ActionController::Base.allow_forgery_protection = true
 
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    host!(host)
+    endpoints = [
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_api_v0_preferences_theme_path],
+    ]
 
-    patch(
-      base_app_web_v0_theme_path,
-      params: { theme: "dark" },
-      headers: {
-        "Accept" => "application/json",
-        "Origin" => "http://#{host}",
-        "Sec-Fetch-Site" => "same-origin",
-      },
-      as: :json,
-    )
+    endpoints.each do |host, path|
+      host!(host)
+      [nil, "invalid-token"].each do |token|
+        headers = {
+          "Accept" => "application/json",
+          "Origin" => "http://#{host}",
+          "Sec-Fetch-Site" => "same-origin",
+        }
+        headers["X-CSRF-Token"] = token if token
 
-    assert_not_equal I18n.t("errors.invalid_authenticity_token"), response.parsed_body["error"]
+        patch(path, params: { theme: "dark" }, headers:, as: :json)
+
+        assert_response :forbidden
+      end
+    end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
     # already leaked as true, restoring the observation would pin the leak for the rest
@@ -126,13 +132,13 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       Rails.configuration.action_controller.allow_forgery_protection
   end
 
-  test "same-site strict-mode POST reaches allowed base surfaces without a CSRF rejection" do
+  test "same-site preference mutations without tokens are refused on base surfaces" do
     ActionController::Base.allow_forgery_protection = true
 
     [
-      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_web_v0_theme_path],
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_api_v0_preferences_theme_path],
     ].each do |host, path|
       host!(host)
       patch(
@@ -146,7 +152,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_not_equal 403, response.status
+      assert_response :forbidden
     end
   ensure
     # Restore the environment default, not the value observed on entry: if the flag was
@@ -156,13 +162,13 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       Rails.configuration.action_controller.allow_forgery_protection
   end
 
-  test "same-site POST without an Origin is forbidden on base surfaces" do
+  test "same-site preference mutations without Origin still require tokens on base surfaces" do
     ActionController::Base.allow_forgery_protection = true
 
     [
-      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_web_v0_theme_path],
-      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_web_v0_theme_path],
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), base_app_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), base_com_api_v0_preferences_theme_path],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL"), base_org_api_v0_preferences_theme_path],
     ].each do |host, path|
       host!(host)
       patch(
@@ -192,7 +198,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(host)
 
     patch(
-      base_app_web_v0_theme_path,
+      base_app_api_v0_preferences_theme_path,
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -228,7 +234,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}:444",
     ].each do |origin|
       patch(
-        base_app_web_v0_theme_path,
+        base_app_api_v0_preferences_theme_path,
         params: { theme: "dark" },
         headers: {
           "Accept" => "application/json",
@@ -256,7 +262,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(host)
 
     patch(
-      base_app_web_v0_theme_path,
+      base_app_api_v0_preferences_theme_path,
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -280,14 +286,15 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
+    https!
 
     user = Client.first
     session_record = ClientToken.create!(
       user: user,
-      user_token_status_id: ClientTokenStatus::NOTHING,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "csrf_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     auth_headers = {
       "Accept" => "text/html",
@@ -296,6 +303,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       )}",
       "X-TEST-SESSION-PUBLIC-ID" => session_record.public_id,
     }
+
+    registered_rp = OidcClientRegistry.find!("base-app-ww")
+    rp_session = OpAppGrant.create!(
+      client_token: session_record, oidc_client_id: registered_rp.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      user, host: host, resource_type: "client", session_public_id: session_record.public_id,
+            base_session_public_id: session_record.public_id, oidc_sid: rp_session.public_id,
+            oidc_jti: rp_session.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+            issuer: OidcIssuer.for_client(registered_rp), audiences: [registered_rp.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(registered_rp),
+            subject: OidcSubject.for(user, resource_type: "client"), client_id: registered_rp.client_id,
+    )
 
     get(base_app_identity_emails_path(ri: "jp"), headers: auth_headers)
 
@@ -306,7 +328,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_predicate token, :present?
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
+      params: { theme: "dark" },
+      headers: {
+        "Accept" => "application/json",
+        "Origin" => "https://#{host}",
+        "X-CSRF-Token" => token,
+        "Sec-Fetch-Site" => "same-origin",
+      },
+      as: :json,
+    )
+
+    assert_response :success
+
+    patch(
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
@@ -335,14 +371,13 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     host!(host)
 
     patch(
-      base_app_web_v0_theme_path,
+      base_app_api_v0_preferences_theme_path,
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => token,
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent: the hybrid strategy uses this session-bound token fallback.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
@@ -362,14 +397,15 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
+    https!
 
     user = Client.first
     session_record = ClientToken.create!(
       user: user,
-      user_token_status_id: ClientTokenStatus::NOTHING,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "csrf_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     auth_headers = {
       "Accept" => "text/html",
@@ -378,6 +414,21 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       )}",
       "X-TEST-SESSION-PUBLIC-ID" => session_record.public_id,
     }
+
+    registered_rp = OidcClientRegistry.find!("base-app-ww")
+    rp_session = OpAppGrant.create!(
+      client_token: session_record, oidc_client_id: registered_rp.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      user, host: host, resource_type: "client", session_public_id: session_record.public_id,
+            base_session_public_id: session_record.public_id, oidc_sid: rp_session.public_id,
+            oidc_jti: rp_session.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+            issuer: OidcIssuer.for_client(registered_rp), audiences: [registered_rp.aud],
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(registered_rp),
+            subject: OidcSubject.for(user, resource_type: "client"), client_id: registered_rp.client_id,
+    )
 
     get(base_app_identity_emails_path(ri: "jp"), headers: auth_headers)
 
@@ -388,33 +439,31 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_predicate token, :present?
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => token,
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent. Base still requires the session-bound token for this request.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
     )
 
-    assert_not_equal 403, response.status
+    assert_response :success
 
     second_session = open_session
     second_session.host!(host)
+    second_session.https!
     second_session.patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => token,
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
-        "Sec-Fetch-Site" => "",
+        "Sec-Fetch-Site" => "same-origin",
       },
       as: :json,
     )
@@ -422,14 +471,13 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_equal 403, second_session.response.status
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
         "X-CSRF-Token" => "invalid-token",
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent. Base requires a valid session-bound token for this request.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
@@ -438,13 +486,12 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     assert_response :forbidden
 
     patch(
-      base_app_web_v0_theme_path(ri: "jp"),
+      base_app_api_v0_preferences_theme_path(ri: "jp"),
       params: { theme: "dark" },
       headers: {
         "Accept" => "application/json",
         "Origin" => "https://#{host}",
-        # Empty means absent: FetchMetadataDefaults injects same-origin unless the test
-        # states the header itself, and same-origin never reaches the legacy token path.
+        # Empty means absent. Base requires a valid session-bound token for this request.
         "Sec-Fetch-Site" => "",
       },
       as: :json,
@@ -466,15 +513,6 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     post(
       base_app_oauth_token_path,
       params: { grant_type: "client_credentials" },
-      headers: { "Accept" => "application/json", "Sec-Fetch-Site" => "cross-site" },
-      as: :json,
-    )
-
-    assert_not_equal 403, response.status
-
-    post(
-      auth_app_oidc_backchannel_logout_url(host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL")),
-      params: { logout_token: "invalid" },
       headers: { "Accept" => "application/json", "Sec-Fetch-Site" => "cross-site" },
       as: :json,
     )

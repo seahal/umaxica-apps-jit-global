@@ -25,4 +25,32 @@ class VisitorEmailPolicy < ApplicationPolicy
   def destroy?
     owner?
   end
+
+  def credential_registration_requirement(token:)
+    unless user.is_a?(Visitor) && user.persisted? && record.is_a?(VisitorEmail) &&
+        record.visitor_id == user.id && token.is_a?(VisitorToken) && token.persisted? &&
+        token.visitor_id == user.id
+      raise ArgumentError, "Contact registration requirement binding is invalid"
+    end
+
+    StepUpRequirement.new(
+      step_up_required: true,
+      scope: "settings_email",
+      allowed_methods: %i(email_otp passkey totp),
+      phishing_resistant_required: false,
+      user_verification_required: false,
+      full_reauthentication_required: false,
+      session_binding: token.public_id,
+      token_binding: token.public_id,
+      ttl: 15.minutes,
+      purpose: "step_up",
+      audience: "step_up:com",
+      require_session_binding: true,
+      actor_ref: user.public_id,
+      resource_ref: nil,
+      tenant_ref: nil,
+    )
+  end
+
+  public :credential_registration_requirement
 end

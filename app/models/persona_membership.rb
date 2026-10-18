@@ -57,7 +57,7 @@ class PersonaMembership < AppRpRecord
                                collective_foreign_key: :enterprise_id,
                                unit_association_name: :enterprise_unit
 
-  belongs_to :persona, inverse_of: :persona_memberships
+  belongs_to :persona, class_name: "ClientPersona", inverse_of: :persona_memberships
   belongs_to :enterprise, inverse_of: :persona_memberships
   belongs_to :enterprise_unit, inverse_of: :persona_memberships
   belongs_to :membership_kind,
@@ -69,9 +69,9 @@ class PersonaMembership < AppRpRecord
   belongs_to :revoke_reason,
              class_name: "PersonaMembershipRevokeReason",
              inverse_of: :persona_memberships
-  belongs_to :granted_by_persona, class_name: "Persona", inverse_of: false
-  belongs_to :approved_by_persona, class_name: "Persona", inverse_of: false
-  belongs_to :revoked_by_persona, class_name: "Persona", inverse_of: false
+  belongs_to :granted_by_persona, class_name: "ClientPersona", inverse_of: false
+  belongs_to :approved_by_persona, class_name: "ClientPersona", inverse_of: false
+  belongs_to :revoked_by_persona, class_name: "ClientPersona", inverse_of: false
 
   validates :persona_id,
             uniqueness: {

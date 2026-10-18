@@ -9,11 +9,11 @@ class StandardErrorRescueInventoryTest < ActiveSupport::TestCase
 
   REVIEWED_RESCUES = {
     "app/controllers/concerns/actor_support.rb" => {
-      count: 6,
+      count: 4,
       classification: "auth boundary; each rescue logs and re-raises ActorSupport::ResolutionError",
     },
     "app/controllers/concerns/authentication_logoutable.rb" => {
-      count: 5,
+      count: 4,
       classification: "logout boundary; each rescue logs and re-raises after session cleanup",
     },
     "app/controllers/concerns/social_callback_guard.rb" => {
@@ -44,33 +44,19 @@ class StandardErrorRescueInventoryTest < ActiveSupport::TestCase
       count: 1,
       classification: "preference persistence side effect; resolution errors are re-raised separately",
     },
-    "app/controllers/concerns/preference_resource_sync.rb" => {
-      count: 1,
-      classification: "preference resource sync side effect; resolution errors are re-raised separately",
-    },
     "app/controllers/concerns/preference_transport.rb" => {
       count: 1,
       classification: "preference refresh transport side effect; resolution errors are re-raised separately",
     },
     "app/controllers/concerns/authentication_base.rb" => {
-      count: 5,
-      classification: "mixed legacy inventory; each site needs follow-up before changing behavior",
+      count: 3,
+      # The refresh-path and redirect-path broad fallbacks were removed: issuer, database, and
+      # redirect construction failures must propagate instead of becoming guessed destinations.
+      classification: "mixed legacy inventory; each remaining site needs follow-up before changing behavior",
     },
     "app/controllers/concerns/passkey_sign_in_flow.rb" => {
       count: 2,
       classification: "WebAuthn options error response and best-effort risk emission boundaries",
-    },
-    "app/controllers/auth/app/sign/in/secrets_controller.rb" => {
-      count: 2,
-      classification: "secret_credential sign-in error response boundary; follow-up required",
-    },
-    "app/controllers/auth/com/sign/in/secrets_controller.rb" => {
-      count: 1,
-      classification: "secret_credential sign-in error response boundary; follow-up required",
-    },
-    "app/controllers/auth/org/sign/in/secrets_controller.rb" => {
-      count: 1,
-      classification: "secret_credential sign-in error response boundary; follow-up required",
     },
   }.freeze
 

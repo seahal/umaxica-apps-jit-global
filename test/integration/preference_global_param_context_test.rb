@@ -357,7 +357,12 @@ class PreferenceGlobalParamContextTest < ActionDispatch::IntegrationTest
       if href.start_with?("/")
         true
       else
-        uri = URI.parse(href) rescue nil
+        uri =
+          begin
+            URI.parse(href)
+          rescue StandardError
+            nil
+          end
         uri&.host && allowed_hosts.include?(uri.host)
       end
     end

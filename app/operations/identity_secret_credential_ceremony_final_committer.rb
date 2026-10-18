@@ -3,16 +3,6 @@
 
 class IdentitySecretCredentialCeremonyFinalCommitter
   CONFIG = {
-    "app" => {
-      record_class: ClientSecretCredential,
-      owner_association: :client_secret_credentials,
-      status_key: :user_identity_secret_status_id,
-      active_status_id: ClientSecretCredentialStatus::ACTIVE,
-      revoked_status_id: ClientSecretCredentialStatus::REVOKED,
-      max_count: ClientSecretCredential::MAX_SECRETS_PER_USER,
-      audit_event_id: ClientChronicleEvent::USER_SECRET_CREATED,
-      audit_action: ClientSecretCredentialsCreate::ACTION,
-    },
     "com" => {
       record_class: VisitorSecretCredential,
       owner_association: :visitor_secret_credentials,
@@ -58,6 +48,7 @@ class IdentitySecretCredentialCeremonyFinalCommitter
   end
 
   def call!
+    config
     validate_actor_binding!
     validate_transaction_state!
     candidate = fetch_candidate!

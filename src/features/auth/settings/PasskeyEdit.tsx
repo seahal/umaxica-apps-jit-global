@@ -80,7 +80,7 @@ export default function PasskeyEdit({
           <TextLink
             href={cancelLink.href}
             tone="muted"
-            className="text-sm"
+            className="text-base"
           >
             {cancelLink.label}
           </TextLink>

@@ -1,0 +1,89 @@
+# Base Lobby Unauthenticated Entry
+
+> **Supersession (2026-09-13):** Base `/lobby` and Auth/Base `/dashboard` are retired; Root owns
+> public and authenticated homes. See `adr/base-auth-ceremony-and-seven-rp-boundary.md`.
+
+> The historical `base-rails-rp` completion example below is retained for migration context only.
+> It must not be used to restore a shared browser RP registration; current surface-specific
+> registrations are defined by the cited ADR.
+
+## Status
+
+Accepted; partially superseded (2026-09-13) (2026-09-11)
+
+Amends `adr/logout-ceremony-boundary.md` for Base completion destination only.
+
+## Context
+
+Base local sign-out finished on `GET /sign/out/complete`. That page is a normal GET resource, so a
+browser can open, reload, or bookmark it as if a sign-out had just happened. The intended contract
+is Post/Redirect/Get: the mutation lives on `POST /sign/out`, and the next GET is the canonical
+unauthenticated entry.
+
+Base `/` already owns regional-host redirect and the existing unauthenticated landing. That behavior
+stays. The missing named resource is a stable anonymous entry that authenticated actors must not
+see.
+
+Rails flash remains forbidden (`generic/no-flash-messages.mdc`). Sign-out already has a
+session-bound, one-time marker in `SignOutNotice`. That marker is the transport for the one-shot
+completion message.
+
+Base local sign-out continues to finish at `/lobby`. In the separate authority-driven Browser RP
+flow, Base Self-RP, Core, Warp, Edit, Palm and Tech use their exact registered
+`/sign/out/completion?ri=jp|us` destination for origin cleanup. The all-client route and registration
+contract is owned by `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`;
+Palm and Tech's participation is recorded in `adr/tech-and-palm-browser-rp-participation.md`.
+
+## Decision
+
+Base entry points are:
+
+```text
+GET /
+  existing regional redirect and landing behavior
+
+GET /lobby
+  canonical unauthenticated entry
+  anonymous -> 200
+  authenticated -> redirect to /dashboard
+
+GET /dashboard
+  canonical authenticated entry
+```
+
+Base local sign-out is:
+
+```text
+POST /sign/out
+  authentication and session cleanup
+  reset_session
+  issue SignOutNotice into the fresh session
+  303 See Other -> GET /lobby?ri=...
+```
+
+`GET /lobby` consumes the notice. A later GET does not keep showing it. The lobby after a just
+completed sign-out sets Inertia `clearHistory` so Back cannot restore a signed-in page.
+
+`GET /sign/out/complete` is removed from Base app, com, and org. Base local sign-out still redirects
+to `/lobby`. Base Self-RP `post_logout_redirect_uri` registrations and its authority-driven logout
+transaction completion URLs use `/sign/out/completion?ri=jp|us`, with exact client and region binding.
+Historically, Side hosts registered on `base-rails-rp` completed at `/sign/out/complete`; that
+sentence is retained only as migration context and is not a current registration instruction.
+
+GET is never a logout mutation.
+
+## Consequences
+
+- Anonymous Base visitors have a named entry that can receive a one-shot sign-out message.
+- Authenticated visitors cannot stay on `/lobby`.
+- `/` is unchanged.
+- Rails flash is not reintroduced.
+- Base local sign-out continues to use `/lobby`; Base Self-RP and the other participating Browser
+  RPs use `/sign/out/completion` for authority-driven origin cleanup.
+
+## Related
+
+- `adr/logout-ceremony-boundary.md`
+- `adr/logout-completion-boundary.md`
+- `docs/security/logout-sequence.md`
+- `.agents/harnesses/rules/generic/no-flash-messages.mdc`

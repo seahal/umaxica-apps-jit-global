@@ -1,5 +1,14 @@
 # Security Design Documentation
 
+> **Current UMAXICA contract (2026-10-07):** The OTP/HOTP material below is retained as historical
+> generic guidance and is not the authority for the current Email or Telephone implementation. The
+> current contract uses separate channel policies and ceremony-owned, purpose-bound keyed
+> random-code verifiers. Identifier-owned `otp_private_key`, `otp_counter` and equivalent HOTP proof
+> material are retired, and no fallback may reconstruct them. See
+> [`adr/realm-separated-identifiers-and-dead-history.md`](../adr/realm-separated-identifiers-and-dead-history.md)
+> and [`docs/security/otp-audit.md`](security/otp-audit.md) for the current ownership and migration
+> boundary.
+
 ## Passcode Design
 
 ### High-Entropy Passcode with Argon2 Hashing
@@ -58,7 +67,12 @@ offline attacks.
 
 ---
 
-## OTP/HOTP Security Best Practices
+## Historical OTP/HOTP Security Guidance (not a current implementation recommendation)
+
+The remainder of this section preserves an older design discussion for traceability. Its examples
+describe identifier-owned HOTP storage and must not be used to design or restore the current
+Email/Telephone flow. The current contract uses independent channel policies and
+ceremony-owned keyed random-code verifiers as stated at the top of this document.
 
 ### Overview
 

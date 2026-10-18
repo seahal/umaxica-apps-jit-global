@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 class AvatarSocialGraphFollowTest < ActiveSupport::TestCase
@@ -29,8 +30,8 @@ class AvatarSocialGraphFollowTest < ActiveSupport::TestCase
   end
 
   test "follow is idempotent when already following" do
-    actor = create_avatar("Existing Follower")
-    target = create_avatar("Existing Followed")
+    actor = create_avatar("Old Follower")
+    target = create_avatar("Old Followed")
     existing = actor.outgoing_follows.create!(followed_avatar: target)
 
     follow = AvatarSocialGraph::Follow.call(actor_avatar: actor, target_avatar: target)
@@ -73,6 +74,6 @@ class AvatarSocialGraphFollowTest < ActiveSupport::TestCase
   private
 
   def create_avatar(moniker)
-    Avatar.create!(capability: @capability, active_handle: @handle, moniker: moniker)
+    AvatarTestFactory.create!(moniker: moniker, capability: @capability, active_handle: @handle)
   end
 end

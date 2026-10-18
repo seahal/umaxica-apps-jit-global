@@ -1,5 +1,5 @@
 import Card from "@/components/ui/Card";
-import Page from "@/components/ui/Page";
+import Page, { type PageUpLink } from "@/components/ui/Page";
 // The signed-in landing of an auth surface.
 //
 // It is a directory of the ceremonies the surface owns. Every entry arrives resolved from the
@@ -21,16 +21,23 @@ export type DashboardGroup = {
 
 export type DashboardSection = {
   heading: string;
+  current_identity?: {
+    display_name: string;
+    /** Server-derived, same-origin image of the selected Avatar; absent when none exists. */
+    avatar_image?: { src: string } | null;
+  };
   items?: DashboardItem[];
   groups?: DashboardGroup[];
 };
 
 export type SurfaceDashboardProps = {
   title: string;
-  description: string;
+  description?: string;
   sections: DashboardSection[];
   /** Absent unless the server decided this actor should be prompted to add a credential. */
   credential_warning?: CredentialWarningProps | null;
+  /** Absent on the dashboard itself; identity and similar screens send the parent dashboard. */
+  up_link?: PageUpLink | null;
 };
 
 function linkList(items: DashboardItem[]) {
@@ -39,12 +46,12 @@ function linkList(items: DashboardItem[]) {
       {items.map((item) => (
         <li
           key={item.label}
-          className="text-sm"
+          className="text-base"
         >
           {item.href ? (
             <a
               href={item.href}
-              className="text-fg underline-offset-4 hover:underline"
+              className="ui-text-link text-fg underline underline-offset-4 hover:underline"
             >
               {item.label}
             </a>
@@ -62,11 +69,14 @@ export default function SurfaceDashboard({
   description,
   sections,
   credential_warning: credentialWarning = null,
+  up_link: upLink = null,
 }: SurfaceDashboardProps) {
   return (
     <Page
       title={title}
-      description={description}
+      {...(description ? { description } : {})}
+      up={upLink}
+      upVisit="inertia"
     >
       {credentialWarning ? <CredentialWarning {...credentialWarning} /> : null}
 
@@ -75,12 +85,28 @@ export default function SurfaceDashboard({
           key={section.heading}
           heading={section.heading}
         >
+          {section.current_identity ? (
+            <div className="mb-2 flex items-center gap-2">
+              {section.current_identity.avatar_image ? (
+                <img
+                  src={section.current_identity.avatar_image.src}
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="size-8 rounded-full object-cover"
+                />
+              ) : null}
+              <p className="text-base font-medium text-fg">
+                {section.current_identity.display_name}
+              </p>
+            </div>
+          ) : null}
           {section.groups?.map((group) => (
             <div
               key={group.heading}
               className="flex flex-col gap-1"
             >
-              <h3 className="text-sm font-medium text-fg">{group.heading}</h3>
+              <h3 className="text-base font-medium text-fg">{group.heading}</h3>
               {linkList(group.items)}
             </div>
           ))}

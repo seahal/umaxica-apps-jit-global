@@ -4,29 +4,58 @@
 require "test_helper"
 require_relative "../support/otp_email_records"
 
-# Pins the OTP email delivery behaviour that exists before Noticed is introduced.
-#
-# test/adapters/otp_email_adapter_test.rb covers the adapter against a fake
-# mailer. This file deliberately uses the real mailers and real records, so it
-# states the end-to-end contract the Noticed path has to reproduce: one job per
-# OTP, ciphertext rather than plaintext in the job arguments, and one mailer per
-# surface.
+# Pins the final Noticed OTP email delivery boundary with real mailers and records:
+# one job per OTP and ciphertext rather than plaintext in job arguments.
 class OtpAdapterEmailCharacterizationTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
   include OtpEmailRecords
 
-  SURFACE_MAILERS = {
-    app: Email::App::OtpMailer,
-    com: Email::Com::OtpMailer,
-    org: Email::Org::OtpMailer,
-  }.freeze
+  setup do
+    ChronicleRecord.connected_to(role: :writing) do
+      ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |policy|
+        policy.name = "Security"
+        policy.duration_days = 365
+        policy.permanent = false
+      end
+    end
+  end
 
   test "app email otp enqueues exactly one mail delivery job" do
     record = create_otp_email_record(:app, address: "characterization-app@example.com")
 
-    assert_enqueued_jobs 1, only: ActionMailer::MailDeliveryJob do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       OtpAdapter.for(surface: :app, channel: :email).deliver(record: record, otp_code: "123456")
     end
+  end
+
+  test "email enqueue is recorded without recipient or otp content" do
+    record = create_otp_email_record(:app, address: "characterization-audit@example.com")
+
+    assert_difference -> { Chronicle.where(action: "notification.delivery.email.enqueued").count }, 1 do
+      OtpAdapter.for(surface: :app, channel: :email).deliver(record: record, otp_code: "123456")
+    end
+
+    chronicle = Chronicle.where(action: "notification.delivery.email.enqueued").order(:created_at).last
+
+    assert_equal record.class.name, chronicle.subject_type
+    assert_equal record.id, chronicle.subject_id
+    assert_not_includes chronicle.metadata.to_json, "characterization-audit@example.com"
+    assert_not_includes chronicle.metadata.to_json, "123456"
+  end
+
+  test "the Noticed path records email enqueue without recipient or otp content" do
+    record = create_otp_email_record(:app, address: "characterization-noticed-audit@example.com")
+
+    assert_difference -> { Chronicle.where(action: "notification.delivery.email.enqueued").count }, 1 do
+      OtpAdapter.for(surface: :app, channel: :email).deliver(record: record, otp_code: "654321")
+    end
+
+    chronicle = Chronicle.where(action: "notification.delivery.email.enqueued").order(:created_at).last
+
+    assert_equal record.class.name, chronicle.subject_type
+    assert_equal record.id, chronicle.subject_id
+    assert_not_includes chronicle.metadata.to_json, "characterization-noticed-audit@example.com"
+    assert_not_includes chronicle.metadata.to_json, "654321"
   end
 
   test "the enqueued job arguments carry no plaintext otp" do
@@ -41,23 +70,29 @@ class OtpAdapterEmailCharacterizationTest < ActiveSupport::TestCase
     assert_equal "123456", OutboundSensitivePayload.decrypt_email_otp(enqueued_encrypted_hotp_token)
   end
 
-  test "each surface routes to its own otp mailer" do
-    SURFACE_MAILERS.each do |surface, mailer|
-      clear_enqueued_jobs
-      record = create_otp_email_record(surface, address: "characterization-#{surface}@example.com")
+  test "the enqueued job arguments carry no plaintext verification token" do
+    record = create_otp_email_record(:app, address: "characterization-verification@example.com")
+    clear_enqueued_jobs
 
-      OtpAdapter.for(surface: surface, channel: :email).deliver(record: record, otp_code: "123456")
+    OtpAdapter.for(surface: :app, channel: :email).deliver(
+      record: record,
+      otp_code: "123456",
+      verification_token: "verification-token",
+      public_id: record.public_id,
+    )
 
-      assert_equal mailer.name, enqueued_mailer_name, surface.to_s
-    end
+    arguments = enqueued_jobs.last[:args].inspect
+
+    assert_not_includes arguments, "verification-token"
+    assert_equal(
+      "verification-token",
+      OutboundSensitivePayload.decrypt_email_verification_token(
+        enqueued_jobs.last[:args].last.fetch("params").fetch("encrypted_verification_token"),
+      ),
+    )
   end
 
   private
-
-  # ActionMailer::MailDeliveryJob serializes as [mailer, action, delivery_method, args: {params:, args:}].
-  def enqueued_mailer_name
-    enqueued_jobs.last[:args].first
-  end
 
   def enqueued_encrypted_hotp_token
     enqueued_jobs.last[:args].last.fetch("params").fetch("encrypted_hotp_token")

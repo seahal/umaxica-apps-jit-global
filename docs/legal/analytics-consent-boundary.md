@@ -17,7 +17,7 @@ model is fully implemented.
 
 ## Current Repository Signals
 
-The repository contains a complete cookie consent model and UI, plus a runtime gate:
+The repository contains a complete cookie consent model and UI, plus a server-side guard:
 
 - cookie banner UI
 - cookie settings UI
@@ -27,31 +27,26 @@ The repository contains a complete cookie consent model and UI, plus a runtime g
   - `functional`
   - `performant`
   - `targetable`
-- **Analytics consent runtime gate** (`app/javascript/analytics_consent_gate.js`)
 - **Server-side analytics consent guard** (`app/services/analytics_consent_guard.rb`)
 
 Relevant implementation references:
 
-- `app/javascript/analytics_consent_gate.js` — Runtime gate that checks consent before analytics
-  execution
-- `app/javascript/controllers/cookie_banner_controller.js`
-- `app/javascript/controllers/cookie_toggle_controller.js`
-- `app/controllers/concerns/preference/web_cookie_actions.rb`
-- `app/models/current/preference.rb`
+- `src/controllers/cookie_banner_controller.ts`
+- `src/controllers/cookie_toggle_controller.ts`
+- `app/controllers/concerns/preference_web_cookie_actions.rb`
+- `app/models/actor/preference.rb`
 - `app/services/analytics_consent_guard.rb` — Legacy server-side guard retained for future
   consent-aware analytics design
-- `app/services/analytics_consent_guard/pre_consent_allowlist.rb` — Exact allowlist of pre-consent
+- `app/services/analytics_consent_guard_pre_consent_allowlist.rb` — Exact allowlist of pre-consent
   events
 
 ### Runtime Gate Implementation
 
-The `installAnalyticsConsentGate()` function (see `app/javascript/analytics_consent_gate.js`)
-provides:
-
-- Consent state checking before analytics script initialization
-- Callback mechanism for consent changes (`onConsentChange`)
-- Protection against pre-consent analytics execution
-- OTEL and security events remain unaffected (bypass the gate)
+Current implementation (2026-10-03): the browser-side gate this note originally described,
+`installAnalyticsConsentGate()` in `app/javascript/analytics_consent_gate.js`, is not present in the
+repository. No file under `src/` loads a product-analytics script, so there is nothing for a
+browser-side gate to hold back. `AnalyticsConsentGuard` and its `EventReporterPatch` are referenced
+only by their own tests; no initializer installs the patch.
 
 The server-side `AnalyticsConsentGuard` provides:
 

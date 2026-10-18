@@ -6,29 +6,50 @@ module Auth
     module Verification
       class SetupsController < ::Auth::Org::ApplicationController
         include ::SurfaceInertiaPage
+        include ::AuthCeremonyAdmission
+        include ::AuthStepUpCeremonyContext
 
-        AUTHENTICATION_MODE = :private
-
-        before_action :authenticate_operator!
+        AUTHENTICATION_MODE = :open
+        declare_authentication_mode! :open
 
         def new
-          authorize!(current_operator, to: :show?)
-          @pt = params[:pt].to_s.presence
-          @pt_destination = setup_pt_path(@pt, root_path: auth_org_settings_path(ri: params[:ri]))
-          @missing_methods = step_up_supported_methods - configured_step_up_methods
+          admit_or_render_sign_ceremony!(expected_intent: "bootstrap") do
+            return unless load_registration_ceremony_context!
 
-          if @missing_methods.empty?
-            return safe_redirect_to(
-              verification_redirect_path(pt: @pt),
-              fallback: actor_root_path(ri: params[:ri]),
-              status: :found,
-            )
+            @missing_methods = admitted_step_up_methods
+            render inertia: true, props: setup_props
           end
-
-          render inertia: true, props: setup_props
         end
 
         private
+
+        def auth_ceremony_entry_intent = "bootstrap"
+
+        def auth_step_up_ceremony_clean_url
+          if auth_ceremony_registration_transaction&.allowed_methods_array == ["passkey"]
+            new_auth_org_verification_registration_passkey_path(ri: params[:ri])
+          else
+            new_auth_org_verification_setup_path(ri: params[:ri])
+          end
+        end
+
+        def auth_ceremony_admission_action_url = auth_org_ceremony_bindings_path
+
+        def auth_ceremony_admitted_action_url = auth_org_verification_setup_path(ri: params[:ri])
+
+        def ceremony_actor_model = Operator
+
+        def ceremony_step_up_session_model = OperatorStepUpSession
+
+        def ceremony_session_token(record) = OperatorToken.find(record.staff_token_id)
+
+        def ceremony_token_owned_by?(token, actor) = token.staff_id == actor.id
+
+        def ceremony_supported_methods = [:passkey]
+
+        def authorize_step_up_ceremony_actor!(actor)
+          authorize!(actor, to: :show?, context: { user: actor })
+        end
 
         # Only the methods the operator still has to configure are offered; a method already in
         # place is absent rather than rendered and disabled.
@@ -36,14 +57,16 @@ module Auth
           {
             title: t("sign.org.verification.setup.title"),
             description: t("sign.org.verification.setup.description"),
-            back_link: if @pt_destination.present?
-                         { label: t("actions.back"), href: @pt_destination }
-                       end,
+            # Setup is shown only when no Step-Up method exists, so no earlier Step-Up state exists to go
+            # back to, and the success continuation (`pt`) is not a Back. The only exit is cancellation.
+            cancel: { label: t("actions.cancel"),
+                      action: auth_org_verification_cancellation_path(ri: params[:ri]),
+                      method: "post", },
             methods: if @missing_methods.include?(:passkey)
                        [{
                          key: "passkey",
                          label: t("sign.org.verification.setup.methods.passkey"),
-                         href: new_auth_org_settings_passkey_path(ri: params[:ri], pt: @pt),
+                         href: new_auth_org_verification_registration_passkey_path(ri: params[:ri]),
                        }]
                      else
                        []

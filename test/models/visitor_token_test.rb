@@ -4,13 +4,13 @@
 # == Schema Information
 #
 # Table name: visitor_tokens
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
 #  last_step_up_aal                   :string
 #  last_step_up_at                    :datetime
@@ -22,7 +22,7 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
@@ -50,12 +50,12 @@
 #  index_visitor_tokens_on_created_at                       (created_at)
 #  index_visitor_tokens_on_dbsc_session_id                  (dbsc_session_id) UNIQUE
 #  index_visitor_tokens_on_device_session_id                (device_session_id)
-#  index_visitor_tokens_on_discarded_at                     (discarded_at)
+#  index_visitor_tokens_on_discard_at                     (discard_at)
 #  index_visitor_tokens_on_oidc_connection_id               (oidc_connection_id)
 #  index_visitor_tokens_on_oidc_jti                         (oidc_jti)
 #  index_visitor_tokens_on_oidc_sid                         (oidc_sid)
 #  index_visitor_tokens_on_public_id                        (public_id) UNIQUE
-#  index_visitor_tokens_on_purged_at                        (purged_at)
+#  index_visitor_tokens_on_purge_eligible_at                        (purge_eligible_at)
 #  index_visitor_tokens_on_refresh_token_digest             (refresh_token_digest) UNIQUE
 #  index_visitor_tokens_on_refresh_token_family_id          (refresh_token_family_id)
 #  index_visitor_tokens_on_rotated_at                       (rotated_at)
@@ -81,7 +81,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
   def setup
     ensure_visitor_reference_records!
     ensure_visitor_token_reference_records!
-    @visitor = Visitor.create!
+    @visitor = Visitor.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
     @token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
   end
 
@@ -89,14 +89,10 @@ class VisitorTokenTest < ActiveSupport::TestCase
 
   public
 
-  test "inherits from ComTicketRecord" do
-    assert_operator VisitorToken, :<, ComTicketRecord
+  test "inherits from OpBaseComRecord" do
+    assert_operator VisitorToken, :<, OpBaseComRecord
     assert_operator VisitorToken, :<, ApplicationRecord
-    assert_not_operator VisitorToken, :<, OrgTicketRecord
-  end
-
-  test "signed ref lookup uses symbol connection owner" do
-    assert_equal ComTicketRecord, VisitorToken.send(:connection_owner)
+    assert_not_operator VisitorToken, :<, OpBaseOrgRecord
   end
 
   test "belongs to visitor" do
@@ -106,9 +102,137 @@ class VisitorTokenTest < ActiveSupport::TestCase
     assert_equal :belongs_to, association.macro
   end
 
+  test "does not delete a token while a sign-up flow still references it" do
+    VisitorSignUpFlowStatus.ensure_defaults!
+    VisitorSignUpFlowCleanupStatus.ensure_defaults!
+    flow = VisitorSignUpFlow.create!(
+      token: @token,
+      status_id: VisitorSignUpFlowStatus::CANCELLED,
+      step: "cancelled",
+      nonce_digest: VisitorSignUpFlow.digest_nonce("nonce"),
+      issued_at: 20.minutes.ago,
+      expires_at: 5.minutes.ago,
+      entry_method: "email",
+      cleanup_status_id: VisitorSignUpFlowCleanupStatus::COMPLETED,
+    )
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { @token.destroy }
+    assert VisitorToken.exists?(@token.id)
+    assert VisitorSignUpFlow.exists?(flow.id)
+
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        VisitorToken.transaction(requires_new: true) do
+          VisitorToken.where(id: @token.id).delete_all
+        end
+      end
+    assert_kind_of PG::RestrictViolation, error.cause
+
+    assert VisitorToken.exists?(@token.id)
+    assert VisitorSignUpFlow.exists?(flow.id)
+  end
+
   test "can be created with visitor" do
     assert_not_nil @token
     assert_equal @visitor.id, @token.visitor_id
+  end
+
+  test "device session rejects a current token owned by another session" do
+    other_token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    session = @token.device_session
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        VisitorDeviceSession.transaction(requires_new: true) do
+          session.update_column(:current_refresh_token_id, other_token.id)
+          VisitorDeviceSession.lease_connection.execute(
+            "SET CONSTRAINTS fk_visitor_device_sessions_on_current_refresh_token_owner IMMEDIATE",
+          )
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_visitor_device_sessions_on_current_refresh_token_owner",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "token device session reference must exist and cannot be NULL" do
+    missing_session_id = VisitorDeviceSession.lease_connection.select_value(
+      "SELECT nextval(pg_get_serial_sequence('visitor_device_sessions', 'id'))",
+    )
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        VisitorToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, missing_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_visitor_tokens_on_device_session_id fk_visitor_tokens_on_visitor_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert_raises(ActiveRecord::NotNullViolation) do
+      VisitorToken.transaction(requires_new: true) do
+        @token.update_column(:device_session_id, nil)
+      end
+    end
+
+    assert_not_nil @token.reload.device_session_id
+  end
+
+  test "token device session must belong to the same visitor" do
+    other_visitor = Visitor.create!
+    other_token = VisitorToken.create!(visitor: other_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        VisitorToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, other_token.device_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_visitor_tokens_on_visitor_id_and_device_session_id",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "deleting the current token clears only its session pointer" do
+    session = @token.device_session
+    session.update!(current_refresh_token: @token)
+
+    @token.delete
+
+    assert_nil session.reload.current_refresh_token_id
+    assert_predicate session, :persisted?
+  end
+
+  test "device session cannot be destroyed while token history references it" do
+    session = @token.device_session
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
+
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        VisitorDeviceSession.transaction(requires_new: true) do
+          VisitorDeviceSession.where(id: session.id).delete_all
+        end
+      end
+    assert_equal "23001", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_visitor_tokens_on_device_session_id fk_visitor_tokens_on_visitor_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert VisitorDeviceSession.exists?(session.id)
+    assert VisitorToken.exists?(@token.id)
+  end
+
+  test "destroying the actor removes tokens before its device sessions" do
+    session_id = @token.device_session.id
+
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    @visitor.reload.update!(discard_at: @visitor.created_at, purge_eligible_at: @visitor.created_at)
+    @visitor = StrictLoadingAssociationPreloader.for_destruction(@visitor.reload)
+    @visitor.destroy!
+
+    assert_not VisitorToken.exists?(@token.id)
+    assert_not VisitorDeviceSession.exists?(session_id)
   end
 
   test "does not expose legacy session_id column" do
@@ -162,8 +286,8 @@ class VisitorTokenTest < ActiveSupport::TestCase
       token = VisitorToken.create!(
         visitor: @visitor,
         visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-        discarded_at: 12.hours.from_now,
-        purged_at: 4.days.from_now,
+        discard_at: 12.hours.from_now,
+        purge_eligible_at: 4.days.from_now,
       )
       token.rotate_refresh_token!
 
@@ -174,8 +298,8 @@ class VisitorTokenTest < ActiveSupport::TestCase
       replacement = result[:token]
 
       assert_equal :rotated, result[:status]
-      assert_equal token.discarded_at.to_i, replacement.discarded_at.to_i
-      assert_equal token.purged_at.to_i, replacement.purged_at.to_i
+      assert_equal token.discard_at.to_i, replacement.discard_at.to_i
+      assert_equal token.purge_eligible_at.to_i, replacement.purge_eligible_at.to_i
     end
   end
 end
@@ -197,31 +321,11 @@ class VisitorTokenTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -274,10 +378,8 @@ class VisitorTokenTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -289,10 +391,8 @@ class VisitorTokenTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -513,63 +613,6 @@ class VisitorTokenTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -592,10 +635,8 @@ class VisitorTokenTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -615,12 +656,12 @@ class VisitorTokenTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

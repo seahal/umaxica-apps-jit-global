@@ -13,6 +13,7 @@ module EnforcementRecoveryCeremonyRecordable
   CONSUMED = 2
   REVOKED = 3
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include ::PublicId
 

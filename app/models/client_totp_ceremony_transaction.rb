@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: client_totp_ceremony_transactions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                          :bigint           not null, primary key
 #  actor_ref                   :string           not null
@@ -32,7 +32,7 @@
 #  index_client_totp_ceremony_transactions_on_result_jti      (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  index_client_totp_ceremony_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class ClientTotpCeremonyTransaction < AppTicketRecord
+class ClientTotpCeremonyTransaction < OpBaseAppRecord
   include TotpCeremonyTransactionable
 
   ceremony_surface "app"

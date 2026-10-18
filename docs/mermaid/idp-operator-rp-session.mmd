@@ -1,0 +1,18 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "active? (derived)" as active
+    state "revoked_at present (retirement may be pending)" as revoked
+    state "revoked and retirement_pending? false (derived)" as retired
+    [*] --> active
+    active --> active: issue_refresh_token! / rotate_refresh_token!
+    active --> revoked: revoke!
+    revoked --> revoked: revoke! repeat
+    revoked --> retired: retirement_pending? clock predicate
+    retired --> [*]
+    note right of active
+        RP session belongs to one stable OperatorDeviceSession.
+        Rotation validates the refresh credential independently of access.
+        Labels are predicates; root/refresh expiry can also deactivate.
+        Unknown max JWT expiry prevents proven retirement.
+        Sibling RP rows are not synchronously revoked by logout.
+    end note

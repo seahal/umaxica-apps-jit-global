@@ -6,8 +6,9 @@ module Base
     class RootsController < Base::Dev::ApplicationController
       AUTHENTICATION_MODE = :deny_all
 
+      layout false
+
       def index
-        render plain: "Base::Dev::Roots#index"
       end
     end
   end

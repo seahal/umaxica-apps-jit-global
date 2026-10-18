@@ -1,71 +1,58 @@
-# typed: false
 # frozen_string_literal: true
 
 require "test_helper"
 
-# The welcome hand-off page and the activity list are per-surface renderings of
-# shared state. The welcome page must offer the surface's own next step, and an
-# activity row must be serialised through the presenter so raw column values
-# never reach the page.
-class WelcomeAndActivitySeamsTest < ActiveSupport::TestCase
-  self.fixture_table_names = []
+class WelcomeAndActivitySeamsTest < ActionController::TestCase
+  tests Base::Com::WelcomesController
+  fixtures :visitors, :operators
 
-  def harness_for(controller_class, &definition)
-    Class.new(controller_class) do
-      attr_accessor :params_hash, :rendered
-
-      def params
-        ActionController::Parameters.new(params_hash || {})
-      end
-
-      def render(*args, **kwargs)
-        self.rendered = [args, kwargs]
-      end
-
-      def invoke(name, ...) = send(name, ...)
-
-      class_eval(&definition) if definition
-    end.new.tap do |h|
-      h.params_hash = { ri: "jp" }
-      h.request = ActionDispatch::TestRequest.create
-    end
-  end
-
-  [Base::Com::WelcomesController, Base::Org::WelcomesController].each do |klass|
-    test "#{klass.name} offers its own next step on the welcome hand-off" do
-      harness = harness_for(klass)
-      harness.instance_variable_set(:@welcome_next_path, "/dashboard")
-
-      harness.show
-
-      props = harness.rendered.last.fetch(:props)
-
-      assert_predicate props.fetch(:next_link).fetch(:href), :present?
-    end
-  end
-
-  [Base::Com::Identity::ActivitiesController, Base::Org::Identity::ActivitiesController].each do |klass|
-    test "#{klass.name} serialises an activity row through the presenter" do
-      presenter = Object.new
-      presenter.define_singleton_method(:occurred_at) { |_activity| Time.zone.local(2026, 9, 1, 12, 0, 0) }
-      presenter.define_singleton_method(:event_label) { |_activity| "Signed in" }
-      presenter.define_singleton_method(:ip_address) { |_activity| "203.0.113.5" }
-      presenter.define_singleton_method(:user_agent_summary) { |_activity| "Chrome" }
-      presenter.define_singleton_method(:login_method) { |_activity| "email" }
-      presenter.define_singleton_method(:login_method_label) { |_activity| "Email" }
-      presenter.define_singleton_method(:context_text) { |_activity| "from Tokyo" }
-
-      harness =
-        harness_for(klass) do
-          define_method(:activity_log) { presenter }
+  [[:com, Base::Com::WelcomesController], [:org, Base::Org::WelcomesController]].each do |surface, controller_class|
+    test "#{surface} authenticated welcome offers its own next step and spends the presentation gate once" do
+      actor, token_model, rp_model, root_association, resource_type, host =
+        if surface == :com
+          [visitors(:reserved_visitor), VisitorToken, OpComGrant, :visitor_token, "visitor",
+           ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),]
+        else
+          [operators(:one), OperatorToken, OpOrgGrant, :operator_token, "operator",
+           ENV.fetch("PUBLIC_BASE_STAFF_URL"),]
         end
-      activity = Struct.new(:id, :event_id).new(7, 4)
+      token = token_model.create!(((surface == :com) ? :visitor : :staff) => actor)
+      token.rotate_refresh_token!
+      BaseSelectorBootstrapAuthority.call(surface: surface, principal: actor)
+      client = OidcClientRegistry.find!("base-#{surface}-ww")
+      now = rp_model.database_now
+      rp = rp_model.create!(
+        root_association => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
+        :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => now,
+        :refresh_token_expires_at => now + 10.minutes,
+      )
+      access = AuthenticationTokenService.encode(
+        actor, host: host, resource_type: resource_type, session_public_id: token.public_id,
+               base_session_public_id: token.public_id, oidc_sid: rp.public_id, oidc_jti: rp.oidc_jti,
+               expires_at: now + 10.minutes, scopes: %w(openid profile), issuer: OidcIssuer.for_client(client),
+               audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+               subject: OidcSubject.for(actor, resource_type: resource_type), client_id: client.client_id,
+      )
+      @controller = controller_class.new
+      @request = ActionController::TestRequest.create(controller_class)
+      @response = controller_class.make_response!(@request)
+      @request.host = host
+      @request.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access
+      @request.cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp.issue_refresh_token!
+      gate = { "remaining" => 1, "expires_at" => (1.minute.from_now).to_i }
+      get :show, params: { ri: "jp" }, session: { "#{surface}_sign_in_welcome" => gate }
 
-      row = harness.invoke(:serialize_activity, activity)
+      assert_response :success
+      assert_equal "/dashboard?ri=jp",
+                   JSON.parse(
+                     css_select("script[data-page=app]")
+                                          .first.text,
+                   ).fetch("props").fetch("next_link").fetch("href")
+      assert_nil session["#{surface}_sign_in_welcome"]
+      get :show, params: { ri: "jp" }
 
-      assert_equal "7", row.fetch(:id)
-      assert_equal "Signed in", row.fetch(:event_label)
-      assert_equal "203.0.113.5", row.fetch(:ip_address)
+      assert_redirected_to "/dashboard?ri=jp"
+      assert_predicate token.reload, :currently_usable?
     end
   end
 end

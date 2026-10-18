@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_theme_options
@@ -7,13 +9,13 @@
 #  id :bigint           not null, primary key
 #
 
-# frozen_string_literal: true
-
 class OrgPreferenceThemeOption < OrgSettingRecord
   # Fixed IDs - do not modify these values
   LIGHT = 1
   DARK = 2
   SYSTEM = 3
+
+  DEFAULTS = [LIGHT, DARK, SYSTEM].freeze
 
   has_many :org_preference_themes,
            class_name: "OrgPreferenceTheme",
@@ -21,17 +23,15 @@ class OrgPreferenceThemeOption < OrgSettingRecord
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when LIGHT then "light"
     when DARK then "dark"
     when SYSTEM then "system"
     end
-  end
-
-  DEFAULTS = [LIGHT, DARK, SYSTEM].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

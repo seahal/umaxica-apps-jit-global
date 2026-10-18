@@ -1,6 +1,45 @@
 # Sign-In Sequence
 
-## Authority
+> **Authority-boundary supersession (2026-09-22):** This document retains the earlier
+> `sign/id`–`acme/www` migration vocabulary for historical context. The current Rails contract is
+> defined by `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
+> IdP/Authorization Server, Auth performs credential ceremony only, and each first-party browser RP
+> uses its own registered client. In particular, do not reintroduce `base-rails-rp`, `sign-rp`, or
+> `side-rails-rp` from the historical examples below.
+
+> **Reading rule:** The sections below retain the earlier `sign/id`–`acme/www` vocabulary as a
+> migration record. They are not a description of the current Rails authority boundary. For the
+> active result contract, use the current section immediately below and the Base/Auth ADR.
+
+> **Lifecycle vocabulary:** Status, event, and result names in this document are current runtime
+> vocabulary. Future canonical lifecycle terminology (`ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`,
+> `HALTED`, and the canonical events) is defined in `docs/security/idp-flow-lifecycle.md` and
+> `adr/idp-flow-lifecycle-vocabulary.md`; it is not implemented yet.
+
+## Current Rails result contract
+
+Auth owns credential ceremony continuity and authentication evidence only. Base owns the OIDC
+authorization transaction, Base Browser Session, RP Session, authorization code, and token
+authority.
+
+The Auth-to-Base result is a short-lived opaque Valkey transport capability. Its digest, generation,
+expiry, and Base finalization references are stored on the matching surface-local PostgreSQL
+authorization transaction. Base reads the transport only after validating the transaction, then
+rechecks the generation under the locked PostgreSQL row before finalizing. A current result may be
+retried while its transport TTL remains; `base_finalized_at` makes Browser Session finalization
+idempotent and a transaction creates at most one Browser Session.
+
+The transport is not the authorization grant. Authorization-code aliases may be issued for the same
+durable transaction, while `authorization_grant_redeemed_at` is claimed atomically in the same
+surface ticket-database transaction that creates or resolves the RP Session. Raw result and
+authorization-code values are never stored in PostgreSQL. Valkey cleanup is transport cleanup, not
+the durable session or grant authority. Rails forgery protection remains enabled for both local and
+cross-surface POST boundaries.
+
+The historical `sign/id` and `acme/www` sections that follow must therefore not be used to infer
+that a result is signed, Valkey-one-shot, or owned by Acme in the current Rails implementation.
+
+## Historical migration vocabulary: Authority
 
 Sign-in has two boundaries:
 
@@ -58,7 +97,7 @@ authority issuer.
 `core`, `line`, and future downstream services must trust acme-issued downstream tokens, not
 sign-issued tokens.
 
-## Ceremony Result Flow
+## Historical migration vocabulary: Ceremony Result Flow
 
 The sign-in flow uses the credential grant/result boundary:
 
@@ -111,20 +150,20 @@ Current `app` sign-in routes share the same completion gate. Route-local control
 credential or provider response, then hand off to `establish_signed_in_session!` and the shared
 `SignInResult` adapter when a session is actually issued.
 
-| route family                        | controller path                                                                                 | credential / provider                | state object                        | completion gate                                         | notes                                                                                                         |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Email OTP                           | `Sign::App::Sign::In::EmailsController`                                                         | email + OTP                          | `SignAppInEmailAuthenticationState` | `establish_signed_in_session!`                          | `create` issues real or dummy OTP; `update` verifies OTP and returns success, MFA, restricted, or hard reject |
-| Google social                       | `Sign::App::Social::AuthenticationsController` + `Sign::App::Auth::OmniauthCallbacksController` | Google OAuth / OmniAuth              | social auth intent + callback state | `establish_signed_in_session!`                          | callback validates state, provider assertion, and callback replay before completion                           |
-| Apple social                        | `Sign::App::Social::AuthenticationsController` + `Sign::App::Auth::OmniauthCallbacksController` | Apple OAuth / OmniAuth               | social auth intent + callback state | `establish_signed_in_session!`                          | Apple-specific form-post callback handling is delegated to the provider integration                           |
-| Passkey / WebAuthn                  | `Sign::App::Sign::In::PasskeysController` + `Sign::App::Sign::In::Passkey::*`                   | WebAuthn credential                  | passkey challenge state             | `establish_signed_in_session!`                          | options and verification controllers already route through the shared gate                                    |
-| TOTP / passcode / secret credential | `Sign::App::Sign::In::SecretCredentialsController` + `Sign::App::Sign::In::Challenge::*`        | TOTP, passcode, or secret credential | pending MFA state                   | `establish_signed_in_session!` or `finalize_mfa_login!` | direct login and MFA follow-up branches both converge on the same session completion rules                    |
+| route family                        | controller path                                                                                 | credential / provider                | state object                        | completion gate                                         | notes                                                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Email OTP                           | `Sign::App::Sign::In::EmailsController`                                                         | email + OTP                          | `SignAppInEmailAuthenticationState` | `establish_signed_in_session!`                          | `create` issues real or dummy OTP; `update` verifies OTP and returns success, MFA, session-limit pending, or hard reject |
+| Google social                       | `Sign::App::Social::AuthenticationsController` + `Sign::App::Auth::OmniauthCallbacksController` | Google OAuth / OmniAuth              | social auth intent + callback state | `establish_signed_in_session!`                          | callback validates state, provider assertion, and callback replay before completion                                      |
+| Apple social                        | `Sign::App::Social::AuthenticationsController` + `Sign::App::Auth::OmniauthCallbacksController` | Apple OAuth / OmniAuth               | social auth intent + callback state | `establish_signed_in_session!`                          | Apple-specific form-post callback handling is delegated to the provider integration                                      |
+| Passkey / WebAuthn                  | `Sign::App::Sign::In::PasskeysController` + `Sign::App::Sign::In::Passkey::*`                   | WebAuthn credential                  | passkey challenge state             | `establish_signed_in_session!`                          | options and verification controllers already route through the shared gate                                               |
+| TOTP / passcode / secret credential | `Sign::App::Sign::In::SecretCredentialsController` + `Sign::App::Sign::In::Challenge::*`        | TOTP, passcode, or secret credential | pending MFA state                   | `establish_signed_in_session!` or `finalize_mfa_login!` | direct login and MFA follow-up branches both converge on the same session completion rules                               |
 
 The route families above must not create `ClientToken`, `ClientDeviceSession`, or auth cookies
 directly in controller code.
 
 All successful sign-in routes must normalize the completion result through the shared `SignInResult`
 adapter. The current result shape includes `success`, `mfa_required`, `session_limit_pending`,
-`session_limit_hard_reject`, `credential_rejected`, `identity_unavailable`, `transaction_expired`,
+`session_limit_conflict`, `credential_rejected`, `identity_unavailable`, `transaction_expired`,
 `failure`, and `invalid_request`.
 
 ## Timing And Enumeration Mitigation
@@ -138,12 +177,11 @@ that must either use that response budget or document another timing-equalized p
 
 Current coverage is:
 
-| Credential path                       | Mitigation                                                      |
-| ------------------------------------- | --------------------------------------------------------------- |
-| App email OTP sign-in                 | Dummy OTP generation and minimum elapsed verification on update |
-| App/com/org passkey sign-in           | `MinimumResponseBudget` on challenge/options endpoints          |
-| App/com/org secret credential sign-in | `MinimumResponseBudget` on credential submission                |
-| Org Entra sign-in                     | `MinimumResponseBudget` on authorization start                  |
+| Credential path             | Mitigation                                                      |
+| --------------------------- | --------------------------------------------------------------- |
+| App email OTP sign-in       | Dummy OTP generation and minimum elapsed verification on update |
+| App/com/org passkey sign-in | `MinimumResponseBudget` on challenge/options endpoints          |
+| Org Entra sign-in           | `MinimumResponseBudget` on authorization start                  |
 
 New credential endpoints must be added to the contract test. If an endpoint intentionally opts out
 of the response budget, it must have an alternate dummy-work or fixed-time verification path that is
@@ -152,7 +190,7 @@ visible in tests and documentation.
 ## Ceremony Cleanup
 
 Sign-in credential ceremonies store short-lived transaction rows keyed by `expires_at`. These rows
-are not part of the account-retention `purged_at` model handled by `RetentionPurgeJob`, so
+are not part of the account-retention `purge_eligible_at` model handled by `RetentionPurgeJob`, so
 production recurring cleanup registers the dedicated ceremony transaction purge jobs in
 `config/recurring.yml`.
 
@@ -175,6 +213,32 @@ Protocol endpoints or route namespaces may remain in compatibility locations dur
 does not make sign/id the token authority. Acme owns OIDC authorization, token issuance, ID tokens,
 access tokens, refresh tokens, JWKS authority, and downstream token issuance.
 
+## Local sign-in phase admission
+
+Local app and com sign-in requests that use a DB-backed `SignInFlow` carry a server-generated,
+purpose-bound signed binding for the expected surface, flow public identifier, phase, and immutable
+flow generation. This binding is an admission check; it is not a replacement for the locked flow
+row, actor binding, expiry, provider correlation, or the existing session-issuance boundary.
+
+Same-phase reload is allowed. A GET or HEAD with a missing, malformed, expired, cross-surface,
+cross-flow, or contradictory phase binding returns HTTP `409 Conflict` as plain text with the exact
+body `戻るはだめです`. It does not redirect, mutate the flow, issue an OTP or WebAuthn challenge,
+create a session, or perform another side effect. The authentication no-store response policy is
+preserved. This refusal is not a lifecycle edge.
+
+A state-changing request that is bound to the original local flow but uses an obsolete or otherwise
+contradictory phase is handled under the flow row lock after a fresh reload. The original flow is
+halted with `HALTED = 930` and an auditable reason code (`phase_regression` or `phase_violation`).
+HALTED is terminal and absorbing. It cannot be revived, changed to another terminal, or used to
+issue a session, OTP, challenge, or provider transaction. An invalid binding is refused without
+treating the current session locator as an alternate flow authority, so an old request from flow A
+cannot halt a newly started flow B.
+
+The binding applies only where the local `SignInFlow` is the authoritative phase object. Social,
+OIDC/Entra, and other provider-owned ceremonies continue to validate their own concrete state,
+nonce, PKCE, transaction, and one-shot contracts; they are not forced into a generic sign-in row. No
+client-side History API or browser Back detector participates in this security decision.
+
 ## Related
 
 - `docs/identity/authority-boundary.md`
@@ -182,3 +246,12 @@ access tokens, refresh tokens, JWKS authority, and downstream token issuance.
 - `docs/security/ceremony-grant-result.md`
 - `docs/security/session-token-authority.md`
 - `docs/security/redirect-vs-ceremony-result.md`
+- `docs/security/idp-flow-lifecycle.md`
+
+## Delivered current sequence (2026-10-06)
+
+The active sequence is Base authorization or the Auth admitted ceremony, canonical sign-in flow and
+ordinary session-limit resolution, then committed session issuance and derived return routing.
+Completion is not a dashboard handoff state. Stale, cancelled, expired, conflicting and replayed
+requests are refused or redirected through their explicit terminal transition. The historical
+sign/id/acme vocabulary above is not an active authority contract.

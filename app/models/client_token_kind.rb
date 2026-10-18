@@ -1,14 +1,15 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: client_token_kinds
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id :bigint           not null, primary key
 #
-# frozen_string_literal: true
 
-class ClientTokenKind < AppTicketRecord
+class ClientTokenKind < OpBaseAppRecord
   include ReferenceRecord
 
   self.primary_key = :id

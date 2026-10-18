@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: client_sign_up_flow_statuses
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id :bigint           not null, primary key
 #
-class ClientSignUpFlowStatus < AppTicketRecord
+class ClientSignUpFlowStatus < OpBaseAppRecord
   include ReferenceRecord
 
   STARTED = 10
@@ -25,6 +25,7 @@ class ClientSignUpFlowStatus < AppTicketRecord
   FAILED = 900
   EXPIRED = 910
   CANCELLED = 920
+  HALTED = 930
   DEFAULTS = [
     STARTED,
     CONTACT_PENDING,
@@ -40,6 +41,7 @@ class ClientSignUpFlowStatus < AppTicketRecord
     FAILED,
     EXPIRED,
     CANCELLED,
+    HALTED,
   ].freeze
 
   has_many :client_sign_up_flows,

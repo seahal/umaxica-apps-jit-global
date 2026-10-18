@@ -45,7 +45,7 @@ class OrgEnforcementCaseTest < ActiveSupport::TestCase
     )
 
     assert_predicate the_case, :requires_approval?
-    assert_raises(EnforcementCaseApplicable::ApprovalRequiredError) { EnforcementCaseApplyOperation.call(enforcement_case: the_case) }
+    assert_raises(EnforcementCaseApplicable::ApprovalRequiredError) { EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: the_case.applied_by_operator_public_id) }
   end
 
   test "an approved permanent_ban targeting an Operator applies successfully" do
@@ -71,7 +71,10 @@ class OrgEnforcementCaseTest < ActiveSupport::TestCase
       effective_at: Time.current,
     )
 
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
     target.reload
 
     assert_equal "active", the_case.state

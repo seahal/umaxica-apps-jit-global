@@ -4,13 +4,13 @@
 # == Schema Information
 #
 # Table name: visitor_step_up_sessions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id               :bigint           not null, primary key
 #  attempt_count    :integer          default(0), not null
-#  discarded_at     :datetime         default(Infinity), not null
+#  discard_at     :datetime         default(Infinity), not null
 #  method           :string
-#  purged_at        :datetime         default(Infinity), not null
+#  purge_eligible_at        :datetime         default(Infinity), not null
 #  return_to        :text             not null
 #  scope            :string           not null
 #  status           :string           not null
@@ -27,8 +27,10 @@
 #
 #  fk_rails_...  (visitor_token_id => visitor_tokens.id) ON DELETE => cascade
 #
-class VisitorStepUpSession < ComTicketRecord
+class VisitorStepUpSession < OpBaseComRecord
   include Retainable
+  include StepUpSessionConsumable
+  include StepUpEmailChallenge
 
   STATUSES = %w(PENDING VERIFIED).freeze
   METHODS = %w(passkey email_otp).freeze
@@ -40,7 +42,7 @@ class VisitorStepUpSession < ComTicketRecord
   validates :visitor_token_id, uniqueness: true
   validates :method, inclusion: { in: METHODS }, allow_nil: true
   validates :status, presence: true, inclusion: { in: STATUSES }
-  validates :discarded_at, presence: true
+  validates :discard_at, presence: true
   validates :attempt_count, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   scope :for_visitor_token, ->(visitor_token) { where(visitor_token_id: visitor_token.id) }
@@ -48,6 +50,16 @@ class VisitorStepUpSession < ComTicketRecord
   scope :pending, -> { where(status: "PENDING") }
 
   def expired?
-    discarded_at <= Time.current
+    discard_at <= Time.current
   end
+
+  private
+
+  def email_transaction_model = VisitorStepUpCeremonyTransaction
+
+  def email_session_token = VisitorToken.find(visitor_token_id)
+
+  def passkey_transaction_model = VisitorStepUpCeremonyTransaction
+
+  def passkey_session_token = VisitorToken.find(visitor_token_id)
 end

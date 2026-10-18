@@ -1,3 +1,6 @@
+import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
+
 import type { SignOutLink } from "./SignOutConfirmation";
 
 // The sign-out completion notice. The description is optional: the server only sends it when it
@@ -15,20 +18,16 @@ export default function SignOutCompleted({
   home_link: homeLink,
 }: SignOutCompletedProps) {
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{heading}</h1>
+    <Page
+      title={heading}
+      width="narrow"
+    >
+      {description ? <p className="text-base text-fg-muted">{description}</p> : null}
 
-      {description ? <p className="text-sm text-fg-muted">{description}</p> : null}
-
-      <p className="text-sm">
+      <p className="text-base">
         {/* A document visit: the destination is another surface entry point with its own guards. */}
-        <a
-          href={homeLink.href}
-          className="text-accent hover:underline"
-        >
-          {homeLink.label}
-        </a>
+        <TextLink href={homeLink.href}>{homeLink.label}</TextLink>
       </p>
-    </section>
+    </Page>
   );
 }

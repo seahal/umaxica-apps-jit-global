@@ -9,6 +9,7 @@ module DeviceSessionable
   STATUS_ACTIVE = 1
   STATUS_REVOKED = 104
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     validates :public_id, uniqueness: true, length: { maximum: 21 }
     validates :status_id, presence: true
@@ -16,8 +17,14 @@ module DeviceSessionable
     scope :active, -> { where(revoked_at: nil, status_id: STATUS_ACTIVE) }
   end
 
+  public
+
   def revoked?
     revoked_at.present? || status_id == STATUS_REVOKED
+  end
+
+  def usable?
+    !revoked? && status_id == STATUS_ACTIVE
   end
 
   def dbsc_bound?
@@ -28,13 +35,14 @@ module DeviceSessionable
     !dbsc_bound?
   end
 
-  def revoke!(reason: "user_logout")
-    now = Time.current
-    update!(
-      status_id: STATUS_REVOKED,
-      revoked_at: revoked_at || now,
-      revoke_reason: reason,
-    )
+  def revoke!(reason: "user_logout", now: nil)
+    with_lock do
+      return self if status_id == STATUS_REVOKED
+
+      decision_time = now || self.class.database_now
+      update!(status_id: STATUS_REVOKED, revoked_at: revoked_at || decision_time, revoke_reason: reason)
+      self
+    end
   end
 
   def bind_dbsc!(session_id:, public_key_thumbprint: nil)

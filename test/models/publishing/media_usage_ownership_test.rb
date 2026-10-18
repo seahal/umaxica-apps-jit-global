@@ -112,7 +112,7 @@ module Publishing
     test "released version media is immutable through active record and postgresql" do
       publishing_revision_media_usage(revision: @revision, media_file: @media_file)
       version = PromoteRevisionOperation.call(revision: @revision)
-      usage = version.media_usages.sole
+      usage = Docs::App::VersionMediaUsage.find_by!(entry_version_id: version.id)
 
       assert_raises(ActiveRecord::ReadOnlyRecord) { usage.update!(caption: "changed") }
       assert_raises(ActiveRecord::ReadOnlyRecord) { usage.destroy! }
@@ -146,7 +146,7 @@ module Publishing
       version = PromoteRevisionOperation.call(revision: @revision)
 
       restored = RestoreVersionOperation.call(version:)
-      copied = restored.media_usages.sole
+      copied = Docs::App::RevisionMediaUsage.find_by!(entry_revision_id: restored.id)
 
       assert_equal @media_file.id, copied.media_file_id
       assert_equal "hero", copied.role

@@ -1,8 +1,36 @@
 # Core Browser JWT Cookie Transport And Next.js Zero-Cookie Boundary
 
+Current naming note (2026-09-25): references to the Rails `Side` surface in this decision mean the
+current internal namespace `Warp`. OIDC, JWT, MCP, persisted, and public-host identifiers retain
+their established values.
+
 ## Status
 
 Accepted (2026-06-14)
+
+## TanStack UI-Origin Supersession (2026-10-03)
+
+`adr/tanstack-start-zero-cookie-ui-origin-boundary.md` supersedes this record's Core UI-origin and
+SSR portions for TanStack Start. It resolves the deferred follow-up by inheriting the complete
+zero-cookie boundary. Rails credential authority and transport binding retain their existing
+contracts. This supersession performs no runtime migration.
+
+## RP Credential Authority Amendment (2026-09-20)
+
+The Base/Auth/RP authority decision supersedes the credential issuance and audience portions of
+this ADR for Rails Core browser authentication. Base remains the sole physical OIDC Authorization
+Server and owns the Base Browser Session and RP Session. Core's OIDC callback uses the Access and
+Refresh credentials returned by Base for the exact Core RP (`core-app`, `core-com`, or `core-org`)
+and stores them in the host-only `oidc_rp_access` and `oidc_rp_refresh` cookie slots (with the
+`__Host-` prefix in secure contexts). It never calls the generic root `log_in` path and never
+creates a second root Browser Session.
+
+The old `core-browser` audience/root-browser-cookie contract below is historical for the Core RP
+path and is not an accepted credential for the current Core browser API. The Core API still keeps
+cookie-only transport, rejects `Authorization: Bearer`, keeps Rails CSRF protection, uses
+`Cache-Control: no-store`, and validates the exact RP issuer/audience/client binding. Palm remains
+an independent bearer-token boundary. The zero-cookie invariant is retained for TanStack Start by
+the 2026-10-03 supersession above; its SSR boundary is no longer an unresolved follow-up.
 
 ## Amendment (2026-08-09)
 
@@ -55,7 +83,7 @@ This repository does not contain deployable Cloudflare ruleset or Worker code. E
 therefore recorded as an operational contract and production rollout blocker until the external
 Cloudflare configuration is deployed and verified.
 
-## Decision
+## Historical Decision (superseded for RP credentials)
 
 Core browser credential transport is cookie-carried JWT access plus opaque refresh. Core uses the
 same Rails auth cookie concern and cookie names as the existing Acme/Sign relying-party flows; it

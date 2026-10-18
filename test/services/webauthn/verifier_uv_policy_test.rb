@@ -20,7 +20,9 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
   end
 
   test "every UV policy purpose is required and enforced server-side" do
-    assert_equal %i(registration direct_sign_in mfa_challenge ordinary_step_up high_risk_step_up).sort,
+    assert_equal %i(
+      registration direct_sign_in emergency_sign_in mfa_challenge ordinary_step_up high_risk_step_up
+    ).sort,
                  Webauthn::UvPolicy::REGISTRY.keys.sort
 
     Webauthn::UvPolicy::REGISTRY.each_value do |policy|
@@ -36,9 +38,11 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
   test "registration options and every assertion purpose request required user verification" do
     registration_options = Webauthn::RegistrationVerifier.options_for(
       config: @config, user_id: SecureRandom.urlsafe_base64(32), user_name: "user@example.com",
+      surface: :app,
     )
 
     assert_equal "required", registration_options.authenticator_selection[:user_verification]
+    assert_equal "required", registration_options.authenticator_selection[:resident_key]
 
     %i(direct_sign_in mfa_challenge ordinary_step_up high_risk_step_up).each do |purpose|
       options = Webauthn::AssertionVerifier.options_for(config: @config, allow_ids: [], purpose: purpose)
@@ -71,6 +75,30 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
     # FakeAuthenticator reports a random (non-zero) AAGUID; the context must
     # surface it in canonical UUID form for catalog resolution.
     assert_match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/, context.aaguid)
+  end
+
+  test "malformed base64 assertion is rejected through the public verifier" do
+    record = fake_credential_record_attrs(@client)
+    challenge = Base64.urlsafe_encode64(SecureRandom.random_bytes(32), padding: false)
+    params = fake_assertion(@client, challenge: challenge, user_verified: true)
+    params.fetch("response")["userHandle"] = "!"
+
+    assert_raises(Webauthn::AssertionVerifier::VerificationError) do
+      Webauthn::AssertionVerifier.verify!(
+        credential_params: params, challenge: challenge, config: @config,
+        public_key: record.fetch(:public_key), sign_count: record.fetch(:sign_count), purpose: :direct_sign_in,
+      )
+    end
+  end
+
+  test "malformed base64 attestation is rejected through the public verifier" do
+    challenge = Base64.urlsafe_encode64(SecureRandom.random_bytes(32), padding: false)
+    params = fake_attestation(@client, challenge: challenge, user_verified: true)
+    params.fetch("response")["clientDataJSON"] = "!"
+
+    assert_raises(Webauthn::RegistrationVerifier::VerificationError) do
+      Webauthn::RegistrationVerifier.verify!(credential_params: params, challenge: challenge, config: @config)
+    end
   end
 
   test "UV=false assertion is rejected for every assertion purpose" do

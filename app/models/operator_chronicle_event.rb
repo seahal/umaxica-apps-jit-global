@@ -28,18 +28,22 @@ class OperatorChronicleEvent < ChronicleRecord
   LOGOUT = 13
   CREDENTIAL_SECURITY_TRANSITION = 14
   PASSKEY_REGISTERED = 15
-
-  # Association with staff_chronicles
-  has_many :staff_chronicles, class_name: "OperatorChronicle", foreign_key: :event_id,
-                              dependent: :destroy,
-                              inverse_of: :staff_chronicle_event
+  STEP_UP_FAILED = 16
+  REFRESH_TOKEN_REUSE_DETECTED = 17
+  SIGN_FLOW_HALTED = 18
 
   DEFAULTS = [
     LOGIN_SUCCESS, AUTHORIZATION_FAILED, LOGGED_IN, LOGGED_OUT, LOGIN_FAILED,
     TOKEN_REFRESHED, NOTHING, STAFF_SECRET_CREATED, STAFF_SECRET_REMOVED,
     STAFF_SECRET_UPDATED, STEP_UP_VERIFIED, SOCIAL_UNLINKED, LOGOUT,
-    CREDENTIAL_SECURITY_TRANSITION, PASSKEY_REGISTERED,
+    CREDENTIAL_SECURITY_TRANSITION, PASSKEY_REGISTERED, STEP_UP_FAILED, REFRESH_TOKEN_REUSE_DETECTED,
+    SIGN_FLOW_HALTED,
   ].freeze
+
+  # Association with staff_chronicles
+  has_many :staff_chronicles, class_name: "OperatorChronicle", foreign_key: :event_id,
+                              dependent: :destroy,
+                              inverse_of: :staff_chronicle_event
 
   def self.ensure_defaults!
     insert_missing_fixed_ids!(DEFAULTS)

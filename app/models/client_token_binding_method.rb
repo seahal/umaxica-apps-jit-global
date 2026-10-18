@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: client_token_binding_methods
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id :bigint           not null, primary key
 #
-class ClientTokenBindingMethod < AppTicketRecord
+class ClientTokenBindingMethod < OpBaseAppRecord
   include ReferenceRecord
 
   NOTHING = 0

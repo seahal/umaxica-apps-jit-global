@@ -8,20 +8,24 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
     Auth::App::Sign::In::PasskeysController,
     Auth::App::Sign::In::Passkey::OptionsController,
     Auth::App::Sign::In::Passkey::VerificationsController,
-    Auth::App::Sign::In::SecretsController,
     Auth::Com::Sign::In::PasskeysController,
     Auth::Com::Sign::In::Passkey::OptionsController,
     Auth::Com::Sign::In::Passkey::VerificationsController,
-    Auth::Com::Sign::In::SecretsController,
     Auth::Org::Sign::In::PasskeysController,
     Auth::Org::Sign::In::Passkey::OptionsController,
     Auth::Org::Sign::In::Passkey::VerificationsController,
-    Auth::Org::Sign::In::SecretsController,
   ].freeze
 
   DUMMY_WORK_CONTROLLERS = [
     Auth::App::Sign::In::EmailsController,
   ].freeze
+
+  test "Email authentication timing does not expose identifier-backed shared OTP policy" do
+    [Auth::App::Sign::In::EmailsController, Auth::Com::Sign::In::EmailsController,
+     SignInOtpResender, EnforcementRecoveryCeremonyFlow, WithdrawalCeremonyReentry,].each do |boundary|
+      assert_not_includes boundary.included_modules.map(&:name), "CommonOtp", boundary.name
+    end
+  end
 
   test "credential controllers that include MinimumResponseBudget register start and enforce callbacks" do
     MINIMUM_RESPONSE_BUDGET_CONTROLLERS.each do |controller_class|
@@ -39,25 +43,15 @@ class AuthCredentialTimingProtectionContractTest < ActiveSupport::TestCase
       Auth::App::Sign::In::PasskeysController,
       Auth::App::Sign::In::Passkey::OptionsController,
       Auth::App::Sign::In::Passkey::VerificationsController,
-      Auth::App::Sign::In::SecretsController,
       Auth::Com::Sign::In::PasskeysController,
       Auth::Com::Sign::In::Passkey::OptionsController,
       Auth::Com::Sign::In::Passkey::VerificationsController,
-      Auth::Com::Sign::In::SecretsController,
       Auth::Org::Sign::In::PasskeysController,
       Auth::Org::Sign::In::Passkey::OptionsController,
       Auth::Org::Sign::In::Passkey::VerificationsController,
-      Auth::Org::Sign::In::SecretsController,
     ]
 
     assert_equal expected.map(&:name).sort, protected_controllers.map(&:name).sort
-  end
-
-  test "email sign-in keeps explicit dummy work timing protection" do
-    controller = Auth::App::Sign::In::EmailsController.new
-
-    assert_includes controller.private_methods, :perform_dummy_otp_generation
-    assert_includes controller.private_methods, :ensure_min_elapsed
   end
 
   # The Entra strategy's request phase used to pad its response time so a valid

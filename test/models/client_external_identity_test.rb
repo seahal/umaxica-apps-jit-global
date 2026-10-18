@@ -29,7 +29,7 @@ class ClientExternalIdentityTest < ActiveSupport::TestCase
     assert_predicate identity, :active?
   end
 
-  test "allows one binding per provider for a client" do
+  test "allows one effective external identity binding per client" do
     client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "e#{SecureRandom.hex(8)}")
     ClientExternalIdentity.create!(
       client: client,
@@ -43,16 +43,16 @@ class ClientExternalIdentityTest < ActiveSupport::TestCase
 
     duplicate = ClientExternalIdentity.new(
       client: client,
-      provider: "google",
-      issuer: "https://accounts.google.com",
-      subject: "google-subject-2",
-      audience: "google-client-id",
-      verification_authority: "omniauth-google-oauth2/1.2.1",
+      provider: "apple",
+      issuer: "https://appleid.apple.com",
+      subject: "apple-subject-2",
+      audience: "apple-client-id",
+      verification_authority: "omniauth-apple/1.4.0",
       verified_at: Time.current,
     )
 
-    assert_not_predicate duplicate, :valid?
-    assert duplicate.errors.of_kind?(:provider, :taken)
+    assert_predicate duplicate, :valid?
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.save! }
   end
 
   test "touch_authenticated! records the latest sign-in without touching the binding" do

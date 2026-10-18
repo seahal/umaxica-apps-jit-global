@@ -44,7 +44,7 @@ module Base
           end
 
           def appealable_cases
-            AppEnforcementCase.in_force.where(
+            AppEnforcementCase.in_force.includes(:appeal).where(
               principal_public_id: current_recovery_ceremony.subject.public_id, visibility: "visible",
             ).where.not(kind: "method_protection")
           end

@@ -18,6 +18,7 @@ class OrgOperatorLifecycleExecute
     return failure("Requester cannot execute their own lifecycle request") if requested_by_actor?
 
     invitation = nil
+    @stop_events = []
     OrgPrincipalRecord.transaction do
       invitation = execute_action!
       request.update!(
@@ -27,6 +28,8 @@ class OrgOperatorLifecycleExecute
         invitation_id: invitation&.id,
       )
     end
+    # The org Zenith commit recorded the stop; the OP revokes older authority after it (one.md 7.5).
+    @stop_events.each { |event| OpIdentityEventInvalidator.deliver(event:) }
 
     OrgOperatorLifecycleResult.new(success: true, request: request, error: nil, invitation: invitation)
   rescue ActiveRecord::RecordInvalid => e
@@ -78,16 +81,16 @@ class OrgOperatorLifecycleExecute
     target.update!(
       withdrawal_started_at: target.withdrawal_started_at || now,
       deactivated_at: target.deactivated_at || now,
-      discarded_at: now,
-      purged_at: now + GRACE_PERIOD,
+      discard_at: now,
+      purge_eligible_at: now + GRACE_PERIOD,
     )
   end
 
   # Not leaving: a leave of absence or a disciplinary suspension. The person is
   # expected back, so this sets no deletion countdown at all -- only
   # `deactivated_at`, which is what `Withdrawable#suspended?` reads and what the
-  # authentication gates refuse. `withdrawal_started_at`, `discarded_at`, and
-  # `purged_at` stay untouched, so the record survives a leave of any length and
+  # authentication gates refuse. `withdrawal_started_at`, `discard_at`, and
+  # `purge_eligible_at` stay untouched, so the record survives a leave of any length and
   # `restore` brings it back.
   #
   # This used to share the withdrawal branch, which meant filing a suspension
@@ -115,8 +118,8 @@ class OrgOperatorLifecycleExecute
       withdrawal_started_at: target.withdrawal_started_at || now,
       deactivated_at: target.deactivated_at || now,
       withdrawn_at: target.withdrawn_at || now,
-      discarded_at: now,
-      purged_at: now,
+      discard_at: now,
+      purge_eligible_at: now,
     )
   end
 
@@ -133,13 +136,16 @@ class OrgOperatorLifecycleExecute
       withdrawal_started_at: nil,
       deactivated_at: nil,
       withdrawn_at: nil,
-      discarded_at: Float::INFINITY,
-      purged_at: Float::INFINITY,
+      discard_at: Float::INFINITY,
+      purge_eligible_at: Float::INFINITY,
     )
   end
 
+  # Advances the operator's authentication epoch and records the stop event in this Zenith
+  # transaction; the OP applies it after commit (R5-WU06).
   def revoke_target_sessions!(target)
-    target.staff_tokens.not_revoked.find_each(&:revoke!)
+    target.lock!
+    @stop_events << IdentityAuthenticationStopRecorder.call(actor: target, reason: "operator_#{request.action}")
   end
 
   # Logical delete: the row keeps (tid, oid), the protocol evidence, and
@@ -163,7 +169,7 @@ class OrgOperatorLifecycleExecute
     active_count =
       Operator
         .where(deactivated_at: nil, withdrawn_at: nil)
-        .where(Operator.arel_table[:discarded_at].gt(Time.current))
+        .where(Operator.arel_table[:discard_at].gt(Time.current))
         .where.not(id: target.id)
         .count
     return if active_count.positive?

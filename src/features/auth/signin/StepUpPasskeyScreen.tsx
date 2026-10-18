@@ -9,6 +9,9 @@ import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
 import { PASSKEY_MESSAGES, authenticationErrorMessage } from "@/features/auth/passkeys/messages";
 import { useCeremonyMessages } from "@/features/auth/passkeys/useCeremonyMessages";
 import { getAssertion, passkeysSupported } from "@/features/auth/passkeys/webauthn";
@@ -29,6 +32,7 @@ export type StepUpPasskeyScreenProps = {
     submit_label: string;
   };
   back_link: SignInLink;
+  cancel: CeremonyCancellationProps;
 };
 
 export default function StepUpPasskeyScreen({
@@ -36,6 +40,7 @@ export default function StepUpPasskeyScreen({
   description,
   form,
   back_link: backLink,
+  cancel,
 }: StepUpPasskeyScreenProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [credentialJson, setCredentialJson] = useState("");
@@ -110,23 +115,26 @@ export default function StepUpPasskeyScreen({
         {error ? (
           <p
             role="alert"
-            className="text-sm text-danger"
+            className="text-base text-error"
           >
             {error}
           </p>
         ) : null}
-        {status ? <p className="text-sm text-fg-muted">{status}</p> : null}
+        {status ? <p className="text-base text-fg-muted">{status}</p> : null}
       </form>
 
-      <p className="text-sm">
+      <p className="text-base">
         {/* Document visit: the challenge menu has its own guards. */}
         <a
           href={backLink.href}
-          className="text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
         >
           {backLink.label}
         </a>
       </p>
+
+      {/* Back returns to method selection; this ends the whole sign-in ceremony. */}
+      <CeremonyCancellation {...cancel} />
     </Page>
   );
 }

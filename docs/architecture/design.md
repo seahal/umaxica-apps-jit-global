@@ -1,8 +1,17 @@
+# Historical design notes
+
+Current presentation rules and implementation ownership are defined in [docs/design.md](../design.md).
+This document is retained as historical context, not implementation guidance. The historical
+shadcn token names, localStorage theme advice, and history-based up navigation below are not
+current contracts. Use the canonical guide and existing server-resolved navigation/theme data.
+
+## Archived content
+
 # Design Philosophy
 
 This file is a shorter colour-role sketch. Canonical UI primitives and tokens are in
-`docs/design.md`. External implementation reading for UI work is the Digital Agency of Japan
-Design System introduction: `docs/reference/digital-agency-design-system.md` and
+`docs/design.md`. External implementation reading for UI work is the Digital Agency of Japan Design
+System introduction: `docs/reference/digital-agency-design-system.md` and
 <https://design.digital.go.jp/dads/introduction/>.
 
 ## 1. Color Roles

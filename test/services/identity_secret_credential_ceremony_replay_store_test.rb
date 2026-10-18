@@ -34,4 +34,54 @@ class IdentitySecretCredentialCeremonyReplayStoreTest < ActiveSupport::TestCase
       end
     assert_equal "transaction is not found", error.message
   end
+
+  %w(app com org).each do |surface|
+    test "#{surface} generated ceremony transaction and grant references are NanoID-21 values" do
+      transaction = IdentitySecretCredentialCeremonyReplayStore.for(surface).create_transaction!(
+        actor_ref: "actor-#{surface}", session_ref: "session-#{surface}", operation: "enrollment",
+      )
+
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
+      assert_not_equal transaction.transaction_id, transaction.grant_jti
+    end
+  end
+
+  test "retries a generated transaction reference collision at the database boundary" do
+    model = ClientSecretCredentialCeremonyTransaction
+    model.create_transaction!(
+      transaction_id: "a" * 21, grant_jti: "e" * 21,
+      actor_ref: "existing-actor", session_ref: "existing-session", operation: "enrollment",
+    )
+    generated = ["a" * 21, "g" * 21, "b" * 21, "h" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        model.create_transaction!(
+          actor_ref: "new-actor", session_ref: "new-session", operation: "enrollment",
+        )
+      end
+
+    assert_equal "b" * 21, transaction.transaction_id
+    assert_equal "h" * 21, transaction.grant_jti
+  end
+
+  test "retries a generated grant reference collision at the database boundary" do
+    model = ClientSecretCredentialCeremonyTransaction
+    model.create_transaction!(
+      transaction_id: "j" * 21, grant_jti: "i" * 21,
+      actor_ref: "existing-actor", session_ref: "existing-session", operation: "enrollment",
+    )
+    generated = ["k" * 21, "i" * 21, "l" * 21, "m" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        model.create_transaction!(
+          actor_ref: "new-actor", session_ref: "new-session", operation: "enrollment",
+        )
+      end
+
+    assert_equal "l" * 21, transaction.transaction_id
+    assert_equal "m" * 21, transaction.grant_jti
+  end
 end

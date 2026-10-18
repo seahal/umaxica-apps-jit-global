@@ -14,8 +14,22 @@ export type ChromeBanner = {
   body: string;
 };
 
+/**
+ * Present only while the session is authenticated through Emergency Access.
+ * The server derives it from the signed session token, so a page cannot opt in
+ * or out of it — see SurfaceChrome#chrome_restricted_mode.
+ */
+export type ChromeRestrictedMode = {
+  label: string;
+  description: string;
+  sign_out: ChromeLink;
+};
+
 export type ChromeCookieControls = {
+  hidden: boolean;
   scope: string;
+  /** Same-origin path the server declared for this page's consent reads and writes. */
+  endpoint_url: string;
   settings_url: string;
   title: string;
   description_html: string;
@@ -27,6 +41,8 @@ export type ChromeCookieControls = {
 
 export type ChromeThemeControls = {
   hidden: boolean;
+  /** Same-origin path the server declared for this page's theme reads and writes. */
+  endpoint_url: string;
   title: string;
   description: string;
   options: {
@@ -41,7 +57,8 @@ export type SurfaceChrome = {
   surface: string;
   brand: { name: string; href: string };
   banner: ChromeBanner | null;
-  primary_navigation: ChromeLink[] | null;
+  /** Non-null for a Restricted Mode (Emergency Access) session only. */
+  restricted_mode: ChromeRestrictedMode | null;
   footer_navigation: ChromeLink[] | null;
   /** Absent on the operational surfaces, which have no preference authority to link to. */
   cookie_controls: ChromeCookieControls | null;
@@ -59,4 +76,6 @@ export type SurfaceChrome = {
  */
 export type SharedProps = {
   chrome: SurfaceChrome;
+  /** Set by a terminal ceremony so the persistent layout clears encrypted browser history. */
+  clear_history?: boolean;
 };

@@ -1,7 +1,7 @@
-// Passkey sign-in for operators.
+// The passkey stage of normal operator sign-in.
 //
-// The identifier is the operator's public id, and the ceremony runs against the same options and
-// verification endpoints, with the same rate limits, that the Stimulus controller used.
+// Entra ID already identified the operator, so the panel asks for no identifier: the server reads
+// the actor from its own pending Entra transaction.
 import Page from "@/components/ui/Page";
 import PasskeyAuthenticationPanel, {
   type PasskeyAuthenticationPanelProps,

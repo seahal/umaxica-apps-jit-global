@@ -17,34 +17,39 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     assert_equal "/sign/in", auth_app_sign_in_path
   end
 
+  test "retired device sign-in path is not recognized" do
+    assert_unrecognized(:app, "/sign/in/device", :get)
+  end
+
   test "sign logout helpers expose the explicit ceremony lifecycle" do
     helpers = Rails.application.routes.url_helpers
 
     assert_respond_to helpers, :auth_app_sign_out_path
     assert_respond_to helpers, :new_auth_app_sign_out_path
     assert_respond_to helpers, :edit_auth_app_sign_out_path
-    assert_respond_to helpers, :auth_app_sign_out_completion_path
     assert_not_respond_to helpers, :auth_app_sign_out_confirmation_path
     assert_not_respond_to helpers, :auth_app_sign_out_attempt_path
     assert_not_respond_to helpers, :complete_auth_app_sign_out_path
+    assert_not_respond_to helpers, :auth_app_sign_out_completion_path
   end
 
   test "top-level sign entry routes resolve conventionally on every sign surface" do
     SURFACES.each_key do |surface|
       assert_recognizes_sign_route(surface, "/sign/up", :get, "auth/#{surface}/sign/ups", "show")
+      assert_recognizes_sign_route(surface, "/sign/up", :post, "auth/#{surface}/sign/ups", "create")
       assert_recognizes_sign_route(surface, "/sign/in", :get, "auth/#{surface}/sign/ins", "show")
+      assert_recognizes_sign_route(surface, "/sign/in", :post, "auth/#{surface}/sign/ins", "create")
       assert_unrecognized(surface, "/sign/up/entrance", :get)
       assert_unrecognized(surface, "/sign/in/entrance", :get)
       assert_recognizes_sign_route(surface, "/sign/out/new", :get, "auth/#{surface}/sign/outs", "new")
       assert_recognizes_sign_route(surface, "/sign/out/edit", :get, "auth/#{surface}/sign/outs", "edit")
-      assert_recognizes_sign_route(surface, "/sign/out/complete", :get, "auth/#{surface}/sign/outs/completions", "show")
+      assert_unrecognized(surface, "/sign/out/complete", :get)
       assert_recognizes_sign_route(surface, "/sign/out", :post, "auth/#{surface}/sign/outs", "create")
       assert_recognizes_sign_route(surface, "/sign/out", :delete, "auth/#{surface}/sign/outs", "destroy")
       assert_unrecognized(surface, "/signed-out", :get)
-      assert_recognizes_sign_route(
-        surface, "/oidc/backchannel/logout", :post,
-        "auth/#{surface}/oidc/backchannel/logouts", "create",
-      )
+      assert_unrecognized(surface, "/oidc/backchannel/logout", :post)
+      assert_unrecognized(surface, "/oidc/authorization", :get)
+      assert_unrecognized(surface, "/oidc/callback", :get)
       assert_unrecognized(surface, "/oidc/frontchannel_logout", :get)
       assert_unrecognized(surface, "/oidc/logout", :get)
       assert_unrecognized(surface, "/oidc/logout", :post)
@@ -77,19 +82,42 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     assert_unrecognized(:app, "/preference/language/edit", :get)
   end
 
-  test "auth app settings keeps only credential ceremony settings" do
+  test "app Secret has a new form and create action while other surfaces have neither" do
+    host = SURFACES.fetch(:app)
+    { get: ["/sign/in/secret/new", "new"], post: ["/sign/in/secret", "create"] }.each do |verb, (path, action)|
+      route = Rails.application.routes.recognize_path("http://#{host}#{path}", method: verb)
+
+      assert_equal "auth/app/sign/in/secrets", route.fetch(:controller)
+      assert_equal action, route.fetch(:action)
+    end
+    assert_equal "/sign/in/secret/new", new_auth_app_sign_in_secret_path
+    SURFACES.each do |surface, hostname|
+      [[:get, "/sign/in/secret"], [:get, "/sign/in/secret_credential/new"],
+       [:post, "/sign/in/secret_credential"],].each do |verb, path|
+        assert_raises(ActionController::RoutingError) { Rails.application.routes.recognize_path("http://#{hostname}#{path}", method: verb) }
+      end
+      next if surface == :app
+
+      [[:get, "/sign/in/secret/new"], [:post, "/sign/in/secret"]].each do |verb, path|
+        assert_raises(ActionController::RoutingError) { Rails.application.routes.recognize_path("http://#{hostname}#{path}", method: verb) }
+      end
+    end
+  end
+
+  test "auth app settings keeps only TOTP and provider ceremony settings" do
     helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
 
     %w(
       auth_app_settings
-      auth_app_settings_passkey
-      auth_app_settings_passkeys_options
-      auth_app_settings_passkeys_verification
       auth_app_settings_totp
       auth_app_settings_apple
       auth_app_settings_google
     ).each do |prefix|
       assert helper_names.any? { |name| name.start_with?(prefix) }, "#{prefix} must remain"
+    end
+
+    %w(auth_app_settings_passkey auth_app_settings_passkeys).each do |prefix|
+      assert helper_names.none? { |name| name.start_with?(prefix) }, "#{prefix} must be retired"
     end
 
     %w(
@@ -107,19 +135,16 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "auth com settings keeps only passkey ceremony settings" do
+  test "auth com settings has no credential management routes" do
     helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
 
-    %w(
-      auth_com_settings
-      auth_com_settings_passkey
-      auth_com_settings_passkeys_options
-      auth_com_settings_passkeys_verification
-    ).each do |prefix|
+    %w(auth_com_settings).each do |prefix|
       assert helper_names.any? { |name| name.start_with?(prefix) }, "#{prefix} must remain"
     end
 
     %w(
+      auth_com_settings_passkey
+      auth_com_settings_passkeys
       auth_com_settings_totp
       auth_com_settings_google
       auth_com_settings_apple
@@ -138,20 +163,19 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "auth org settings keeps only passkey and entra ceremony settings" do
+  test "auth org settings keeps only the Entra ceremony" do
     helper_names = Rails.application.routes.named_routes.helper_names.map(&:to_s)
 
     %w(
       auth_org_settings
-      auth_org_settings_passkey
-      auth_org_settings_passkeys_options
-      auth_org_settings_passkeys_verification
       auth_org_settings_entra
     ).each do |prefix|
       assert helper_names.any? { |name| name.start_with?(prefix) }, "#{prefix} must remain"
     end
 
     %w(
+      auth_org_settings_passkey
+      auth_org_settings_passkeys
       auth_org_settings_totp
       auth_org_settings_google
       auth_org_settings_apple
@@ -174,13 +198,13 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
     {
       app: %w(/settings/emails /settings/telephones /settings/birthdate /settings/secret_credentials
               /settings/sessions /settings/revocations/all /settings/activities /settings/withdrawal
-              /settings/mfa/challenge /settings/mfa/reset),
+              /settings/mfa/challenge /settings/mfa/reset /settings/passkeys /settings/totps),
       com: %w(/settings/emails /settings/telephones /settings/birthdate /settings/secret_credentials
               /settings/sessions /settings/revocations/all /settings/activities /settings/withdrawal
-              /settings/mfa/challenge),
+              /settings/mfa/challenge /settings/passkeys),
       org: %w(/settings/emails /settings/telephones /settings/birthdate /settings/secret_credentials
               /settings/sessions /settings/revocations/all /settings/activities /settings/withdrawal
-              /settings/mfa/challenge /settings/operator_lifecycle_requests),
+              /settings/mfa/challenge /settings/operator_lifecycle_requests /settings/passkeys),
     }.each do |surface, paths|
       paths.each { |path| assert_unrecognized(surface, path, :get) }
     end
@@ -211,8 +235,8 @@ class Auth::RouteNamingTest < ActionDispatch::IntegrationTest
 
     assert_includes source, "scope(module: :auth, as: :auth)"
     assert_includes source, "constraints("
-    assert_includes source, "namespace(:oidc)"
     assert_includes source, "namespace(:social)"
+    assert_not_includes source, "namespace(:oidc)"
   end
 
   private

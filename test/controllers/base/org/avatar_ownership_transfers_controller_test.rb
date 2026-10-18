@@ -1,0 +1,734 @@
+# typed: false
+# frozen_string_literal: true
+
+require "test_helper"
+
+class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::IntegrationTest
+  setup do
+    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    @source = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
+    @token = OperatorToken.create!(staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
+    @avatar_result = AvatarProvisioning::Create.call(
+      actor: @operator,
+      subject_type: :agent,
+      subject: @source.account,
+      avatar_params: { moniker: "Bureau Avatar" },
+      handle_params: { handle: "bureau-#{SecureRandom.hex(4)}" },
+      owner_surface: "org",
+      owner_collective_public_id: @source.collective.public_id,
+    )
+
+    assert_predicate @avatar_result, :success?, @avatar_result.errors.inspect
+    select_source_avatar!
+
+    @target_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @target_client)
+  end
+
+  test "registry request transport is refused before the verified ownership cutover" do
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a50"
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             avatar_public_id: @avatar_result.avatar.public_id,
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: base_browser_headers.merge("Idempotency-Key" => key),
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "registry transfer admission requires the verified Avatar ownership cutover", response.body
+    assert_not AvatarOwnershipCutover.established?
+  end
+
+  # A client whose first response was lost retries with the same key and discovers the committed result.
+  test "registry request replays the committed result for a stable idempotency key" do
+    establish_avatar_ownership_cutover!
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a55"
+    headers = base_browser_headers.merge("Idempotency-Key" => key)
+    public_ids =
+      Array.new(2) do
+        grant_step_up!("avatar_transfer_request")
+        post(
+          base_org_avatar_ownership_transfers_url(host: @host),
+          params: org_request_params, headers: headers, as: :json,
+        )
+
+        assert_response :success
+        assert_equal "registry", response.parsed_body.fetch("transfer_kind")
+        response.parsed_body.fetch("transfer_public_id")
+      end
+
+    assert_equal public_ids.first, public_ids.second
+    assert_equal 1, AvatarTransferReservation.where(idempotency_key: key).count
+  end
+
+  test "registry request refuses a reused idempotency key with different input" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a56"
+    headers = base_browser_headers.merge("Idempotency-Key" => key)
+    post base_org_avatar_ownership_transfers_url(host: @host),
+         params: org_request_params, headers: headers, as: :json
+
+    assert_response :success
+    recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
+    grant_step_up!("avatar_transfer_request")
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: { target_surface: "app", target_collective_public_id: other_target.collective.public_id },
+           headers: headers,
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal recorded, AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+  end
+
+  test "registry request refuses a reused idempotency key from a different initiator" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+    key = "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a57"
+    post base_org_avatar_ownership_transfers_url(host: @host),
+         params: org_request_params, headers: base_browser_headers.merge("Idempotency-Key" => key), as: :json
+
+    assert_response :success
+    recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+    other_operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
+    other_avatar_result = AvatarProvisioning::Create.call(
+      actor: other_operator,
+      subject_type: :agent,
+      subject: other.account,
+      avatar_params: { moniker: "Other initiator" },
+      handle_params: { handle: "avatar-replay-agent-#{SecureRandom.hex(5)}" },
+      owner_surface: "org",
+      owner_collective_public_id: other.collective.public_id,
+    )
+
+    assert_predicate other_avatar_result, :success?, other_avatar_result.errors.inspect
+    other_token = OperatorToken.create!(staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    BaseSwitcherAuthority.switch(
+      surface: :org,
+      principal: other_operator,
+      session: other_token,
+      params: {
+        account_public_id: other.account.public_id,
+        organization_public_id: other.collective.public_id,
+        organization_unit_public_id: other.unit.public_id,
+        avatar_public_id: other_avatar_result.avatar.public_id,
+      },
+    )
+    grant_step_up!("avatar_transfer_request", token: other_token)
+
+    assert_no_difference -> { AvatarTransferReservation.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: org_request_params,
+           headers: base_browser_headers(operator: other_operator, token: other_token).merge("Idempotency-Key" => key),
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal recorded, AvatarTransferReservation.find_by!(idempotency_key: key).attributes
+  end
+
+  test "keyless legacy request is refused after the ownership cutover" do
+    establish_avatar_ownership_cutover!
+    grant_step_up!("avatar_transfer_request")
+
+    assert_no_difference [-> { AvatarOwnershipTransfer.count }, -> { AvatarTransferReservation.count }] do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: { target_surface: "app", target_collective_public_id: @target.collective.public_id },
+           headers: base_browser_headers,
+           as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "legacy Avatar transfer operations are unavailable after cutover", response.body
+  end
+
+  test "registry accept transport is refused before the verified ownership cutover" do
+    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: @target_client,
+      surface: "app",
+      subject_public_id: @target.account.public_id,
+      avatar_public_id: @target.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: @source.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a52",
+      request_fingerprint: registry_request_fingerprint(
+        actor: @target_client,
+        surface: "app",
+        subject_public_id: @target.account.public_id,
+        avatar_public_id: @target.avatar.public_id,
+        target_surface: "org",
+        target_collective_public_id: @source.collective.public_id,
+      ),
+    )
+
+    grant_step_up!("avatar_transfer_accept")
+    post base_org_accept_avatar_ownership_transfer_url(
+      reservation.public_id,
+      host: @host,
+      ri: "jp",
+    ),
+         params: { transfer_kind: "registry" },
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :unprocessable_content
+    assert_equal "registry transfer admission requires the verified Avatar ownership cutover", response.body
+    assert_equal "pending", reservation.reload.state
+    assert_not AvatarOwnershipCutover.established?
+  end
+
+  test "org owner can request app transfer and cancel only with cancel scope" do
+    grant_step_up!("avatar_transfer_request")
+    http_headers_2 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpOrgGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpOrgGrant.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    post base_org_avatar_ownership_transfers_url(host: @host, ri: "jp"),
+         params: {
+           target_surface: "app",
+           target_collective_public_id: @target.collective.public_id,
+         },
+         headers: http_headers_2, as: :json
+
+    assert_response :success
+    transfer_id = response.parsed_body.fetch("transfer_public_id")
+    transfer = AvatarOwnershipTransfer.find_by!(public_id: transfer_id)
+
+    assert_equal "org", transfer.from_owner_surface
+    assert_equal "app", transfer.to_owner_surface
+    assert_equal @avatar_result.avatar.id, transfer.avatar_id
+
+    grant_step_up!("avatar_transfer_cancel")
+    http_headers_1 =
+      begin
+        rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpOrgGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpOrgGrant.create!(
+              operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "operator",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    post base_org_cancel_avatar_ownership_transfer_url(transfer_id, host: @host),
+         headers: http_headers_1, as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response.parsed_body.fetch("status")
+    assert_equal "org", @avatar_result.avatar.reload.current_ownership_period.owner_surface
+  end
+
+  test "another authorized source agent can cancel a transfer over HTTP" do
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @operator,
+      surface: "org",
+      subject_public_id: @source.account.public_id,
+      avatar_public_id: @avatar_result.avatar.public_id,
+      target_surface: "app",
+      target_collective_public_id: @target.collective.public_id,
+    )
+    other_operator = Operator.create!(
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    other = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
+    AgentMembership.create!(
+      agent: other.account,
+      bureau: @source.collective,
+      bureau_unit: @source.unit,
+      membership_kind_id: AgentMembershipKind::OWNER,
+      membership_state_id: AgentMembershipState::ACTIVE,
+      primary: false,
+      metadata: {},
+    )
+    other_avatar_result = AvatarProvisioning::Create.call(
+      actor: other_operator,
+      subject_type: :agent,
+      subject: other.account,
+      avatar_params: { moniker: "Second agent" },
+      handle_params: { handle: "avatar-transfer-agent-#{SecureRandom.hex(5)}" },
+      owner_surface: "org",
+      owner_collective_public_id: other.collective.public_id,
+    )
+
+    assert_predicate other_avatar_result, :success?, other_avatar_result.errors.inspect
+    other_token = OperatorToken.create!(staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    BaseSwitcherAuthority.switch(
+      surface: :org,
+      principal: other_operator,
+      session: other_token,
+      params: {
+        account_public_id: other.account.public_id,
+        organization_public_id: other.collective.public_id,
+        organization_unit_public_id: other.unit.public_id,
+        avatar_public_id: other_avatar_result.avatar.public_id,
+      },
+    )
+    grant_step_up!("avatar_transfer_cancel", token: other_token)
+
+    post base_org_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers(operator: other_operator, token: other_token),
+         as: :json
+
+    assert_response :success
+    assert_equal "cancelled", response.parsed_body.fetch("status")
+    assert_equal other.account.public_id, transfer.reload.cancel_actor_public_id
+  end
+
+  test "URL-provided Avatar cannot replace a nil selected Avatar" do
+    assert_nil @source.avatar
+    @token.update!(selected_avatar_public_id: nil)
+    grant_step_up!("avatar_transfer_request")
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      http_headers_0 =
+        begin
+          rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @token.public_id)
+          rp_host = rp_headers["Host"]
+          rp_route =
+            begin
+              Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+            rescue ActionController::RoutingError
+              nil
+            end
+          rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+          if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+            rp_client_id =
+              case rp_family
+              when "base" then "base-#{rp_surface}-ww"
+              when "edit" then "edit-org-ww"
+              when "tech" then "tech-org-ww"
+              else "#{rp_family}-#{rp_surface}-jp"
+              end
+            rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+            rp_client = OidcClientRegistry.find!(rp_client_id)
+            rp_key = [rp_client.client_id, rp_token.public_id]
+            @base_browser_rp_credentials ||= {}
+            if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OpOrgGrant.exists?(
+                  device_session_id: rp_token.device_session_id,
+                  oidc_client_id: rp_client.client_id,
+                  revoked_at: nil,
+                ))
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OpOrgGrant.create!(
+                operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                       session_public_id: rp_token.public_id,
+                                       base_session_public_id: rp_token.public_id,
+                                       oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                       expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                       issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                       subject: OidcSubject.for(
+                                         rp_token.actor_record,
+                                         resource_type: "operator",
+                                       ), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            if @base_browser_rp_credentials[rp_key]
+              rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+              rp_cookie = [
+                rp_headers.fetch("Cookie"),
+                "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+              ].join("; ")
+              rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+            end
+          end
+          rp_headers
+        end
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             avatar_public_id: @target.avatar.public_id,
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: http_headers_0, as: :json
+
+      assert_response :forbidden
+    end
+  end
+
+  test "request is denied when the selected agent is no longer an owner member" do
+    grant_step_up!("avatar_transfer_request")
+    membership = @source.account.agent_memberships.find_by!(bureau: @source.collective)
+    membership.update!(membership_kind_id: AgentMembershipKind::MEMBER)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: base_browser_headers,
+           as: :json
+
+      assert_response :forbidden
+    end
+  end
+
+  test "request is refused after the operator principal enters a login-blocked status" do
+    grant_step_up!("avatar_transfer_request")
+    headers = base_browser_headers
+    @operator.update!(status_id: OperatorStatus::RESERVED)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: headers,
+           as: :json
+
+      assert_response :forbidden
+    end
+  end
+
+  test "an app principal cannot use the org transfer endpoint" do
+    token = ClientToken.create!(user: @target_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    headers = as_user_headers(@target_client, host: @host, session_public_id: token.public_id)
+
+    assert_no_difference -> { AvatarOwnershipTransfer.count } do
+      post base_org_avatar_ownership_transfers_url(host: @host),
+           params: {
+             target_surface: "app",
+             target_collective_public_id: @target.collective.public_id,
+           },
+           headers: headers,
+           as: :json
+
+      assert_response :unauthorized
+    end
+  end
+
+  test "an operator cannot accept a transfer addressed to another bureau" do
+    destination_operator = Operator.create!(
+      status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    destination = BaseSelectorBootstrapAuthority.call(surface: :org, principal: destination_operator)
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @operator,
+      surface: "org",
+      subject_public_id: @source.account.public_id,
+      avatar_public_id: @avatar_result.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: destination.collective.public_id,
+    )
+    grant_step_up!("avatar_transfer_accept")
+
+    post base_org_accept_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :forbidden
+    assert_equal "pending", transfer.reload.state
+    assert_equal "org", @avatar_result.avatar.reload.current_ownership_period.owner_surface
+  end
+
+  test "destination-side org authority cannot cancel an app-originated transfer" do
+    transfer = AvatarOwnershipTransfers::RequestOperation.call(
+      actor: @target_client,
+      surface: "app",
+      subject_public_id: @target.account.public_id,
+      avatar_public_id: @target.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: @source.collective.public_id,
+    )
+    grant_step_up!("avatar_transfer_cancel")
+
+    post base_org_cancel_avatar_ownership_transfer_url(transfer.public_id, host: @host),
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :forbidden
+    assert_equal "pending", transfer.reload.state
+    assert_equal "app", @target.avatar.reload.current_ownership_period.owner_surface
+  end
+
+  test "registry accept transport completes an explicit registry reservation" do
+    establish_avatar_ownership_cutover!
+    source_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: source_client)
+    source.avatar.current_avatar_persona_binding.revoke!(force: true)
+    source_avatar_result = AvatarProvisioning::Create.call(
+      actor: source_client,
+      subject_type: :persona,
+      subject: source.account,
+      avatar_params: { moniker: "Enterprise src" },
+      handle_params: { handle: "registry-org-http-#{SecureRandom.hex(4)}" },
+      owner_surface: "app",
+      owner_collective_public_id: source.collective.public_id,
+    )
+
+    assert_predicate source_avatar_result, :success?, source_avatar_result.errors.inspect
+    reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
+      actor: source_client,
+      surface: "app",
+      subject_public_id: source.account.public_id,
+      avatar_public_id: source_avatar_result.avatar.public_id,
+      target_surface: "org",
+      target_collective_public_id: @source.collective.public_id,
+      idempotency_key: "018f2b18-6f5c-7a30-8ec2-4ebc1f0f7a48",
+      request_fingerprint: registry_request_fingerprint(
+        actor: source_client,
+        surface: "app",
+        subject_public_id: source.account.public_id,
+        avatar_public_id: source_avatar_result.avatar.public_id,
+        target_surface: "org",
+        target_collective_public_id: @source.collective.public_id,
+      ),
+    )
+
+    grant_step_up!("avatar_transfer_accept")
+    post base_org_accept_avatar_ownership_transfer_url(
+      reservation.public_id,
+      host: @host,
+      ri: "jp",
+    ),
+         params: { transfer_kind: "registry" },
+         headers: base_browser_headers,
+         as: :json
+
+    assert_response :success
+    body = response.parsed_body
+
+    assert_equal "registry", body.fetch("transfer_kind")
+    assert_equal "accepted", body.fetch("status")
+    assert_equal "org", source_avatar_result.avatar.reload.current_ownership_period.owner_surface
+    assert_equal @source.collective.public_id,
+                 source_avatar_result.avatar.current_ownership_period.owner_collective_public_id
+  end
+
+  private
+
+  def select_source_avatar!
+    BaseSwitcherAuthority.switch(
+      surface: :org,
+      principal: @operator,
+      session: @token,
+      params: {
+        account_public_id: @source.account.public_id,
+        organization_public_id: @source.collective.public_id,
+        organization_unit_public_id: @source.unit.public_id,
+        avatar_public_id: @avatar_result.avatar.public_id,
+      },
+    )
+  end
+
+  def grant_step_up!(scope, token: @token)
+    token.update!(
+      last_step_up_at: Time.current,
+      last_step_up_scope: scope,
+      last_step_up_aal: nil,
+      last_step_up_method: "passkey",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
+      last_step_up_session_public_id: token.public_id,
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:org",
+    )
+  end
+
+  def base_browser_headers(operator: @operator, token: @token)
+    rp_headers = as_staff_headers(operator, host: @host, session_public_id: token.public_id)
+    rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+    rp_client = OidcClientRegistry.find!("base-org-ww")
+    rp_key = [rp_client.client_id, rp_token.public_id]
+    @base_browser_rp_credentials ||= {}
+    issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
+    access, refresh = @base_browser_rp_credentials.fetch(rp_key)
+    cookie = [
+      rp_headers.fetch("Cookie"),
+      "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(access)}",
+      "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(refresh)}",
+    ].join("; ")
+    rp_headers.merge("Cookie" => cookie, "HTTP_COOKIE" => cookie)
+  end
+
+  def issue_base_browser_credentials!(rp_headers, rp_token, rp_client, rp_key)
+    return if @base_browser_rp_credentials[rp_key] || !rp_token.currently_usable?
+    return if rp_token.device_session_id && OpOrgGrant.exists?(
+      device_session_id: rp_token.device_session_id,
+      oidc_client_id: rp_client.client_id,
+      revoked_at: nil,
+    )
+
+    rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+    rp_now = Time.current
+    rp_session = OpOrgGrant.create!(
+      operator_token: rp_token,
+      oidc_client_id: rp_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: rp_now,
+      refresh_token_expires_at: rp_now + 10.minutes,
+    )
+    rp_access = AuthenticationTokenService.encode(
+      rp_token.actor_record,
+      host: rp_headers.fetch("Host"),
+      resource_type: "operator",
+      session_public_id: rp_token.public_id,
+      base_session_public_id: rp_token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: rp_now + 10.minutes,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(rp_client),
+      audiences: [rp_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+      subject: OidcSubject.for(rp_token.actor_record, resource_type: "operator"),
+      client_id: rp_client.client_id,
+    )
+    @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+  end
+
+  def registry_request_fingerprint(actor:, surface:, subject_public_id:, avatar_public_id:, target_surface:,
+                                   target_collective_public_id:)
+    Digest::SHA256.hexdigest(
+      [
+        "avatar_transfer", surface, actor.public_id, subject_public_id, avatar_public_id,
+        target_surface, target_collective_public_id,
+      ].join("\0"),
+    )
+  end
+
+  def org_request_params
+    { target_surface: "app", target_collective_public_id: @target.collective.public_id }
+  end
+
+  def establish_avatar_ownership_cutover!
+    AvatarOwnershipCutover.create!(
+      id: AvatarOwnershipCutover::CUTOVER_ID,
+      cutover_at: Time.utc(2030, 1, 1),
+    )
+  end
+end

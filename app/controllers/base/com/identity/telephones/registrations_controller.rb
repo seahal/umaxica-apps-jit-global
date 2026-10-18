@@ -10,9 +10,6 @@ module Base
           include ::TurnstilePageProps
           include CloudflareTurnstile
 
-          include CommonOtp
-          include SignSettingsTelephoneRegistration
-
           include EnforcementIdentifierGate
 
           include ::VerificationVisitor
@@ -21,7 +18,6 @@ module Base
 
           TELEPHONE_VERIFICATION_RATE_LIMIT = 5
           TELEPHONE_VERIFICATION_RATE_WINDOW = 60
-          before_action :authenticate_visitor!
           # Object-level authorization (ActionPolicy): registering a telephone is a fresh-record action
           # for the authenticated visitor, so gate by actor type. Each step builds/looks up the record
           # for current_visitor. Verification/turnstile/rate-limit guards remain on the flow.
@@ -54,7 +50,9 @@ module Base
               return
             end
 
-            tel_params = params(user_telephone: [:raw_number, :number])
+            tel_params = params.slice(:visitor_telephone).permit(visitor_telephone: [:raw_number, :number]).fetch(
+              :visitor_telephone, {},
+            )
             number = tel_params[:raw_number] || tel_params[:number]
 
             # adr/unified-enforcement.md, Identifier attachment enforcement: an in-force
@@ -76,12 +74,6 @@ module Base
             end
 
             session[registration_session_key] = @user_telephone.id
-            start_telephone_ceremony!(
-              surface: "com",
-              actor: current_visitor,
-              session_ref: current_session_public_id,
-              candidate: @user_telephone,
-            )
             redirect_to(
               edit_base_com_identity_telephones_registration_path(ri: params[:ri]),
             )
@@ -104,7 +96,7 @@ module Base
               return
             end
 
-            submitted_code = params.dig(:user_telephone, :pass_code)
+            submitted_code = params.dig(:visitor_telephone, :pass_code)
             if submitted_code.blank?
               @user_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.code_required"))
               render_registration_edit_failure
@@ -113,7 +105,7 @@ module Base
 
             status = complete_visitor_telephone_verification(@user_telephone.id, submitted_code)
 
-            handle_registration_update_status(status)
+            handle_registration_update_status(status, submitted_code)
           end
 
           private
@@ -181,24 +173,23 @@ module Base
             authorize!(VisitorTelephone, to: :create?)
           end
 
-          def handle_registration_update_status(status)
+          def handle_registration_update_status(status, code)
             case status
             when :success
               finish_telephone_ceremony!(
                 surface: "com",
                 actor: current_visitor,
                 session_ref: current_session_public_id,
-                candidate: @user_telephone,
+                candidate: @user_telephone, code: code,
               )
               reset_registration_session!
-              redirect_to(
+              redirect_to_surface_url(
                 base_com_identity_telephones_url(
                   ri: params[:ri],
                   host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
                 ),
-                allow_other_host: cross_host_redirect_allowed?,
               )
-            when :session_expired, :locked
+            when :session_expired
               reset_registration_session!
               redirect_to(
                 new_base_com_identity_telephones_registration_path(ri: params[:ri]),
@@ -213,10 +204,10 @@ module Base
           end
 
           def valid_registration_session?
-            @user_telephone.present? &&
-              @user_telephone.visitor_id == current_visitor.id &&
-              !@user_telephone.otp_expired? &&
-              @user_telephone.visitor_telephone_status_id == VisitorTelephoneStatus::UNVERIFIED
+            TelephoneCredentialRegistrationOtpFormQuery.call(
+              actor: current_visitor, token: current_session_token, telephone: @user_telephone,
+              transaction: registration_otp_transaction, browser_nonce: base_admission_browser_nonce,
+            )
           end
 
           def registration_session_key
@@ -225,11 +216,11 @@ module Base
 
           def reset_registration_session!
             session.delete(registration_session_key)
-            reset_telephone_ceremony_session!
+            session.delete(registration_transaction_session_key)
           end
 
           def verification_required_action?
-            current_visitor&.verified_telephone?
+            true
           end
 
           def verification_scope
@@ -241,67 +232,84 @@ module Base
 
             check_telephone_verification_rate_limit!
 
-            digest = IdentifierBlindIndex.bidx_for_telephone(number)
-            existing_visitor_telephone =
-              digest.present? ? visitor.visitor_telephones.find_by(number_digest: digest) : nil
-
-            @user_telephone = existing_visitor_telephone || visitor.visitor_telephones.build(raw_number: number)
-            @user_telephone.raw_number = number if existing_visitor_telephone
-            @user_telephone.visitor_telephone_status_id = VisitorTelephoneStatus::UNVERIFIED
+            @user_telephone = visitor.visitor_telephones.build(raw_number: number)
             if auto_accept_confirmations
               @user_telephone.confirm_policy = true
               @user_telephone.confirm_using_mfa = true
             end
 
-            if digest.present? && existing_visitor_telephone.blank?
-              VisitorTelephone.where(
-                number_digest: digest,
-                visitor_id: visitor.id,
-                visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-              ).destroy_all
-            end
-
-            otp_number = generate_otp_attributes(@user_telephone)
             return false unless @user_telephone.valid?
 
             @user_telephone.save!
-            send_telephone_verification_sms(@user_telephone, otp_number)
+            issued = TelephoneCredentialRegistrationOtpIssuer.call(
+              actor: visitor, token: current_session_token, telephone: @user_telephone,
+              browser_nonce: ensure_base_admission_browser_nonce!,
+            )
+            return false unless issued.success?
+
+            session[registration_transaction_session_key] = issued.transaction.transaction_id
+            send_telephone_verification_sms(@user_telephone, issued)
             true
           end
 
           def complete_visitor_telephone_verification(id, submitted_code)
-            @user_telephone = VisitorTelephone.find_by(id: id)
-            if @user_telephone.blank? ||
-                @user_telephone.otp_expired? ||
-                @user_telephone.visitor_telephone_status_id != VisitorTelephoneStatus::UNVERIFIED
-              return :session_expired
-            end
+            return :session_expired unless @user_telephone && @user_telephone.id == id && registration_otp_transaction
 
-            result = verify_otp_code(@user_telephone, submitted_code)
+            result = TelephoneCredentialRegistrationOtpVerificationCommitter.call(
+              actor: current_visitor, token: current_session_token, telephone: @user_telephone,
+              transaction: registration_otp_transaction,
+              browser_nonce: base_admission_browser_nonce, code: submitted_code,
+            )
+            return :success if result.verified_evidence?
+            return :session_expired if %i(unavailable result_expired session_mismatch locked).include?(result.status)
 
-            unless result[:success]
-              increment_otp_attempts!(@user_telephone)
-              if @user_telephone.locked?
-                @user_telephone.destroy!
-                return :locked
-              end
-
-              @user_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.invalid_code"))
-              return :invalid_code
-            end
-
-            # sign/id verifies the OTP and commits the settings telephone.
-            clear_otp(@user_telephone)
-            @user_telephone.save! if @user_telephone.changed?
-            :success
+            @user_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.invalid_code"))
+            result.status
           end
 
-          def send_telephone_verification_sms(visitor_telephone, otp_number)
+          def send_telephone_verification_sms(contact, issued)
             OtpAdapter.for(surface: :com, channel: :telephone).deliver(
-              record: visitor_telephone,
-              otp_code: otp_number,
-              message_style: :localized_verification,
+              record: contact, otp_code: issued.code, purpose: "credential_registration",
+              public_id: contact.public_id, message_style: :localized_verification,
+              contact_ceremony_transaction_ref: issued.transaction.transaction_id,
+              contact_otp_generation: issued.transaction.otp_generation,
             )
+          end
+
+          def finish_telephone_ceremony!(surface:, actor:, session_ref:, candidate:, code:)
+            unless surface == "com" && actor == current_visitor && session_ref == current_session_token.public_id
+              raise IdentityTelephoneCeremony::Error, "registration controller binding mismatch"
+            end
+
+            status = TelephoneCredentialRegistrationOtpFinalizer.call!(
+              actor:, actor_context: current_actor.with(surface: :base), token: current_session_token,
+              telephone: candidate, code: code,
+              transaction: registration_otp_transaction,
+              browser_nonce: base_admission_browser_nonce,
+              requirement: step_up_requirement(scope: verification_scope),
+            )
+            return candidate if status == :finalized
+
+            raise IdentityTelephoneCeremony::Error, "registration finalization is unavailable"
+          end
+
+          def registration_otp_transaction
+            reference = session[registration_transaction_session_key]
+            return unless reference
+
+            VisitorTelephoneCeremonyTransaction.find_by(transaction_id: reference)
+          end
+
+          def registration_transaction_session_key = :settings_telephone_registration_transaction_ref
+
+          def step_up_requirement(scope:)
+            unless scope == "settings_telephone"
+              raise StepUpRequirement::Invalid, "registration operation scope mismatch"
+            end
+
+            contact = @user_telephone || VisitorTelephone.new(visitor: current_visitor)
+            VisitorTelephonePolicy.new(contact, user: current_visitor)
+              .credential_registration_requirement(token: current_session_token)
           end
 
           def check_telephone_verification_rate_limit!

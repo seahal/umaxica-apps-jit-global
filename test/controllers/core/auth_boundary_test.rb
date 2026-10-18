@@ -16,6 +16,7 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       acme_host: BOOT_HOSTS.acme_service.host,
       jwt_issuer_id: "surface:CORE_APP",
       resource_type: "client",
+      client_id: "core-app-jp",
     },
     {
       host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", BOOT_HOSTS.core_corporate.host),
@@ -24,6 +25,7 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       acme_host: BOOT_HOSTS.acme_corporate.host,
       jwt_issuer_id: "surface:CORE_COM",
       resource_type: "visitor",
+      client_id: "core-com-jp",
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL", BOOT_HOSTS.core_staff.host),
@@ -32,6 +34,7 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       acme_host: BOOT_HOSTS.acme_staff.host,
       jwt_issuer_id: "surface:CORE_ORG",
       resource_type: "operator",
+      client_id: "core-org-jp",
     },
   ].freeze
 
@@ -45,15 +48,21 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
         { controller: surface.fetch(:controller), action: "show" },
       )
 
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}/sign/callback", method: :get)
+      end
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}/oidc/authorization", method: :get)
+      end
+
       assert_routing(
         { method: :post, path: "http://#{host}/sign/out" },
         { controller: surface.fetch(:sign_out_controller), action: "create" },
       )
 
-      assert_routing(
-        { method: :post, path: "http://#{host}/oidc/backchannel/logout" },
-        { controller: "core/#{surface.fetch(:controller).split("/")[1]}/oidc/backchannel/logouts", action: "create" },
-      )
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path("http://#{host}/oidc/backchannel/logout", method: :post)
+      end
     end
   end
 
@@ -71,61 +80,64 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
   test "logout redirects to the base oidc logout flow on every surface" do
     SURFACES.each do |surface|
       host = surface.fetch(:host)
-      host!(host)
+      browser = open_session
+      browser.host!(host)
+      browser.https!
+      rp_session = nil
 
       resource_type = surface.fetch(:resource_type)
-      user, token, token_class = actor_and_token_for(resource_type)
-      cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+      user, token, = actor_and_token_for(resource_type)
+      rp_session = authenticate_rp!(browser, surface, user, token, host)
 
-      post(
-        "http://#{host}/sign/out", params: { ri: "jp" },
-                                   headers: bearer_headers(
-                                     AuthenticationToken.encode(
-                                       user, host: host, session_public_id: token.public_id,
-                                             resource_type: resource_type,
-                                             jwt_issuer_id: surface.fetch(:jwt_issuer_id),
-                                     ),
-                                   ),
-      )
+      browser.post("/sign/out", params: { ri: "jp" })
 
+      response = browser.response
       handoff_rendered = response.status.between?(200, 299)
 
       assert response.redirect? || handoff_rendered, "expected redirect or handoff success, got #{response.status}"
-      assert_select "form#sign-out-handoff-form[method=?]", "post", maximum: 1 if handoff_rendered
+      assert_includes response.body, 'id="sign-out-handoff-form"' if handoff_rendered
     ensure
-      # Each surface iteration mints a fresh session for the same fixture
-      # user; revoke it so the per-user concurrent session cap isn't hit on
-      # a later surface in this loop.
-      AuthenticationLogoutCurrentSession.call(
-        resource: user,
-        token_class: token_class,
-        session_public_id: token.public_id,
-        reason: "test_cleanup",
-      )
+      RpSessionRevoker.call(scope: :rp_session, record: rp_session) if rp_session
     end
-  end
-
-  test "back-channel logout rejects invalid tokens without mutating session state" do
-    SURFACES.each do |surface|
-      host = surface.fetch(:host)
-      host! host
-
-      post "https://#{host}/oidc/backchannel/logout", params: { logout_token: "invalid" }
-
-      assert_response :bad_request
-      assert_equal "invalid_logout_token", response.body
-    end
-  end
-
-  def core_sign_out_completion_url_for(controller, host)
-    surface = controller.split("/")[1]
-    public_send("core_#{surface}_sign_out_completion_url", ri: "jp", host: host)
   end
 
   private
 
-  def bearer_headers(token, headers: {})
-    headers.merge("Authorization" => "Bearer #{token}")
+  def authenticate_rp!(browser, surface, resource, token, host)
+    client = OidcClientRegistry.find!(surface.fetch(:client_id))
+    session_class, association =
+      case surface.fetch(:resource_type)
+      when "operator" then [OpOrgGrant, :operator_token]
+      when "visitor" then [OpComGrant, :visitor_token]
+      else [OpAppGrant, :client_token]
+      end
+    rp_session = session_class.create!(
+      association => token,
+      :oidc_client_id => client.client_id,
+      :oidc_scope => "openid profile",
+      :oidc_jti => SecureRandom.uuid,
+      :oidc_nonce => SecureRandom.hex(16),
+      :oidc_auth_time => 1.minute.ago,
+      :refresh_token_expires_at => 10.minutes.from_now,
+    )
+    browser.cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      resource,
+      host: host,
+      resource_type: surface.fetch(:resource_type),
+      session_public_id: token.public_id,
+      base_session_public_id: token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_client(client),
+      audiences: [client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+      subject: OidcSubject.for(resource, resource_type: surface.fetch(:resource_type)),
+      client_id: client.client_id,
+    )
+    browser.cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
+    rp_session
   end
 
   def actor_and_token_for(resource_type)
@@ -137,7 +149,11 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
     when "visitor"
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
-      visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      visitor = Visitor.create!(
+        id: 9_116_000_000_000 + SecureRandom.random_number(1_000_000),
+        status_id: VisitorStatus::ACTIVE,
+        visibility_id: VisitorVisibility::VISITOR,
+      )
       token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
       [visitor, token, VisitorToken]
     else

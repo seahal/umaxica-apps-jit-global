@@ -42,7 +42,8 @@ class PreferenceTokenTest < ActiveSupport::TestCase
       assert_not_nil decoded
       assert_equal "dr", decoded.dig("preferences", "ct")
       assert_equal @jti, decoded["jti"]
-      assert_equal PreferenceToken::TOKEN_TYPE, decoded["typ"]
+      assert_nil decoded["typ"]
+      assert_equal @public_id, decoded["sub"]
     end
   end
 
@@ -60,7 +61,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
                 preference_type: @preference_type,
                 public_id: @public_id,
                 jti: @jti,
-                jwt_issuer_id: "surface:SIGN_APP",
+                jwt_issuer_id: "surface:AUTH_APP",
               )
 
               assert_not_nil token
@@ -68,7 +69,7 @@ class PreferenceTokenTest < ActiveSupport::TestCase
               decoded = PreferenceToken.decode(
                 token,
                 host: "log.umaxica.app",
-                jwt_issuer_id: "surface:SIGN_APP",
+                jwt_issuer_id: "surface:AUTH_APP",
               )
 
               assert_equal "dr", decoded.dig("preferences", "ct")

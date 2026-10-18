@@ -5,25 +5,24 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :client_statuses, :client_secret_credential_kinds, :client_secret_credential_statuses
+  fixtures :clients, :client_statuses
 
   setup do
     OmniAuth.config.test_mode = true
     @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     host! @host
     @user = create_verified_user_with_email(email_address: "social_link_test@example.com")
-    # Ensure @user has at least one auth method to start (e.g. password secret_credential)
-    # Check fixtures or add one.
-    # Note: ClientSecretCredentialKind should be seeded. If validation fails, check seeded values.
-    ClientSecretCredentialKind.find_or_create_by!(id: ClientSecretCredentialKind::LOGIN)
-    ClientSecretCredentialStatus.find_or_create_by!(id: ClientSecretCredentialStatus::ACTIVE)
     ClientTotpCredentialStatus.find_or_create_by!(id: ClientTotpCredentialStatus::ACTIVE)
-
-    ClientSecretCredential.create!(
-      user: @user,
-      user_secret_kind_id: ClientSecretCredentialKind::LOGIN,
-      password_digest: "digest",
-      name: "default",
+    now = Client.database_now
+    issuance = ClientSecretIssuance.create!(
+      client: @user, origin_operation_id: SecureRandom.uuid, origin: "manual", attempt_number: 1,
+      browser_session_ref: "social-link-secret-fixture", planned_count: 1,
+      presented_at: now, confirmed_at: now, expires_at: now + 1.minute,
+    )
+    raw = SecureRandom.base58(32)
+    @secret = ClientSecretCredential.create!(
+      client: @user, issuance: issuance, name: "Secret", password: raw,
+      confirmed_at: now,
     )
     ClientTotpCredential.create!(
       user: @user,
@@ -41,7 +40,66 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
     )
-    @headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+    @headers =
+      begin
+        rp_headers = as_user_headers(@user, host: @host, session_public_id: @token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
   end
@@ -53,9 +111,10 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
 
   test "should unlink apple account when another identity exists" do
     # Create Apple identity directly (link flow is handled elsewhere)
-    ClientAppleIdentity.create!(
-      user: @user, uid: "apple_uid_link", provider: "apple",
-      token: "t", token_expires_at: 1.hour.from_now.to_i,
+    identity = ClientExternalIdentity.create!(
+      client: @user, subject: "apple_uid_link", provider: "apple",
+      issuer: ExternalAuthentication::ProviderRegistry.fetch("apple").issuer,
+      audience: "apple-test-client-id", verification_authority: "test", verified_at: Time.current, state: "active",
     )
     satisfy_user_verification(@token)
     mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
@@ -69,32 +128,62 @@ class SocialLinkUnlinkTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     follow_redirect!(headers: @headers)
 
-    assert_nil ClientAppleIdentity.find_by(uid: "apple_uid_link")
+    assert_not ClientExternalIdentity.effective_binding.exists?(id: identity.id)
+    assert_not_nil identity.reload.released_at
+    assert @secret.reload.available_at?(at: Client.database_now)
+    assert_nil @secret.claimed_at
   end
 
-  test "should prevent unlinking last identity" do
-    # Create user with ONLY Apple identity (remove password secret_credential)
-    @user.client_secret_credentials.destroy_all
-    @user.client_emails.update_all(user_email_status_id: ClientEmailStatus::UNVERIFIED)
+  test "social unlink requires an alternative allowed by its existing method policy" do
+    # Secret remains a normal login method; the existing social-unlink policy
+    # separately requires email, Passkey or another active social identity.
+    @user.client_emails.each { |email| email.update!(user_email_status_id: ClientEmailStatus::UNVERIFIED) }
 
-    ClientAppleIdentity.create!(
-      user: @user, uid: "apple_uid_solo", provider: "apple",
-      token: "t", token_expires_at: 1.hour.from_now.to_i,
+    identity = ClientExternalIdentity.create!(
+      client: @user, subject: "apple_uid_solo", provider: "apple",
+      issuer: ExternalAuthentication::ProviderRegistry.fetch("apple").issuer,
+      audience: "apple-test-client-id", verification_authority: "test", verified_at: Time.current, state: "active",
     )
     satisfy_user_verification(@token)
     mark_token_step_up_satisfied_for_test(@token, scope: "social_unlink")
 
+    ActionController::Base.allow_forgery_protection = true
+    cookie_header = @headers.fetch("Cookie")
+    cookie_header.split("; ").each do |pair|
+      name, value = pair.split("=", 2)
+      cookies[name] = Rack::Utils.unescape(value)
+    end
+    get(
+      auth_app_settings_apple_url(ri: "jp", host: @host),
+      headers: @headers.merge("Accept" => "text/html", "HTTP_COOKIE" => cookie_header),
+    )
+
+    assert_response :success
+    csrf_token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+      response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+    assert_predicate csrf_token, :present?
+
     # Try to unlink Apple
     delete(
       auth_app_settings_apple_url(ri: "jp", host: @host),
-      headers: @headers,
+      headers: {
+        "Origin" => "https://#{@host}",
+        "Sec-Fetch-Site" => "same-origin",
+        "X-CSRF-Token" => csrf_token,
+      },
       params: { "cf-turnstile-response": "test" },
     )
 
     assert_response :unprocessable_content
 
     # Ensure it wasn't destroyed
-    assert ClientAppleIdentity.find_by(uid: "apple_uid_solo")
+    assert ClientExternalIdentity.exists?(identity.id)
+    assert @secret.reload.available_at?(at: Client.database_now)
+    assert_nil @secret.claimed_at
+  ensure
+    ActionController::Base.allow_forgery_protection =
+      Rails.configuration.action_controller.allow_forgery_protection
   end
 end
 
@@ -115,31 +204,11 @@ class SocialLinkUnlinkTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -199,13 +268,11 @@ class SocialLinkUnlinkTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
-    )
+    ).tap(&:finalize_binding!)
   end
 
   def insert_verified_visitor_email!(visitor_id:, address:)
@@ -214,10 +281,8 @@ class SocialLinkUnlinkTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -352,7 +417,8 @@ class SocialLinkUnlinkTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,
@@ -438,93 +504,6 @@ class SocialLinkUnlinkTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-    cookie_name = AuthenticationCookieName.access
-    cookies[cookie_name] = access_token if respond_to?(:cookies, true)
-    base.merge(
-      "Authorization" => "Bearer #{access_token}",
-      "HTTP_AUTHORIZATION" => "Bearer #{access_token}",
-      "Cookie" => "#{cookie_name}=#{access_token}",
-      "HTTP_COOKIE" => "#{cookie_name}=#{access_token}",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      staff, host: host, session_public_id: token.public_id,
-             resource_type: "operator",
-    )
-    cookie_name = AuthenticationCookieName.access
-    cookies[cookie_name] = access_token if respond_to?(:cookies, true)
-    base.merge(
-      "Authorization" => "Bearer #{access_token}",
-      "HTTP_AUTHORIZATION" => "Bearer #{access_token}",
-      "Cookie" => "#{cookie_name}=#{access_token}",
-      "HTTP_COOKIE" => "#{cookie_name}=#{access_token}",
-    )
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      visitor, host: host, session_public_id: token.public_id,
-               resource_type: "visitor",
-    )
-    cookie_name = AuthenticationCookieName.access
-    cookies[cookie_name] = access_token if respond_to?(:cookies, true)
-    base.merge(
-      "Authorization" => "Bearer #{access_token}",
-      "HTTP_AUTHORIZATION" => "Bearer #{access_token}",
-      "Cookie" => "#{cookie_name}=#{access_token}",
-      "HTTP_COOKIE" => "#{cookie_name}=#{access_token}",
-    )
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -540,10 +519,8 @@ class SocialLinkUnlinkTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -561,6 +538,10 @@ class SocialLinkUnlinkTest
         last_step_up_purpose: "step_up",
         last_step_up_audience: "step_up:app",
         last_step_up_session_public_id: token.public_id,
+        last_step_up_credential_ref: "test-step-up-credential",
+        last_step_up_phishing_resistant: false,
+        last_step_up_user_verified: true,
+        last_step_up_full_reauthentication: false,
         updated_at: Time.current, }.compact,
     )
   end
@@ -568,12 +549,12 @@ class SocialLinkUnlinkTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

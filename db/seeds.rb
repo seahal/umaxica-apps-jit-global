@@ -1,13 +1,44 @@
 # typed: false
 # frozen_string_literal: true
 
-# Reference data (lookup / status tables) is owned by migrations, which insert the fixed rows
-# with `INSERT ... ON CONFLICT DO NOTHING` (see adr/reference-table-discipline.md). This file is
-# only responsible for development/test sample fixtures (sample Client / Operator and their
-# email/secret), and is a no-op in production. The sample fixtures below rely on the reference
-# rows already being present from migrations.
+# Reference data (lookup / status tables) is normally owned by migrations, which insert the fixed
+# rows with `INSERT ... ON CONFLICT DO NOTHING` (see adr/reference-table-discipline.md). This file
+# also replays fixed social Chronicle references after a schema-only load, because that database's
+# migration markers suppress the original data inserts. The remaining content is development/test
+# reference and sample data; production seeds only the social Chronicle references.
+
+ChronicleRecord.connected_to(role: :writing) do
+  ClientChronicleEvent.insert_missing_fixed_ids!(
+    [ClientChronicleEvent::SOCIAL_LINKED, ClientChronicleEvent::SOCIAL_UNLINKED],
+  )
+  ClientChronicleLevel.insert_missing_fixed_ids!([ClientChronicleLevel::NOTHING])
+end
 
 return if Rails.env.production?
+
+# Protocol epoch rows are fixed reference state owned by each OP store. A SQL structure load
+# restores the table and its schema_migrations rows but does not replay the migration INSERT,
+# so preserve the initialized epoch on a fresh local/test database without changing an existing
+# operator-selected epoch.
+[
+  [OpAppProtocolEpoch, "app"],
+  [OpComProtocolEpoch, "com"],
+  [OpOrgProtocolEpoch, "org"],
+].each do |model, realm|
+  model.connection_class_for_self.connected_to(role: :writing) do
+    next unless model.lease_connection.data_source_exists?(model.table_name)
+
+    row = model.find_or_initialize_by(id: 1)
+    if row.new_record?
+      row.realm = realm
+      row.contract_epoch = ContractEpochValue::MINIMUM
+      row.changed_at = Time.current
+      row.save!
+    elsif row.realm != realm || !ContractEpochValue.valid?(row.contract_epoch)
+      raise ArgumentError, "#{model.name} epoch row has an invalid persisted shape"
+    end
+  end
+end
 
 # `schema_format: :sql` loads `structure.sql` for db:prepare, which carries schema only (no row
 # data). Migrations that seed fixed reference-table rows via raw INSERTs are marked "already run"
@@ -15,7 +46,8 @@ return if Rails.env.production?
 # prepared database. Ensure the reference tables this file depends on are populated before use.
 [
   ClientStatus, ClientVisibility, ClientMfaLevel, ClientMfaStatus,
-  ClientEmailStatus, ClientSecretCredentialKind, ClientSecretCredentialStatus,
+  ClientEmailStatus,
+  VisitorSecretCredentialKind, VisitorSecretCredentialStatus, VisitorPasskeyStatus,
   OperatorStatus, OperatorVisibility, OperatorMfaLevel, OperatorMfaStatus,
   OperatorEmailStatus, OperatorSecretCredentialKind,
 ].each(&:ensure_defaults!)
@@ -25,7 +57,38 @@ OperatorSecretCredentialStatus.insert_missing_fixed_ids!(
    OperatorSecretCredentialStatus::USED,],
 )
 
-sample_user_secret = "00000000000000000000000000000000"
+# Occurrence reference rows are owned by the occurrence database, not primary.
+# A structure.sql load marks data migrations as applied without replaying their
+# INSERTs, so reproduce the current JWT anomaly catalog through the same
+# idempotent migration writer on the correct writer connection. During the
+# pre-migration bootstrap both tables are absent and this section is skipped;
+# a partially-created occurrence schema fails loudly instead of reporting a
+# successful but incomplete seed.
+occurrence_connection = OccurrenceRecord.lease_connection
+occurrence_tables = %w(jwt_occurrence_statuses jwt_occurrences)
+occurrence_table_presence =
+  occurrence_tables.map do |table_name|
+    occurrence_connection.data_source_exists?(table_name)
+  end
+
+if occurrence_table_presence.any?
+  require Rails.root.join(
+    "db/occurrences_migrate/20260918150000_insert_current_jwt_anomaly_reference_data",
+  ).to_s
+  InsertCurrentJwtAnomalyReferenceData.new.seed_into(occurrence_connection)
+end
+
+# Avatar lifecycle states are owned by the avatar database and are required by
+# avatar provisioning (social sign-up completion). Replay them for the same
+# structure.sql reason as the occurrence catalog above.
+avatar_connection = AvatarRecord.lease_connection
+if avatar_connection.data_source_exists?("avatar_lifecycle_states")
+  require Rails.root.join(
+    "db/avatars_migrate/20260703000001_create_avatar_lifecycle_state_authority",
+  ).to_s
+  CreateAvatarLifecycleStateAuthority.new.seed_into(avatar_connection)
+end
+
 sample_staff_public_id = "2222222222222222"
 sample_staff_secret = "22222222222222222222222222222222"
 sample_staff_email_address = "sample-staff@example.test"
@@ -47,13 +110,6 @@ user_email.user_email_status_id = ClientEmailStatus::VERIFIED
 user_email.confirm_policy = true
 user_email.save!
 
-user_secret = user.client_secret_credentials.find_or_initialize_by(name: "sample-user-secret")
-user_secret.user_secret_kind_id = ClientSecretCredentialKind::PERMANENT
-user_secret.user_identity_secret_status_id = ClientSecretCredentialStatus::ACTIVE
-user_secret.uses_remaining = 10
-user_secret.password = sample_user_secret
-user_secret.save!
-
 staff = Operator.find_or_initialize_by(public_id: sample_staff_public_id)
 staff.status_id = OperatorStatus::ACTIVE
 staff.visibility_id = OperatorVisibility::USER
@@ -68,12 +124,12 @@ staff_email.staff_email_status_id = OperatorEmailStatus::VERIFIED
 staff_email.save!
 
 staff_secret = staff.operator_secret_credentials.find_or_initialize_by(name: "sample-staff-secret")
-staff_secret.staff_secret_kind_id = OperatorSecretCredentialKind::PERMANENT
+staff_secret.staff_secret_kind_id = OperatorSecretCredentialKind::LOGIN
 staff_secret.staff_identity_secret_status_id = OperatorSecretCredentialStatus::ACTIVE
 staff_secret.password = sample_staff_secret
 staff_secret.save!
 
-# Flipper stores nothing until a feature is written, so a fresh platform database shows an
+# Flipper stores nothing until a feature is written, so a fresh primary database shows an
 # empty feature list and every external authentication ceremony reads as disabled. Register
 # the ceremony kill switches so they appear in the Flipper UI and local sign-in works.
 #
@@ -85,7 +141,7 @@ ExternalAuthentication::FlipperProviderAvailabilityAdapter::PROVIDER_FEATURE_NAM
   .each_value { |feature_name| Flipper.enable(feature_name) }
 
 # `fqdn_available_*` carries the same `:availability` polarity, so an unwritten flag closes the
-# FQDN: a fresh platform database answers every request with 503 `fqdn_unavailable` before routing.
+# FQDN: a fresh primary database answers every request with 503 `fqdn_unavailable` before routing.
 # Every slot the router serves is opened here so a freshly seeded development environment serves the
 # hosts its own routes declare. Production is untouched (this file returns above) -- switching a
 # public FQDN on stays an explicit operator decision made through the Flipper UI.
@@ -93,22 +149,26 @@ FqdnAvailabilityRegistry.flag_names.each { |feature_name| Flipper.enable(feature
 
 # Deterministic development CMS documents so all twelve public content cells have
 # a published entry. Uses the normal draft -> promote -> publish lifecycle.
-LOCALES = %w(ja en).freeze
+# Keep this out of test: `db:prepare` seeds newly created test databases, and the
+# welcome rows then leak into every worker clone and break empty-table assertions.
+if Rails.env.development?
+  locales = %w(ja en)
 
-Publishing::ContentFamilies::ENTRY_CLASSES.product(LOCALES).each do |entry_class, locale|
-  slug = "welcome"
-  next if entry_class.reflect_on_association(:slugs).klass.exists?(locale:, slug:)
+  Publishing::ContentFamilies::ENTRY_CLASSES.product(locales).each do |entry_class, locale|
+    slug = "welcome"
+    next if entry_class.reflect_on_association(:slugs).klass.exists?(locale:, slug:)
 
-  title = "#{entry_class::SURFACE.capitalize} #{entry_class::AUDIENCE} (#{locale})"
-  entry = entry_class.create!(locale:)
-  entry.slugs.create!(locale:, slug:, state: "canonical", canonicalized_at: Time.current)
-  revision = entry.revisions.create!(
-    locale:, title:, summary: "#{title} summary",
-    body: { "text" => "#{title} body" }, schema_version: 1,
-    content_digest: Digest::SHA256.hexdigest("#{entry_class::AUDIENCE}-#{entry_class::SURFACE}-#{locale}-welcome"),
-    sequence: 1,
-  )
-  entry.update!(current_revision: revision)
-  version = Publishing::PromoteRevisionOperation.call(revision:)
-  entry.publications.create!(entry_version: version, effective_from: 1.hour.ago)
+    title = "#{entry_class::SURFACE.capitalize} #{entry_class::AUDIENCE} (#{locale})"
+    entry = entry_class.create!(locale:)
+    entry.slugs.create!(locale:, slug:, state: "canonical", canonicalized_at: Time.current)
+    revision = entry.revisions.create!(
+      locale:, title:, summary: "#{title} summary",
+      body: { "text" => "#{title} body" }, schema_version: 1,
+      content_digest: Digest::SHA256.hexdigest("#{entry_class::AUDIENCE}-#{entry_class::SURFACE}-#{locale}-welcome"),
+      sequence: 1,
+    )
+    entry.update!(current_revision: revision)
+    version = Publishing::PromoteRevisionOperation.call(revision:)
+    entry.publications.create!(entry_version: version, effective_from: 1.hour.ago)
+  end
 end

@@ -5,7 +5,7 @@ module Webauthn
   # Session-backed one-time store for in-process WebAuthn challenges.
   #
   # Every challenge is bound at issue time to its surface, RP ID, origin,
-  # purpose, and actor; consumption re-verifies all bindings and deletes the
+  # purpose, and optional actor; consumption re-verifies all bindings and deletes the
   # entry before any of them are checked, so a mismatching or failing attempt
   # still burns the challenge (replay defense). Cross-request ceremonies that
   # span the sign/id boundary use the durable *PasskeyCeremonyTransaction
@@ -25,7 +25,12 @@ module Webauthn
 
     class ChallengeBindingMismatchError < ChallengeError; end
 
-    PURPOSES = %w(registration authentication step_up).freeze
+    # Ceremony purposes are separate namespaces, not labels: a challenge issued
+    # for one is rejected by every other verifier (see #consume! /
+    # #consume_with_actor!). `emergency_sign_in` is the org Emergency Access
+    # ceremony and must never be interchangeable with normal `authentication`
+    # or with `step_up`.
+    PURPOSES = %w(registration authentication emergency_sign_in step_up).freeze
 
     Consumed = Data.define(:challenge, :actor_global_key)
 
@@ -62,7 +67,7 @@ module Webauthn
 
       raise ChallengeNotFoundError, "Challenge not found" unless data
 
-      if Time.current.to_i > data["expires_at"].to_i
+      if Time.current.to_i >= data["expires_at"].to_i
         raise ChallengeExpiredError, "Challenge has expired"
       end
       if data["purpose"] != normalize_purpose(purpose)
@@ -78,10 +83,10 @@ module Webauthn
       data["challenge"]
     end
 
-    # Consumption variant for identifier-first sign-in, where the server
-    # learns the acting account from the challenge itself: validates surface,
-    # RP ID, origin, purpose, TTL, and one-time use, and returns the actor
-    # binding for the caller to enforce credential ownership against.
+    # Consumption variant for a sign-in flow where the actor may be learned
+    # from the challenge itself: validates surface, RP ID, origin, purpose,
+    # TTL, and one-time use, and returns the optional actor binding for the
+    # caller to enforce credential ownership against.
     def consume_with_actor!(id, purpose:, surface:, rp_id:, origin:)
       entries = current_entries
       data = entries.delete(id)
@@ -89,7 +94,7 @@ module Webauthn
 
       raise ChallengeNotFoundError, "Challenge not found" unless data
 
-      if Time.current.to_i > data["expires_at"].to_i
+      if Time.current.to_i >= data["expires_at"].to_i
         raise ChallengeExpiredError, "Challenge has expired"
       end
       if data["purpose"] != normalize_purpose(purpose)
@@ -145,7 +150,7 @@ module Webauthn
 
     def cleanup_expired!(entries)
       now = Time.current.to_i
-      entries.delete_if { |_, data| data["expires_at"].to_i < now }
+      entries.delete_if { |_, data| data["expires_at"].to_i <= now }
     end
 
     def evict_oldest!(entries)

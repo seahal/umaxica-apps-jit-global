@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_assignments
@@ -22,8 +24,6 @@
 #
 #  fk_rails_...  (avatar_id => avatars.id) ON DELETE => cascade
 #
-
-# frozen_string_literal: true
 
 class AvatarAssignment < AvatarRecord
   include AvatarAssignmentAuthorityProtection

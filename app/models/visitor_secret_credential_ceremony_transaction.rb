@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: visitor_secret_credential_ceremony_transactions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                          :bigint           not null, primary key
 #  actor_ref                   :string           not null
@@ -32,7 +32,7 @@
 #  idx_on_result_jti_9191bba74d             (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  idx_on_transaction_id_759e16c588         (transaction_id) UNIQUE
 #
-class VisitorSecretCredentialCeremonyTransaction < ComTicketRecord
+class VisitorSecretCredentialCeremonyTransaction < OpBaseComRecord
   include SecretCredentialCeremonyTransactionable
 
   ceremony_surface "com"

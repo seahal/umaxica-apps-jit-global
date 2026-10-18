@@ -1,0 +1,7 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "unconsumed (consumed_at null)" as unconsumed
+    state "consumed_at present" as consumed
+    [*] --> unconsumed
+    unconsumed --> consumed: consume! provider callback
+    consumed --> [*]

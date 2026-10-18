@@ -46,4 +46,6 @@ module JitSessionCookieConfig
   def partitioned?(rails_env: Rails.env)
     rails_env.production?
   end
+
+  private_class_method :partitioned?
 end

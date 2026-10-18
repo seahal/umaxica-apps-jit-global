@@ -10,6 +10,7 @@ module Webauthn
 
     APP_CONFIG = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.app", origin: "https://auth.umaxica.app")
     COM_CONFIG = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.com", origin: "https://auth.umaxica.com")
+    ORG_CONFIG = Webauthn::RelyingPartyConfig.new(rp_id: "auth.umaxica.org", origin: "https://auth.umaxica.org")
 
     setup do
       @client = webauthn_fake_client
@@ -17,11 +18,31 @@ module Webauthn
 
     test "registration options demand required user verification" do
       options = RegistrationVerifier.options_for(
-        config: APP_CONFIG, user_id: "1", user_name: "user@example.com",
+        config: APP_CONFIG, user_id: "1", user_name: "user@example.com", surface: :app,
       )
 
       assert_equal "required", options.authenticator_selection[:user_verification]
+      assert_equal "required", options.authenticator_selection[:resident_key]
       assert_equal "auth.umaxica.app", options.rp.id
+    end
+
+    test "registration discoverability is required for app and com but unchanged for org" do
+      app_options = RegistrationVerifier.options_for(
+        config: APP_CONFIG, user_id: "app-user", user_name: "app@example.com", surface: :app,
+      )
+      com_options = RegistrationVerifier.options_for(
+        config: COM_CONFIG, user_id: "com-user", user_name: "com@example.com", surface: :com,
+      )
+      org_options = RegistrationVerifier.options_for(
+        config: ORG_CONFIG, user_id: "org-user", user_name: "org@example.com", surface: :org,
+      )
+
+      assert_equal "required", app_options.authenticator_selection[:resident_key]
+      assert_equal "required", com_options.authenticator_selection[:resident_key]
+      assert_equal "discouraged", org_options.authenticator_selection[:resident_key]
+      [app_options, com_options, org_options].each do |options|
+        assert_equal "required", options.authenticator_selection[:user_verification]
+      end
     end
 
     test "authentication options demand required user verification" do
@@ -133,7 +154,9 @@ module Webauthn
     private
 
     def registration_challenge
-      RegistrationVerifier.options_for(config: APP_CONFIG, user_id: "1", user_name: "user@example.com").challenge
+      RegistrationVerifier.options_for(
+        config: APP_CONFIG, user_id: "1", user_name: "user@example.com", surface: :app,
+      ).challenge
     end
 
     def authentication_challenge

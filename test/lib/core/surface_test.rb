@@ -96,32 +96,4 @@ class CoreSurfaceTest < ActiveSupport::TestCase
 
     assert_not CoreSurface.matches?(request, :org)
   end
-
-  test "normalized_host lowercases and removes trailing dot" do
-    assert_equal "example.com", CoreSurface.send(:normalized_host, "EXAMPLE.COM")
-    assert_equal "example.com", CoreSurface.send(:normalized_host, "example.com.")
-  end
-
-  test "normalized_host removes port" do
-    assert_equal "example.com", CoreSurface.send(:normalized_host, "example.com:8080")
-  end
-
-  test "normalized_host extracts host from a URL string" do
-    assert_equal "app.example.com", CoreSurface.send(:normalized_host, "https://APP.EXAMPLE.COM:3000/path")
-  end
-
-  test "normalized_host returns nil for blank" do
-    assert_nil CoreSurface.send(:normalized_host, "")
-    assert_nil CoreSurface.send(:normalized_host, nil)
-  end
-
-  test "extract_host returns host if request responds to host" do
-    request = MockRequest.new("app.example.com")
-
-    assert_equal "app.example.com", CoreSurface.send(:extract_host, request)
-  end
-
-  test "extract_host converts string to host" do
-    assert_equal "app.example.com", CoreSurface.send(:extract_host, "app.example.com")
-  end
 end

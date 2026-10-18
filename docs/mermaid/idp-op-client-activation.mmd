@@ -1,0 +1,21 @@
+stateDiagram-v2
+    %% R5-WU19 OP admission of one exact RP client at one contract epoch.
+    %% Stored per realm in op_client_activations (op_base_app / op_base_com / op_base_org).
+    state "closed (no row)" as absent
+    state "enabled" as enabled
+    state "disabled" as disabled
+
+    [*] --> absent
+    absent --> enabled: OpClientActivationWriter enabled=true / epoch row lock
+    absent --> disabled: OpClientActivationWriter enabled=false / epoch row lock
+    enabled --> disabled: OpClientActivationWriter enabled=false (failed-cell rollback)
+    disabled --> enabled: OpClientActivationWriter enabled=true
+
+    note right of absent
+      Read by OpClientAdmissionQuery at the OP
+      authorization and token endpoints in an
+      op-base role process. No row, a disabled
+      row, or a row for an older contract epoch
+      admits nothing. A new contract epoch starts
+      every client closed again.
+    end note

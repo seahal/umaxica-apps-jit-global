@@ -18,6 +18,7 @@ module SecretCredential
     limited_session
   ).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     has_secure_password algorithm: :argon2, validations: false
     validates :name, presence: true
@@ -31,11 +32,11 @@ module SecretCredential
   end
 
   class_methods do
-    def issue!(name:, length: SECRET_PASSWORD_LENGTH, discarded_at: nil, uses: 1, status: :active, **attributes)
+    def issue!(name:, length: SECRET_PASSWORD_LENGTH, discard_at: nil, uses: 1, status: :active, **attributes)
       raw_secret_credential = SecureRandom.base58(length)
       record_attributes = attributes.merge(name: name)
       record_attributes[:uses_remaining] = uses if supports_uses_remaining?
-      record_attributes[:discarded_at] = discarded_at if discarded_at && supports_expiration?
+      record_attributes[:discard_at] = discard_at if discard_at && supports_expiration?
       record = new(record_attributes)
       record[identity_secret_credential_status_id_column] = status_id_for(status)
       record.password = raw_secret_credential
@@ -54,15 +55,6 @@ module SecretCredential
     def status_id_for(status)
       status_key = status.to_s.upcase
       case identity_secret_credential_status_class.name
-      when "ClientSecretCredentialStatus"
-        {
-          "ACTIVE" => ClientSecretCredentialStatus::ACTIVE,
-          "EXPIRED" => ClientSecretCredentialStatus::EXPIRED,
-          "REVOKED" => ClientSecretCredentialStatus::REVOKED,
-          "USED" => ClientSecretCredentialStatus::USED,
-          "DELETED" => ClientSecretCredentialStatus::DELETED,
-          "NOTHING" => ClientSecretCredentialStatus::NOTHING,
-        }.fetch(status_key)
       when "OperatorSecretCredentialStatus"
         {
           "ACTIVE" => OperatorSecretCredentialStatus::ACTIVE,
@@ -98,46 +90,13 @@ module SecretCredential
 
     def supports_expiration?
       if respond_to?(:column_names)
-        column_names.include?("discarded_at")
+        column_names.include?("discard_at")
       elsif respond_to?(:attribute_types)
-        attribute_types.key?("discarded_at")
+        attribute_types.key?("discard_at")
       else
         false
       end
     end
-  end
-
-  def verify_and_consume!(raw_secret_credential, now: Time.current)
-    with_lock do
-      reload
-
-      # Perform authentication first to maintain constant-time comparison
-      auth_result = authenticate(raw_secret_credential)
-
-      # Then check other conditions
-      return false unless active?
-      return false if expire_if_needed!(now: now)
-
-      if uses_remaining_available?
-        return false unless Integer(uses_remaining.to_s, 10).positive?
-      end
-      return false unless auth_result
-
-      self.last_used_at = now
-      if uses_remaining_available?
-        self.uses_remaining -= 1
-        if uses_remaining.zero?
-          self[self.class.identity_secret_credential_status_id_column] = self.class.status_id_for(:used)
-        end
-      else
-        # Fallback for secret_credentials without uses_remaining persistence: mark as used after first success.
-        self[self.class.identity_secret_credential_status_id_column] = self.class.status_id_for(:used)
-      end
-
-      save!
-    end
-
-    true
   end
 
   def expire_if_needed!(now: Time.current)
@@ -189,14 +148,14 @@ module SecretCredential
   end
 
   def expired_by_time?(now)
-    return false unless respond_to?(:discarded_at)
-    return false if discarded_at.nil?
+    return false unless respond_to?(:discard_at)
+    return false if discard_at.nil?
 
     # PostgreSQL infinity/-infinity are used as sentinels for "never expires"
     # When read from DB, they may be converted to Float::INFINITY/-Float::INFINITY
-    return false if discarded_at.respond_to?(:infinite?) && discarded_at.infinite?
+    return false if discard_at.respond_to?(:infinite?) && discard_at.infinite?
 
-    discarded_at <= now
+    discard_at <= now
   end
 
   private

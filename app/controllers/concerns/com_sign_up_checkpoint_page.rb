@@ -34,7 +34,6 @@ module ComSignUpCheckpointPage
       title: t("sign.com.registration.checkpoint.show.page_title"),
       birthdate: missing.include?(:birthdate) ? sign_up_checkpoint_birthdate_props : nil,
       passkey: missing.include?(:passkey) ? sign_up_checkpoint_passkey_props : nil,
-      passcode: missing.include?(:passcode) ? sign_up_checkpoint_passcode_props : nil,
       complete_message: missing.empty? ? t("sign.com.registration.checkpoint.show.complete") : nil,
       cancellation: sign_up_checkpoint_cancellation_props(missing.first),
     }
@@ -47,6 +46,7 @@ module ComSignUpCheckpointPage
       label: t("sign.com.registration.checkpoint.show.birthdate.label"),
       action: public_send(
         :"auth_com_sign_up_check_#{@sign_up_ticket.entry_method}_birthdate_path",
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
       ),
@@ -66,19 +66,7 @@ module ComSignUpCheckpointPage
       description: t("sign.com.registration.checkpoint.show.passkey.description"),
       label: t("sign.com.registration.checkpoint.show.passkey.action"),
       href: auth_com_sign_up_check_telephone_passkey_path(
-        ri: params[:ri],
-        pt: signed_pt_param,
-        checkpoint_version: @sign_up_ticket.checkpoint_version,
-      ),
-    }
-  end
-
-  def sign_up_checkpoint_passcode_props
-    {
-      title: t("sign.com.registration.checkpoint.show.passcode.title"),
-      description: t("sign.com.registration.checkpoint.show.passcode.description"),
-      label: t("sign.com.registration.checkpoint.show.passcode.action"),
-      href: auth_com_sign_up_check_telephone_passcode_path(
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
         checkpoint_version: @sign_up_ticket.checkpoint_version,
@@ -97,6 +85,7 @@ module ComSignUpCheckpointPage
       label: t("actions.cancel"),
       action: public_send(
         :"auth_com_sign_up_check_#{@sign_up_ticket.entry_method}_#{step}_path",
+        **sign_up_flow_binding_params,
         ri: params[:ri],
         pt: signed_pt_param,
       ),

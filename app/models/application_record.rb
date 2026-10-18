@@ -4,6 +4,30 @@
 class ApplicationRecord < ActiveRecord::Base
   primary_abstract_class
 
+  # Every domain gets its own dedicated abstract class with its own `connects_to`
+  # (PublishingRecord, OpBaseAppRecord, ...); nothing does business logic through
+  # ApplicationRecord directly. Without a connection of its own, though,
+  # `ActiveRecord::Base.connection` (what any gem or Rails-provided model that skips those
+  # dedicated classes ends up calling -- rails_db's dashboard, ActiveStorage, ActionMailbox)
+  # raised ActiveRecord::ConnectionNotEstablished, and DatabaseSelector
+  # (config/initializers/multi_db.rb) wraps every GET in `connected_to(role: :reading)`, which
+  # needs a reading pool to exist at all or raises ActiveRecord::ConnectionNotDefined. `primary`
+  # is this repository's conventional default database for exactly this kind of
+  # application-wide, non-domain-specific state (Flipper's own model connects to it the same
+  # way; see config/initializers/flipper.rb and adr/global-regional-database-ownership.md).
+  connects_to database: { writing: :primary, reading: :primary }
+
+  # Return one instant from this model's writer database. `clock_timestamp()`
+  # is deliberately read outside the query cache so a state transition does
+  # not reuse a previously cached wall-clock value. Callers should obtain it
+  # after acquiring any lock required for their decision and pass the value
+  # through the rest of that decision unit.
+  def self.database_now
+    value = uncached { lease_connection.select_value("SELECT clock_timestamp()", "DatabaseClock") }
+    value.is_a?(Time) ? value : Time.zone.parse(value.to_s)
+  end
+  public_class_method :database_now
+
   FIXED_ID_SEED_CACHE = Concurrent::Map.new
   private_constant :FIXED_ID_SEED_CACHE
 
@@ -17,13 +41,10 @@ class ApplicationRecord < ActiveRecord::Base
   # (and, as a fallback, from the request path when a reference table is found
   # empty after db:reset). Re-running it inserts nothing new.
   #
-  # Caveat worth knowing before relying on it: the per-id fallback below rescues
-  # StatementInvalid and moves on, so a row that cannot be inserted for a real
-  # reason -- a NOT NULL column with no default, a failing check constraint --
-  # is skipped silently and the reference table is left incomplete. That
-  # swallow predates this comment and conflicts with
-  # generic/no-silent-fallback.mdc; it is recorded here rather than changed,
-  # because narrowing it needs its own change and regression tests.
+  # Only a duplicate fixed id is an expected race: another writer may have
+  # inserted the same reference row after the initial presence check. Other
+  # database failures must escape so a partial reference set cannot be reported
+  # as successfully seeded.
   def self.insert_missing_fixed_ids!(ids)
     return if ids.blank?
 
@@ -54,11 +75,11 @@ class ApplicationRecord < ActiveRecord::Base
           end
 
         insert_all(rows)
-      rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid
+      rescue ActiveRecord::RecordNotUnique
         # Fallback for concurrent inserts or models without insert_all support
         missing_ids.each do |id|
           where(primary_key => id).first_or_create!
-        rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid
+        rescue ActiveRecord::RecordNotUnique
           nil
         end
       end

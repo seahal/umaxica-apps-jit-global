@@ -13,7 +13,6 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_operator!
         before_action :authorize_emails!, only: :index
 
         def index
@@ -59,14 +58,12 @@ module Base
             return
           end
 
-          unless AuthMethodGuard.can_remove_email?(current_operator, @staff_email)
-            redirect_to(
-              base_org_identity_emails_path(ri: params[:ri]),
-            )
-            return
+          current_operator.with_lock do
+            @staff_email = OperatorEmail.lock.find_by!(id: @staff_email.id, staff_id: current_operator.id)
+            unless @staff_email.undeletable? || !AuthMethodGuard.can_remove_email?(current_operator, @staff_email)
+              @staff_email.destroy_without_dead_history!
+            end
           end
-
-          @staff_email.destroy!
           redirect_to(
             base_org_identity_emails_path(ri: params[:ri]),
             status: :see_other,

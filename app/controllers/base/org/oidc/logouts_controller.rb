@@ -4,11 +4,12 @@
 module Base
   module Org
     module Oidc
-      class LogoutsController < Base::Org::ApplicationController
+      class LogoutsController < Base::Org::AuthorityController
         include CommonRedirect
         include ::AuthenticationLogoutable
         include SignOutNotice
         include SignOidcLogout
+        include ::OidcRpLogoutAuthority
         include ::SurfaceInertiaPage
 
         AUTHENTICATION_MODE = :open
@@ -19,9 +20,19 @@ module Base
 
         declare_authentication_mode! :open
 
-        def create
-          show
+        def show
+          return show_browser_rp_logout_authority! if browser_rp_logout_challenge?
+
+          handle_oidc_end_session_request
         end
+
+        def create
+          return create_browser_rp_logout_authority! if browser_rp_logout_challenge?
+
+          handle_oidc_end_session_request
+        end
+
+        public :create
 
         private
 
@@ -31,7 +42,7 @@ module Base
         end
 
         def oidc_logout_completed_path(ri:, _sot: nil)
-          base_org_sign_out_completion_path(ri: ri)
+          base_org_sign_out_path(ri: ri)
         end
 
         # The ERB template this action rendered was a two-line wrapper around the shared sign-out
@@ -65,9 +76,10 @@ module Base
 
         def sign_out_confirmation_form
           {
-            action: sign_out_post_path,
+            action: request.path,
             submit: t("sign.shared.sign_out.button"),
             logout_challenge: params[:logout_challenge].presence,
+            ri: params[:ri].presence,
             confirm_description: t("sign.shared.sign_out.confirm_description"),
           }
         end

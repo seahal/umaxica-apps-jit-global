@@ -26,6 +26,7 @@ module Auth
         include SessionLimitGate
 
         include SocialOmniauthCallbackFlow
+        include ::AuthenticationModeSwitchGuard
 
         AUTHENTICATION_MODE = :deny_all
 
@@ -48,6 +49,7 @@ module Auth
 
         rescue_from SocialAuth::BaseError, with: :handle_social_auth_error
         rescue_from ActiveRecord::RecordNotUnique, with: :handle_record_not_unique
+        before_action :reject_social_sign_in_callback_while_authenticated!, only: :omniauth
         before_action :verify_social_callback_request!, only: [:omniauth], raise: false
 
         # Allow unauthenticated access for login intent
@@ -151,6 +153,12 @@ module Auth
 
         private
 
+        def reject_social_sign_in_callback_while_authenticated!
+          return if current_social_auth_intent.to_s == "link"
+
+          reject_new_sign_in_if_authenticated!
+        end
+
         def verified_external_authentication_callback(auth)
           provider = SocialIdentifiable.normalize_provider(params[:provider])
           operation = current_social_auth_intent.presence || "login"
@@ -225,10 +233,6 @@ module Auth
               return
             end
 
-            if social_sign_up_required?(user, existing_account)
-              return handle_social_sign_up_intent(user, provider_name, identity, pt: pt)
-            end
-
             handle_login_intent(user, provider_name, existing_account, pt: pt)
 
           else
@@ -292,19 +296,18 @@ module Auth
 
         def with_pending_social_sign_up_lock(provider, uid, &)
           digest = pending_social_signup_uid_digest(provider: provider, uid: uid)
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             SignUpEmailPendingGuard.with_lock(
               namespace: "sign_up:social_callback",
               address_digest: "#{provider}:#{digest}",
-              model_class: AppTicketRecord,
+              model_class: OpBaseAppRecord,
               &
             )
           end
         end
 
         def create_pending_social_sign_up_flow!(provider, pt: nil)
-          AppTicketRecord.connected_to(role: :writing) do
-            ClientSignUpFlowStatus.ensure_defaults!
+          OpBaseAppRecord.connected_to(role: :writing) do
             cycle = ClientSignUpFlow.create!(
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
@@ -340,6 +343,15 @@ module Auth
             raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
           end
           raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless cycle.entry_method == provider
+
+          binding = auth_social_admission_binding!
+          ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+          unless ceremony.authentication_evidence_recorded?
+            ceremony.record_authentication_evidence!(method: provider)
+          end
+          unless ceremony.reload.authentication_method == provider
+            raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+          end
 
           grant = social_signup_ceremony_grant_for(cycle, provider)
 
@@ -422,7 +434,7 @@ module Auth
           issuance = IdentitySocialCeremonyGrantIssuer.issue!(
             surface: "app",
             actor_ref: cycle.public_id,
-            session_ref: cycle.public_id,
+            session_ref: auth_social_admission_binding!.entry_ref,
             operation: "signup",
             provider: provider,
             resource_ref: "sign_up",
@@ -438,11 +450,11 @@ module Auth
           if identity&.respond_to?(:uid) && identity.respond_to?(:provider) &&
               identity.uid.present? && identity.provider.present?
             digest = "#{SocialIdentifiable.normalize_provider(identity.provider)}:#{identity.uid}"
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               SignUpEmailPendingGuard.with_lock(
                 namespace: "sign_up:social_callback",
                 address_digest: digest,
-                model_class: AppTicketRecord,
+                model_class: OpBaseAppRecord,
                 &
               )
             end
@@ -454,8 +466,7 @@ module Auth
         def create_social_sign_up_flow!(user, identity, pt: nil)
           raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless user && identity
 
-          AppTicketRecord.connected_to(role: :writing) do
-            ClientSignUpFlowStatus.ensure_defaults!
+          OpBaseAppRecord.connected_to(role: :writing) do
             cycle = ClientSignUpFlow.create!(
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
@@ -483,54 +494,23 @@ module Auth
           redirect_to(auth_app_settings_path)
         end
 
-        def handle_login_intent(user, provider_name, existing_account, pt: nil)
-          Rails.logger.debug(JitLogEvent.format("sign.social.omniauth.login_intent", message: "Signing in user"))
-          if existing_account
-            return reject_established_social_login_session_creation!(provider_name)
-          end
-
-          unless user&.login_allowed?
-            return redirect_to(
-              auth_app_sign_in_path,
-            )
-          end
-
-          if external_authentication_method_locked?(
-            enforcement_case_class: AppEnforcementCase,
-            principal_public_id: user.public_id,
-            authentication_method: SocialIdentifiable.normalize_provider(provider_name),
+        def handle_login_intent(user, provider_name, _existing_account, pt: nil)
+          provider = SocialIdentifiable.normalize_provider(provider_name)
+          result = AuthenticationSessionCommitter.call(
+            controller: self, resource: user, pt:, ri: params[:ri], auth_method: "social",
+            established_authentication_method: provider,
+            authentication_event_at: @external_authentication_callback_result.principal.verified_at,
+            audit_context: { auth_method: "social", provider: },
           )
-            return redirect_to(
-              auth_app_sign_in_path,
-            )
+          if result[:status] == :authentication_evidence_recorded && auth_ceremony_authorization_transaction
+            redirect_to_sign_in_sequence!(pt:, status: :see_other)
+          elsif %i(authentication_evidence_recorded mfa_required).include?(result[:status]) && result[:redirect_path]
+            redirect_to(result.fetch(:redirect_path), status: :see_other)
+          else
+            refusal = sign_in_result_from_session_result(result, actor: user)
+            render plain: refusal.message.presence || I18n.t("sign.app.social.sessions.create.failure"),
+                   status: refusal.response_status
           end
-
-          login_result = sign_in(user, pt: pt, provider_name: provider_name)
-
-          if login_result.is_a?(Hash) && login_result[:status] != :success
-            Rails.logger.warn(
-              JitLogEvent.format(
-                "sign.social.omniauth.login_failed",
-                status: login_result[:status],
-                user_id: user.id,
-              ),
-            )
-            return handle_login_failure(login_result, provider_name, user)
-          end
-
-          if login_result.is_a?(Hash) && login_result[:restricted]
-            return redirect_to(
-              auth_app_sign_in_session_path,
-            )
-          end
-
-          Rails.logger.debug(
-            JitLogEvent.format(
-              "sign.social.omniauth.login_successful",
-              message: "Redirecting after login",
-            ),
-          )
-          redirect_after_login(provider_name, existing_account, pt: pt)
         end
 
         def reject_established_social_login_session_creation!(provider_name)
@@ -545,67 +525,6 @@ module Auth
           )
         end
 
-        def redirect_after_login(provider_name, existing_account, pt: nil)
-          return redirect_for_existing_account(provider_name, pt: pt) if existing_account
-
-          redirect_for_new_account(provider_name, pt: pt)
-        end
-
-        def redirect_for_existing_account(_provider_name, pt: nil)
-          redirect_to_sign_in_sequence!(pt: pt)
-        end
-
-        def redirect_for_new_account(_provider_name, pt: nil)
-          redirect_to_sign_in_sequence!(pt: pt)
-        end
-
-        def sign_in(user, pt: nil, provider_name: nil)
-          result = AuthenticationSessionCommitter.call(
-            controller: self, resource: user, pt: pt, ri: params[:ri], auth_method: "social",
-            audit_context: social_login_audit_context,
-            # "social" cannot distinguish google from apple; the provider is
-            # known to the caller (adr/unified-enforcement.md, Session attribution).
-            established_authentication_method: provider_name.presence &&
-              SocialIdentifiable.normalize_provider(provider_name),
-          )
-          Rails.logger.debug(
-            JitLogEvent.format(
-              "sign.social.omniauth.sign_in_result",
-              **social_login_result_log_payload(result),
-            ),
-          )
-          result
-        end
-
-        def social_login_result_log_payload(result)
-          return { result_class: result.class.name } unless result.is_a?(Hash)
-
-          payload = {
-            status: result[:status],
-            restricted: result[:restricted],
-            session_management_required: result[:session_management_required],
-            token_type: result[:token_type],
-            expires_in: result[:expires_in],
-          }
-          dbsc = result[:dbsc]
-          if dbsc.is_a?(Hash)
-            payload[:dbsc] = {
-              binding_method: dbsc[:binding_method],
-              status: dbsc[:status],
-              session_id_present: dbsc[:session_id].present?,
-            }
-          end
-          payload.compact
-        end
-
-        def social_login_audit_context
-          auth = request.env["omniauth.auth"]
-          provider = SocialIdentifiable.normalize_provider(auth&.provider)
-          context = { auth_method: "social" }
-          context[:provider] = provider if provider.present?
-          context
-        end
-
         def bind_social_sign_up_flow!(cycle, user, identity)
           raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless identity
           unless identity.persisted? && identity.id.present?
@@ -616,7 +535,7 @@ module Auth
             raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
           end
 
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             cycle.update!(
               principal_id: user.id,
               pending_contact_type: "social_identity",
@@ -645,38 +564,6 @@ module Auth
         end
 
         # Handle login failures (session limit, MFA required, etc.)
-        def handle_login_failure(login_result, _provider_name, user = nil)
-          SignRiskEmitter.emit(
-            "auth_failed", user_id: user&.id, ip: request.remote_ip,
-                           reason: "social_login_failed",
-          ) if user
-          sign_in_result = sign_in_result_from_session_result(login_result, actor: user)
-          status = sign_in_result.status
-
-          case status
-          when :session_limit_hard_reject
-            render_session_limit_hard_reject(
-              message: sign_in_result.message,
-              http_status: sign_in_result.response_status,
-            )
-          when :session_limit_pending
-            Rails.logger.debug(JitLogEvent.format("sign.social.omniauth.session_limit_exceeded"))
-            redirect_to(
-              sign_in_result.redirect_to,
-            )
-          when :mfa_required
-            Rails.logger.debug(JitLogEvent.format("sign.social.omniauth.mfa_required"))
-            safe_redirect_to(
-              sign_in_result.redirect_to,
-              fallback: auth_app_sign_in_path,
-            )
-          else
-            Rails.logger.warn(JitLogEvent.format("sign.social.omniauth.unknown_login_failure", status: status))
-            redirect_to(
-              auth_app_sign_in_path,
-            )
-          end
-        end
 
         def social_auth_failure_redirect_path
           ri = params[:ri].presence || current_social_auth_ri

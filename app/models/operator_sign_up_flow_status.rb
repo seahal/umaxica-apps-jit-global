@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: operator_sign_up_flow_statuses
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id :bigint           not null, primary key
 #
-class OperatorSignUpFlowStatus < OrgTicketRecord
+class OperatorSignUpFlowStatus < OpBaseOrgRecord
   include ReferenceRecord
 
   STARTED = 10
@@ -16,7 +16,14 @@ class OperatorSignUpFlowStatus < OrgTicketRecord
   CREDENTIAL_PENDING = 30
   CHECKPOINT_PENDING = 40
   COMPLETED = 100
-  DEFAULTS = [STARTED, CONTACT_PENDING, CREDENTIAL_PENDING, CHECKPOINT_PENDING, COMPLETED].freeze
+  FAILED = 900
+  EXPIRED = 910
+  CANCELLED = 920
+  HALTED = 930
+  DEFAULTS = [
+    STARTED, CONTACT_PENDING, CREDENTIAL_PENDING, CHECKPOINT_PENDING, COMPLETED,
+    FAILED, EXPIRED, CANCELLED, HALTED,
+  ].freeze
 
   has_many :operator_sign_up_flows,
            foreign_key: :status_id,

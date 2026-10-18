@@ -14,7 +14,7 @@ class SocialAuthAutoLinkTest < ActionDispatch::IntegrationTest
 
   setup do
     OmniAuth.config.test_mode = true
-    @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @callback_headers = social_callback_headers(@host)
   end
 
@@ -28,8 +28,70 @@ class SocialAuthAutoLinkTest < ActionDispatch::IntegrationTest
 
     user_count_before = Client.count
 
-    # Start OAuth flow to set up session state (required by SocialCallbackGuard)
-    state = start_social_auth_flow(provider: "apple", intent: "login")
+    unless "login" == "link"
+      @base_browser = open_session
+      base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      @base_browser.host!(base_host)
+      @base_browser.https!
+      @base_browser.get("/sign", params: { ri: "jp", pt: "/dashboard?ri=jp" })
+      form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      @base_browser.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+      issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+      2.times do |index|
+        target = URI.parse(@base_browser.response.location)
+        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+        unless target.host == base_host
+          rt = Rack::Utils.parse_query(target.query).fetch("rt")
+          payload, = JWT.decode(
+            rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+          )
+          target = URI.parse(payload.fetch("url"))
+        end
+        if index.zero?
+          raise RuntimeError, "Base authorization host mismatch" unless target.host == base_host
+
+          @base_browser.get(target.request_uri)
+          form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+          fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+          @base_browser.post(
+            form["action"], params: fields, headers: {
+              "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+        else
+          raise RuntimeError, "Auth admission host mismatch" unless target.host == auth_host
+
+          host!(auth_host)
+          https!
+          get(target.request_uri)
+        end
+      end
+      3.times do |index|
+        sender = (index == 1) ? @base_browser : self
+        form = Nokogiri::HTML(sender.response.body).at_css("form")
+        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+        sender.post(
+          form["action"], params: fields, headers: {
+            "Origin" => "https://#{(index == 1) ? base_host : auth_host}", "Sec-Fetch-Site" => "same-origin",
+          },
+        )
+        raise RuntimeError, "Social admission failed at step #{index}" unless sender.response.status == 303
+        next if index == 2
+
+        receiver = index.zero? ? @base_browser : self
+        receiver.get(URI.parse(sender.response.location).request_uri)
+      end
+    end
+    post auth_app_social_apple_registration_path(ri: "jp")
+    state = social_auth_state_from_response
     setup_apple_mock_auth(uid: apple_uid)
 
     # Callback without login (no headers)
@@ -63,23 +125,6 @@ class SocialAuthAutoLinkTest < ActionDispatch::IntegrationTest
     )
   end
 
-  def start_social_auth_flow(provider:, intent:, user: nil)
-    grant = nil
-    if intent.to_s == "link" && user
-      token = ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-      session_ref = token&.try(:device_session)&.public_id.presence || token&.public_id
-      grant = IdentitySocialCeremonyGrantIssuer.issue!(
-        surface: "app",
-        actor_ref: user.public_id,
-        session_ref: session_ref,
-        operation: "link",
-        provider: provider,
-      ).grant
-    end
-
-    seed_social_auth_session(provider: provider, intent: intent, user: user, ri: "jp", social_ceremony_grant: grant)
-  end
-
   def create_active_browser_token!(user)
     ensure_user_token_reference_records!
     ClientToken.create!(
@@ -88,7 +133,7 @@ class SocialAuthAutoLinkTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
   end
   private
@@ -116,29 +161,9 @@ class SocialAuthAutoLinkTest
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "SIGN"
+    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "AUTH"
     surface =
       if resource_type == "operator" || normalized.include?(".org") || normalized.include?("org.")
         "ORG"
@@ -194,10 +219,8 @@ class SocialAuthAutoLinkTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -209,10 +232,8 @@ class SocialAuthAutoLinkTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -349,71 +370,36 @@ class SocialAuthAutoLinkTest
   end
 
   def submit_social_completion_if_present!
-    return unless response.media_type == "text/html"
-    return unless response.body.include?("social-completion-form")
+    target = URI.parse(response.location) if response.redirect?
+    continuation = target&.path == "/social/authentication/completion"
+    if continuation
+      host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      host!(host)
+      https!
+      headers = { "Host" => host, "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+      get(target.request_uri, headers: headers)
+      form = response.parsed_body.at_css("form")
+      raise StandardError, "social completion continuation form missing" unless form
 
-    # A browser only reaches the completion endpoint when CSP allows the form
-    # target. See test/support/form_action_policy_helper.rb.
-    assert_forms_submittable_under_policy
+    else
+      return unless response.media_type == "text/html" && response.body.include?("social-completion-form")
 
-    form = response.parsed_body.at_css("form#social-completion-form")
-    raise StandardError, "social completion form missing" unless form
+      assert_forms_submittable_under_policy
+      form = response.parsed_body.at_css("form#social-completion-form")
+      raise StandardError, "social completion form missing" unless form
 
-    params = {}
-    form.css("input").each do |input|
-      name = input["name"]
-      params[name] = input["value"] if name.present?
-    end
-
-    action_uri = URI.parse(form["action"])
-    post(
-      form["action"],
-      params: params,
-      headers: {
-        "Host" => action_uri.host,
-        "Origin" => "https://#{@host}",
+      headers = {
+        "Host" => URI.parse(form["action"]).host,
+        "Origin" => "https://#{configured_host(:sign_service)}",
         "Sec-Fetch-Site" => "same-site",
-      },
-    )
-  end
-
-  def seed_social_auth_session(
-    provider:,
-    intent: "login",
-    user: nil,
-    entry: nil,
-    ri: "jp",
-    rt: nil,
-    referer: nil,
-    social_ceremony_grant: nil
-  )
-    host = @host.presence || configured_host(:sign_service)
-    host!(host) if respond_to?(:host!)
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path =
-      if intent.to_s == "link"
-        public_send(
-          :"auth_app_settings_#{normalized_provider}_path", ri: ri,
-                                                            social_ceremony_grant: social_ceremony_grant,
-        )
-      elsif entry.to_s == "sign_up"
-        public_send(:"auth_app_social_#{normalized_provider}_registration_path", ri: ri, rt: rt)
-      else
-        public_send(:"auth_app_social_#{normalized_provider}_session_path", ri: ri, rt: rt)
-      end
-    headers = social_callback_headers(host)
-    headers["Referer"] = referer if referer.present?
-    if user
-      user_headers = as_user_headers(user, host: host)
-      token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
-      mark_token_step_up_satisfied_for_test(
-        token,
-        scope: SocialAuth::SOCIAL_LINK_SCOPE,
-      ) if intent.to_s == "link" && token
-      headers = headers.merge(user_headers)
+      }
     end
-    post(continue_path, headers: headers)
-    social_auth_state_from_response
+    params = form.css("input").filter_map do |input|
+      name = input["name"]
+      [name, input["value"]] if continuation ? !name.nil? : name.present?
+    end.to_h
+    post(form["action"], params: params, headers: headers)
+    cookies.to_hash.each_key { |key| cookies.delete(key) } unless continuation
   end
 
   def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
@@ -490,69 +476,6 @@ class SocialAuthAutoLinkTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token if respond_to?(:cookies, true)
-    base.merge(
-      "Authorization" => "Bearer #{access_token}",
-      "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-      "HTTP_COOKIE" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -568,10 +491,8 @@ class SocialAuthAutoLinkTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -581,12 +502,12 @@ class SocialAuthAutoLinkTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

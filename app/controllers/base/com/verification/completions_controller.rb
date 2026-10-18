@@ -10,7 +10,10 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_visitor!
+        def show
+          authorize!(current_visitor, to: :show?)
+          super
+        end
 
         def create
           authorize!(current_visitor, to: :show?)
@@ -18,11 +21,37 @@ module Base
             surface: "com",
             actor: current_visitor,
             token: current_session_token,
-            fallback: base_com_dashboard_path(ri: params[:ri]),
           )
         end
 
+        public :create
+
         private
+
+        def finalize_completion_transaction!(actor:, token:, transaction:, result_reference:)
+          return super if %w(step_up reauthentication).include?(transaction.purpose)
+
+          unless %w(bootstrap credential_registration).include?(transaction.purpose) &&
+              transaction.method == "passkey"
+            raise BaseAuthAdmissionCoordinator::Denied.new(
+              "registration method unavailable", code: "unsupported_method",
+            )
+          end
+
+          IdentityPasskeyRegistrationFinalCommitter.call!(
+            actor: actor, token: token, transaction: transaction, result_reference: result_reference,
+            ip_address: request.remote_ip, user_agent: request.user_agent,
+          )
+          transaction.reload
+        rescue IdentityPasskeyCeremonyContract::Error
+          raise BaseAuthAdmissionCoordinator::Denied.new("passkey registration unavailable", code: "unsupported_method")
+        end
+
+        def completion_step_up_transaction(reference)
+          VisitorStepUpCeremonyTransaction.connection_owner.connected_to(role: :writing) do
+            VisitorStepUpCeremonyTransaction.find_by!(transaction_id: reference)
+          end
+        end
 
         def actor_verification_path(**args)
           base_com_verification_path(**args)

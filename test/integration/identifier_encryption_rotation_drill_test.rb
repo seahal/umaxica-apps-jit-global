@@ -8,10 +8,12 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
+    @original_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     host! ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     @service_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     @staff_host = ENV.fetch("PRIVATE_AUTH_STAFF_URL")
-    @corporate_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost")
+    @corporate_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL")
 
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -20,6 +22,7 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED_WITH_SIGN_UP)
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
 
     @user = clients(:one)
     @staff = operators(:one)
@@ -28,105 +31,216 @@ class IdentifierEncryptionRotationDrillTest < ActionDispatch::IntegrationTest
   end
 
   teardown do
+    ActionController::Base.allow_forgery_protection = @original_forgery_protection
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
   end
 
   test "rotation drill preserves existing records and keeps app org and com flows working" do
-    old_primary_key = SecureRandom.hex(32)
-    new_primary_key = SecureRandom.hex(32)
+    original_realm_providers =
+      %w(app com org).index_with do |realm|
+        RealmIdentifierEncryptionKeyProvider.key_provider(realm: realm)
+      end
 
     app_email_address = "rotation-app-email-#{SecureRandom.hex(4)}@example.com"
     app_telephone_number = "+1555#{SecureRandom.random_number(10_000_000).to_s.rjust(7, "0")}"
     staff_email_address = "rotation-org-email-#{SecureRandom.hex(4)}@example.com"
     visitor_email_address = "rotation-com-email-#{SecureRandom.hex(4)}@example.com"
 
-    old_provider = encryption_key_provider(old_primary_key)
-    rotation_provider = encryption_key_provider(new_primary_key, old_primary_key)
-    ActiveRecord::Encryption.with_encryption_context(key_provider: old_provider) do
-      old_app_email = ClientEmail.create!(
-        user: @user,
-        raw_address: app_email_address,
-        confirm_policy: true,
-        user_email_status_id: ClientEmailStatus::VERIFIED,
-      )
-      old_app_telephone = ClientTelephone.create!(
-        user: @user,
-        raw_number: app_telephone_number,
-        confirm_policy: true,
-        confirm_using_mfa: true,
-        user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-      )
-      old_staff_email = OperatorEmail.create!(
-        staff: @staff,
-        raw_address: staff_email_address,
-        confirm_policy: true,
-        staff_email_status_id: OperatorEmailStatus::VERIFIED,
-      )
-      visitor = Visitor.create!(
-        status_id: VisitorStatus::ACTIVE,
-        visibility_id: VisitorVisibility::VISITOR,
-      )
-      old_visitor_email = VisitorEmail.create!(
-        visitor: visitor,
-        address: visitor_email_address,
-        confirm_policy: true,
-        visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      )
+    old_app_email = ClientEmail.create!(
+      user: @user,
+      raw_address: app_email_address,
+      confirm_policy: true,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
+    )
+    old_app_email.finalize_binding!
+    old_app_telephone = ClientTelephone.create!(
+      user: @user,
+      raw_number: app_telephone_number,
+      confirm_policy: true,
+      confirm_using_mfa: true,
+      user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+    )
+    old_app_telephone.finalize_binding!
+    old_staff_email = OperatorEmail.create!(
+      staff: @staff,
+      raw_address: staff_email_address,
+      confirm_policy: true,
+      staff_email_status_id: OperatorEmailStatus::VERIFIED,
+    )
+    visitor = Visitor.create!(
+      status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    old_visitor_email = VisitorEmail.create!(
+      visitor: visitor,
+      address: visitor_email_address,
+      confirm_policy: true,
+      visitor_email_status_id: VisitorEmailStatus::VERIFIED,
+    )
+    old_visitor_email.finalize_binding!
 
-      ActiveRecord::Encryption.with_encryption_context(key_provider: rotation_provider) do
-        reencrypt_result = IdentifierEncryptionReencrypt.new.call
+    original_types =
+      [
+        [ClientEmail, "address", "app"], [ClientTelephone, "number", "app"],
+        [VisitorEmail, "address", "com"], [VisitorTelephone, "number", "com"],
+        [OperatorEmail, "address", "org"], [OperatorTelephone, "number", "org"],
+      ].map { |model, column, realm| [model, column, realm, model.type_for_attribute(column)] }
+    original_environment = {}
+    rotated_providers =
+      %w(app com org).index_with do |realm|
+        prefix = realm.upcase
+        current_name = "#{prefix}_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY"
+        previous_name = "#{prefix}_ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY_PREVIOUS"
+        current = ENV.fetch(current_name)
+        previous_json = ENV[previous_name]
+        original_environment[current_name] = current
+        original_environment[previous_name] = previous_json
+        previous = previous_json.nil? ? [] : JSON.parse(previous_json)
+        ENV[current_name] = SecureRandom.hex(32)
+        ENV[previous_name] = JSON.generate(previous + [current])
+        RealmIdentifierEncryptionKeyProvider.key_provider(realm: realm)
+      end
+    original_types.each do |model, column, realm, type|
+      scheme = type.scheme.merge(key_provider: rotated_providers.fetch(realm))
+      rotated_type = ActiveRecord::Encryption::EncryptedAttributeType.new(
+        scheme: scheme, cast_type: type.cast_type, default: model.columns_hash.fetch(column).default,
+      )
+      model.attribute(column, rotated_type)
+    end
+    reencrypt_result = IdentifierEncryptionReencrypt.new.call
 
-        assert_operator reencrypt_result.user_emails_reencrypted, :>=, 1
-        assert_operator reencrypt_result.user_telephones_reencrypted, :>=, 1
-        assert_operator reencrypt_result.staff_emails_reencrypted, :>=, 1
-        assert_operator reencrypt_result.visitor_emails_reencrypted, :>=, 1
+    assert_operator reencrypt_result.user_emails_reencrypted, :>=, 1
+    assert_operator reencrypt_result.user_telephones_reencrypted, :>=, 1
+    assert_operator reencrypt_result.staff_emails_reencrypted, :>=, 1
+    assert_operator reencrypt_result.visitor_emails_reencrypted, :>=, 1
 
-        assert_equal app_email_address, old_app_email.reload.address
-        assert_equal app_telephone_number, old_app_telephone.reload.number
-        assert_equal staff_email_address, old_staff_email.reload.address
-        assert_equal visitor_email_address, old_visitor_email.reload.address
+    assert_equal app_email_address, old_app_email.reload.address
+    assert_equal app_telephone_number, old_app_telephone.reload.number
+    assert_equal staff_email_address, old_staff_email.reload.address
+    assert_equal visitor_email_address, old_visitor_email.reload.address
 
-        travel 31.seconds do
-          assert_app_sign_in_email_flow(app_email_address)
-        end
+    [
+      [old_app_email, "address", "app"], [old_app_telephone, "number", "app"],
+      [old_staff_email, "address", "org"], [old_visitor_email, "address", "com"],
+    ].each do |record, column, realm|
+      assert_raises(ActiveRecord::Encryption::Errors::Decryption) do
+        ActiveRecord::Encryption.encryptor.decrypt(
+          record.read_attribute_before_type_cast(column), key_provider: original_realm_providers.fetch(realm),
+        )
       end
     end
+
+    travel(31.seconds) do
+      begin
+        fx0_address = app_email_address
+        https!
+        begin
+          entry0_browser = self
+          entry0_surface = "app"
+          entry0_intent = "sign_in"
+          entry0_host = {
+            "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+            "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+            "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+          }.fetch(entry0_surface)
+          entry0_browser.host!(entry0_host)
+          entry0_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+            surface: entry0_surface, intent: entry0_intent,
+            base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+          )
+          entry0_path = "/sign/#{(entry0_intent == "sign_up") ? "up" : "in"}"
+          entry0_browser.get(
+            entry0_path,
+            params: { entry_ref: entry0_issuance.reference, ri: "jp" },
+          )
+          entry0_csrf = entry0_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+          entry0_browser.post(
+            "/ceremony_bindings",
+            params: {
+              entry_ref: entry0_issuance.reference,
+              authenticity_token: entry0_csrf,
+              ri: "jp",
+            },
+          )
+
+          assert_equal 303, entry0_browser.response.status
+          entry0_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+            surface: entry0_surface, reference: entry0_issuance.reference,
+          )
+          entry0_binding.reload.confirm_base!(
+            base_token: nil,
+            browser_digest: entry0_binding.base_browser_digest,
+          )
+          entry0_browser.get(
+            entry0_path,
+            params: { entry_ref: entry0_issuance.reference, ri: "jp" },
+          )
+          entry0_csrf = entry0_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+          entry0_browser.post(
+            entry0_path,
+            params: {
+              entry_ref: entry0_issuance.reference,
+              authenticity_token: entry0_csrf,
+              ri: "jp",
+            },
+          )
+
+          assert_equal 303, entry0_browser.response.status
+          entry0_phase_binding = SignInFlowBindingCodec.encode(
+            flow: entry0_issuance.transaction, surface: "app", phase: "PRIMARY_PENDING",
+          )
+        end
+        fx0_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        fx0_headers = { "Origin" => "https://#{fx0_host}", "Sec-Fetch-Site" => "same-origin" }
+        get("/sign/in/email/new", params: { ri: "jp", fb: entry0_phase_binding })
+
+        assert_response :ok
+        fx0_csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+        fx0_delivery_count = ActionMailer::Base.deliveries.size
+        perform_enqueued_jobs do
+          post(
+            "/sign/in/email", params: {
+              client_email: { address: fx0_address },
+              authenticity_token: fx0_csrf,
+              "cf-turnstile-response": "test",
+              ri: "jp",
+              fb: entry0_phase_binding,
+            }, headers: fx0_headers,
+          )
+        end
+
+        assert_response :found
+        assert_equal fx0_delivery_count + 1, ActionMailer::Base.deliveries.size
+        fx0_match = ActionMailer::Base.deliveries.last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/)
+
+        assert_predicate fx0_match, :present?, "expected a delivered ceremony OTP"
+        fx0_code = fx0_match[1]
+        get(URI.parse(response.location).request_uri, params: { ri: "jp" })
+
+        assert_response :ok
+        fx0_csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+
+        patch(
+          "/sign/in/email", params: {
+            client_email: { pass_code: fx0_code },
+            authenticity_token: fx0_csrf,
+            "cf-turnstile-response": "test",
+            ri: "jp",
+            fb: entry0_phase_binding,
+          }, headers: fx0_headers,
+        )
+
+        assert_response :found
+        assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
+      end
+    end
+  ensure
+    original_types&.each { |model, column, _, type| model.attribute(column, type) }
+    original_environment&.each { |name, value| value.nil? ? ENV.delete(name) : ENV[name] = value }
   end
 
   private
-
-  def assert_app_sign_in_email_flow(address)
-    post(
-      sign_app_sign_in_email_url(ri: "jp"),
-      params: {
-        user_email: { address: address },
-        "cf-turnstile-response": "test",
-      },
-      headers: { "Host" => @service_host },
-    )
-
-    assert_response :found
-
-    email = ClientEmail.find_by!(address_digest: IdentifierBlindIndex.bidx_for_email(address))
-    otp_data = email.get_otp
-    code = ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
-
-    patch(
-      sign_app_sign_in_email_url(ri: "jp"),
-      params: { user_email: { pass_code: code } },
-      headers: { "Host" => @service_host },
-    )
-
-    assert_response :found
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
-  end
-
-  def encryption_key_provider(*passwords)
-    ActiveRecord::Encryption::KeyProvider.new(
-      passwords.map { |password| ActiveRecord::Encryption::Key.derive_from(password) },
-    )
-  end
 end
 
 # DAMP local helper copy for former shared test support.
@@ -146,31 +260,11 @@ class IdentifierEncryptionRotationDrillTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -230,10 +324,8 @@ class IdentifierEncryptionRotationDrillTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -245,10 +337,8 @@ class IdentifierEncryptionRotationDrillTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -503,63 +593,6 @@ class IdentifierEncryptionRotationDrillTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -575,10 +608,8 @@ class IdentifierEncryptionRotationDrillTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -598,12 +629,12 @@ class IdentifierEncryptionRotationDrillTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

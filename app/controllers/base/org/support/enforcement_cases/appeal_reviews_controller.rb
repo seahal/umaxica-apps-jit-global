@@ -5,42 +5,33 @@ module Base
   module Org
     module Support
       module EnforcementCases
-        # The review is a noun resource so it remains distinct from the
-        # operator action that created the Case. EnforcementAppeal enforces
-        # reviewer separation again at the model boundary.
+        # adr/unified-enforcement.md, Appeal: the reviewer must differ from the applying and the
+        # approving operator (EnforcementAppeal#resolve!). An approved appeal ends the Case through
+        # the same refcounted release path as any other ending.
         class AppealReviewsController < Base::Org::ApplicationController
-          include EnforcementCaseRealmResolvable
+          include ::OrgOwnerPageRelay
 
           AUTHENTICATION_MODE = :private
-
           declare_authentication_mode! :private
-          before_action :require_enforcement_step_up!
-          before_action :set_enforcement_case
 
+          before_action :no_store
+
+          public
+
+          # R5-WU12: decided, written and composed by the Enforcement owner over HTTPS.
+          def new
+            relay_owner_page!
+          end
+
+          # R5-WU12: decided, written and composed by the Enforcement owner over HTTPS.
           def create
-            authorize!(@enforcement_case, with: EnforcementCasePolicy, to: :review_appeal?)
-
-            appeal = @enforcement_case.appeal
-            raise ActiveRecord::RecordNotFound, "appeal not found" unless appeal
-
-            appeal.resolve!(
-              reviewer_operator_public_id: current_operator.public_id,
-              resolution_code: params.expect(:resolution_code),
-            )
-            render json: { public_id: appeal.public_id, state: appeal.state }, status: :ok
-          rescue EnforcementAppeal::ReviewerSeparationError, EnforcementAppeal::InvalidResolutionError,
-                 ActiveRecord::RecordInvalid, ArgumentError => e
-            render json: { error: e.message }, status: :unprocessable_content
+            relay_owner_page!
           end
 
           private
 
-          def require_enforcement_step_up!
-            require_step_up!(scope: "enforcement_case_review_appeal")
-          end
-
-          def set_enforcement_case
-            @enforcement_case = enforcement_case_class.find_by!(public_id: params.expect(:enforcement_case_id))
+          def no_store
+            response.headers["Cache-Control"] = "private, no-store"
           end
         end
       end

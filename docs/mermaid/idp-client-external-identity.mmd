@@ -1,0 +1,25 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "active" as active
+    state "consent_revoked" as consent_revoked
+    state "account_deleted" as account_deleted
+    [*] --> active
+    active --> consent_revoked: consent-revoked
+    active --> account_deleted: account-deleted
+    consent_revoked --> consent_revoked: consent-revoked
+    consent_revoked --> account_deleted: account-deleted
+    active --> active: repository.activate!
+    consent_revoked --> active: repository.activate!
+    account_deleted --> [*]
+    state "released_at present (historical binding)" as released
+    active --> released: release binding
+    consent_revoked --> released: release binding
+    released --> [*]: app withdrawal termination / Source release proof
+    note right of active
+        Resolution uses verified issuer and subject only.
+        Active uniqueness is one subject per Client and one active
+        social binding per Client across Google and Apple.
+        A released subject cannot be reattached by an old callback.
+        App withdrawal removes the row only after persisting its keyed
+        release proof; org Entra authority is outside this axis.
+    end note

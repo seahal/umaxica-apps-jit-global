@@ -32,7 +32,7 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 ### 1.3 Intended Audience and Use
 
 - Product and engineering leadership – prioritization, roadmap alignment
-- Domain engineers (Rails/React/pnpm toolchain) – implementation details and traceable requirements
+- Domain engineers (Rails/React/Bun toolchain) – implementation details and traceable requirements
 - DevOps/SRE – hosting, observability, security posture
 - QA/Release – acceptance criteria, traceability to tests and documentation
 
@@ -40,24 +40,24 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 
 ## 2. Stakeholders and Roles
 
-| Role                  | Responsibilities                                                                                                                | Tooling / Notes                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Product Owner         | Defines feature scope, localization priorities, and compliance targets                                                          | Roadmap, Notion/Jira                                      |
-| Tech Lead / Architect | Owns multi-surface Rails architecture, multi-DB strategy, and integration points (Valkey, SMS, email)                           | Rails, Docker Compose                                     |
-| Front-End Engineer    | Builds Turbo/React views in `src`, owns theme and preference UX                                                                 | pnpm, Vite Plus, Tailwind, Turbo                          |
-| Back-End Engineer     | Implements controller logic (e.g., `config/routes/*.rb` namespaces), models, encryption, OTP/passkey workflows                  | Rails 8, PostgreSQL, Valkey                               |
-| Platform/DevOps       | Manages Compose stack (PostgreSQL shards, Valkey, optional RustFS, Grafana/Loki/Tempo), CI (`integration.yml`), and deployments | Podman, Foreman, GitHub Actions                           |
-| QA Engineer           | Designs Minitest/spec + JS/TS tests (via pnpm), Rswag/OpenAPI verification, smoke/load tests                                    | `bin/rails test`, `pnpm test` (when added), Playwright/k6 |
-| Security/Compliance   | Oversees JWT keys, Cloudflare Turnstile secrets, GDPR/ePrivacy consent storage                                                  | Secrets management, monitoring                            |
+| Role                  | Responsibilities                                                                                                                                    | Tooling / Notes                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Product Owner         | Defines feature scope, localization priorities, and compliance targets                                                                              | Roadmap, Notion/Jira                            |
+| Tech Lead / Architect | Owns multi-surface Rails architecture, multi-DB strategy, and integration points (Valkey, SMS, email)                                               | Rails, Docker Compose                           |
+| Front-End Engineer    | Builds Turbo/React views in `src`, owns theme and preference UX                                                                                     | Bun, Vite, Tailwind, Turbo                      |
+| Back-End Engineer     | Implements controller logic (e.g., `config/routes/*.rb` namespaces), models, encryption, OTP/passkey workflows                                      | Rails 8, PostgreSQL, Valkey                     |
+| Platform/DevOps       | Manages Compose stack (PostgreSQL shards, Valkey, optional RustFS, Grafana/Loki/Tempo), CI (`ci.yml`), and deployments                              | Podman, Foreman, GitHub Actions                 |
+| QA Engineer           | Designs Minitest/spec + JS/TS tests (via Bun), OpenAPI contract verification (Committee) and Swagger UI (`rswag-api`, `rswag-ui`), smoke/load tests | `bin/rails test`, `bun run test`, Playwright/k6 |
+| Security/Compliance   | Oversees JWT keys, Cloudflare Turnstile secrets, GDPR/ePrivacy consent storage                                                                      | Secrets management, monitoring                  |
 
 ---
 
 ## 3. System Overview
 
-- **Runtime & language**: Ruby 3.4.7 / Rails 8.x monolith with multi-database (`connects_to`)
+- **Runtime & language**: Ruby 4.0.7 / Rails 8.x monolith with multi-database (`connects_to`)
   separation (identity, universal, guest, profile, token, etc.) backed by PostgreSQL 18 (primary +
   replica).
-- **Frontend toolchain**: Vite Rails with pnpm-managed Vite Plus tooling for Turbo/Stimulus/React
+- **Frontend toolchain**: Vite Rails with Bun-managed Vite tooling for Turbo/Stimulus/React
   entrypoints under `src`; browser CSS is bundled through Vite entrypoints while Rails still serves
   non-browser static assets.
 - **Cache and rate-limit counters**: Valkey (Redis-compatible) backs two separate, non-authoritative
@@ -67,21 +67,23 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
   HOTP/TOTP (ROTP), `Outbound::Sms`, and Cloudflare Turnstile for bot defense.
 - **Observability**: OpenTelemetry instrumentation exports to Tempo via OTLP; logs/metrics land in
   Loki/Grafana (docker/observability stack).
-- **Storage & CDN**: Shrine uses memory storage in test and filesystem storage otherwise. An opt-in
-  RustFS profile supports explicit S3-compatible integration checks; production object storage
-  remains deferred.
-- **Surface mapping** (driven by ENV such as `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, etc.): | Surface
-  | Host examples | Namespace | Responsibilites |
-  |---------|---------------|-----------|-----------------| | Top (marketing / preferences) |
-  `www.umaxica.com`, `www.umaxica.app`, `www.umaxica.org` | `Top::Com/App/Org` | Redirects to edge,
-  exposes `/health`, `/api/v0/health.json`, preference UIs (cookie/region/theme). | | Sign |
-  `log.umaxica.app`, `log.umaxica.org` | `Sign::App/Org` | Registration (email/phone), OTP,
-  passkeys, OAuth (Google/Apple), recovery, withdrawals. | | Help | `help.umaxica.com` |
-  `Help::Com/App/Org` | Contact forms, ticket intake (`ServiceSiteContact`), Turnstile enforcement.
-  | | Docs / News | `docs.umaxica.*`, `news.umaxica.*` | `Docs::*`, `News::*` |
-  Documentation/newsroom placeholders with health pages. | | BFF | `bff.umaxica.*` | `Bff::*` |
-  Non-auth preference/email endpoints for clients. | | API | `api.umaxica.*` | `Api::*` | JSON APIs
-  (`/v1/inquiry/valid_email_addresses`, `valid_telephone_numbers`, `health`). |
+- **Storage & CDN**: Shrine uses memory storage in test, configured S3-compatible storage in
+  development/staging, and AWS S3 through the platform credential provider in production. Objects
+  are private. The Avatar image-delivery URL/API and CDN namespace remain undefined; no user-facing
+  image route is currently provided. The opt-in RustFS profile supports explicit local storage
+  integration checks.
+- **Surface mapping** (driven by ENV such as `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, etc.): |
+  Surface | Host examples | Namespace |
+  Responsibilites | |---------|---------------|-----------|-----------------| | Top (marketing /
+  preferences) | `www.umaxica.com`, `www.umaxica.app`, `www.umaxica.org` | `Top::Com/App/Org` |
+  Redirects to edge, exposes `/health`, `/api/v0/health.json`, preference UIs
+  (cookie/region/theme). | | Sign | `log.umaxica.app`, `log.umaxica.org` | `Sign::App/Org` |
+  Registration (email/phone), OTP, passkeys, OAuth (Google/Apple), recovery, withdrawals. | | Help |
+  `help.umaxica.com` | `Help::Com/App/Org` | Contact forms, ticket intake (`ServiceSiteContact`),
+  Turnstile enforcement. | | Docs / News | `docs.umaxica.*`, `news.umaxica.*` | `Docs::*`,
+  `News::*` | Documentation/newsroom placeholders with health pages. | | BFF | `bff.umaxica.*` |
+  `Bff::*` | Non-auth preference/email endpoints for clients. | | API | `api.umaxica.*` | `Api::*` |
+  JSON APIs (`/v1/inquiry/valid_email_addresses`, `valid_telephone_numbers`, `health`). |
 
 ---
 
@@ -95,13 +97,14 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 - **FR-02**: All surfaces implement the 2026-09-03 health contract via the shared `Health` service
   layer: `text/plain` probes at `/health` (seven-line aggregate) and
   `/health/{startup,liveness,readiness}` (`ok\n` / 503), plus machine JSON at `/api/v0/health.json`
-  (`pass/warn/fail` plus an RFC 3339 UTC timestamp) and `/api/v0/revision.json`. Every response carries `Cache-Control: no-store`
-  (a health verdict must not be cached). Details in `docs/reference/health-endpoints.md`.
+  (`pass/warn/fail` plus an RFC 3339 UTC timestamp) and `/api/v0/revision.json`. Every response
+  carries `Cache-Control: no-store` (a health verdict must not be cached). Details in
+  `docs/reference/health-endpoints.md`.
 - **FR-03**: Controllers must set consistent default URL parameters (`lx`, `ri`, `tz`) using
   `DefaultUrlOptions` so deep links retain localization context.
-- **FR-04**: Request throttling is enforced through the `RateLimit` concern (`rate_limit to: 1000
-  within 1.hour` against the Valkey-backed `config.x.rate_limit.store`) for every ActionController
-  except API health, with overrides for test environments.
+- **FR-04**: Request throttling is enforced through the `RateLimit` concern
+  (`rate_limit to: 1000 within 1.hour` against the Valkey-backed `config.x.rate_limit.store`) for
+  every ActionController except API health, with overrides for test environments.
 
 ### 4.2 Preference management & localization
 
@@ -185,9 +188,9 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
   Tempo; spans must include hostnames to differentiate surfaces.
 - **FR-25**: Compose stack (PostgreSQL primaries/replicas, Valkey, optional RustFS,
   Grafana/Loki/Tempo) must stay reproducible for local dev; `Procfile.dev` orchestrates Rails with
-  pnpm handling JS tooling.
-- **FR-26**: GitHub Actions integration pipeline (`integration.yml`) plus Lefthook pre-commit must
-  run `bundle exec rubocop`, `erb_lint`, `pnpm run lint`, `pnpm run check`, and `bin/rails test`.
+  Bun handling JS tooling.
+- **FR-26**: GitHub Actions integration pipeline (`ci.yml`) plus Lefthook pre-commit must run
+  `bundle exec rubocop`, `erb_lint`, `bun run lint`, `bun run check`, and `bin/rails test`.
 - **FR-27**: Health dashboards (Grafana) must visualize request rate, OTP/passkey errors, and
   Turnstile failures.
 
@@ -195,16 +198,16 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 
 ## 5. Non-Functional Requirements
 
-| Category             | Requirement                                                                                                                                                                                         |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Performance          | P95 response time ≤ 300 ms for `/health` endpoints; OTP submissions and preference updates complete within 2 s end-to-end; pnpm lint/format cycles and Tailwind watch rebuilds complete within 5 s. |
-| Availability         | ≥ 99.0 % uptime for top/sign/help hosts, measured monthly; automated failover to replica PostgreSQL instances for read-heavy queries.                                                               |
-| Scalability          | Support ≥ 1k req/min per host with linear scale-out via additional Rails pods.                                                                                                                      |
-| Security             | Enforce HTTPS-only traffic, HSTS headers, CSRF protection, signed cookies, JWT validation, Cloudflare Turnstile challenge, rate limiters, and WebAuthn/TOTP options.                                |
-| Privacy & Compliance | Preference cookies must capture consent state (GDPR/ePrivacy). PII stored encrypted with separation by database cluster. Audit logs retained ≥ 180 days.                                            |
-| Maintainability      | Namespaced controllers/views keep code per host ≤ 500 LOC; shared concerns (`Authn`, `PreferenceRegions`, `Theme`, etc.) must remain framework-agnostic.                                            |
-| Localization         | UI copy available in Japanese (default) and English; URL params `lx`, `ri`, `tz`, `ct` propagate through redirects and forms.                                                                       |
-| Observability        | OTEL traces for HTTP, the Valkey rate-limit store, and Action Mailer; structured logs shipped to Loki; uptime monitors poll `/health` (text) + `/api/v0/health.json`.                                               |
+| Category             | Requirement                                                                                                                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Performance          | P95 response time ≤ 300 ms for `/health` endpoints; OTP submissions and preference updates complete within 2 s end-to-end; Bun lint/format cycles and Tailwind watch rebuilds complete within 5 s. |
+| Availability         | ≥ 99.0 % uptime for top/sign/help hosts, measured monthly; automated failover to replica PostgreSQL instances for read-heavy queries.                                                              |
+| Scalability          | Support ≥ 1k req/min per host with linear scale-out via additional Rails pods.                                                                                                                     |
+| Security             | Enforce HTTPS-only traffic, HSTS headers, CSRF protection, signed cookies, JWT validation, Cloudflare Turnstile challenge, rate limiters, and WebAuthn/TOTP options.                               |
+| Privacy & Compliance | Preference cookies must capture consent state (GDPR/ePrivacy). PII stored encrypted with separation by database cluster. Audit logs retained ≥ 180 days.                                           |
+| Maintainability      | Namespaced controllers/views keep code per host ≤ 500 LOC; shared concerns (`Authn`, `PreferenceRegions`, `Theme`, etc.) must remain framework-agnostic.                                           |
+| Localization         | UI copy available in Japanese (default) and English; URL params `lx`, `ri`, `tz`, `ct` propagate through redirects and forms.                                                                      |
+| Observability        | OTEL traces for HTTP, the Valkey rate-limit store, and Action Mailer; structured logs shipped to Loki; uptime monitors poll `/health` (text) + `/api/v0/health.json`.                              |
 
 ---
 
@@ -212,27 +215,28 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 
 ### 6.1 Technical constraints
 
-- Ruby 3.4.7, Rails 8.x, pnpm 12.0.0, Node.js 24.19.0 (for tooling), PostgreSQL 18.
+- Ruby 4.0.7, Rails 8.x, Bun 1.4.0, Node.js 24.20.0 (for tooling), PostgreSQL 18.
 - Multi-database config defined in `config/database.yml` requires environment variables for each
   host (e.g., `POSTGRESQL_IDENTITY_PUB`, `POSTGRESQL_ACTIVITY_PUB`/`POSTGRESQL_ACTIVITY_SUB`, and
   `POSTGRESQL_BEHAVIOR_PUB`).
-- Asset pipeline relies on Vite for browser CSS and pnpm-managed JS tooling for the app UI; Rails
+- Asset pipeline relies on Vite for browser CSS and Bun-managed JS tooling for the app UI; Rails
   continues to serve static non-browser assets where appropriate.
-- Dependencies include ROTP, WebAuthn, OmniAuth (Google/Apple), Rswag, Action Policy, Shrine,
-  Fastly gem, AWS SDK.
+- Dependencies include ROTP, WebAuthn, OmniAuth (Google/Apple), Rswag (`rswag-api` and `rswag-ui`
+  for the Swagger UI surface; `rswag-specs` is not used), Action Policy, Shrine, Fastly gem, AWS
+  SDK.
 
 ### 6.2 Environmental & configuration constraints
 
 - Required ENV keys: host mappings (e.g., `TOP_CORPORATE_URL`, `ID_SERVICE_URL`, `API_STAFF_URL`),
-  downstream edge hosts (`EDGE_*`), the rate-limit store URL (`RATE_LIMIT_REDIS_URL`),
-  Cloudflare Turnstile secret, JWT private/public keys, SMS provider selector, storage credentials
-  (when the optional RustFS profile is used), OTLP endpoint.
-- The devcontainer Compose override publishes the optional RustFS API and console on loopback
-  ports 9000/9001 by default; both ports are configurable through `.env`.
+  downstream edge hosts (`EDGE_*`), the rate-limit store URL (`RATE_LIMIT_REDIS_URL`), Cloudflare
+  Turnstile secret, JWT private/public keys, SMS provider selector, storage credentials (when the
+  optional RustFS profile is used), OTLP endpoint.
+- The devcontainer Compose override publishes the optional RustFS API and console on loopback ports
+  9000/9001 by default; both ports are configurable through `.env`.
 - Foreman/Procfile required for multi-process dev; CI uses GitHub Actions runners with a PostgreSQL
-  service. CI needs no Valkey service: in test, both `Rails.cache` and the rate-limit
-  store default to `ActiveSupport::Cache::NullStore`, and a test whose subject is cache or
-  rate-limit behaviour opts into an in-memory `ActiveSupport::Cache::MemoryStore`.
+  service. CI needs no Valkey service: in test, both `Rails.cache` and the rate-limit store default
+  to `ActiveSupport::Cache::NullStore`, and a test whose subject is cache or rate-limit behaviour
+  opts into an in-memory `ActiveSupport::Cache::MemoryStore`.
 
 ### 6.3 External services & integrations
 
@@ -248,27 +252,27 @@ staff tooling across `umaxica.[app|com|org]` and auxiliary subdomains.
 
 ## 7. Acceptance Criteria
 
-| ID    | Condition                                                                                                                                            |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ID    | Condition                                                                                                                                             |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | AC-01 | `GET .../health` returns 200 `text/plain` (seven-line aggregate); `GET .../api/v0/health.json` returns `{"status":"pass",…}` for each host namespace. |
-| AC-02 | Editing language/region/timezone/theme updates cookies and redirects back to the proper Top scope with query parameters preserved.                   |
-| AC-03 | Email registration flow issues an OTP via ActionMailer only when Turnstile succeeds and saves `UserIdentityEmail` with encrypted address.            |
-| AC-04 | Telephone registration rejects invalid E.164 numbers and uses the configured SMS provider.                                                           |
-| AC-05 | Passkey flow returns creation options, stores the challenge in session, and accepts subsequent verification payloads.                                |
-| AC-06 | Help contact form cannot submit without policy consent; valid submissions persist to `service_site_contacts` and emit a Mailer call.                 |
-| AC-07 | API inquiry endpoints validate addresses/phones using shared rules (no divergent regex).                                                             |
-| AC-08 | Rate limiting, JWT verification, and Cloudflare Turnstile secrets are configurable per environment and validated during smoke tests.                 |
-| AC-09 | OpenTelemetry traces are visible in Grafana Tempo for at least the top/sign/help flows in staging/production.                                        |
-| AC-10 | CI pipeline executes `bundle exec rails test`, `pnpm run lint`, `pnpm run check`, `rubocop`, and `erb_lint` before merging.                          |
+| AC-02 | Editing language/region/timezone/theme updates cookies and redirects back to the proper Top scope with query parameters preserved.                    |
+| AC-03 | Email registration flow issues an OTP via ActionMailer only when Turnstile succeeds and saves `UserIdentityEmail` with encrypted address.             |
+| AC-04 | Telephone registration rejects invalid E.164 numbers and uses the configured SMS provider.                                                            |
+| AC-05 | Passkey flow returns creation options, stores the challenge in session, and accepts subsequent verification payloads.                                 |
+| AC-06 | Help contact form cannot submit without policy consent; valid submissions persist to `service_site_contacts` and emit a Mailer call.                  |
+| AC-07 | API inquiry endpoints validate addresses/phones using shared rules (no divergent regex).                                                              |
+| AC-08 | Rate limiting, JWT verification, and Cloudflare Turnstile secrets are configurable per environment and validated during smoke tests.                  |
+| AC-09 | OpenTelemetry traces are visible in Grafana Tempo for at least the top/sign/help flows in staging/production.                                         |
+| AC-10 | CI pipeline executes `bundle exec rails test`, `bun run lint`, `bun run check`, `rubocop`, and `erb_lint` before merging.                             |
 
 ---
 
 ## 8. Appendices & References
 
 - Repository guides: `README.md`, `AGENTS.md`, `docs/checklist.md`
-- Infrastructure: `compose.yml`, `Procfile.dev`
+- Infrastructure: `compose.yaml`, `Procfile.dev`
 - Security: `SECURITY.md`, `CODE_OF_CONDUCT.md`
-- Testing assets: `test/`, `spec/`, `rswag` configuration
+- Testing assets: `test/`, `gait/`, `rswag` configuration
 - Change log: tracked via Git history and PR descriptions
 
 > **Note:** This SRS is internal-facing and must be updated whenever routes, data stores, or

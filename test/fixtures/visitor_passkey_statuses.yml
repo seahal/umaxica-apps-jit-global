@@ -1,0 +1,14 @@
+# Fixed reference rows used by COM credential ceremonies.
+_fixture:
+  model_class: VisitorPasskeyStatus
+
+active:
+  id: <%= VisitorPasskeyStatus::ACTIVE %>
+disabled:
+  id: <%= VisitorPasskeyStatus::DISABLED %>
+revoked:
+  id: <%= VisitorPasskeyStatus::REVOKED %>
+deleted:
+  id: <%= VisitorPasskeyStatus::DELETED %>
+nothing:
+  id: <%= VisitorPasskeyStatus::NOTHING %>

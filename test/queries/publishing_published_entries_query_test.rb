@@ -9,6 +9,29 @@ class PublishingPublishedEntriesQueryTest < ActiveSupport::TestCase
   # is what this guards.
   EXPECTED_INDEX_QUERIES = 7
 
+  test "orders by publication time then public_id without pagination mechanics" do
+    published_at = Time.zone.parse("2026-03-01 09:00:00 UTC")
+    older = publishing_publish(
+      entry: publishing_draft(audience: "app", surface: "info", slug: "older", title: "Older"),
+      published_at: published_at - 1.hour,
+    )
+    tied_a = publishing_publish(
+      entry: publishing_draft(audience: "app", surface: "info", slug: "tied-a", title: "Tied A"),
+      published_at:,
+    )
+    tied_b = publishing_publish(
+      entry: publishing_draft(audience: "app", surface: "info", slug: "tied-b", title: "Tied B"),
+      published_at:,
+    )
+    query = publishing_query(audience: "app", surface: "info")
+    result = query.call.to_a
+
+    assert_kind_of ActiveRecord::Relation, query.call
+    assert_equal older, result.last
+    assert_equal [tied_a, tied_b].map(&:public_id).sort, result.first(2).map(&:public_id).sort
+    assert_equal result.map(&:public_id), publishing_query(audience: "app", surface: "info").call.map(&:public_id)
+  end
+
   test "returns only entries with an active publication" do
     published_entry = publishing_publish(
       entry: publishing_draft(
@@ -49,6 +72,17 @@ class PublishingPublishedEntriesQueryTest < ActiveSupport::TestCase
     )
 
     assert_not_includes publishing_query(audience: "app", surface: "info").call, entry
+  end
+
+  test "excludes a publication whose window has not opened yet" do
+    entry = publishing_draft(audience: "app", surface: "info", slug: "scheduled-one", title: "Scheduled")
+    version = Publishing::PromoteRevisionOperation.call(revision: entry.current_revision)
+    entry.publications.create!(entry_version: version, effective_from: 1.hour.from_now)
+
+    query = publishing_query(audience: "app", surface: "info")
+
+    assert_not_includes query.call, entry
+    assert_nil query.find_published(public_id: entry.public_id)
   end
 
   test "a terminated publication stops being served once its window closes" do

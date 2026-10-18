@@ -1,0 +1,16 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "consumed" as consumed
+    [*] --> pending
+    pending --> consumed: consume_result! / Base final committer
+    pending --> pending: App link completion / expires_at set to now
+    consumed --> [*]
+    note right of pending
+        Auth result returns to Base final committer.
+        Provider browser state, email and display name never resolve
+        an actor; only verified issuer and subject are authoritative.
+        Release history prevents stale callback reattachment.
+        App link completion requires a live pending Ticket grant and
+        retires that grant after consuming the candidate.
+    end note

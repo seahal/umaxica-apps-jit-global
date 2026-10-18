@@ -6,6 +6,7 @@ module FlowWithdrawal
 
   include FlowBase
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     cycle_status_column :status_id
   end

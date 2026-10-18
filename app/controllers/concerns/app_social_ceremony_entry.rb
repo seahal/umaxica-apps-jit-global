@@ -22,6 +22,7 @@ module AppSocialCeremonyEntry
   SUPPORTED_PROVIDERS = %w(google apple).freeze
   SOCIAL_LINK_SCOPE = SocialAuth::SOCIAL_LINK_SCOPE
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include SocialAuth
     include SignUpSuspensionGuard
@@ -62,27 +63,18 @@ module AppSocialCeremonyEntry
     # no intent, no ceremony grant, and no ClientSignUpFlow behind.
     return false if social_auth_entry == "sign_up" && reject_suspended_sign_up!
 
+    auth_social_admission_binding! if intent.to_s == "login"
+
     # Prepare session with intent context (OmniAuth manages OAuth state)
-    state = prepare_social_auth_intent!(
+    prepare_social_auth_intent!(
       intent,
       provider: provider,
       pt: nil,
       entry: social_auth_entry,
       ri: params[:ri].presence,
     )
-    if params[:social_ceremony_grant].present?
+    if intent.to_s != "login" && params[:social_ceremony_grant].present?
       store_social_ceremony_grant!(params[:social_ceremony_grant])
-    elsif intent.to_s == "login"
-      issuance = IdentitySocialCeremonyGrantIssuer.issue!(
-        surface: "app",
-        actor_ref: social_login_actor_ref,
-        session_ref: state,
-        operation: "login",
-        provider: provider,
-        resource_ref: social_auth_entry,
-        return_to: path_from_signed_pt(signed_pt_token(resolved_path_or_navigation_target)),
-      )
-      store_social_ceremony_grant!(issuance.grant)
     end
     issue_sign_up_flow!(provider) if social_auth_entry == "sign_up"
 
@@ -104,8 +96,7 @@ module AppSocialCeremonyEntry
 
   def issue_sign_up_flow!(provider)
     cycle =
-      AppTicketRecord.connected_to(role: :writing) do
-        ClientSignUpFlowStatus.ensure_defaults!
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.create!(
           principal_id: nil,
           status_id: ClientSignUpFlowStatus::STARTED,
@@ -119,7 +110,7 @@ module AppSocialCeremonyEntry
         )
       end
     result =
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         SignUpStateMachine.call(
           ticket: cycle,
           event: :start_social_callback,

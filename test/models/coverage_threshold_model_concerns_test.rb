@@ -13,16 +13,18 @@ class CoverageThresholdModelConcernsTest < ActiveSupport::TestCase
 
   test "refresh token primitives distinguish expiry, revocation, and digest states" do
     token = ClientToken.new
-    token.discarded_at = nil
+    token.discard_at = nil
+
+    # A missing refresh-token expiry is invalid authentication state, not an
+    # unbounded usable lifetime.
+    assert_predicate token, :expired_refresh?
+    token.discard_at = Float::INFINITY
+
+    assert_predicate token, :expired_refresh?
+    token.discard_at = 1.hour.from_now
 
     assert_not_predicate token, :expired_refresh?
-    token.discarded_at = Float::INFINITY
-
-    assert_not_predicate token, :expired_refresh?
-    token.discarded_at = 1.hour.from_now
-
-    assert_not_predicate token, :expired_refresh?
-    token.discarded_at = 1.hour.ago
+    token.discard_at = 1.hour.ago
 
     assert_predicate token, :expired_refresh?
     token.define_singleton_method(:revoked?) { true }
@@ -40,31 +42,8 @@ class CoverageThresholdModelConcernsTest < ActiveSupport::TestCase
     assert_equal({ status: :invalid, token: nil }, ClientToken.rotate_refresh!(presented_refresh_digest: nil))
   end
 
-  test "refresh token class helpers select actor status and kind columns" do
-    user = FakeAttributes.new(%i(user_id user_token_status_id user_token_kind_id))
-    staff = FakeAttributes.new(%i(staff_id staff_token_status_id staff_token_kind_id))
-    visitor = FakeAttributes.new([])
-    %i(actor_foreign_key_from token_status_key_from token_kind_key_from).each do |method|
-      assert_equal(
-        { actor_foreign_key_from: :user_id,
-          token_status_key_from: :user_token_status_id,
-          token_kind_key_from: :user_token_kind_id, }.fetch(method), ClientToken.send(method, user),
-      )
-      assert_equal(
-        { actor_foreign_key_from: :staff_id,
-          token_status_key_from: :staff_token_status_id,
-          token_kind_key_from: :staff_token_kind_id, }.fetch(method), ClientToken.send(method, staff),
-      )
-      assert_equal(
-        { actor_foreign_key_from: :visitor_id,
-          token_status_key_from: :visitor_token_status_id,
-          token_kind_key_from: :visitor_token_kind_id, }.fetch(method), ClientToken.send(method, visitor),
-      )
-    end
-  end
-
   test "token status management distinguishes active restricted revoked and expired states" do
-    token = ClientToken.new(user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.new(user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.hour.from_now)
 
     assert_predicate token, :active_status?
     assert_not_predicate token, :restricted?
@@ -81,13 +60,13 @@ class CoverageThresholdModelConcernsTest < ActiveSupport::TestCase
 
     assert_predicate token, :expired?
     token.user_token_status_id = ClientTokenStatus::ACTIVE
-    token.discarded_at = 1.hour.ago
+    token.discard_at = 1.hour.ago
 
     assert_predicate token, :scheduled_revocation_due?
     assert_not_predicate token, :currently_usable?
     assert_equal ClientTokenStatus, ClientToken.token_status_model
     assert_equal :user_token_status_id, ClientToken.token_status_foreign_key
-    assert_equal :discarded_at, ClientToken.expiry_column
+    assert_equal :discard_at, ClientToken.expiry_column
   end
 
   test "logout transaction exposes origin sequences and status predicates" do
@@ -127,7 +106,8 @@ class CoverageThresholdModelConcernsTest
     t.define_singleton_method(:update!) { |attrs|
       attrs.each { |k, v|
         public_send("#{k}=", v) if respond_to?("#{k}=")
-      }; self
+      }
+      self
     }
 
     assert_same t, t.advance_step!("origin_cleared")
@@ -143,7 +123,8 @@ class CoverageThresholdModelConcernsTest
     t.define_singleton_method(:update!) { |attrs|
       attrs.each { |k, v|
         public_send("#{k}=", v) if respond_to?("#{k}=")
-      }; self
+      }
+      self
     }
     t.status = "failed"
 

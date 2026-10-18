@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: organization_invitations
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id              :bigint           not null, primary key
 #  code            :string(32)       not null
@@ -33,7 +33,7 @@ class OrganizationInvitationTest < ActiveSupport::TestCase
       [0, 1, 2, 3].each { |id| OrganizationStatus.find_or_create_by!(id: id) }
     end
     @staff = Operator.create!
-    @organization = Organization.create!(name: "Test Org", domain: "test-org-#{SecureRandom.hex(4)}")
+    @organization = OperatorOrganization.create!(name: "Test Org", domain: "test-org-#{SecureRandom.hex(4)}")
     @invitation = OrganizationInvitation.create!(
       email: "invitee@example.com",
       organization_id: @organization.id,

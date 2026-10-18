@@ -1,0 +1,13 @@
+# Rows inserted by db/op_base_app_migrate/20261006160000_seed_app_sign_flow_reference_data.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: ClientSignOutFlowKind
+
+nothing:
+  id: 0
+idp_sign_out:
+  id: 10
+rp_initiated:
+  id: 20
+session_revoke:
+  id: 30

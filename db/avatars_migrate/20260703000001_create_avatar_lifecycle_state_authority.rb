@@ -127,12 +127,9 @@ class CreateAvatarLifecycleStateAuthority < ActiveRecord::Migration[8.2]
       add_reference(:avatars, :lifecycle_state, foreign_key: { to_table: :avatar_lifecycle_states })
     end
 
-    now = Time.current
-    MigrationAvatarLifecycleState.reset_column_information
-    STATE_ROWS.each do |attributes|
-      MigrationAvatarLifecycleState.create!(attributes.merge(created_at: now, updated_at: now))
-    end
+    seed_into(connection)
 
+    MigrationAvatarLifecycleState.reset_column_information
     active_state = MigrationAvatarLifecycleState.find_by!(key: "active")
     MigrationAvatar.reset_column_information
     MigrationAvatar.find_each do |avatar|
@@ -142,6 +139,30 @@ class CreateAvatarLifecycleStateAuthority < ActiveRecord::Migration[8.2]
     safety_assured do
       change_column_null(:avatars, :lifecycle_state_id, false)
     end
+  end
+
+  # Structure loads mark migrations as applied without replaying their data
+  # inserts. db/seeds.rb calls this same idempotent writer on the avatar
+  # connection so a reset database still has the lifecycle states that avatar
+  # provisioning requires.
+  def seed_into(target_connection)
+    unless target_connection.data_source_exists?("avatar_lifecycle_states")
+      raise ActiveRecord::MigrationError,
+            "avatar_lifecycle_states must exist before lifecycle reference data is inserted"
+    end
+
+    now = target_connection.quote(Time.current)
+    columns = STATE_ROWS.first.keys
+    values =
+      STATE_ROWS.map do |row|
+        "(#{columns.map { |column| target_connection.quote(row.fetch(column)) }.join(", ")}, #{now}, #{now})"
+      end
+
+    target_connection.execute(<<~SQL.squish)
+      INSERT INTO avatar_lifecycle_states (#{columns.join(", ")}, created_at, updated_at)
+      VALUES #{values.join(", ")}
+      ON CONFLICT (key) DO NOTHING
+    SQL
   end
 
   def down

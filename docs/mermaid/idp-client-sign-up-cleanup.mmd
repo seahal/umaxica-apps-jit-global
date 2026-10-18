@@ -1,0 +1,22 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NOTHING id=0 (reference only)" as NOTHING
+    state "IDLE id=10" as IDLE
+    state "PENDING id=20" as PENDING
+    state "COMPLETED id=30" as COMPLETED
+    state "FAILED id=40" as FAILED
+    [*] --> IDLE
+    IDLE --> PENDING: SignUpTermination terminal retention
+    FAILED --> PENDING: SignUpTermination replay / cleanup worker
+    PENDING --> COMPLETED: cleanup successful
+    PENDING --> FAILED: cleanup exception
+    PENDING --> PENDING: cleanup attempt
+    COMPLETED --> [*]
+    NOTHING --> PENDING: SignUpArtifactCleanup public call
+    IDLE --> PENDING: SignUpArtifactCleanup public call
+    FAILED --> PENDING: SignUpArtifactCleanup public call
+    note right of NOTHING
+        NOTHING has no ordinary entry path.
+        FAILED is retryable; cap may strand it.
+        Public cleanup can be called before enqueue.
+    end note

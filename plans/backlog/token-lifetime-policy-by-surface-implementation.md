@@ -4,7 +4,7 @@
 
 This plan implements the accepted decision in `adr/token-lifetime-policy-by-surface.md`. Do not
 start implementation until the current large-scale edits settle and this plan is promoted to
-`plans/active/`. This file changes no code by itself.
+`specs/`. This file changes no code by itself.
 
 ## Goal
 

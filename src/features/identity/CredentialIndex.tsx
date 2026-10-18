@@ -48,7 +48,7 @@ export default function CredentialIndex({
         </ButtonLink>
       }
     >
-      <Table>
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{columns.value}</th>
@@ -66,7 +66,7 @@ export default function CredentialIndex({
               <td>
                 <Link
                   href={entry.edit_link.href}
-                  className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+                  className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
                 >
                   {entry.edit_link.label}
                 </Link>

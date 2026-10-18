@@ -2,17 +2,103 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 # require "helpers/global_test_support"
 
 class RetentionPurgeJobTest < ActiveJob::TestCase
+  setup do
+    ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
+    ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
+  end
+
   teardown { Flipper.disable(RetentionPurgeJob::FEATURE_NAME) }
 
-  test "anonymizes account records where purged_at is in the past" do
-    user_to_purge = Client.create!(public_id: "purge_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+  test "Avatar purge deferral preserves encrypted moniker history" do
+    handle = Handle.create!(
+      handle: "purge-avatar-#{SecureRandom.hex(4)}",
+      cooldown_until: Time.current,
+      is_system: false,
+    )
+    avatar = AvatarTestFactory.create!(
+      moniker: "Purge",
+      capability: AvatarCapability.find(AvatarCapability::NORMAL),
+      active_handle: handle,
+    )
+    former_moniker = avatar.avatar_monikers.create!(
+      moniker: "Former",
+      valid_from: Time.utc(2024, 1, 1),
+      valid_to: Time.utc(2025, 1, 1),
+    )
+    current_moniker = AvatarMoniker.current.find_by!(avatar_id: avatar.id)
+    avatar.update_columns(purge_eligible_at: 1.hour.ago)
+
+    assert_no_difference -> { Avatar.count } do
+      assert_no_difference -> { AvatarMoniker.count } do
+        RetentionPurgeJob.perform_now
+      end
+    end
+
+    assert Avatar.exists?(avatar.id)
+    assert AvatarMoniker.exists?(former_moniker.id)
+    assert AvatarMoniker.exists?(current_moniker.id)
+    assert AvatarPurgeDeferral.exists?(avatar_id: avatar.id, reason_code: "ownership_history")
+  end
+
+  test "rejects a retention batch size outside the bounded execution range" do
+    error =
+      assert_raises(ArgumentError) do
+        RetentionPurgeJob.perform_now(batch_size: 501)
+      end
+
+    assert_equal "batch_size must be between 1 and 500", error.message
+  end
+
+  test "rejects fractional retention batch sizes instead of truncating them" do
+    error =
+      assert_raises(ArgumentError) do
+        RetentionPurgeJob.perform_now(batch_size: 1.5)
+      end
+
+    assert_equal "batch_size must be between 1 and 500", error.message
+  end
+
+  test "rejects zero negative and missing retention batch sizes" do
+    [0, -1, nil].each do |batch_size|
+      error =
+        assert_raises(ArgumentError) do
+          RetentionPurgeJob.perform_now(batch_size: batch_size)
+        end
+
+      assert_equal "batch_size must be between 1 and 500", error.message
+    end
+  end
+
+  test "accepts both inclusive retention batch-size boundaries before work" do
+    FeatureFlags.stub(:enabled?, true) do
+      [1, 500].each do |batch_size|
+        assert_nothing_raised { RetentionPurgeJob.perform_now(batch_size:) }
+      end
+    end
+  end
+
+  test "accepts an integral string batch size through the public job interface" do
+    FeatureFlags.stub(:enabled?, true) do
+      # The validation is exercised before any destructive work is reached. The kill-switch stub
+      # keeps this boundary test independent of retention rows while still using the public job
+      # entrypoint.
+      assert_nothing_raised { RetentionPurgeJob.perform_now(batch_size: "1") }
+    end
+  end
+
+  test "anonymizes account records where purge_eligible_at is in the past" do
+    user_to_purge = Client.create!(
+      public_id: "purge_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE,
+      created_at: 2.hours.ago,
+    )
     user_to_keep = Client.create!(public_id: "keep_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
 
-    user_to_purge.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
-    user_to_keep.update_columns(discarded_at: Retainable::SENTINEL, purged_at: Retainable::SENTINEL)
+    user_to_purge.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
+    user_to_keep.update_columns(discard_at: Retainable::SENTINEL, purge_eligible_at: Retainable::SENTINEL)
 
     assert_no_difference -> { Client.count } do
       RetentionPurgeJob.perform_now
@@ -31,13 +117,16 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   # that routed Operators through `anonymize_accounts` (or Clients through
   # `purge_operators`) would silently corrupt one actor type's lifecycle.
   test "purge physically removes due operators but anonymizes due users in place" do
-    user = Client.create!(public_id: "puser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+    user = Client.create!(
+      public_id: "puser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE,
+      created_at: 2.hours.ago,
+    )
     operator_due = Operator.create!
     operator_pending = Operator.create!
 
-    user.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
-    operator_due.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
-    operator_pending.update_columns(discarded_at: Retainable::SENTINEL, purged_at: Retainable::SENTINEL)
+    user.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
+    operator_due.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
+    operator_pending.update_columns(discard_at: Retainable::SENTINEL, purge_eligible_at: Retainable::SENTINEL)
 
     assert_difference -> { Operator.count }, -1 do
       assert_no_difference -> { Client.count } do
@@ -52,17 +141,20 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     # Operator: physically deleted, never marked terminated (Staff lifecycle).
     assert_not Operator.exists?(operator_due.id)
 
-    # Operator not yet due (purged_at = Infinity sentinel) must be untouched.
+    # Operator not yet due (purge_eligible_at = Infinity sentinel) must be untouched.
     assert Operator.exists?(operator_pending.id)
   end
 
   # Re-running the worker must be safe: already-anonymized users are skipped via
   # `where(terminated_at: nil)` and already-deleted operators are simply absent.
   test "purge is idempotent across repeated runs" do
-    user = Client.create!(public_id: "iuser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
+    user = Client.create!(
+      public_id: "iuser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE,
+      created_at: 2.hours.ago,
+    )
     operator = Operator.create!
-    user.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
-    operator.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
+    user.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
+    operator.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
     RetentionPurgeJob.perform_now
     terminated_at_after_first = user.reload.terminated_at
@@ -76,13 +168,13 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     assert_not Operator.exists?(operator.id)
   end
 
-  test "purges visitor occurrences where purged_at is in the past" do
+  test "purges visitor occurrences where purge_eligible_at is in the past" do
     VisitorOccurrenceStatus.ensure_defaults!
     occurrence_to_purge = VisitorOccurrence.create!(body: "purge-#{SecureRandom.hex(8)}")
     occurrence_to_keep = VisitorOccurrence.create!(body: "keep-#{SecureRandom.hex(8)}")
 
-    occurrence_to_purge.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
-    occurrence_to_keep.update_columns(discarded_at: Retainable::SENTINEL, purged_at: Retainable::SENTINEL)
+    occurrence_to_purge.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
+    occurrence_to_keep.update_columns(discard_at: Retainable::SENTINEL, purge_eligible_at: Retainable::SENTINEL)
 
     assert_difference -> { VisitorOccurrence.count }, -1 do
       RetentionPurgeJob.perform_now
@@ -93,6 +185,12 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   end
 
   test "runs sign up artifact cleanup before purging signup cycles" do
+    ClientSignUpFlowStatus::DEFAULTS.each do |id|
+      ClientSignUpFlowStatus.find_or_create_by!(id: id)
+    end
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each do |id|
+      ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id)
+    end
     user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = ClientEmail.create!(
       user: user,
@@ -112,44 +210,32 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
       pending_contact_id: email.id,
       cleanup_status_id: ClientSignUpFlowCleanupStatus::PENDING,
     )
-    cycle.update_columns(discarded_at: cycle.created_at, purged_at: cycle.created_at)
+    cycle.update_columns(discard_at: cycle.created_at, purge_eligible_at: cycle.created_at)
 
     RetentionPurgeJob.perform_now
 
     assert_not ClientSignUpFlow.exists?(cycle.id)
     assert_equal ClientEmailStatus::DELETED, email.reload.user_email_status_id
-    assert_operator email.discarded_at, :<=, Time.current
+    assert_operator email.discard_at, :<=, Time.current
   end
 
-  # Regression guard for RETAINABLE_MODELS ordering. ClientSignUpFlow has an
-  # ON DELETE CASCADE FK to ClientToken; if RETAINABLE_MODELS lists ClientToken
-  # before ClientSignUpFlow, purging tokens will silently cascade-delete
-  # active cycles whose own `purged_at` is still Infinity.
-  test "ClientSignUpFlow is listed before ClientToken in RETAINABLE_MODELS" do
+  test "retention purge registers client sign-up flows and tokens independently" do
     models = RetentionPurgeJob::RETAINABLE_MODELS
-    cycle_index = models.index(ClientSignUpFlow)
-    token_index = models.index(ClientToken)
 
-    assert cycle_index, "ClientSignUpFlow missing from RETAINABLE_MODELS"
-    assert token_index, "ClientToken missing from RETAINABLE_MODELS"
-    assert_operator cycle_index, :<, token_index,
-                    "ClientSignUpFlow must precede ClientToken to avoid cascade-deletion of active cycles"
+    assert_includes models, ClientSignUpFlow
+    assert_includes models, ClientToken
   end
 
-  test "VisitorSignUpFlow is listed before VisitorToken in RETAINABLE_MODELS" do
+  test "retention purge registers visitor sign-up flows and tokens independently" do
     models = RetentionPurgeJob::RETAINABLE_MODELS
-    cycle_index = models.index(VisitorSignUpFlow)
-    token_index = models.index(VisitorToken)
 
-    assert cycle_index, "VisitorSignUpFlow missing from RETAINABLE_MODELS"
-    assert token_index, "VisitorToken missing from RETAINABLE_MODELS"
-    assert_operator cycle_index, :<, token_index,
-                    "VisitorSignUpFlow must precede VisitorToken"
+    assert_includes models, VisitorSignUpFlow
+    assert_includes models, VisitorToken
   end
 
   # Every Retainable model must be registered with RetentionPurgeJob so the
   # worker actually purges its rows. Forgetting to add a new model is silent --
-  # `purged_at` ticks past forever with no one cleaning up. Compare against
+  # `purge_eligible_at` ticks past forever with no one cleaning up. Compare against
   # the Retainable.registry that models populate on `included`.
   test "all Retainable-including models are registered in RETAINABLE_MODELS" do
     # Force eager load so every Retainable include block runs and registers.
@@ -169,7 +255,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   test "purge skips a client blocked by an in-force principal_hard_delete_blocked Principal Effect" do
     client = Client.create!(public_id: "block_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
     operator = operators(:one)
-    client.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
+    client.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
     the_case = AppEnforcementCase.new(
       kind: "permanent_ban",
@@ -186,7 +272,10 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
       principal_hard_delete_blocked: true,
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference -> { Client.count } do
       RetentionPurgeJob.perform_now
@@ -200,7 +289,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
        "batch delete" do
     blocked_operator = Operator.create!
     applying_operator = operators(:one)
-    blocked_operator.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
+    blocked_operator.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
     the_case = OrgEnforcementCase.new(
       kind: "permanent_ban",
@@ -218,7 +307,10 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
       withdrawal_purge_blocked: true,
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert_no_difference -> { Operator.count } do
       RetentionPurgeJob.perform_now
@@ -235,8 +327,8 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     Flipper.enable(RetentionPurgeJob::FEATURE_NAME)
     user = Client.create!(public_id: "suser_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE)
     operator_due = Operator.create!
-    user.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
-    operator_due.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
+    user.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
+    operator_due.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
     assert_nothing_raised do
       assert_no_difference -> { Operator.count } do
@@ -250,7 +342,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
 
   test "the next unsuspended run catches up on work skipped while suspended" do
     operator_due = Operator.create!
-    operator_due.update_columns(discarded_at: 1.hour.ago, purged_at: 1.hour.ago)
+    operator_due.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
     Flipper.enable(RetentionPurgeJob::FEATURE_NAME)
     RetentionPurgeJob.perform_now

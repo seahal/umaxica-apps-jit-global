@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="<%= get_language %>" data-theme="<%= theme_cookie_value %>" class="<%= theme_html_class %>">
+<html lang="<%= get_language %>" data-theme="<%= theme_cookie_value %>" class="<%= theme_html_class %>" data-edition="org">
 <head>
   <meta charset="utf-8">
   <%# The document title stays a server responsibility: it is rendered into the initial HTML from
@@ -10,6 +10,7 @@
                         separator: "—",
                         reverse: true %>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <%= render "shared/ui/presentation_labels" %>
   <%= csrf_meta_tags %>
   <%= csp_meta_tag %>
   <%# Inertia injects its progress bar as a <style> element built at runtime, and the Vite dev
@@ -23,9 +24,9 @@
   <%# Turnstile renders explicitly from React, so the API script has to be in the document before
       the widget mounts. %>
   <%= render "layouts/shared/cloudflare_turnstile_api" %>
-  <%= inertia_ssr_head %>
 </head>
 <body>
+  <%= render "shared/ui/skip_link" %>
   <%# Header, footer and preference controls are the React surface layout's responsibility
       (src/layouts/SurfaceLayout.tsx); this shell owns the document only. %>
   <%= inertia_root %>

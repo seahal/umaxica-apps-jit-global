@@ -8,16 +8,13 @@ module Base
         class RedeliveriesController < BaseController
           include CloudflareTurnstile
           include CommonRedirect
-          include CommonOtp
           include SignEmailRegistrable
           include SignEmailRegistrationFlow
-          include SignSettingsEmailRegistration
           include VerificationClient
 
           AUTHENTICATION_MODE = :private
           declare_authentication_mode! :private
 
-          before_action :authenticate_client!
           before_action :preserve_email_registration_redirect_parameter, only: :create
           before_action :authorize_email_redelivery!, only: :create
           step_up only: :create, bootstrap: true
@@ -50,11 +47,21 @@ module Base
 
           def verification_scope = "settings_email"
 
+          def step_up_requirement(scope:)
+            unless scope == "settings_email"
+              raise StepUpRequirement::Invalid, "registration operation scope mismatch"
+            end
+
+            contact = @user_email || ClientEmail.new(user: current_client)
+            ClientEmailPolicy.new(contact, user: current_client)
+              .credential_registration_requirement(token: current_session_token)
+          end
+
           def pending_email_status_id = ClientEmailStatus::UNVERIFIED
 
           def verified_email_status_id = ClientEmailStatus::VERIFIED
 
-          def on_email_registration_verified!(*); nil end
+          def on_email_registration_verified!(*) = nil
 
           def create_audit_event!(event_id)
             ClientChronicle.create!(
@@ -63,9 +70,9 @@ module Base
             )
           end
 
-          def cleanup_pending_signup!; nil end
+          def cleanup_pending_signup! = nil
 
-          def remove_existing_unverified_emails!; nil end
+          def remove_existing_unverified_emails! = nil
         end
       end
     end

@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preferences
@@ -8,10 +10,10 @@
 #  dbsc_challenge           :text
 #  dbsc_challenge_issued_at :datetime
 #  dbsc_public_key          :jsonb
-#  discarded_at             :datetime         default(Infinity), not null
+#  discard_at             :datetime         default(Infinity), not null
 #  explicit_fields          :jsonb            not null
 #  jti                      :string
-#  purged_at                :datetime         default(Infinity), not null
+#  purge_eligible_at                :datetime         default(Infinity), not null
 #  token_digest             :binary
 #  used_at                  :datetime
 #  created_at               :datetime         not null
@@ -30,7 +32,7 @@
 #  index_com_preferences_on_dbsc_status_id     (dbsc_status_id)
 #  index_com_preferences_on_jti                (jti) UNIQUE
 #  index_com_preferences_on_public_id          (public_id) UNIQUE
-#  index_com_preferences_on_purged_at          (purged_at)
+#  index_com_preferences_on_purge_eligible_at          (purge_eligible_at)
 #  index_com_preferences_on_replaced_by_id     (replaced_by_id)
 #  index_com_preferences_on_status_id          (status_id)
 #  index_com_preferences_on_token_digest       (token_digest)
@@ -44,8 +46,6 @@
 #  fk_rails_...                             (replaced_by_id => com_preferences.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
-
 class ComPreference < ComSettingRecord
   include Retainable
   include ::PublicId
@@ -56,6 +56,9 @@ class ComPreference < ComSettingRecord
 
   self.belongs_to_required_by_default = false
 
+  DBSC_BINDING_METHOD_CLASS = ComPreferenceBindingMethod
+  DBSC_STATUS_CLASS = ComPreferenceDbscStatus
+
   # A preference token is "expired" exactly when it has been discarded, so the
   # generic token vocabulary reads expires_at while Retainable owns the column.
   #
@@ -65,12 +68,11 @@ class ComPreference < ComSettingRecord
   # expiry -- see PreferenceWebCookieEndpoint#refresh_token_expires_at and
   # #consented_buffer_expires_at, which both guard with `!expires_at.is_a?(Float)`.
   # A new caller that forgets this guard writes an infinite cookie lifetime.
-  alias_attribute :expires_at, :discarded_at
-
-  DBSC_BINDING_METHOD_CLASS = ComPreferenceBindingMethod
-  DBSC_STATUS_CLASS = ComPreferenceDbscStatus
+  alias_attribute :expires_at, :discard_at
 
   attribute :status_id, default: ComPreferenceStatus::NOTHING
+  attribute :binding_method_id, default: ComPreferenceBindingMethod::NOTHING
+  attribute :dbsc_status_id, default: ComPreferenceDbscStatus::NOTHING
 
   belongs_to :com_preference_status,
              foreign_key: :status_id,
@@ -143,8 +145,6 @@ class ComPreference < ComSettingRecord
            dependent: :nullify
   validates :status_id, numericality: { only_integer: true }
   validates :jti, uniqueness: true, allow_nil: true
-  attribute :binding_method_id, default: ComPreferenceBindingMethod::NOTHING
-  attribute :dbsc_status_id, default: ComPreferenceDbscStatus::NOTHING
 
   before_validation :default_replaced_by_to_self, on: :create
   after_create :persist_self_replacement

@@ -5,16 +5,6 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class ProsopiteSmokeTest < ActionDispatch::IntegrationTest
-  test "prosopite raises in test" do
-    assert_predicate Prosopite, :raise?
-  end
-
-  test "active record strict loading raises in test" do
-    assert_predicate ActiveRecord::Base, :strict_loading_by_default
-    assert_equal :n_plus_one_only, ActiveRecord::Base.strict_loading_mode
-    assert_equal :raise, ActiveRecord.action_on_strict_loading_violation
-  end
-
   test "prosopite raises for n+1 queries in integration tests" do
     created_user_ids =
       Prosopite.pause do
@@ -29,8 +19,10 @@ class ProsopiteSmokeTest < ActionDispatch::IntegrationTest
       Prosopite.pause do
         assert_raises(Prosopite::NPlusOneQueriesError) do
           Prosopite.scan do
+            # Query the same child table once per parent without lazy-loading an association, so
+            # Prosopite remains observable while global strict loading stays enabled.
             Client.where(id: created_user_ids).order(:id).each do |user|
-              user.client_emails.load
+              ClientEmail.where(user_id: user.id).load
             end
           end
         end

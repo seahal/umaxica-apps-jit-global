@@ -7,7 +7,7 @@ Accepted (2026-06-03)
 ## Context
 
 The account withdrawal and retention model already uses lifecycle timestamps such as
-`withdrawal_started_at`, `deactivated_at`, `discarded_at`, `purged_at`, and `terminated_at`. Those
+`withdrawal_started_at`, `deactivated_at`, `discard_at`, `purge_eligible_at`, and `terminated_at`. Those
 timestamps describe withdrawal, suspension, retention, and termination behavior.
 
 Operational forced access removal is a different security action. It is not ordinary inactivity, not
@@ -105,6 +105,10 @@ Initial reason codes:
   not approve a UI or route.
 
 ## Related
+
+- `adr/unified-enforcement.md` and `adr/operator-capability-authorization.md`: the only org
+  controller path that locks or unlocks is an Enforcement Case, authorized by operator capability.
+  There is no standalone access-lock endpoint.
 
 - `adr/identity-authority-boundary.md`
 - `adr/acme-session-and-token-authority.md`

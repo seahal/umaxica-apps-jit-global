@@ -1,0 +1,18 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "submitted" as submitted
+    state "under_review" as under_review
+    state "approved" as approved
+    state "rejected" as rejected
+    state "redacted" as redacted
+    [*] --> submitted
+    submitted --> approved: resolve! approved
+    under_review --> approved: resolve! approved
+    submitted --> rejected: resolve! rejected
+    under_review --> rejected: resolve! rejected
+    submitted --> redacted: redact!
+    under_review --> redacted: redact!
+    approved --> redacted: redact!
+    rejected --> redacted: redact!
+    redacted --> redacted: redact!
+    redacted --> [*]

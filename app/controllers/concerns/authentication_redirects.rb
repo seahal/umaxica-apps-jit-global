@@ -9,7 +9,11 @@ module AuthenticationRedirects
   DEFAULT_PT_SESSION_KEY = AuthIoKeys::Session::DEFAULT_PT
   PATH_TARGET_TOKEN_SALT = "path_target_token"
   PATH_TARGET_TOKEN_PURPOSE = :path_target
+  PATH_TARGET_TOKEN_FLOW = "authentication"
   PATH_TARGET_TOKEN_EXPIRES_IN = 15.minutes
+
+  # A controller asked for a sign-in destination without belonging to a sign-in surface.
+  class UnknownSignInSurfaceError < StandardError; end
 
   # Preserves the redirect parameter in session and returns it for immediate use
   #
@@ -131,10 +135,11 @@ module AuthenticationRedirects
     redirect_to_pt_destination!(destination)
   end
 
-  def sign_in_checkpoint_path(pt: nil)
+  def sign_in_checkpoint_path(pt: nil, cycle: nil)
     attrs = { ri: current_region_identifier }
     safe_pt = signed_pt_token(pt)
     attrs[AuthIoKeys::Params::PT] = safe_pt if safe_pt.present?
+    attrs.merge!(sign_in_flow_binding_params(cycle)) if cycle
 
     if respond_to?(:auth_app_sign_in_check_path, true)
       auth_app_sign_in_check_path(**attrs)
@@ -147,34 +152,47 @@ module AuthenticationRedirects
     end
   end
 
-  def sign_in_welcome_path(pt: nil, id: nil)
+  def sign_in_welcome_path(pt: nil, id: nil, cycle: nil)
+    surface = sign_in_surface
     attrs = { ri: current_region_identifier }
     safe_pt = signed_pt_token(pt)
     attrs[AuthIoKeys::Params::PT] = safe_pt if safe_pt.present?
+    attrs.merge!(sign_in_flow_binding_params(cycle)) if cycle
     _ = id
 
-    case sign_in_surface
+    case surface
     when :app
       base_app_welcome_url(
         **attrs,
-        host: ENV.fetch("PRIVATE_BASE_SERVICE_URL"),
+        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+        protocol: "https",
       )
     when :com
       base_com_welcome_url(
         **attrs,
-        host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
+        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+        protocol: "https",
       )
     when :org
       base_org_welcome_url(
         **attrs,
-        host: ENV.fetch("PRIVATE_BASE_STAFF_URL"),
+        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+        protocol: "https",
       )
-    else
-      path = "/welcome"
-      query = attrs.compact.to_query
-      query.present? ? "#{path}?#{query}" : path
     end
   end
+
+  def sign_in_flow_binding_params(cycle, phase: nil)
+    return {} unless cycle
+
+    phase ||= cycle.class.state_name_for(cycle.state_id)
+    {
+      AuthIoKeys::Params::FLOW_BINDING => SignInFlowBindingCodec.encode(
+        flow: cycle, surface: sign_in_surface, phase: phase,
+      ),
+    }
+  end
+  private :sign_in_flow_binding_params
 
   def sign_in_dashboard_path(pt: nil)
     _ = pt
@@ -184,19 +202,20 @@ module AuthenticationRedirects
       base_app_dashboard_url(
         ri: params[:ri],
         host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+        protocol: "https",
       )
     when :com
       base_com_dashboard_url(
         ri: params[:ri],
-        host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
+        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+        protocol: "https",
       )
     when :org
       base_org_dashboard_url(
         ri: params[:ri],
-        host: ENV.fetch("PRIVATE_BASE_STAFF_URL"),
+        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+        protocol: "https",
       )
-    else
-      "/dashboard"
     end
   end
 
@@ -206,11 +225,17 @@ module AuthenticationRedirects
 
   alias after_dashboard_path after_welcome_path
 
+  # Resolves the surface whose Dashboard and Welcome complete a sign-in. Base controllers complete
+  # sign-ins too (social completion, session-limit resolution, Welcome), so they resolve like Auth.
+  # A controller outside these namespaces has no sign-in destination; reaching here from one is a
+  # programmer error and fails instead of guessing a destination such as Home "/".
   def sign_in_surface
     case self.class.name
-    when /\A(Auth|Sign|Acme)::App::/ then :app
-    when /\A(Auth|Sign|Acme)::Com::/ then :com
-    when /\A(Auth|Sign|Acme)::Org::/ then :org
+    when /\A(Auth|Sign|Acme|Base)::App::/ then :app
+    when /\A(Auth|Sign|Acme|Base)::Com::/ then :com
+    when /\A(Auth|Sign|Acme|Base)::Org::/ then :org
+    else
+      raise UnknownSignInSurfaceError, "#{self.class.name} has no sign-in surface"
     end
   end
 
@@ -306,9 +331,9 @@ module AuthenticationRedirects
   alias safe_non_dashboard_return_path safe_non_welcome_return_path
 
   def welcome_return_path?(path)
+    # Every surface serves Welcome at "/welcome", so classifying a return path needs no surface.
     candidate = URI.parse(path.to_s)
-    welcome = URI.parse(sign_in_welcome_path)
-    candidate.path == welcome.path || candidate.path == "/welcome" || candidate.path.start_with?("/welcomes/")
+    candidate.path == "/welcome" || candidate.path.start_with?("/welcomes/")
   rescue URI::InvalidURIError
     false
   end
@@ -362,7 +387,7 @@ module AuthenticationRedirects
   end
 
   def authentication_pt_flow
-    "authentication"
+    PATH_TARGET_TOKEN_FLOW
   end
 
   def authentication_pt_surface
@@ -393,4 +418,6 @@ module AuthenticationRedirects
       status: :unprocessable_content,
     )
   end
+
+  private :verify_authentication_pt_path
 end

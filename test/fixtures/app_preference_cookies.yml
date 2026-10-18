@@ -28,4 +28,4 @@
 
 # Valid YAML with no records
 # _fixture:
-  #   model_class: AppPreferenceCookie
+#   model_class: AppPreferenceCookie

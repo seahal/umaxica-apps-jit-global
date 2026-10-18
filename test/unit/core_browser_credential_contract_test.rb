@@ -25,12 +25,21 @@ class CoreBrowserCredentialContractTest < ActiveSupport::TestCase
     assert_equal "/", oidc.fetch(:path)
   end
 
-  test "native and side audiences are classified as non core browser" do
-    assert CoreBrowserCredentialContract.native_or_side_audience?("aud" => ["palm-api"])
-    assert CoreBrowserCredentialContract.native_or_side_audience?("aud" => ["side-service"])
-    assert_not CoreBrowserCredentialContract.native_or_side_audience?(
+  test "native and retained external RP audiences are classified as non core browser" do
+    assert CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["palm-api"])
+    assert CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["warp-service"])
+    assert_not CoreBrowserCredentialContract.native_or_warp_audience?(
       "aud" => [CoreBrowserCredentialContract::ACCESS_AUDIENCE],
     )
-    assert_not CoreBrowserCredentialContract.native_or_side_audience?("aud" => ["port-api"])
+    assert_not CoreBrowserCredentialContract.native_or_warp_audience?("aud" => ["port-api"])
+  end
+
+  test "core browser access token expiry is capped by the root session deadline" do
+    now = Time.utc(2026, 9, 13, 9, 0)
+    absolute_expiry = now + 2.minutes
+    token = Struct.new(:discard_at).new(absolute_expiry)
+
+    assert_equal absolute_expiry,
+                 CoreBrowserCredentialContract.access_token_expires_at_for(token_record: token, now: now)
   end
 end

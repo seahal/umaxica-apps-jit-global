@@ -1,15 +1,16 @@
 // Client-side theme application.
 //
 // Rails renders `data-theme` and the theme class on <html> from the `ct` cookie so the first paint
-// already carries the visitor's theme. This module keeps that in sync afterwards: it applies a new
-// choice immediately, follows the system setting while the choice is "system", and reconciles with
-// the server, which is the authority for the stored preference.
+// already carries the visitor's theme. This module keeps that in sync afterwards: a new choice is
+// applied only after the server accepts it, the system setting is followed while the choice is
+// "system", and the stored preference remains the authority.
 //
 // The wire format is the two-letter code the preference store uses; `Theme` is the name the UI
 // works in. Converting at the boundary keeps the codes out of the components.
 
 import { readCookie, watchCookie } from "@/lib/cookies";
 import { readString } from "@/lib/payload";
+import { sameOriginEndpoint } from "@/lib/request";
 
 export type Theme = "dark" | "light" | "system";
 
@@ -95,8 +96,11 @@ export function watchSystemTheme(currentTheme: () => Theme): () => void {
   return () => media.removeEventListener("change", sync);
 }
 
-function themeEndpointUrl({ includeThemeParams = true }: { includeThemeParams?: boolean } = {}) {
-  const endpoint = new URL("/web/v0/theme", window.location.origin);
+function themeEndpointUrl(
+  endpointUrl: string,
+  { includeThemeParams = true }: { includeThemeParams?: boolean } = {},
+) {
+  const endpoint = sameOriginEndpoint(endpointUrl);
   endpoint.search = window.location.search;
   if (!includeThemeParams) {
     endpoint.searchParams.delete("ct");
@@ -105,10 +109,15 @@ function themeEndpointUrl({ includeThemeParams = true }: { includeThemeParams?: 
   return endpoint.toString();
 }
 
-/** The stored preference, or null when it cannot be read; the cookie stays authoritative then. */
-export async function fetchStoredTheme(): Promise<Theme | null> {
+/**
+ * The stored preference, or null when it cannot be read; the cookie stays authoritative then.
+ * `endpointUrl` is the path the server declared for this page. A path that would leave the current
+ * origin throws instead of reading as "no stored theme".
+ */
+export async function fetchStoredTheme(endpointUrl: string): Promise<Theme | null> {
+  const url = themeEndpointUrl(endpointUrl);
   try {
-    const response = await fetch(themeEndpointUrl());
+    const response = await fetch(url);
     if (!response.ok) {
       return null;
     }
@@ -119,10 +128,19 @@ export async function fetchStoredTheme(): Promise<Theme | null> {
   }
 }
 
-/** Persists a choice and returns what the server stored, falling back to the requested theme. */
-export async function persistTheme(theme: Theme, csrf: string): Promise<Theme> {
+/**
+ * Persists a choice and returns the theme the server stored. Returns null when the write is not
+ * accepted or the response names no theme — callers must not apply a colour until this resolves to
+ * a stored value.
+ */
+export async function persistTheme(
+  endpointUrl: string,
+  theme: Theme,
+  csrf: string,
+): Promise<Theme | null> {
+  const url = themeEndpointUrl(endpointUrl, { includeThemeParams: false });
   try {
-    const response = await fetch(themeEndpointUrl({ includeThemeParams: false }), {
+    const response = await fetch(url, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -133,13 +151,13 @@ export async function persistTheme(theme: Theme, csrf: string): Promise<Theme> {
     });
 
     if (!response.ok) {
-      return theme;
+      return null;
     }
 
     const data: unknown = await response.json();
     const code = readString(data, "theme");
-    return code ? themeFromCode(code) : theme;
+    return code ? themeFromCode(code) : null;
   } catch {
-    return theme;
+    return null;
   }
 }

@@ -6,6 +6,7 @@ module BannerModel
 
   DISTANT_ENDS_AT = -> { Time.zone.local(9999, 12, 31, 23, 59, 59) }
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     attribute :published, default: false
     attribute :starts_at, default: -> { Time.current }

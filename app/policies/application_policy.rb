@@ -11,6 +11,14 @@ class ApplicationPolicy < ActionPolicy::Base
   alias_rule :edit?, to: :update?
   alias_rule :new?, to: :create?
 
+  # Session capability layer. Authorization is DB role AND session capability
+  # AND the ordinary policy rule; an authentication context can only ever
+  # narrow what the actor's roles already allow, never widen it. Normal and
+  # Emergency contexts pass it; an unrecognised context fails every rule.
+  # Emergency sessions are kept from sensitive actions by Step-Up gates, not
+  # here (docs/security/org-emergency-access.md).
+  pre_check :deny_capability_restricted_context
+
   def edit? = update?
 
   def new? = create?
@@ -44,6 +52,23 @@ class ApplicationPolicy < ActionPolicy::Base
     relation.none
   end
 
+  # Named by the pre_check above; Action Policy resolves it on the policy
+  # instance, so it is not part of the policy's public rule vocabulary.
+  def deny_capability_restricted_context
+    rule = result&.rule
+    return if rule.blank?
+
+    deny! unless authentication_context.permits_rule?(rule)
+  end
+
+  # The trusted authentication context of the current session, read from the
+  # signed access token. An absent claim is a session minted before Emergency
+  # Access existed and is Normal; an unrecognised value carries no capabilities
+  # at all, so a tampered or unknown context denies rather than defaulting open.
+  def authentication_context
+    AuthorizationTokenClaims.authentication_context(current_token)
+  end
+
   protected
 
   def actor_context
@@ -70,61 +95,11 @@ class ApplicationPolicy < ActionPolicy::Base
       end
   end
 
-  # Extract JWT scopes from the current user token.
-  # @return [Array<String>]
-  def jwt_scopes
-    return [] if current_token.blank?
-
-    AuthorizationTokenClaims.scopes(current_token)
-  end
-
-  # Check if the user has a specific scope
-  # @param scope [String] the scope to check (e.g., "read:self", "write:org")
-  # @return [Boolean]
-  def has_scope?(scope)
-    jwt_scopes.include?(scope.to_s)
-  end
-
-  # Check if the user has permission for the current domain
-  # @param allowed_domains [Array<String>] list of allowed domain prefixes (e.g., ["app", "org"])
-  # @return [Boolean]
-  def domain_permitted?(*allowed_domains)
-    return true if allowed_domains.blank?
-
-    domain = extract_domain_from_audience
-    return true if domain.blank?
-
-    allowed_domains.map(&:to_s).include?(domain.to_s)
-  end
-
-  # Extract domain from audience claim in the current user token.
-  def extract_domain_from_audience
-    return nil if current_token.blank?
-
-    audiences = Array(current_token["aud"])
-    return nil if audiences.empty?
-
-    audiences.first.to_s.split(".").first
-  end
-
   # Get JWT subject (user ID) from the current user token.
   def jwt_subject
     return nil if current_token.blank?
 
     AuthorizationTokenClaims.subject(current_token)
-  end
-
-  # Check if current token is for specific domain
-  def domain_app?
-    extract_domain_from_audience == "app"
-  end
-
-  def domain_org?
-    extract_domain_from_audience == "org"
-  end
-
-  def domain_com?
-    extract_domain_from_audience == "com"
   end
 
   # Check if user owns the record
@@ -157,25 +132,16 @@ class ApplicationPolicy < ActionPolicy::Base
       (defined?(Visitor) && user.is_a?(Visitor) && record.is_a?(Visitor))
   end
 
+  # adr/operator-capability-authorization.md: the only grant check org administrative policies use.
+  # Callers pass a fixed OperatorCapabilityGrant constant; being an Operator is necessary, never
+  # sufficient.
+  def operator_capability?(capability)
+    user.is_a?(::Operator) && user.capability?(capability)
+  end
+
   # Role-based checks
   def operator?
     user&.has_role?("operator", organization: organization)
-  end
-
-  def manager?
-    user&.has_role?("manager", organization: organization)
-  end
-
-  def editor?
-    user&.has_role?("editor", organization: organization)
-  end
-
-  def contributor?
-    user&.has_role?("contributor", organization: organization)
-  end
-
-  def viewer?
-    user&.has_role?("viewer", organization: organization)
   end
 
   # Combined role checks

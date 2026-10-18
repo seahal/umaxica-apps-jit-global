@@ -16,6 +16,12 @@ pipeline even though they have different purposes.
 
 ## Decision
 
+OTP message disclosure through delivery events and DEBUG output is an open, mandatory remediation
+item. The [2026-10-03 escalation decision](otp-observability-secret-exposure-remediation.md) and
+[active remediation plan](../specs/otp-observability-secret-exposure-remediation/plan.md) record the
+finding, comprehensive scope, and required closure evidence. This does not change the logging
+ownership below or claim that secret protection has been implemented.
+
 Access logs stay on Lograge. Lograge owns request-completion logging and emits one normalized JSON
 object per request.
 
@@ -50,6 +56,88 @@ reporting, but it must not be required for ordinary application log output.
   changing the access-log pipeline.
 - Product analytics consent filtering must be redesigned separately if product analytics events are
   reintroduced.
+
+## Amendment: authentication security events have a durable Chronicle record
+
+Amended: 2026-09-21
+
+`AuthenticationSecurityEventEmitter` now records its accepted security-event taxonomy in the
+existing Chronicle audit database through the existing `security` retention policy. Payloads pass
+through the Chronicle sanitization policy before persistence; the operational log remains separately
+redacted and diagnostic. This amendment adds no table, retention duration, provider integration, or
+external configuration.
+
+Notification enqueue, provider acceptance, delivery outcome, retry, and permanent failure remain
+different facts. The existing SMS boundary records enqueue, provider acceptance, and provider
+failure facts in Chronicle without recipient or message content. The OTP email adapters record
+successful enqueue and enqueue failure, bound to the email record as the Chronicle subject and
+without recipient or message content; an enqueue failure retains the original delivery exception for
+the caller. An audit-write failure after a successful enqueue is logged diagnostically and does not
+turn one queued email into a caller-visible delivery failure that could cause a duplicate. No
+delivery success is inferred from an enqueue result, and email provider receipts or a generic
+provider receipt ledger are not introduced until their owner, provider contract, and retention
+policy are approved.
+
+## Amendment: development logs reach Loki by file tail
+
+Amended: 2026-09-18
+
+The layer split above is unchanged. What changes is transport: in development, Grafana Alloy tails
+the repository's log files into Loki, so the same logs are queryable beside the traces they belong
+to. Nothing about who writes what moves.
+
+```text
+Lograge      -> log/development.access.jsonl -> alloy -> loki   (access logs)
+Rails.logger -> log/development.log          -> alloy -> loki   (application logs)
+audit / security records -> database rows                       (unchanged, never Loki)
+```
+
+Audit, security, compliance and purchase records stay database rows. Loki holds a 24h development
+copy of diagnostic output and is not a record of fact; moving an authoritative record there would be
+the exact mixing this ADR exists to prevent.
+
+### Why file tail
+
+Five transports were compared:
+
+1. **Dedicated file + `loki.source.file`** — chosen.
+2. **Reuse of the existing file logger alone** — would merge access logs into `log/development.log`,
+   collapsing two layers into one Loki stream.
+3. **stdout tee** — host-native Rails' stdout is a terminal on the host. A container cannot read it,
+   so this works in the Dev Container and fails in the repository's primary topology.
+4. **journald** — host-native Rails under `bin/dev` is not a systemd unit, and mounting the host
+   journal into a container is a far larger grant than a read-only directory.
+5. **OTLP logs** — the Ruby OpenTelemetry Logs SDK is not the stable, broadly instrumented path the
+   traces SDK is. Adopting it because it is newer would trade a working logger contract for an
+   experimental one; it stays a future option, not this change.
+
+The file tail is the only option that works identically for host-native Rails and for Dev Container
+Rails, because both write into the same repository `./log` directory, which Alloy mounts read-only.
+
+### What this adds to the Lograge pipeline
+
+`config/initializers/lograge.rb` keeps stdout and, **in development only**, broadcasts the same JSON
+line to `log/development.access.jsonl`. Production is untouched and remains stdout-only. The access
+log is a separate file from `log/development.log` precisely so the Lograge and `Rails.logger` layers
+stay distinguishable in Loki (`job="rails-access"` and `job="rails-application"`).
+
+### Capacity, rotation and retention ownership
+
+- **Rotation** of the access log is the Rails logger's: 3 files of 16 MB, so the repository log
+  directory is bounded whether or not the observability stack runs. `log/development.log` remains
+  the framework's own file under the developer's control.
+- **Retention** of the shipped copy is Loki's: 24h, enforced by the compactor
+  (`podman/loki/loki.yaml`), matching Tempo and Prometheus.
+- **Volume** is bounded on the write path by Loki's ingestion rate limits.
+
+No log is stored a third time: Alloy keeps only tail positions, not copies.
+
+### Labels
+
+Loki labels carry `job`, `service_name`, `layer`, `filename`, and — for access logs — `method` and
+`status` lifted from the JSON line. Deliberately not labels: `request_id`, `trace_id`, and path,
+each of which would create a new Loki stream per request. They remain in the line itself, which is
+forwarded unmodified, so `trace_id` still correlates a log line to its Tempo trace.
 
 ## Related
 

@@ -21,6 +21,8 @@ class AppPreferenceAdultContentGateOption < AppSettingRecord
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults! = insert_missing_fixed_ids!(DEFAULTS)
+
   def name
     case id
     when NOTHING then "nothing"
@@ -34,6 +36,4 @@ class AppPreferenceAdultContentGateOption < AppSettingRecord
   def denied? = id == DENY
 
   def enabled? = denied?
-
-  def self.ensure_defaults! = insert_missing_fixed_ids!(DEFAULTS)
 end

@@ -4,7 +4,10 @@
 # Docs owns the public documentation content surface.
 scope module: :docs, as: :docs do
   # App documentation host.
-  constraints host: [ENV["PRIVATE_DOCS_SERVICE_URL"], "docs.jp.umaxica.app", "docs.app.localhost"].compact do
+  constraints host: [
+    Rails.configuration.x.boot_config.fetch(:hosts).docs_service.host,
+    "docs.jp.umaxica.app", "docs.app.localhost",
+  ].compact do
     # App surface controllers.
     scope module: :app, as: :app do
       # Thin landing endpoint.
@@ -38,6 +41,9 @@ scope module: :docs, as: :docs do
           # Published documentation entries. `param: :public_id` addresses the
           # resource by its opaque API identity, distinct from the presentation
           # slug; the route stays fully resourceful.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of the
@@ -52,7 +58,10 @@ scope module: :docs, as: :docs do
   end
 
   # Corporate documentation host.
-  constraints host: [ENV["PRIVATE_DOCS_CORPORATE_URL"], "docs.jp.umaxica.com", "docs.com.localhost"].compact do
+  constraints host: [
+    Rails.configuration.x.boot_config.fetch(:hosts).docs_corporate.host,
+    "docs.jp.umaxica.com", "docs.com.localhost",
+  ].compact do
     # Corporate surface controllers.
     scope module: :com, as: :com do
       # Thin landing endpoint.
@@ -84,6 +93,9 @@ scope module: :docs, as: :docs do
         # Versioned documentation API.
         namespace :v0 do
           # Published documentation entries, addressed by opaque public_id.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of the
@@ -98,7 +110,10 @@ scope module: :docs, as: :docs do
   end
 
   # Staff documentation host.
-  constraints host: [ENV["PRIVATE_DOCS_STAFF_URL"], "docs.jp.umaxica.org", "docs.org.localhost"].compact do
+  constraints host: [
+    Rails.configuration.x.boot_config.fetch(:hosts).docs_staff.host,
+    "docs.jp.umaxica.org", "docs.org.localhost",
+  ].compact do
     # Staff surface controllers.
     scope module: :org, as: :org do
       # Thin landing endpoint.
@@ -130,6 +145,9 @@ scope module: :docs, as: :docs do
         # Versioned documentation API.
         namespace :v0 do
           # Published documentation entries, addressed by opaque public_id.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of the

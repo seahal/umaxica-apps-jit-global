@@ -27,6 +27,7 @@ module ApiContentNegotiation
   # before_action is the request filter contract for JSON endpoints. Installing
   # it at inclusion is intentional: negotiation must run before every action,
   # and listing the filters on each including controller would duplicate them.
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_action :enforce_api_acceptable_response_type!
     before_action :enforce_api_request_media_type!

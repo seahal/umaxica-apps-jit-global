@@ -10,7 +10,12 @@ module SignSettingsSecretCredentialCacheControl
   private
 
   def set_no_store_for_secret_credential_pages
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    # Rails serializes its `no_store` cache-control flag as only `private, no-store`,
+    # dropping the additional directives this secret page contract requires.
+    response.cache_control.replace(
+      no_cache: true,
+      extras: %w(no-store must-revalidate private),
+    )
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
   end

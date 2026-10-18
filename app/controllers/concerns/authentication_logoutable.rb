@@ -37,13 +37,13 @@ module AuthenticationLogoutable
     ensure
       # Detach the browser from the signed-out principal's preference
       # credential before ending the auth session (target semantics section 6.1;
-      # see memos/2026-07-21-preference-lifecycle-sign-out-audit.md section 4 for
+      # see research/2026-07-21-preference-lifecycle-sign-out-audit.md section 4 for
       # the gap this closes). Non-fatal by construction: never allowed to
       # block or fail ordinary sign-out.
       rotate_preference_after_sign_out! if respond_to?(:rotate_preference_after_sign_out!, true)
       clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
       Actor.clear if defined?(Actor)
-      reset_session
+      reset_session_and_clear_inertia_history!
     end
     LogoutResult.success
   end
@@ -64,7 +64,7 @@ module AuthenticationLogoutable
   #     auth regardless of its Preference cookie state.
   #   - Preference is never an authentication/authorization authority (see
   #     security invariant 9 in
-  #     memos/2026-07-21-preference-lifecycle-hardening-implementation.md):
+  #     research/2026-07-21-preference-lifecycle-hardening-implementation.md):
   #     an un-retired remote Preference credential can still resolve display
   #     preferences for that device but cannot grant access to the account.
   #   - Preference tokens are not enumerable per-account server-side (they
@@ -80,9 +80,20 @@ module AuthenticationLogoutable
       rotate_preference_after_sign_out! if respond_to?(:rotate_preference_after_sign_out!, true)
       clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
       Actor.clear if defined?(Actor)
-      reset_session
+      reset_session_and_clear_inertia_history!
     end
     LogoutResult.success
+  end
+
+  # Ends the browser's Rails session and asks Inertia to clear its history on the next page this
+  # origin renders. `encrypt_history` only encrypts history entries; the key lives in the tab's
+  # sessionStorage, which `reset_session` cannot reach, so without the clear a same-document Back
+  # restores the signed-in page from history without asking the server. The flag is written
+  # after the reset, so it is the only thing the new session carries; inertia_rails keeps it
+  # across redirects and drops it once a page is rendered.
+  def reset_session_and_clear_inertia_history!
+    reset_session
+    session[:inertia_clear_history] = true
   end
 
   def safe_current_resource_for_logout
@@ -120,10 +131,14 @@ module AuthenticationLogoutable
     return nil unless respond_to?(:find_refresh_token_record, true)
 
     refresh_plain = cookies[AuthenticationBase::REFRESH_COOKIE_KEY].to_s
+    return nil if refresh_plain.blank?
+
     refresh_public_id, = token_class.parse_refresh_token(refresh_plain)
+    return nil if refresh_public_id.blank?
+
+    # Lookup failures propagate (raise_logout_resolution_error!): a database
+    # error is not evidence that the browser held no session.
     find_refresh_token_record(refresh_public_id)
-  rescue StandardError
-    nil
   end
 
   def current_session_public_id_from_refresh_cookie_for_logout

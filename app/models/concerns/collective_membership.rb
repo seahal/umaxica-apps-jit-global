@@ -4,6 +4,7 @@
 module CollectiveMembership
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     self.belongs_to_required_by_default = false
 
@@ -27,6 +28,8 @@ module CollectiveMembership
   CONFIG_REGISTRY = {}
   private_constant :CONFIG_REGISTRY
 
+  public
+
   def account
     public_send(self.class.account_association_name)
   end
@@ -35,8 +38,16 @@ module CollectiveMembership
     public_send(self.class.collective_association_name)
   end
 
+  def organization
+    collective
+  end
+
   def collective_unit
     public_send(self.class.unit_association_name)
+  end
+
+  def organization_unit
+    collective_unit
   end
 
   def active?

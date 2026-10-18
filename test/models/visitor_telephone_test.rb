@@ -7,15 +7,13 @@
 # Database name: com_principal
 #
 #  id                          :bigint           not null, primary key
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  locked_at                   :datetime         default(-Infinity), not null
 #  number                      :string           default(""), not null
 #  number_digest               :string
 #  otp_attempts_count          :integer          default(0), not null
-#  otp_counter                 :text             default(""), not null
-#  otp_expires_at              :datetime         default(-Infinity), not null
-#  otp_private_key             :string           default(""), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  otp_last_sent_at            :datetime
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  public_id                   :string(21)       not null
@@ -25,9 +23,9 @@
 # Indexes
 #
 #  index_visitor_telephones_on_active_number_digest         (number_digest) UNIQUE WHERE ((number_digest IS NOT NULL) AND (visitor_telephone_status_id <> 4))
-#  index_visitor_telephones_on_discarded_at                 (discarded_at)
+#  index_visitor_telephones_on_discard_at                 (discard_at)
 #  index_visitor_telephones_on_public_id                    (public_id) UNIQUE
-#  index_visitor_telephones_on_purged_at                    (purged_at)
+#  index_visitor_telephones_on_purge_eligible_at                    (purge_eligible_at)
 #  index_visitor_telephones_on_visitor_id                   (visitor_id)
 #  index_visitor_telephones_on_visitor_telephone_status_id  (visitor_telephone_status_id)
 #
@@ -49,57 +47,56 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "090-1234-#{rand(1000..9999)}",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
     assert_equal telephone.public_id, telephone.to_param
   end
 
-  test "rejects creating more than the maximum telephones per visitor" do
-    status = VisitorTelephoneStatus.find(VisitorTelephoneStatus::UNVERIFIED)
+  test "pending telephone rows do not reserve capacity and the database permits only one effective binding" do
+    owner = Visitor.create!
 
-    VisitorTelephone::MAX_TELEPHONES_PER_VISITOR.times do |index|
-      VisitorTelephone.create!(
-        visitor: @visitor,
-        visitor_telephone_status: status,
-        number: "090-2222-#{format("%04d", index)}",
-        otp_counter: "0",
-        otp_private_key: "secret_credential",
-      )
+    assert_equal 0, owner.visitor_telephones.effective_binding.count
+    candidates =
+      5.times.map do |index|
+        VisitorTelephone.create!(visitor: owner, number: "+81903333000#{index}", confirm_policy: "1")
+      end
+
+    assert candidates.none?(&:binding_effective?)
+    first, second = candidates
+    first.update!(visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED)
+    assert_difference -> { VisitorTelephone.effective_binding.where(visitor_id: owner.id).count }, 1 do
+      first.finalize_binding!
     end
+    second.update!(visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED)
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      VisitorTelephone.transaction(requires_new: true) { second.finalize_binding! }
+    end
+    assert_predicate first.reload, :binding_effective?
+    assert_not_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorTelephone.effective_binding.where(visitor_id: owner.id).count
+    first.release_binding!
+    second.finalize_binding!
 
-    extra = VisitorTelephone.new(
-      visitor: @visitor,
-      visitor_telephone_status: status,
-      number: "090-3333-0000",
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
-    )
-
-    assert_not extra.valid?
-    assert_not_empty extra.errors[:base]
+    assert_predicate first.reload, :binding_released?
+    assert_predicate second.reload, :binding_effective?
+    assert_equal 1, VisitorTelephone.effective_binding.where(visitor_id: owner.id).count
   end
 
-  test "rejects duplicate number digest" do
+  test "effective telephone numbers are unique at finalization" do
     existing = VisitorTelephone.create!(
       visitor: @visitor,
       number: "090-4444-0000",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
-    )
-    duplicate = VisitorTelephone.new(
+    ).finalize_binding!
+    duplicate = VisitorTelephone.create!(
       visitor: @visitor,
       number: "+819044440000",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
-    assert_equal existing.number_digest, duplicate.tap(&:valid?).number_digest
-    assert_not duplicate.valid?
-    assert_not_empty duplicate.errors[:number]
+    assert_equal existing.number_digest, duplicate.number_digest
+    assert_predicate duplicate, :valid?
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate.finalize_binding! }
   end
 
   test "deleted sign-up telephone does not reserve number forever" do
@@ -107,17 +104,13 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "+1 (555) 444-0001",
       visitor_telephone_status_id: VisitorTelephoneStatus::DELETED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
-      discarded_at: 1.minute.ago,
-      purged_at: 29.minutes.from_now,
+      discard_at: 1.minute.ago,
+      purge_eligible_at: 29.minutes.from_now,
     )
     retry_telephone = VisitorTelephone.new(
       visitor: @visitor,
       number: "+15554440001",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
     assert_predicate retry_telephone, :valid?
@@ -131,11 +124,9 @@ class VisitorTelephoneTest < ActiveSupport::TestCase
       visitor: @visitor,
       number: "+1 (555) 765-4321",
       visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-      otp_counter: "0",
-      otp_private_key: "secret_credential",
     )
 
-    expected = IdentifierBlindIndex.bidx_for_telephone("+15557654321")
+    expected = IdentifierBlindIndex.bidx_for_telephone("+15557654321", realm: :com)
 
     assert_equal expected, telephone.number_digest
   end
@@ -159,31 +150,11 @@ class VisitorTelephoneTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -243,10 +214,8 @@ class VisitorTelephoneTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -258,10 +227,8 @@ class VisitorTelephoneTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -482,63 +449,6 @@ class VisitorTelephoneTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -554,10 +464,8 @@ class VisitorTelephoneTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -577,12 +485,12 @@ class VisitorTelephoneTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

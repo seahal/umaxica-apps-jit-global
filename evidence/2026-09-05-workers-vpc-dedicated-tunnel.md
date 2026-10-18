@@ -10,35 +10,35 @@ Repositories:
 ## Why
 
 The account's single VPC Service `019f5fe0-287f-7040-9f2f-036cb5b21df7`
-(`umaxica-apps-edge-cf-workers-vpc`) was bound to tunnel
-`1d501e9a-62f7-4c0d-ba5e-a26e3f10088f` — the `Auth` tunnel, which also serves the ten published
-browser hostnames behind Access. Every Access, ingress, replica or token change on the browser path
-therefore also moved the Edge Worker's only route to Rails.
+(`umaxica-apps-edge-cf-workers-vpc`) was bound to tunnel `1d501e9a-62f7-4c0d-ba5e-a26e3f10088f` —
+the `Auth` tunnel, which also serves the ten published browser hostnames behind Access. Every
+Access, ingress, replica or token change on the browser path therefore also moved the Edge Worker's
+only route to Rails.
 
 Two further faults were observed, neither recorded before:
 
 1. `wrangler vpc service list` reports that service's host as **`10.89.2.2`**, a Podman-assigned
    container address, not `core.app.localhost` as `adr/006-development-workers-vpc-transport.md`
    states. That address changes whenever the network is recreated.
-2. The reason for (1): on `umaxica-apps-global-dc_frontend`,
-   `getent hosts core.app.localhost` answers `::1`. RFC 6761 reserves the `localhost.` domain and
-   glibc resolves anything under it to loopback before the container resolver is consulted, so no
-   `*.localhost` alias can serve as a VPC Service target. The transport probe in
-   `docs/operations/cloudflare-private-origin.md` returns `000`, not `200`, through those names.
+2. The reason for (1): on `umaxica-apps-global-dc_frontend`, `getent hosts core.app.localhost`
+   answers `::1`. RFC 6761 reserves the `localhost.` domain and glibc resolves anything under it to
+   loopback before the container resolver is consulted, so no `*.localhost` alias can serve as a VPC
+   Service target. The transport probe in `docs/operations/cloudflare-private-origin.md` returns
+   `000`, not `200`, through those names.
 
 ## What was created
 
-| | |
-| :- | :- |
-| Tunnel name | `umaxica-dev-workers-vpc` |
-| Tunnel id | `03a4a67c-2aca-4f2c-9aeb-d1666f18bc87` |
-| Account | UMAXICA (`c90999d8a4039c63d02b7a7b1545d211`) |
-| Management | locally managed (`cloudflared tunnel create`) |
-| Ingress rules | none — not required for Workers VPC |
-| Public hostname / Access app | none |
-| Connector service | `cloudflare-tunnel-workers-vpc` (`compose.yaml`) |
-| Token variable | `CLOUDFLARED_WORKERS_VPC_TOKEN` in the gitignored `.env` |
-| VPC Service target | `core-workers-vpc.internal:3000`, HTTP |
+|                              |                                                          |
+| :--------------------------- | :------------------------------------------------------- |
+| Tunnel name                  | `umaxica-dev-workers-vpc`                                |
+| Tunnel id                    | `03a4a67c-2aca-4f2c-9aeb-d1666f18bc87`                   |
+| Account                      | UMAXICA (`c90999d8a4039c63d02b7a7b1545d211`)             |
+| Management                   | locally managed (`cloudflared tunnel create`)            |
+| Ingress rules                | none — not required for Workers VPC                      |
+| Public hostname / Access app | none                                                     |
+| Connector service            | `cloudflare-tunnel-workers-vpc` (`compose.yaml`)         |
+| Token variable               | `CLOUDFLARED_WORKERS_VPC_TOKEN` in the gitignored `.env` |
+| VPC Service target           | `core-workers-vpc.internal:3000`, HTTP                   |
 
 Cloudflare documents that "ingress configurations for locally-managed tunnels are not required for
 Workers VPC as routing is handled by the VPC Service configuration"
@@ -96,30 +96,30 @@ the environment before Compose parsing (`/run/user/1000/libpod` is read-only); t
 Dev Container recreation is therefore still unverified in this session.
 
 `test_development_compose_aliases_only_private_origins_and_configured_public_site_hosts` initially
-failed on the new alias, correctly: it modelled only two alias categories. It now recognises a third,
-routing-only category via `ROUTING_ONLY_ALIASES`, and additionally asserts that every name in that
-list is still an alias and does **not** appear in `config/environments/development.rb`. Assertions
-rose from 110 to 140; nothing was relaxed.
+failed on the new alias, correctly: it modelled only two alias categories. It now recognises a
+third, routing-only category via `ROUTING_ONLY_ALIASES`, and additionally asserts that every name in
+that list is still an alias and does **not** appear in `config/environments/development.rb`.
+Assertions rose from 110 to 140; nothing was relaxed.
 
 ## VPC Service and end-to-end result
 
 The VPC Service was created from the Edge repository once an OAuth session on the UMAXICA account
 was available:
 
-| | |
-| :- | :- |
-| Service name | `umaxica-dev-rails-api` |
-| Service id | `01a06fd0-89b7-7613-9e1d-f7d07c693273` |
-| Type / port | HTTP, `3000` |
-| Target | `core-workers-vpc.internal` |
-| Tunnel | `03a4a67c-2aca-4f2c-9aeb-d1666f18bc87` |
+|              |                                        |
+| :----------- | :------------------------------------- |
+| Service name | `umaxica-dev-rails-api`                |
+| Service id   | `01a06fd0-89b7-7613-9e1d-f7d07c693273` |
+| Type / port  | HTTP, `3000`                           |
+| Target       | `core-workers-vpc.internal`            |
+| Tunnel       | `03a4a67c-2aca-4f2c-9aeb-d1666f18bc87` |
 
 `wrangler vpc service get` confirms all five fields.
 
 The API token in the Edge repository could not create it — reads succeed, but
-`POST /accounts/…/connectivity/directory/services` returns `Authentication error [code: 10000]`
-even after the `接続ディレクトリ` admin permission was added. `wrangler login` as
-`umaxica.com@gmail.com` (UMAXICA, `connectivity:admin`) was required.
+`POST /accounts/…/connectivity/directory/services` returns `Authentication error [code: 10000]` even
+after the `接続ディレクトリ` admin permission was added. `wrangler login` as `umaxica.com@gmail.com`
+(UMAXICA, `connectivity:admin`) was required.
 
 Gate F, run from the Edge repository as `node tools/verify-edge-connectivity.mjs vpc`: the binding
 `UMAXICA_APPS_EDGE_CF_WORKERS_VPC` resolved to `01a06fd0-…` as a remote VPC Service, and all fifteen
@@ -137,6 +137,6 @@ configuration in either repository references the old service any more; deleting
 resources for tidiness is outside this change.
 
 One incidental observation, not addressed here: the `Auth` connector
-(`umaxicaappsglobaldc_cloudflare-tunnel_1`) is running on the legacy
-`umaxicaappsglobaldc_frontend` network, which no longer holds a `core` container, so that tunnel
-currently has no route to Rails. It is unrelated to the Workers VPC path.
+(`umaxicaappsglobaldc_cloudflare-tunnel_1`) is running on the legacy `umaxicaappsglobaldc_frontend`
+network, which no longer holds a `core` container, so that tunnel currently has no route to Rails.
+It is unrelated to the Workers VPC path.

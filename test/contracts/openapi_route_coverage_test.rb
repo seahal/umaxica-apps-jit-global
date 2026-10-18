@@ -31,8 +31,17 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
   # descriptions even after the registration endpoint moved under `/api/v0/preferences`.
   PROTOCOL_EXEMPT_PATHS = ["/api/v0/preferences/dbsc"].freeze
 
+  # Base owner APIs (R5-WU12/14/15) are server-to-server calls from the realm's own Base Self-RP,
+  # not a client-facing JSON contract; their contract is
+  # docs/architecture/avatar-authority-contract-proposal.md and the owner/relay tests. Deferred, not
+  # permanent: adr/owner-api-openapi-description-deferred.md says when to revisit.
+  OWNER_API_PATHS = %r{
+    \A/api/v0/(avatar|membership|iam|support|publishing|identity/(?:standing|selection)|tech-capability-checks)(/|\z)
+  }x
+
   # Surfaces with their own description. `net` and `dev` are internal-only and have none.
   SURFACES = OpenapiContract::SURFACES
+  APPLICATION_SERVICE_NAMES = %w(auth base core docs edit help info news palm warp).freeze
 
   test "every described surface has a bundled description that parses" do
     SURFACES.each do |surface|
@@ -70,11 +79,24 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
   end
 
   test "the surfaces differ only where the routes differ" do
-    # Palm serves the app surface only, so `/api/v0/profile` must be app-only in the descriptions
-    # too. This is the concrete case that a single shared description could not express.
-    assert_includes described_operations("app"), "GET /api/v0/profile"
-    assert_not_includes described_operations("com"), "GET /api/v0/profile"
-    assert_not_includes described_operations("org"), "GET /api/v0/profile"
+    %w(app com org).each do |surface|
+      assert_not_includes described_operations(surface), "GET /api/v0/profile"
+    end
+  end
+
+  test "edit org operational API routes are covered by the org description" do
+    edit_operations = Rails.application.routes.routes.filter_map { |route|
+      next unless route.defaults[:controller].to_s.start_with?("edit/org/api/v0/")
+
+      path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")
+      verb = route.verb.to_s.strip
+      next if verb.empty?
+
+      "#{verb} #{path}"
+    }.to_set
+
+    assert_equal Set["GET /api/v0/health.json", "GET /api/v0/revision.json"], edit_operations
+    assert edit_operations.subset?(described_operations("org"))
   end
 
   private
@@ -83,17 +105,24 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
   # OpenAPI's `{slug}`. Deduplicated: several services serve the same path on the same surface --
   # `/api/v0/entries` comes from docs, help, info, and news -- and the description states the path
   # once.
+  # Edit owns an org-facing API health/revision pair and must be included even though it is not a
+  # browser application namespace. GUID remains deliberately outside this three-surface contract
+  # until its `net` OpenAPI ownership decision is made (see config/routes/guid.rb).
   def routed_operations(surface)
+    service_pattern = Regexp.union(*APPLICATION_SERVICE_NAMES)
+    controller_pattern = %r{\A(?:#{service_pattern})/#{Regexp.escape(surface)}(?:/|\z)}
+
     Rails.application.routes.routes.filter_map { |route|
       name = route.name.to_s
       controller_path = route.defaults[:controller].to_s
       next unless name.include?("_#{surface}_") ||
-        controller_path.match?(%r{\A(?:core|docs|help|info|news|palm|auth|base|side)/#{Regexp.escape(surface)}(?:/|\z)})
+        controller_path.match?(controller_pattern)
 
       path = route.path.spec.to_s.sub(/\(\.:format\)\z/, "")
       next unless path.match?(DESCRIBED_PREFIXES)
       next if TEXT_ONLY_PATHS.include?(path)
       next if PROTOCOL_EXEMPT_PATHS.include?(path)
+      next if OWNER_API_PATHS.match?(path)
 
       verb = route.verb.to_s
       next if verb.empty?

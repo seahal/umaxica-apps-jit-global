@@ -4,6 +4,8 @@
 module SignUpSequenceControllerSupport
   extend ActiveSupport::Concern
 
+  include SignUpFlowEntry
+
   AGE_RESTRICTED_I18N_KEYS = {
     "app" => "sign.app.registration.checkpoint.age_restricted",
     "com" => "sign.com.registration.checkpoint.age_restricted",
@@ -11,10 +13,6 @@ module SignUpSequenceControllerSupport
   private_constant :AGE_RESTRICTED_I18N_KEYS
 
   private
-
-  def hide_sign_up_auth_navigation
-    @hide_auth_navigation = true
-  end
 
   def load_sign_up_ticket
     return render_sign_up_age_restricted if sign_up_session_state.age_restricted?
@@ -25,29 +23,6 @@ module SignUpSequenceControllerSupport
     render plain: I18n.t("errors.messages.not_found"), status: :not_found
   end
 
-  def load_sign_up_checkpoint_ticket
-    return render_sign_up_age_restricted if sign_up_session_state.age_restricted?
-
-    @sign_up_ticket = current_sign_up_flow_ticket
-    return if @sign_up_ticket
-
-    sign_up_session_state.clear_all!
-    session_missing_key = "sign.#{sign_up_surface}.registration.session_missing"
-    redirect_to(
-      sign_up_restart_path,
-      alert: I18n.t(session_missing_key),
-    )
-  end
-
-  def authorize_sign_up_participant!(rule)
-    return if performed?
-
-    context = sign_up_policy_context
-    return if allowed_to?(rule, context, with: SignUp::ParticipantPolicy)
-
-    render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
-  end
-
   def authorize_sign_up_requirement!(rule)
     return if performed?
 
@@ -55,26 +30,6 @@ module SignUpSequenceControllerSupport
     return if context && allowed_to?(rule, context, with: SignUp::RequirementPolicy)
 
     render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
-  end
-
-  def authorize_sign_up_requirement_or_cleared_continue!(rule)
-    return if performed?
-
-    context = sign_up_requirement_context
-    return if context && (
-      allowed_to?(rule, context, with: SignUp::RequirementPolicy) ||
-        allowed_to?(:continue_after_cleared_requirement?, context, with: SignUp::RequirementPolicy)
-    )
-
-    render plain: I18n.t("errors.messages.not_authorized"), status: :forbidden
-  end
-
-  def sign_up_policy_context
-    SignUpPolicyContext.build(
-      surface: sign_up_surface,
-      actor_authentication: sign_up_actor_authentication,
-      ticket: @sign_up_ticket,
-    )
   end
 
   def sign_up_requirement_context
@@ -92,37 +47,6 @@ module SignUpSequenceControllerSupport
     nil
   end
 
-  def run_sign_up_event(event, payload: {})
-    return if performed?
-
-    render_sign_up_result(perform_sign_up_event(event, payload: payload))
-  end
-
-  def run_sign_up_requirement_event(payload: {})
-    return if performed?
-
-    result = perform_sign_up_event(
-      :clear_requirement,
-      payload: payload.merge(checkpoint_version: sign_up_checkpoint_version_param),
-    )
-    return finalize_sign_up_from_checkpoint! if result.success? && result.next_event == :finalize
-
-    render_sign_up_result(result)
-  end
-
-  def enter_sign_up_checkpoint!
-    return if performed?
-
-    unless @sign_up_ticket.sign_up_checkpoint_pending?
-      result = perform_sign_up_event(:enter_checkpoint)
-      return render_sign_up_result(result) unless result.success?
-    end
-
-    return finalize_sign_up_from_checkpoint! if sign_up_missing_requirements.empty?
-
-    render_sign_up_checkpoint
-  end
-
   def perform_sign_up_event(event, payload: {})
     sign_up_ticket_record_class.connected_to(role: :writing) do
       SignUpStateMachine.call(
@@ -134,11 +58,16 @@ module SignUpSequenceControllerSupport
     end
   end
 
+  # Answers a rejected sign-up transition. A successful transition is never rendered as a body: every
+  # sign-up definition ends with birthdate, so clearing it always finalizes, and reaching here with a
+  # success is a broken invariant rather than a response to send.
   def render_sign_up_result(result)
+    if %i(ok advanced completed).include?(result.status)
+      raise ArgumentError, "sign-up transition #{result.status} has no response body; it must redirect"
+    end
+
     status =
       case result.status
-      when :ok, :advanced, :completed, :sign_in_handoff_accepted
-        :ok
       when :blocked, :unauthorized
         :forbidden
       when :expired
@@ -147,7 +76,34 @@ module SignUpSequenceControllerSupport
         :unprocessable_content
       end
 
-    render plain: result.status.to_s, status: status
+    # The state-machine classification is internal; it is logged, and the public body is fixed copy.
+    Rails.logger.info(JitLogEvent.format("sign.signup.transition_rejected", status: result.status.to_s))
+    render plain: sign_up_rejection_message(status), status: status
+  end
+
+  # Public contract for a rejected birthdate: each validation reason the actor can correct maps to
+  # a fixed message key, so changing the model's own error wording never changes the response. Any
+  # other reason is logged and answered with the generic message.
+  SIGN_UP_BIRTHDATE_PUBLIC_ERRORS = {
+    birthdate_format: "sign.shared.birthdate.errors.format",
+    too_long: "sign.shared.birthdate.errors.format",
+    birthdate_before_today: "sign.shared.birthdate.errors.not_before_today",
+  }.freeze
+
+  def sign_up_birthdate_rejection_message(actor)
+    reasons = actor.errors.details.fetch(:birthdate, []).map { |detail| detail.fetch(:error) }
+    key = reasons.filter_map { |reason| SIGN_UP_BIRTHDATE_PUBLIC_ERRORS[reason] }.first
+    return I18n.t(key) if key
+
+    Rails.logger.info(
+      JitLogEvent.format("sign.signup.birthdate_rejected", attributes: actor.errors.attribute_names.map(&:to_s)),
+    )
+    I18n.t("errors.messages.invalid_request")
+  end
+
+  def sign_up_rejection_message(http_status)
+    key = (http_status == :forbidden) ? "errors.messages.not_authorized" : "errors.messages.invalid_request"
+    I18n.t(key)
   end
 
   def render_sign_up_checkpoint
@@ -176,25 +132,6 @@ module SignUpSequenceControllerSupport
     false
   end
 
-  def persist_sign_up_birthdate_requirement
-    return true unless sign_up_requirement_param == "birthdate"
-    return false unless validate_sign_up_checkpoint_version!
-
-    actor = sign_up_pending_actor
-    unless actor
-      render plain: I18n.t("errors.messages.not_found"), status: :not_found
-      return false
-    end
-
-    actor.birthdate = sign_up_birthdate_param
-    unless actor.save
-      render plain: actor.errors.full_messages.to_sentence, status: :unprocessable_content
-      return false
-    end
-
-    true
-  end
-
   def clear_sign_up_birthdate_requirement
     return if performed?
     return continue_after_cleared_sign_up_requirement if sign_up_requirement_cleared?(:birthdate)
@@ -208,7 +145,7 @@ module SignUpSequenceControllerSupport
 
     actor.birthdate = sign_up_birthdate_param
     unless actor.save
-      render plain: actor.errors.full_messages.to_sentence, status: :unprocessable_content
+      render plain: sign_up_birthdate_rejection_message(actor), status: :unprocessable_content
       return
     end
 
@@ -218,7 +155,7 @@ module SignUpSequenceControllerSupport
       today: Time.zone.today,
     )
       sign_up_session_state.age_restricted = true
-      result = SignUpTermination.call(cycle: @sign_up_ticket, event: :fail, actor_context: Actor.authn)
+      result = SignUpTermination.call(cycle: @sign_up_ticket, event: :halt, actor_context: Actor.authn)
       return render_sign_up_result(result) unless result.success? || result.status == :failed
 
       render_sign_up_age_restricted
@@ -272,7 +209,6 @@ module SignUpSequenceControllerSupport
     # durable identity graph is provisioned, then the actor is handed off
     # to the sign-in boundary.
     finalized = nil
-    handoff = nil
     sign_in_result = nil
 
     # Serialize the entire finalize/handoff/complete sequence under the
@@ -283,45 +219,52 @@ module SignUpSequenceControllerSupport
     # the duplicate transition. Holding the lock from the policy
     # re-check through `:complete` keeps the actor mutation and the
     # cycle transition atomic with respect to peers.
-    sign_up_ticket_record_class.connected_to(role: :writing) do
-      @sign_up_ticket.with_cycle_lock do
-        @sign_up_ticket.reload
+    outcome =
+      sign_up_ticket_record_class.connected_to(role: :writing) do
+        @sign_up_ticket.with_cycle_lock do
+          @sign_up_ticket.reload
+          @sign_up_ticket.require_active_cycle!
+          context = sign_up_finalization_context
+          return render_sign_up_finalization_forbidden(json: json) unless context &&
+            allowed_to?(:finalize?, context, with: SignUp::FinalizationPolicy)
 
-        unless @sign_up_ticket.sign_up_checkpoint_pending?
-          finalized = SignUpResult.build(
-            status: :invalid_transition,
-            ticket: @sign_up_ticket,
-            errors: ["ticket is not at checkpoint"],
+          unless @sign_up_ticket.sign_up_checkpoint_pending?
+            finalized = SignUpResult.build(
+              status: :invalid_transition,
+              ticket: @sign_up_ticket,
+              errors: ["ticket is not at checkpoint"],
+            )
+            next
+          end
+
+          finalization_result = finalize_sign_up_side_effect!
+          finalized = perform_sign_up_event(
+            :finalize, payload: { finalization_result: finalization_result },
           )
-          next
+          next unless finalized.success?
+
+          actor = context.pending_actor
+          # Avatar provisioning rejects a principal that cannot sign in. Such a principal
+          # fails the sign-in handoff below and is reported through that failure path.
+          if actor.login_allowed? && actor.access_enabled?
+            IdentityGraphProvisioner.call!(surface: sign_up_surface, principal: actor)
+          end
+          complete = perform_sign_up_event(:complete)
+          next unless complete.success?
+
+          sign_in_result = handoff_to_sign_in_flow!(context.pending_actor)
         end
-
-        finalization_result = finalize_sign_up_side_effect!
-        finalized = perform_sign_up_event(
-          :finalize, payload: { finalization_result: finalization_result },
-        )
-        next unless finalized.success?
-
-        IdentityGraphProvisioner.call!(
-          surface: sign_up_surface,
-          principal: context.pending_actor,
-        )
-        sign_in_result = handoff_to_sign_in_flow!(context.pending_actor)
-        handoff = perform_sign_up_event(
-          :handoff_to_sign_in,
-          payload: {
-            sign_in_handoff_status: sign_in_result.success? ? :accepted : :failed,
-            sign_in_handoff: sign_in_result.status,
-          },
-        )
-        next unless handoff.success?
-
-        perform_sign_up_event(:complete)
       end
+
+    if outcome.is_a?(FlowTransitionResult)
+      finalized = SignUpResult.build(status: :expired, ticket: @sign_up_ticket, errors: ["ticket is expired"])
     end
 
     return render_sign_up_failure_result(finalized, json: json) unless finalized&.success?
-    return render_sign_up_failure_result(handoff, json: json) unless handoff&.success?
+
+    if @sign_up_ticket.is_a?(ClientSignUpFlow)
+      ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: @sign_up_ticket)
+    end
 
     sign_up_session_state.clear_all!
     redirect_after_sign_up_handoff!(sign_in_result, json: json)
@@ -333,10 +276,6 @@ module SignUpSequenceControllerSupport
 
   def sign_up_ticket_public_id
     session[sign_up_sequence_session_key].presence
-  end
-
-  def sign_up_requirement_param
-    (params[:requirement].presence || params.dig(:sign_up, :requirement).presence).to_s
   end
 
   def sign_up_birthdate_param
@@ -400,9 +339,15 @@ module SignUpSequenceControllerSupport
       amr: Actor.authn.amr,
       actor_type: Actor.authn.actor_type,
       actor_id: Actor.authn.actor_id,
-      restricted: Actor.authn.restricted?,
       active_sign_sequence_id: @sign_up_ticket&.public_id,
     )
+  end
+
+  def sign_up_flow_binding_params
+    flow = @sign_up_ticket || current_sign_up_flow_ticket
+    return {} unless flow
+
+    { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: flow, surface: sign_up_surface) }
   end
 
   def sign_up_flow_locator
@@ -495,9 +440,9 @@ module SignUpSequenceControllerSupport
   def sign_up_telephone_edit_path
     case sign_up_surface
     when :app
-      auth_app_sign_up_check_telephone_otp_path(ri: params[:ri])
+      auth_app_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri])
     when :com
-      auth_com_sign_up_check_telephone_otp_path(ri: params[:ri])
+      auth_com_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri])
     else
       sign_up_default_sign_in_path
     end
@@ -539,23 +484,29 @@ module SignUpSequenceControllerSupport
       telephone = ClientTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
       return :failed unless telephone
 
-      SignAppUpTelephoneRegistrationFinalizer.call(telephone: telephone)
+      SignAppUpTelephoneRegistrationFinalizer.call(
+        telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
+        flow: @sign_up_ticket, session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+      )
     when "email", "social_identity"
       # Email and social sign-up only need the actor promoted into the
       # verified-with-sign-up state before the durable graph is provisioned.
-      Client.transaction do
-        actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP) if
-          actor.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+      actor.with_lock do
+        raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless actor.active?
+
+        if @sign_up_ticket.pending_contact_type == "email"
+          email = ClientEmail.lock.find(@sign_up_ticket.pending_contact_id)
+          raise ActiveRecord::RecordNotFound unless email.user_id == actor.id
+
+          finalize_sign_up_email_binding!(actor, email)
+          actor.finalize_email_sign_up!(email: email, flow: @sign_up_ticket)
+        elsif actor.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+          actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+        end
       end
     else
       return :failed
     end
-
-    @sign_up_recovery_passcode_reveal_url =
-      issue_sign_up_recovery_passcodes!(
-        surface: :app,
-        actor: actor,
-      )
 
     :accepted
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved,
@@ -571,9 +522,20 @@ module SignUpSequenceControllerSupport
       telephone = VisitorTelephone.find_by(id: @sign_up_ticket.pending_contact_id)
       return :failed unless telephone
 
-      SignComUpTelephoneRegistrationFinalizer.call(telephone: telephone)
+      SignComUpTelephoneRegistrationFinalizer.call(
+        telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
+        flow: @sign_up_ticket, session_nonce: session.dig(:com_sign_up_flow_locator, "nonce"),
+      )
     when "email"
       # Email sign-up has no additional com-side credential finalizer here.
+      actor.with_lock do
+        raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless actor.active?
+
+        email = VisitorEmail.lock.find(@sign_up_ticket.pending_contact_id)
+        raise ActiveRecord::RecordNotFound unless email.visitor_id == actor.id
+
+        finalize_sign_up_email_binding!(actor, email)
+      end
     else
       return :failed
     end
@@ -589,17 +551,58 @@ module SignUpSequenceControllerSupport
     :failed
   end
 
+  def finalize_sign_up_email_binding!(actor, email)
+    retained = email.binding_finalized_at.present?
+    nonce =
+      case email
+      when ClientEmail then session.dig(:app_sign_up_flow_locator, "nonce")
+      when VisitorEmail then session.dig(:com_sign_up_flow_locator, "nonce")
+      else raise ArgumentError, "unsupported signup email owner"
+      end
+    email.finalize_sign_up_binding!(flow: @sign_up_ticket, session_nonce: nonce)
+    if retained
+      model, realm, role =
+        case email
+        when ClientEmail then [ClientContactAuditOutbox, :app, :client]
+        when VisitorEmail then [VisitorContactAuditOutbox, :com, :visitor]
+        else raise ArgumentError, "unsupported signup email owner"
+        end
+      context = current_actor
+      valid_context = context.is_a?(ActorValuesContext) && context.tld == realm &&
+        ((context.actor_type == role && context.subject == actor) ||
+         (context.unauthenticated? && context.subject.equal?(Unauthenticated.instance)))
+      raise ArgumentError, "signup email actor context mismatch" unless valid_context
+
+      receipts = model.where(
+        contact_kind: "email", event_name: "finalized", owner_ref: actor.public_id,
+        contact_ref: email.public_id, operation_ref: @sign_up_ticket.public_id,
+        actor_ref: context.authenticated? ? context.subject.public_id : nil,
+      )
+      unless email.binding_effective? && receipts.count == 1
+        raise ActiveRecord::RecordNotSaved, "Signup email finalization provenance mismatch"
+      end
+
+      # Source committed before the Ticket failure: reconcile only this original operation.
+      return
+    end
+
+    ContactBindingAuditRecorder.call!(
+      actor_context: current_actor, actor: actor, contact: email,
+      operation_ref: @sign_up_ticket.public_id, event_name: "finalized",
+    )
+  end
+
   def handoff_to_sign_in_flow!(actor)
-    # bootstrap_actor: true marks this as a fresh registration handoff.
-    # The sign-in boundary creates or advances a pending cycle; active
-    # session issuance remains delayed until checkpoint and selector pass.
+    # A finished registration hands off to the ordinary sign-in boundary with
+    # no exemption: a new account has no prior root login and no sessions, so
+    # the cooldown and the limit pass on their own, and any account where they
+    # do not pass must not receive a session either.
     result = establish_signed_in_session!(
       actor,
       pt: sign_up_handoff_pt,
       ri: params[:ri],
       auth_method: sign_up_auth_method,
       audit_context: { flow: "sign_up", sign_up_flow_id: @sign_up_ticket.public_id },
-      bootstrap_actor: true,
       # sign_up_auth_method collapses google/apple to "social" for the MFA-gating
       # value; the sign-up ticket's entry_method still carries the precise
       # provider (adr/unified-enforcement.md, Session attribution).
@@ -622,6 +625,10 @@ module SignUpSequenceControllerSupport
     end
   end
 
+  def sign_up_handoff_proceeds?(result)
+    result.proceed?
+  end
+
   def redirect_after_sign_up_handoff!(sign_in_result, json: false)
     if json
       return render json: {
@@ -630,18 +637,18 @@ module SignUpSequenceControllerSupport
       }, status: :created
     end
 
-    if sign_in_result.success?
+    if sign_up_handoff_proceeds?(sign_in_result)
       redirect_to_sign_in_sequence!(pt: sign_up_handoff_pt)
     elsif sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
       redirect_to(sign_in_result.redirect_to)
     else
-      render plain: sign_in_result.message.presence || sign_in_result.status.to_s,
+      render plain: sign_in_result.message.presence || I18n.t("errors.messages.invalid_request"),
              status: sign_in_result.response_status
     end
   end
 
   def sign_up_handoff_redirect_url(sign_in_result)
-    if sign_in_result.success?
+    if sign_up_handoff_proceeds?(sign_in_result)
       sign_in_sequence_redirect_path(pt: sign_up_handoff_pt)
     elsif sign_in_result.mfa_required? || sign_in_result.session_limit_pending?
       sign_in_result.redirect_to
@@ -670,9 +677,9 @@ module SignUpSequenceControllerSupport
   def sign_up_ticket_record_class
     case @sign_up_ticket
     when ClientSignUpFlow
-      AppTicketRecord
+      OpBaseAppRecord
     when VisitorSignUpFlow
-      ComTicketRecord
+      OpBaseComRecord
     else
       @sign_up_ticket.class
     end
@@ -733,6 +740,12 @@ module SignUpSequenceControllerSupport
 
   def issue_sign_up_recovery_passcodes!(surface:, actor:)
     config = sign_up_recovery_passcode_config(surface)
+    existing = IdentityOneTimeReveal.resume_for_operation!(
+      actor: actor, session_nonce: actor.public_id, purpose: config.fetch(:reveal_purpose),
+      operation_ref: @sign_up_ticket.public_id,
+    )
+    return config.fetch(:reveal_url).call(existing.token) if existing
+
     top_up = RecoveryPasscodeTopUp.call(
       actor: actor,
       credential_class: config.fetch(:credential_class),
@@ -745,7 +758,9 @@ module SignUpSequenceControllerSupport
       session_nonce: actor.public_id,
       value: top_up.raw_values,
       purpose: config.fetch(:reveal_purpose),
-      metadata: { surface: surface.to_s, issued_count: top_up.issued_count },
+      metadata: { surface: surface.to_s,
+                  issued_count: top_up.issued_count,
+                  delivery_operation_ref: @sign_up_ticket.public_id, },
     )
 
     config.fetch(:reveal_url).call(reveal.token)
@@ -753,26 +768,12 @@ module SignUpSequenceControllerSupport
 
   def sign_up_recovery_passcode_config(surface)
     case surface.to_sym
-    when :app
-      {
-        credential_class: ClientSecretCredential,
-        reveal_purpose: "client.recovery_secret_credential",
-        reveal_url: ->(token) {
-          base_app_identity_secrets_url(
-            ri: params[:ri], token: token,
-            host: base_authority_host,
-          )
-        },
-      }
     when :com
       {
         credential_class: VisitorSecretCredential,
         reveal_purpose: "visitor.recovery_secret_credential",
         reveal_url: ->(token) {
-          base_com_identity_secrets_url(
-            ri: params[:ri], token: token,
-            host: ENV.fetch("PRIVATE_BASE_CORPORATE_URL"),
-          )
+          base_com_identity_recovery_secret_path(ri: params[:ri], token: token)
         },
       }
     else

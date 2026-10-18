@@ -6,7 +6,7 @@ require "test_helper"
 
 class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
   setup do
-    @corporate_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", "sign.com.localhost")
+    @corporate_host = ENV.fetch("PRIVATE_AUTH_CORPORATE_URL")
     @service_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
   end
 
@@ -40,7 +40,204 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
 
   test "corporate sign-in page does not contain social login buttons" do
     host! @corporate_host
-    get "/sign/in", params: { ri: "jp", login_challenge: login_challenge_for("com") }
+    begin
+      fv5064 = "/sign/in"
+      fv5063 = login_challenge_for("com")
+      fv5062 = :entry_ref
+      fv5061 = { ri: "jp" }
+      fv5060 = {}
+      fv5059 = false
+      fv5058 = nil
+      fv5057 = nil
+      begin
+        fv5005 = self
+        fv5012 = fv5064
+        fv5055 = fv5063
+        fv5056 = fv5062
+        fv5021 = fv5061
+        fv5014 = fv5060
+        fv5043 = fv5059
+        fv5042 = fv5058
+        fv5017 = fv5057
+        fv5011 = fv5021.merge(fv5056 => fv5055)
+        fv5005.get(fv5012, params: fv5011, headers: fv5014)
+        fv5049 =
+          begin
+            fv5054 = fv5005.response.body
+            fv5053 = true
+            fv5052 = Nokogiri::HTML(fv5054).at_css("form")
+            if fv5052.nil? && fv5053
+              nil
+            else
+              raise RuntimeError, "Auth continuation form is missing" unless fv5052
+
+              fv5051 = fv5052.at_css("input[name='authenticity_token']")&.[]("value")
+              raise RuntimeError,
+                    "Auth continuation is missing its CSRF token" if fv5051.blank?
+
+              fv5050 = fv5052.css("input[type='hidden']").to_h do |input|
+                [input["name"], input["value"]]
+              end.except("authenticity_token")
+              [fv5052["action"], fv5051, fv5050]
+            end
+          end
+        if fv5049
+
+          fv5048, fv5046, fv5047 = fv5049
+
+          fv5005.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
+            "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+          fv5005.post(fv5048, params: fv5047.merge(authenticity_token: fv5046), headers: fv5014)
+          fv5045 = fv5005.response.location
+          if fv5045.present?
+
+            fv5041 = URI.parse(fv5045)
+            fv5040 = fv5041.host
+            fv5016 =
+              begin
+                fv5044 = fv5040
+                {
+                  ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
+                  ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
+                  ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                }.fetch(fv5044)
+              end
+            fv5015 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
+              surface: fv5016, reference: fv5041.path.split("/").fetch(-2),
+            )
+
+            if fv5043
+              fv5023 = fv5042 || fv5005
+              fv5023.host!(fv5040)
+              fv5023.https!
+              fv5023.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
+                "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+              fv5039 = fv5041.request_uri
+              fv5030 = fv5014.merge(
+                "Host" => fv5040,
+                "Origin" => "https://#{fv5040}",
+                "Sec-Fetch-Site" => "same-origin",
+              )
+              fv5023.get(fv5039, headers: fv5030)
+              fv5033, fv5031, fv5032 =
+                begin
+                  fv5038 = fv5023.response.body
+                  fv5037 = false
+                  fv5036 = Nokogiri::HTML(fv5038).at_css("form")
+                  if fv5036.nil? && fv5037
+                    nil
+                  else
+                    raise RuntimeError, "Auth continuation form is missing" unless fv5036
+
+                    fv5035 = fv5036.at_css("input[name='authenticity_token']")&.[]("value")
+                    raise RuntimeError,
+                          "Auth continuation is missing its CSRF token" if fv5035.blank?
+
+                    fv5034 = fv5036.css("input[type='hidden']").to_h do |input|
+                      [input["name"], input["value"]]
+                    end.except("authenticity_token")
+                    [fv5036["action"], fv5035, fv5034]
+                  end
+                end
+              fv5023.post(
+                fv5033,
+                params: fv5032.merge(authenticity_token: fv5031),
+                headers: fv5030,
+              )
+              begin
+                fv5024 = fv5023
+                fv5026 = "session"
+                fv5025 = fv5024.response.cookies[fv5026]
+                if fv5025.nil?
+                  fv5029 = fv5024.response.headers["Set-Cookie"] || fv5024.response.headers["set-cookie"]
+                  fv5028 =
+                    if fv5029.is_a?(String) && fv5029.start_with?("[")
+                      JSON.parse(fv5029)
+                    else
+                      Array(fv5029)
+                    end
+                  fv5027 =
+                    fv5028.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
+                      entry.split(";", 2).first.to_s.start_with?("#{fv5026}=")
+                    end
+                  if fv5027
+
+                    _, fv5025 = fv5027.split(";", 2).first.to_s.split("=", 2)
+                    fv5025 = Rack::Utils.unescape(fv5025.to_s)
+                  end
+                end
+
+                unless fv5025.nil?
+                  fv5024.cookies.delete(fv5026)
+                  # Rack::Test's []= uses its default host. The current request may target a
+                  # different surface, so install the cookie against the browser's active host.
+                  fv5024.cookies.merge(
+                    "#{fv5026}=#{Rack::Utils.escape(fv5025)}",
+                    URI.parse("https://#{fv5024.host}/"),
+                  )
+                end
+              end
+              fv5022 = fv5023.response.location
+              raise RuntimeError, "Base confirmation did not return to Auth" if fv5022.blank?
+
+              fv5019 = URI.parse(fv5022)
+              if fv5021[:ri].present?
+                fv5020 = Rack::Utils.parse_nested_query(fv5019.query.to_s)
+                fv5020["ri"] ||= fv5021[:ri].to_s
+                fv5019.query = URI.encode_www_form(fv5020)
+              end
+              fv5005.host!(fv5019.host)
+              fv5005.https!
+              fv5018 = fv5019.request_uri
+              fv5001 = fv5014.merge("Host" => fv5019.host)
+              fv5005.get(fv5018, headers: fv5001)
+            else
+              fv5015.confirm_base!(
+                base_token: fv5017,
+                browser_digest: AuthAdmissionBinding.browser_digest(
+                  surface: fv5016,
+                  entry_ref: fv5015.entry_ref,
+                  nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+                ),
+              )
+              fv5013 = fv5005.host
+              fv5005.host!(fv5013)
+              fv5005.https!
+              fv5001 = fv5014.merge("Host" => fv5013)
+              fv5005.get(fv5012, params: fv5011, headers: fv5001)
+            end
+            fv5004, fv5002, fv5003 =
+              begin
+                fv5010 = fv5005.response.body
+                fv5009 = false
+                fv5008 = Nokogiri::HTML(fv5010).at_css("form")
+                if fv5008.nil? && fv5009
+                  nil
+                else
+                  raise RuntimeError, "Auth continuation form is missing" unless fv5008
+
+                  fv5007 = fv5008.at_css("input[name='authenticity_token']")&.[]("value")
+                  raise RuntimeError,
+                        "Auth continuation is missing its CSRF token" if fv5007.blank?
+
+                  fv5006 = fv5008.css("input[type='hidden']").to_h do |input|
+                    [input["name"], input["value"]]
+                  end.except("authenticity_token")
+                  [fv5008["action"], fv5007, fv5006]
+                end
+              end
+            fv5005.post(
+              fv5004,
+              params: fv5003.merge(authenticity_token: fv5002),
+              headers: fv5001,
+            )
+          end
+        end
+      end
+    end
+
+    assert_response :see_other
+    follow_redirect!
 
     assert_response :success
     assert_not_includes response.body, "/auth/google_app"
@@ -73,20 +270,23 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
   private
 
   def login_challenge_for(surface)
-    OidcAuthorizationTransactionCoordinator.issue!(
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: surface,
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "core-next-rp",
-        redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris.first,
+        client_id: "core-com-jp",
+        redirect_uri: OidcClientRegistry.find!("core-com-jp").redirect_uris.first,
         code_challenge: SecureRandom.urlsafe_base64(32),
         code_challenge_method: "S256",
         state: SecureRandom.urlsafe_base64(16),
         nonce: SecureRandom.urlsafe_base64(16),
         scope: "openid profile",
       },
-    ).transaction.login_challenge
+    ).transaction
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
+    ).reference
   end
 
   def with_env(values)
@@ -115,31 +315,11 @@ class ComSocialLoginBlockedTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -199,10 +379,8 @@ class ComSocialLoginBlockedTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -214,10 +392,8 @@ class ComSocialLoginBlockedTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -352,7 +528,8 @@ class ComSocialLoginBlockedTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,
@@ -438,63 +615,6 @@ class ComSocialLoginBlockedTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -510,10 +630,8 @@ class ComSocialLoginBlockedTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -533,12 +651,12 @@ class ComSocialLoginBlockedTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

@@ -10,6 +10,37 @@ class Actor::SelectedContextTest < ActiveSupport::TestCase
     assert_not Actor::SelectedContext::NULL.selected?
   end
 
+  test "distinguishes a selected persona from a complete organization context" do
+    context = Actor::SelectedContext.new(account_public_id: "persona")
+
+    assert_predicate context, :persona_selected?
+    assert_not_predicate context, :organization_context_selected?
+    assert_not_predicate context, :selected?
+  end
+
+  test "requires the organization unit for the complete organization context" do
+    context = Actor::SelectedContext.new(
+      account_public_id: "persona",
+      collective_public_id: "organization",
+    )
+
+    assert_predicate context, :persona_selected?
+    assert_not_predicate context, :organization_context_selected?
+    assert_not_predicate context, :selected?
+  end
+
+  test "keeps selected? as the complete organization context contract" do
+    context = Actor::SelectedContext.new(
+      account_public_id: "persona",
+      collective_public_id: "organization",
+      collective_unit_public_id: "unit",
+    )
+
+    assert_predicate context, :persona_selected?
+    assert_predicate context, :organization_context_selected?
+    assert_predicate context, :selected?
+  end
+
   test "equality returns false for non-selected-context objects" do
     context = Actor::SelectedContext.new(account_public_id: "account")
 

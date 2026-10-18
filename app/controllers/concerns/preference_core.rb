@@ -7,6 +7,7 @@ module PreferenceCore
   include PreferenceBase
   include PreferenceResourceSync
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     helper_method :preference_base_i18n_key, :preference_acme_i18n_key
   end
@@ -23,8 +24,11 @@ module PreferenceCore
     with_preference_connection(:writing) do
       @preference_region = load_or_refresh_preference_child("Region", option_id: nil)
       @preference_language = load_or_refresh_preference_child("Language", option_id: nil)
+      @preference_date_format = load_or_refresh_preference_child("DateFormat", option_id: nil)
+      @preference_time_format = load_or_refresh_preference_child("TimeFormat", option_id: nil)
+      @preference_currency = load_or_refresh_preference_child("Currency", option_id: nil)
 
-      update_region_and_language_preferences!
+      update_region_and_regional_defaults!
     end
   end
 
@@ -33,17 +37,13 @@ module PreferenceCore
       @preference_language = load_or_refresh_preference_child_for_edit("Language")
     end
 
-    pin_locale_to_saved_language(@preference_language)
+    pin_locale_to_saved_language(@preference_language) if
+      @preferences.persisted? && @preferences.explicit_field?(:language)
   end
 
-  # Render the language settings screen in the user's *saved* language so the
-  # page text matches the option pre-selected in the form. The selector reflects
-  # the persisted DB/JWT value (@preference_language.option_id), but the page
-  # locale is otherwise resolved by ActorSupport#overlay_language, which lets a
-  # transient ?lx=/?ri= request param win over the saved value. Without this pin
-  # the page renders in the overlay locale while the selector shows the saved one
-  # (e.g. an English page with Japanese selected). On the settings screen the saved
-  # value is the source of truth, so align the display to it.
+  # An explicitly saved language wins over a regional request overlay, keeping
+  # the language screen aligned with the user's choice. Unmarked defaults remain
+  # eligible for region-derived locale without persisting a preference on GET.
   def pin_locale_to_saved_language(language_preference)
     option_id = language_preference&.option_id
     return if option_id.blank?
@@ -75,7 +75,6 @@ module PreferenceCore
 
   def set_timezone_preferences_edit
     with_preference_connection(:writing) do
-      ensure_model_defaults!(PreferenceClassRegistry.option_class(preference_prefix, :timezone))
       @preference_timezone = load_or_refresh_preference_child_for_edit("Timezone")
     end
 
@@ -146,7 +145,6 @@ module PreferenceCore
   def set_selectable_preference_edit(type)
     @preference_option_type = type.to_sym
     with_preference_connection(:writing) do
-      ensure_model_defaults!(PreferenceClassRegistry.option_class(preference_prefix, type))
       @preference_option = load_or_build_selectable_preference_child(type)
     end
   end
@@ -175,11 +173,9 @@ module PreferenceCore
     @preference_surface_key = preference_surface_key
     @preference_option_scope = :"preference_#{type}"
     @preference_option_update_url = preference_update_url(type)
+    option_class = PreferenceClassRegistry.option_class(preference_prefix, type)
     @preference_option_choices =
-      PreferenceClassRegistry.option_class(
-        preference_prefix,
-        type,
-      ).order(:id).filter_map do |option|
+      preference_ordered_options(option_class, type).filter_map do |option|
         next if option.name.blank?
 
         [preference_option_label(type, option.name), option.id]
@@ -195,7 +191,7 @@ module PreferenceCore
 
   def set_cookie_preferences_edit
     with_preference_connection(:writing) do
-      @preference_cookie = load_or_refresh_preference_child(
+      @preference_cookie = load_or_refresh_preference_child_for_edit(
         "Cookie",
         targetable: false, performant: false, functional: false, consented: false,
       )
@@ -239,12 +235,12 @@ module PreferenceCore
     association_name = :"#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
     @preferences ||= ensure_preferences_record
 
-    # Access-token loading can leave a child association memoized on @preferences.
-    # Reload it here so preference edit/update screens render the latest DB value
-    # without forcing the generic loader to refresh associations for every caller.
+    # Access-token loading can leave a child association memoized on @preferences. Reset only that
+    # target so the explicit child query below reads the current DB value without association.reload
+    # triggering strict loading for the already-loaded target.
     if @preferences.persisted?
       association = @preferences.association(association_name)
-      association.reload if association.loaded?
+      association.reset if association.loaded?
     end
 
     load_or_create_preference_child(child_type, default_attributes)
@@ -254,28 +250,21 @@ module PreferenceCore
   # missing child row. Use this from *_preferences_edit actions; the
   # persisting loader above stays reserved for *_preferences_update (a
   # legitimate write point) since GET must not mutate state.
-  def load_or_refresh_preference_child_for_edit(child_type)
+  def load_or_refresh_preference_child_for_edit(child_type, default_attributes = {})
     association_name = :"#{preference_prefix_underscore}_#{child_type.to_s.underscore}"
     @preferences ||= ensure_preferences_record
 
     if @preferences.persisted?
       association = @preferences.association(association_name)
-      association.reload if association.loaded?
+      association.reset if association.loaded?
     end
 
-    load_or_build_preference_child(child_type)
+    load_or_build_preference_child(child_type, default_attributes)
   end
 
-  def reload_preferences_and_reissue_token!(sync_resource: true)
+  def reload_preferences_and_reissue_token!
     @preferences.reload
-    # Force reload all preference associations to ensure they reflect DB state
-    PreferenceClassRegistry::CHILD_RECORD_TYPES.each do |type|
-      assoc_name = "#{preference_prefix_underscore}_#{type}"
-      @preferences.association(assoc_name.to_sym).reload if @preferences.respond_to?(assoc_name)
-    end
     issue_access_token_from(@preferences)
-
-    sync_to_resource_preference! if sync_resource
   end
 
   def update_preference_child_dual_write!(child, attributes, option_type:, audit_event:)
@@ -300,7 +289,7 @@ module PreferenceCore
       ) if resource_pref
     end
 
-    reload_preferences_and_reissue_token!(sync_resource: false)
+    reload_preferences_and_reissue_token!
   rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
     record_preference_write_error("preference.write.option_error", e, target: option_type)
     raise PreferenceOperationError
@@ -332,7 +321,7 @@ module PreferenceCore
       write_resource_preference_cookie!(resource_pref, p_hash) if resource_pref
     end
 
-    reload_preferences_and_reissue_token!(sync_resource: false)
+    reload_preferences_and_reissue_token!
   rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
     record_preference_write_error("preference.write.cookie_error", e, target: :cookie)
     raise PreferenceOperationError
@@ -421,11 +410,11 @@ module PreferenceCore
 
   def load_or_build_selectable_preference_child(type)
     type = type.to_sym
-    association_name = :"#{preference_prefix_underscore}_#{type}"
-    child = @preferences.public_send(association_name)
+    record_class = PreferenceClassRegistry.record_class(preference_prefix, type)
+    child = record_class.find_by(preference_id: @preferences.id)
     return child if child.present?
 
-    PreferenceClassRegistry.record_class(preference_prefix, type).new(
+    record_class.new(
       preference: @preferences,
       option_id: PreferenceClassRegistry.default_option_id(preference_prefix, type),
     )
@@ -477,18 +466,6 @@ module PreferenceCore
     )
   end
 
-  def preference_update_notice
-    t([preference_translation_scope, "update_success"].join("."))
-  end
-
-  def preference_reset_destroyed_notice
-    t(["acme", preference_surface_key, "preference.resets.destroyed"].join("."))
-  end
-
-  def preference_operation_failed_alert
-    I18n.t("errors.messages.preference_operation_failed")
-  end
-
   def preference_context_redirect_params
     PreferenceGlobal::PARAM_CONTEXT_KEYS.each_with_object({}) do |key, memo|
       memo[key] = params[key] if params[key].present?
@@ -514,47 +491,65 @@ module PreferenceCore
     session[:language] = option_id_to_language(@preference_language.option_id, preference_prefix)
   end
 
-  def update_region_and_language_preferences!
+  # The child options a region owns and the constant that names each one's value per region. A
+  # region change is a regional-bundle reset: it rewrites language, date format, clock format
+  # and currency to the region's defaults and marks each one explicit, the same way it has
+  # always done for language. Individual screens still let a person override any of them afterwards.
+  REGIONAL_DEFAULT_OPTION_NAMES = {
+    "jp" => { language: :JA, date_format: :ISO, time_format: :HOUR_24, currency: :JPY },
+    "us" => { language: :EN, date_format: :US, time_format: :HOUR_12, currency: :USD },
+  }.freeze
+
+  REGIONAL_DEFAULT_AUDIT_EVENTS = {
+    language: "UPDATE_PREFERENCE_LANGUAGE",
+    date_format: "UPDATE_PREFERENCE_DATE_FORMAT",
+    time_format: "UPDATE_PREFERENCE_TIME_FORMAT",
+    currency: "UPDATE_PREFERENCE_CURRENCY",
+  }.freeze
+
+  def update_region_and_regional_defaults!
     region_attributes = sanitize_option_id(preference_region_params, option_type: :region)
-    language_attributes = {
-      PreferenceIoKeys::Params::OPTION_ID => language_option_id_for_region_option(
-        region_attributes[PreferenceIoKeys::Params::OPTION_ID],
-      ),
-    }.compact
-    raise PreferenceOperationError if language_attributes.blank?
+    derived_option_ids = regional_default_option_ids(region_attributes[PreferenceIoKeys::Params::OPTION_ID])
+    raise PreferenceOperationError if derived_option_ids.blank?
 
     resource_pref = preference_write_resource_preference!
     authorize_resource_preference_write!(resource_pref)
 
     with_dual_write_transaction(resource_pref) do
-      update_preference_child_with_audit(@preference_region, region_attributes, "UPDATE_PREFERENCE_REGION")
-      mark_preference_field_explicit!(:region)
-      write_resource_preference_option!(
-        resource_pref, :region,
-        region_attributes[PreferenceIoKeys::Params::OPTION_ID],
-      ) if resource_pref
+      write_regional_bundle_field!(
+        resource_pref, :region, @preference_region,
+        region_attributes[PreferenceIoKeys::Params::OPTION_ID], "UPDATE_PREFERENCE_REGION",
+      )
 
-      update_preference_child_with_audit(@preference_language, language_attributes, "UPDATE_PREFERENCE_LANGUAGE")
-      mark_preference_field_explicit!(:language)
-      write_resource_preference_option!(
-        resource_pref, :language,
-        language_attributes[PreferenceIoKeys::Params::OPTION_ID],
-      ) if resource_pref
+      derived_option_ids.each do |field, option_id|
+        write_regional_bundle_field!(
+          resource_pref, field, instance_variable_get(:"@preference_#{field}"),
+          option_id, REGIONAL_DEFAULT_AUDIT_EVENTS.fetch(field),
+        )
+      end
     end
 
-    reload_preferences_and_reissue_token!(sync_resource: false)
+    reload_preferences_and_reissue_token!
   rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
     record_preference_write_error("preference.write.option_error", e, target: :region)
     raise PreferenceOperationError
   end
 
-  def language_option_id_for_region_option(region_option_id)
-    region = option_id_to_region(region_option_id, preference_prefix)
-    option_class = PreferenceClassRegistry.option_class(preference_prefix, :language)
+  def write_regional_bundle_field!(resource_pref, field, child, option_id, audit_event)
+    update_preference_child_with_audit(child, { PreferenceIoKeys::Params::OPTION_ID => option_id }, audit_event)
+    mark_preference_field_explicit!(field)
+    write_resource_preference_option!(resource_pref, field, option_id) if resource_pref
+  end
 
-    case region
-    when "jp" then option_class::JA
-    when "us" then option_class::EN
+  # region option id -> { language:, date_format:, time_format:, currency: } option ids, or nil
+  # when the submitted region is not one this application models.
+  def regional_default_option_ids(region_option_id)
+    region = option_id_to_region(region_option_id, preference_prefix)
+    names = REGIONAL_DEFAULT_OPTION_NAMES[region]
+    return nil if names.nil?
+
+    names.to_h do |field, constant_name|
+      [field, PreferenceClassRegistry.option_class(preference_prefix, field).const_get(constant_name)]
     end
   end
 
@@ -571,44 +566,6 @@ module PreferenceCore
       density: :dn,
       page_size: :ps,
     }[screen.to_sym]
-  end
-
-  def delete_preference_cookie
-    preference = find_preference_for_delete
-    if preference.present?
-      log_preference_reset(preference)
-      # Keep cookies and records intact on logout; do not delete or reset preference values.
-      # The preference record and cookies remain so the user retains their settings.
-    end
-    reset_preference_state
-    nil
-  end
-
-  # Reset preferences to defaults (explicit user action, not logout).
-  # Resets BOTH AppPreference/OrgPreference AND ClientPreference/OperatorPreference.
-  def reset_preference_to_defaults!
-    return if @preferences.blank?
-
-    resource_pref = preference_write_resource_preference!
-    authorize_resource_preference_write!(resource_pref)
-
-    # Same dual-write contract as the option/cookie writes: source (token) first,
-    # mirror (resource) second, both inside one cross-DB boundary so a failure
-    # rolls back the whole reset instead of leaving the databases out of sync.
-    with_dual_write_transaction(resource_pref) do
-      reset_app_org_preference_to_defaults!(@preferences)
-      reset_resource_preference_defaults_for_write!(resource_pref) if resource_pref
-
-      create_audit_log(
-        event_id: preference_audit_event_class::RESET_BY_USER_DECISION,
-        context: { preference_reset: true, reset_to_defaults: true },
-      )
-    end
-
-    reload_preferences_and_reissue_token!(sync_resource: false)
-  rescue ActiveRecord::RecordInvalid, ActiveRecord::InvalidForeignKey, ActionPolicy::Unauthorized, ArgumentError => e
-    record_preference_write_error("preference.reset.error", e, target: :reset)
-    raise PreferenceOperationError
   end
 
   def reset_preference_by_rebootstrap!
@@ -638,21 +595,6 @@ module PreferenceCore
 
   private
 
-  def find_preference_for_delete
-    return @preferences if @preferences.present?
-
-    token_value = refresh_token_value
-    @refresh_token_value = token_value
-    return nil if token_value.blank?
-
-    token_digest = refresh_token_lookup_digest(token_value)
-    return nil unless token_digest
-
-    with_preference_connection(:writing) do
-      preference_class.find_by(token_digest: token_digest)
-    end
-  end
-
   def log_preference_reset(preference)
     @preferences = preference
     create_audit_log(
@@ -663,35 +605,6 @@ module PreferenceCore
     Rails.logger.error("log_preference_reset failed: #{e.class} - #{e.message}")
   end
 
-  def reset_app_org_preference_to_defaults!(preference)
-    association_prefix = preference.class.name.underscore
-    prefix = preference_prefix
-
-    with_preference_connection(:writing) do
-      PreferenceAdoption::CHILD_RECORD_TYPES.each do |type|
-        child = preference.public_send("#{association_prefix}_#{type}")
-        next unless child
-
-        ensure_model_defaults!(PreferenceClassRegistry.option_class(prefix, type))
-        default_id = PreferenceClassRegistry.default_option_id(prefix, type)
-        child.update!(option_id: default_id) if child.option_id != default_id
-      end
-
-      cookie = preference.public_send("#{association_prefix}_cookie")
-      cookie&.update!(
-        consented: false,
-        functional: false,
-        performant: false,
-        targetable: false,
-        consented_at: nil,
-      )
-
-      # Reset clears explicit intent: every field returns to default-seeded state
-      # so dynamic region seeding (?ri) applies again until the user sets a value.
-      preference.clear_explicit_fields! if preference.respond_to?(:clear_explicit_fields!)
-    end
-  end
-
   def existing_resource_preference_for_reset
     return unless respond_to?(:current_resource, true)
 
@@ -699,9 +612,9 @@ module PreferenceCore
     return if resource.blank?
 
     case preference_class.name
-    when "AppPreference" then resource.user_preference
-    when "OrgPreference" then resource.staff_preference
-    when "ComPreference" then resource.visitor_preference
+    when "AppPreference" then ClientPreference.find_by(user_id: resource.id)
+    when "OrgPreference" then OperatorPreference.find_by(staff_id: resource.id)
+    when "ComPreference" then VisitorPreference.find_by(visitor_id: resource.id)
     end
   end
 
@@ -709,8 +622,8 @@ module PreferenceCore
     now = Time.current
     with_preference_connection(:writing) do
       preference.update!(
-        discarded_at: [preference.created_at, now].compact.max,
-        purged_at: now + PreferenceBase::REFRESH_TOKEN_TTL,
+        discard_at: [preference.created_at, now].compact.max,
+        purge_eligible_at: now + PreferenceBase::REFRESH_TOKEN_TTL,
         status_id: preference_status_class::DELETED,
         token_digest: nil,
         jti: JitSecurityJwtJtiGenerator.generate,
@@ -795,16 +708,8 @@ module PreferenceCore
     @refresh_public_id = nil
   end
 
-  def safe_return_to_path
-    safe_return_path(params[:return_to])
-  end
-
   def preference_surface_key
     preference_class.name.delete_suffix("Preference").downcase
-  end
-
-  def preference_translation_scope
-    "acme.#{preference_surface_key}.preferences"
   end
 
   def preference_base_i18n_key(*segments)
@@ -857,4 +762,6 @@ module PreferenceCore
     label = "#{label} (#{value.to_s.upcase})" if type.to_sym == :currency
     label
   end
+
+  private :pin_locale_to_saved_language
 end

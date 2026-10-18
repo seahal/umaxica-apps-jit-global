@@ -2,13 +2,23 @@
 # frozen_string_literal: true
 
 require_relative "../../test/support/swappable_cache_store"
+require_relative "../../lib/umaxica/valkey/error"
+require_relative "../../lib/umaxica/valkey/configuration_error"
+require_relative "../../lib/umaxica/valkey/settings"
+require_relative "../../lib/umaxica/valkey/test_namespace"
+require_relative "../../lib/umaxica/valkey/store_error_handler"
+require_relative "../../lib/umaxica/test_environment/migration_failure_propagation"
+
+if Rails.env.test?
+  Umaxica::Valkey::TestNamespace.ensure!
+  Umaxica::Valkey::Settings.reset_current!
+  Umaxica::Valkey::Settings.current
+end
 
 # The test environment is used exclusively to run your application's
 # test suite. You never need to work with it otherwise. Remember that
 # your test database is "scratch space" for the test suite and is wiped
 # and recreated between test runs. Don't rely on the data there!
-
-require Rails.root.join("test/support/swappable_cache_store")
 
 Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb.
@@ -21,6 +31,10 @@ Rails.application.configure do
 
   # While tests run files are not watched, reloading is not necessary.
   config.enable_reloading = false
+
+  # Eager-load Rake task environments in CI, matching Rails' generated test configuration.
+  ci = ENV["CI"]
+  config.rake_eager_load = ci.nil? ? false : ci == "true"
 
   # Eager loading loads your entire application before parallel workers fork.
   # Process-based parallelize relies on this so each worker inherits the loaded
@@ -37,28 +51,32 @@ Rails.application.configure do
   # Show full error reports.
   config.consider_all_requests_local = true
 
-  # Tests persist neither application cache nor rate-limit state by default, and
-  # CI never depends on an external Redis/Valkey service. Ordinary tests must not
-  # accidentally depend on cached state, and must not accumulate rate-limit
-  # counters and receive surprise 429s.
-  #
-  # Tests whose subject *is* cache or rate-limit behavior opt into a
-  # deterministic ActiveSupport::Cache::MemoryStore explicitly, and restore the
-  # previous store in teardown.
-  config.cache_store = :null_store
+  # Application cache in test is an in-process MemoryStore. Test cache DB 2 is
+  # reserved in valkey.yml and is never connected. Rate-limit and auth-state use
+  # the KVS instance (logical DBs 4 and 6) with a run/worker key namespace.
+  valkey = Umaxica::Valkey::Settings.current
+  config.cache_store = :memory_store
   config.x.rate_limit.store =
-    TestSupport::SwappableCacheStore.new(ActiveSupport::Cache::NullStore.new)
+    TestSupport::SwappableCacheStore.new(
+      ActiveSupport::Cache::RedisCacheStore.new(
+        url: valkey.rate_limit.url,
+        namespace: Umaxica::Valkey::TestNamespace.rate_limit_namespace,
+        error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("rate_limit"),
+      ),
+    )
 
   # Render exception templates for rescuable exceptions and raise for other exceptions.
   config.action_dispatch.show_exceptions = :rescuable
 
-  # Off by default, permanently - this is the Rails-generated test default, and under
-  # `protect_from_forgery using: :header_or_legacy_token` a bare test request verifies
-  # successfully anyway, so enabling it suite-wide would buy appearance, not coverage.
-  # CSRF is asserted by targeted boundary tests that opt in with `with_forgery_protection`.
-  # Decision and the condition that would reopen it:
+  # Browser E2E explicitly opts in to real CSRF; ordinary Minitest retains the default below.
+  # Off by default, permanently - this is the Rails-generated test default, and the test
+  # environment is deliberately different from development and production here. Enabling it
+  # suite-wide would require threading authenticity tokens through a large number of tests whose
+  # subject is not CSRF, duplicating coverage the boundary tests already provide. Individual tests
+  # that need real CSRF verification are welcome to opt in with `with_forgery_protection`.
+  # Decision, and why a suite-wide flag is not revisited:
   # adr/csrf-protection-disabled-in-test-environment.md
-  config.action_controller.allow_forgery_protection = false
+  config.action_controller.allow_forgery_protection = ENV["RAILS_BROWSER_E2E"] == "1"
 
   # Store uploaded files on the local file system in a temporary directory.
   # config.active_storage.service = :test
@@ -81,6 +99,12 @@ Rails.application.configure do
   # Raise error for missing translations in controllers, views, and models.
   config.i18n.raise_on_missing_translations = :strict
 
+  # No en <-> ja fallback chain: a key missing from the requested language is a missing translation
+  # and raises through the setting above. raise_on_fallback stays on so a test that installs its own
+  # chain still cannot be served the other language. Read by config/initializers/locale.rb.
+  config.x.locale.fallbacks_enabled = false
+  config.x.locale.raise_on_fallback = true
+
   # Annotate rendered view with file names.
   # config.action_view.annotate_rendered_view_with_filenames = true
 
@@ -90,11 +114,15 @@ Rails.application.configure do
   # Raise on SQL warnings from PostgreSQL.
   config.active_record.db_warnings_action = :raise
   config.active_record.dump_schema_after_migration = false
+  # Fixture rows for encrypted attributes use the Rails encrypted-fixture serializer.
+  config.active_record.encryption.encrypt_fixtures = true
 
   # Detect N+1 queries and raise errors immediately.
   config.active_record.strict_loading_by_default = true
-  config.active_record.strict_loading_mode = :n_plus_one_only
+  config.active_record.strict_loading_mode = :all
   config.active_record.action_on_strict_loading_violation = :raise
+  # Include query callsites when debug logging is requested; keep the normal log level at info.
+  config.active_record.verbose_query_logs = true
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
@@ -136,7 +164,12 @@ Rails.application.configure do
   # is what takes this out of `log_file_size`'s hands, and that is intended.
   #
   # The cost: two `bin/rails test` invocations running at once clobber each other's log.
-  test_log = Rails.root.join("log/test.log")
+  test_log =
+    if ENV["RAILS_BROWSER_E2E"] == "1"
+      Rails.root.join("log/e2e-rails.log")
+    else
+      Rails.root.join("log/test.log")
+    end
   test_log.dirname.mkpath
   test_log_device = test_log.open("w")
   test_log_device.sync = true
@@ -158,11 +191,11 @@ Rails.application.configure do
     self.create_unlogged_tables = true
   end
 
-  config.after_initialize do
-    # Rails' fixture FK validation deadlocks under this multi-DB test suite; the
-    # database constraints still enforce integrity when fixtures are loaded.
-    ActiveRecord.verify_foreign_keys_for_fixtures = false
-  end
+  # Rails applies this configured value after the application callbacks. Assigning the
+  # ActiveRecord singleton in after_initialize was overwritten by the Rails default and
+  # fixture loading silently validated existing NOT VALID foreign keys in disposable DBs.
+  # Keep the established fixture policy while ordinary FK enforcement remains active.
+  config.active_record.verify_foreign_keys_for_fixtures = false
 
   # Log slow queries over 100ms.
   config.active_record.query_log_tags_enabled = true

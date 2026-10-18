@@ -30,7 +30,11 @@ class ApiProblemExceptionsApp
   end
 
   def call
-    return public_exceptions.call(env) unless api_request?
+    unless api_request?
+      status_code, response_headers, response_body = public_exceptions.call(env)
+      response_headers["cache-control"] = "private, no-store" if status_code == 404
+      return [status_code, response_headers, response_body]
+    end
 
     [status, headers, [body]]
   end

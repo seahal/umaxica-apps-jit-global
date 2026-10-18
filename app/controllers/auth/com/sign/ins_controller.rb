@@ -6,42 +6,25 @@ module Auth
     module Sign
       class InsController < ::Auth::Com::ApplicationController
         include ::SurfaceInertiaPage
+        include ::AuthenticationModeSwitchGuard
+        include ::AuthCeremonyAdmission
+        include ::SignInPhaseBindingControllerSupport
 
         AUTHENTICATION_MODE = :guest
         declare_authentication_mode! :guest, no_redirect: true
 
+        before_action -> {
+          enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") if params[:entry_ref].blank?
+        }
+
         def show
-          return reject_logged_in_direct_entry! if logged_in? && params[:login_challenge].blank?
-          return render_method_selection! if params[:login_challenge].blank?
-
-          transaction =
-            OidcAuthorizationTransactionCoordinator.find_by_login_challenge!(
-              surface: "com",
-              login_challenge: params[:login_challenge].to_s,
-            )
-          raise ActionController::BadRequest,
-                "authorization transaction expired" if transaction.login_challenge_expired?
-          raise ActionController::BadRequest, "authorization transaction already consumed" if transaction.consumed?
-          raise ActionController::BadRequest,
-                "authorization transaction intent mismatch" unless transaction.intent == "sign_in"
-
-          session[:oidc_authorization_login_challenge] = transaction.login_challenge
-          @oidc_authorization_intent = transaction.intent
-          render inertia: "auth/com/sign_ins/new", props: sign_in_method_props
-        rescue ActiveRecord::RecordNotFound
-          render plain: I18n.t("errors.messages.invalid_request"),
-                 status: :bad_request
+          admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
         end
 
         private
 
-        def reject_logged_in_direct_entry!
-          render plain: I18n.t("errors.messages.already_authenticated"), status: :forbidden
-        end
+        def auth_ceremony_entry_intent = "sign_in"
 
-        # Direct entry without an authorization transaction renders this surface's entry page instead
-        # of bouncing through Base. Every page it links to is already reachable directly, and the
-        # completion paths branch on a missing `oidc_authorization_login_challenge`.
         def render_method_selection!
           render inertia: "auth/com/sign_ins/new", props: sign_in_method_props
         end
@@ -53,6 +36,7 @@ module Auth
 
           {
             title: t("sign.com.authentication.new.page_title"),
+            cancel_label: t("actions.cancel"),
             description: t("sign.com.authentication.new.description"),
             methods: sign_in_method_links(pt),
             social_providers: [],
@@ -65,21 +49,17 @@ module Auth
         end
 
         def sign_in_method_links(pt)
+          binding = sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING")
           [
             {
               key: "email",
               label: t("sign.com.authentication.new.links.email"),
-              href: new_auth_com_sign_in_email_path(ri: params[:ri], pt: pt),
+              href: new_auth_com_sign_in_email_path(ri: params[:ri], pt: pt, **binding),
             },
             {
               key: "passkey",
               label: t("sign.com.authentication.new.links.passkey"),
-              href: new_auth_com_sign_in_passkey_path(ri: params[:ri], pt: pt),
-            },
-            {
-              key: "secret_credential",
-              label: t("sign.com.authentication.new.links.secret_credential"),
-              href: new_auth_com_sign_in_secret_path(ri: params[:ri], pt: pt),
+              href: new_auth_com_sign_in_passkey_path(ri: params[:ri], pt: pt, **binding),
             },
           ]
         end

@@ -2,6 +2,7 @@ import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
 
 // The email re-entry screen shared by the withdrawal ceremony and the enforcement recovery
@@ -68,12 +69,11 @@ export default function OtpReentryNew({
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-fg">{title}</h1>
-        {message ? <p className="text-sm text-fg-muted">{message}</p> : null}
-      </header>
-
+    <Page
+      title={title}
+      {...(message ? { description: message } : {})}
+      width="narrow"
+    >
       <form
         onSubmit={submitAddress}
         className="flex flex-col gap-4"
@@ -99,7 +99,7 @@ export default function OtpReentryNew({
       {passCodeForm ? (
         <form
           onSubmit={submitPassCode}
-          className="flex flex-col gap-4"
+          className="flex flex-col gap-4 border-t border-line pt-6"
         >
           <TextField
             id={passCodeForm.field}
@@ -120,6 +120,6 @@ export default function OtpReentryNew({
           </Button>
         </form>
       ) : null}
-    </section>
+    </Page>
   );
 }

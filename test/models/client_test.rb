@@ -13,11 +13,11 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
 #  token_valid_after_at        :datetime
@@ -38,11 +38,11 @@
 #  index_clients_on_access_state           (access_state)
 #  index_clients_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_clients_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_clients_on_discarded_at           (discarded_at)
+#  index_clients_on_discard_at           (discard_at)
 #  index_clients_on_mfa_level_id           (mfa_level_id)
 #  index_clients_on_mfa_status_id          (mfa_status_id)
 #  index_clients_on_public_id              (public_id) UNIQUE
-#  index_clients_on_purged_at              (purged_at) WHERE (purged_at IS NOT NULL)
+#  index_clients_on_purge_eligible_at              (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL)
 #  index_clients_on_status_id              (status_id)
 #  index_clients_on_terminated_at          (terminated_at) WHERE (terminated_at IS NOT NULL)
 #  index_clients_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
@@ -60,12 +60,21 @@
 #
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 require "support/external_identity_test_helper"
 
 class ClientTest < ActiveSupport::TestCase
   include ExternalIdentityTestHelper
 
   NIL_UUID = "00000000-0000-0000-0000-000000000000"
+  CLIENT_DESTRUCTIVE_ASSOCIATIONS = %i(
+    client_external_identities client_apple_notification_events client_emails client_telephones
+    client_totp_credentials client_passkeys client_withdrawal_ceremonies client_tokens client_device_sessions
+    oidc_connections client_memberships clients client_banners client_members client_member_discoveries
+    client_member_observations client_member_revocations client_member_impersonations client_member_suspensions
+    client_member_deletions owned_members client_bulletins rp_account authority_lock core_app_client_bridge
+    user_preference
+  ).freeze
 
   def setup
     Prosopite.pause do
@@ -199,13 +208,13 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "boundary values: public_id must be unique" do
-    @user.public_id = "duplicate-id"
-    @user.save!
+    existing_user = Client.create!(public_id: "duplicate-id", status_id: ClientStatus::NOTHING)
 
     duplicate_user = Client.new(public_id: "duplicate-id")
 
     assert_not duplicate_user.valid?
     assert_not_empty duplicate_user.errors[:public_id]
+    assert_equal "duplicate-id", existing_user.reload.public_id
   end
 
   test "boundary values: public_id length" do
@@ -218,6 +227,9 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_emails" do
     email = ClientEmail.create!(user: @user, address: "delete_test@example.com")
     assert_difference("ClientEmail.count", -1) do
+      @user = Client.includes(CLIENT_DESTRUCTIVE_ASSOCIATIONS).find(@user.id)
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
     end
     assert_raise(ActiveRecord::RecordNotFound) { email.reload }
@@ -226,6 +238,9 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_telephones" do
     phone = ClientTelephone.create!(user: @user, number: "+15551234567")
     assert_difference("ClientTelephone.count", -1) do
+      @user = Client.includes(CLIENT_DESTRUCTIVE_ASSOCIATIONS).find(@user.id)
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
     end
     assert_raise(ActiveRecord::RecordNotFound) { phone.reload }
@@ -234,46 +249,36 @@ class ClientTest < ActiveSupport::TestCase
   test "association deletion: destroys dependent client_tokens" do
     token = ClientToken.create!(
       user: @user,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     assert_difference("ClientToken.count", -@user.client_tokens.count) do
+      @user = Client.includes(CLIENT_DESTRUCTIVE_ASSOCIATIONS).find(@user.id)
+      # An Identity is physically erased only once it has lapsed and is purgeable.
+      @user.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
       @user.destroy
     end
     assert_raise(ActiveRecord::RecordNotFound) { token.reload }
   end
 
-  test "owned_avatars association" do
-    capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
-    handle = Handle.create!(
-      handle: "owned_handle-#{SecureRandom.hex(4)}",
-      cooldown_until: Time.current,
-    )
-    member = Member.create!(user: @user, public_id: "m_#{SecureRandom.hex(8)}")
-    avatar = Avatar.create!(member: member, capability: capability, active_handle: handle, moniker: "Owned")
-    avatar.avatar_assignments.create!(user: @user, role: "owner")
+  test "purge_eligible_at query picks clients with past purge_eligible_at" do
+    user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago)
 
-    assert_includes @user.owned_avatars, avatar
+    assert_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
-  test "purged_at query picks clients with past purged_at" do
-    user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", discarded_at: 2.hours.ago, purged_at: 1.hour.ago)
-
-    assert_includes Client.where(purged_at: ..Time.current), user
-  end
-
-  test "purged_at query excludes clients with future purged_at" do
+  test "purge_eligible_at query excludes clients with future purge_eligible_at" do
     user = Client.create!(
-      public_id: "u_#{SecureRandom.hex(8)}", discarded_at: 30.minutes.from_now,
-      purged_at: 1.hour.from_now,
+      public_id: "u_#{SecureRandom.hex(8)}", discard_at: 30.minutes.from_now,
+      purge_eligible_at: 1.hour.from_now,
     )
 
-    assert_not_includes Client.where(purged_at: ..Time.current), user
+    assert_not_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
-  test "purged_at query excludes clients with default purged_at" do
+  test "purge_eligible_at query excludes clients with default purge_eligible_at" do
     user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}")
 
-    assert_not_includes Client.where(purged_at: ..Time.current), user
+    assert_not_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
   test "totp_enabled? returns false when no totp" do
@@ -329,7 +334,11 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "login_methods_remaining? returns false when no methods" do
-    assert_not @user.login_methods_remaining?
+    client = Client.create!(
+      id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
+
+    assert_not client.login_methods_remaining?
   end
 
   test "login_methods_remaining? returns true when email verified" do
@@ -338,7 +347,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :login_methods_remaining?
   end
@@ -349,7 +358,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     methods = @user.remaining_login_methods
 
@@ -362,7 +371,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_email?
   end
@@ -373,7 +382,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "unverified@example.com",
       user_email_status_id: ClientEmailStatus::UNVERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_not @user.verified_email?
   end
@@ -383,7 +392,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_telephone?
   end
@@ -393,9 +402,9 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15557654321",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
-    @user.client_telephones.load
+    @user = Client.includes(:client_telephones).find(@user.id)
 
     assert_predicate @user, :verified_telephone?
   end
@@ -405,7 +414,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::UNVERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_not @user.verified_telephone?
   end
@@ -420,7 +429,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :has_verified_pii?
   end
@@ -430,7 +439,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :has_verified_pii?
   end
@@ -467,7 +476,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     methods = @user.remaining_login_methods(excluding_provider: "google")
 
@@ -476,6 +485,8 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "remaining_social_unlink_methods ignores stale social association cache" do
+    @user = Client.includes(:client_external_identities).find(@user.id)
+
     assert_empty @user.client_external_identities.to_a
 
     create_active_external_identity(client: @user, provider: "apple", subject: "cached_apple_uid")
@@ -504,7 +515,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
@@ -512,6 +523,8 @@ class ClientTest < ActiveSupport::TestCase
       webauthn_id: "test_webauthn_id",
       description: "My Passkey",
     )
+
+    @user.reload
 
     assert_predicate @user, :passkey_login_available?
   end
@@ -527,7 +540,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
@@ -573,7 +586,7 @@ class ClientTest < ActiveSupport::TestCase
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
 
-    @user.client_totp_credentials.load
+    @user = Client.includes(:client_totp_credentials).find(@user.id)
 
     assert_predicate @user, :totp_enabled?
   end
@@ -584,7 +597,7 @@ class ClientTest < ActiveSupport::TestCase
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::INACTIVE,
     )
 
-    @user.client_totp_credentials.load
+    @user = Client.includes(:client_totp_credentials).find(@user.id)
 
     assert_not @user.totp_enabled?
   end
@@ -595,7 +608,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_includes @user.remaining_social_unlink_methods(excluding_provider: "google"), :email
   end
@@ -640,7 +653,7 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED_WITH_SIGN_UP,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_email?
   end
@@ -651,9 +664,9 @@ class ClientTest < ActiveSupport::TestCase
       address: "verified@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
-    @user.client_emails.load
+    @user = Client.includes(:client_emails).find(@user.id)
 
     assert_predicate @user, :verified_email?
   end
@@ -663,7 +676,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED_WITH_SIGN_UP,
-    )
+    ).tap(&:finalize_binding!)
 
     assert_predicate @user, :verified_telephone?
   end
@@ -685,7 +698,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::UNVERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
@@ -702,7 +715,7 @@ class ClientTest < ActiveSupport::TestCase
       user: @user,
       number: "+15551234567",
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     ClientPasskey.create!(
       user: @user,
       status_id: ClientPasskeyStatus::ACTIVE,
@@ -711,7 +724,7 @@ class ClientTest < ActiveSupport::TestCase
       description: "My Passkey",
     )
 
-    @user.client_passkeys.load
+    @user = Client.includes(:client_passkeys, :client_telephones).find(@user.id)
 
     assert_predicate @user, :passkey_login_available?
   end

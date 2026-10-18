@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: operator_workspace_account_memberships
@@ -19,8 +21,6 @@
 #
 #  fk_rails_...  (operator_workspace_account_id => operator_workspace_accounts.id) ON DELETE => cascade
 #
-
-# frozen_string_literal: true
 
 class OperatorWorkspaceAccountMembership < OrgRpRecord
   belongs_to :staff,

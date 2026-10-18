@@ -20,8 +20,7 @@ Accepted
 2026-06-02: `adr/google-social-temporary-gateway-exception.md` adds a QA-only exception for the
 Google social temporary gateway. It does not change this ADR's production target. Public `org`
 signup is not a permanent self-service operator creation path, and `com` returns to a social-free
-state before production cleanup. The implementation plan for this exception is
-`plans/active/org-com-google-social-temporary-gateway-plan.md`.
+state before production cleanup.
 
 ## Context
 
@@ -166,9 +165,10 @@ Future Sign In and Sign Up implementation should separate four responsibilities:
 
 `Actor.authn` should hold the normalized authentication facts for the current actor/session, such as
 surface, actor id, current AAL, satisfied methods, primary method, step-up method, authentication
-timestamps, token/session id, restricted-session status, and the active sign sequence id. It should
-be the common source for authorization and controller decisions that need to know the actor's
-current authentication state. It should not own route progression.
+timestamps, token/session id, and the active sign sequence id. Historical token status 103 is a
+durable row fact and is rejected before it can become current authentication context. It should be
+the common source for authorization and controller decisions that need to know the actor's current
+authentication state. It should not own route progression.
 
 The sign state machine should own flow progression. It decides which sign participant is current,
 whether the participant stack is empty or blocking, and which transition is allowed next. It should
@@ -183,9 +183,9 @@ social link/unlink, sign-up checkpoint setup, and any sequence-owned pending art
 Chronicle should record security-significant history. State transitions and sign boundary outcomes
 should emit audit events such as sign-up start, contact submission, OTP verification result,
 checkpoint item clearance, guardrail block, account finalization, sign-in boundary entry, session
-issuance, restricted-session issuance, sign-in failure, step-up outcome, policy denial, sequence
-expiry, and compensating cleanup. Chronicle events must not record OTP values, tokens, cookies,
-authorization headers, or full request parameters.
+issuance, sign-in failure, step-up outcome, policy denial, sequence expiry, and compensating
+cleanup. Chronicle events must not record OTP values, tokens, cookies, authorization headers, or
+full request parameters.
 
 Telephone registration is finalized only after all required Sign Up setup succeeds. Finalization
 includes telephone status transition, actor account creation, audit writing, login session creation,
@@ -242,3 +242,11 @@ without being forced into a broken Sign In path.
 - Com signup remains social-free.
 - Org `GET /sign/up/new` does not create an operator or issue a session.
 - Org operator lifecycle request creation requires an authenticated operator and AAL2 step-up.
+
+## Delivered reconciliation (2026-10-06)
+
+Sign-up completion enters ordinary sign-in admission and completes at session issuance; it does not
+use a special Secret or social handoff state to bypass the canonical lifecycle. Browser-bound
+admission, cancellation, continuation and contact OTP evidence are retained by the owning flow. The
+earlier Acme/Sign authority language and “AAL2 step-up” shorthand are historical; current
+authorization uses explicit operation requirements and the surface-specific policy.

@@ -6,14 +6,20 @@ import Select from "@/components/ui/Select";
 import PreferenceScreenFrame, {
   type PreferenceLink,
 } from "@/features/preferences/PreferenceScreenFrame";
+import { applyTheme, fetchStoredTheme } from "@/lib/theme";
+import type { SharedProps } from "@/types/inertia";
 
 // Backs both `option` (region, timezone, language, theme) and `selectable` (currency, calendar,
 // clock, motion, density, pagination). The two shared ERB templates they replace differed only in
 // how the server built the choice labels, which is still where that difference lives.
+//
+// A theme write must not recolour the document until the server accepts it and the theme endpoint
+// reports the stored value — the same contract as the chrome ThemeControls on every Inertia surface.
 
 type PreferenceChoice = {
   label: string;
   value: number;
+  disabled?: boolean;
 };
 
 type PreferenceSelectForm = {
@@ -55,7 +61,8 @@ export default function PreferenceSelect({
 }: PreferenceSelectProps) {
   const [value, setValue] = useState(String(form.value));
   const [processing, setProcessing] = useState(false);
-  const { errors } = usePage().props;
+  const { errors, chrome } = usePage<SharedProps>().props;
+  const themeEndpointUrl = chrome.theme_controls?.endpoint_url;
   const error = errors[form.field];
 
   const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
@@ -66,6 +73,18 @@ export default function PreferenceSelect({
       {
         onStart: () => setProcessing(true),
         onFinish: () => setProcessing(false),
+        onSuccess: () => {
+          // The theme screen writes through Inertia rather than the chrome control. Colour
+          // follows the value the server stored, and only after that write is accepted.
+          if (screen === "theme") {
+            // The theme screen renders only on families whose chrome declares a theme endpoint,
+            // so a missing one is a rendering defect rather than a reason to skip the read.
+            if (themeEndpointUrl === undefined) {
+              throw new Error("theme preference screen rendered without a chrome theme endpoint");
+            }
+            void applyThemeAfterPreferenceWrite(themeEndpointUrl);
+          }
+        },
       },
     );
   };
@@ -85,15 +104,13 @@ export default function PreferenceSelect({
           name={`${form.scope}[${form.field}]`}
           value={value}
           onChange={(next) => {
-            /* v8 ignore next -- React Aria reports null only when the selection is cleared */
-            if (next !== null) {
-              setValue(String(next));
-            }
+            setValue(next);
           }}
           {...(error === undefined ? {} : { errorMessage: error })}
           options={form.choices.map((choice) => ({
             value: String(choice.value),
             label: choice.label,
+            isDisabled: choice.disabled === true,
           }))}
         />
 
@@ -107,7 +124,7 @@ export default function PreferenceSelect({
           {regionLink ? (
             <Link
               href={regionLink.href}
-              className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+              className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
             >
               {regionLink.label}
             </Link>
@@ -121,7 +138,7 @@ export default function PreferenceSelect({
             <li key={linked.key}>
               <Link
                 href={linked.href}
-                className="block rounded-lg border border-line bg-surface px-4 py-3 text-sm
+                className="block rounded-lg border border-line bg-surface px-4 py-3 text-base
                   font-medium text-fg hover:bg-surface-muted"
               >
                 {linked.label}
@@ -132,4 +149,11 @@ export default function PreferenceSelect({
       ) : null}
     </PreferenceScreenFrame>
   );
+}
+
+async function applyThemeAfterPreferenceWrite(endpointUrl: string): Promise<void> {
+  const stored = await fetchStoredTheme(endpointUrl);
+  if (stored) {
+    applyTheme(stored);
+  }
 }

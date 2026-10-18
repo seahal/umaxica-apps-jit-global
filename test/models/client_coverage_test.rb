@@ -10,7 +10,9 @@ class ClientCoverageTest < ActiveSupport::TestCase
   setup do
     ClientStatus.find_or_create_by!(id: 1)
     ClientVisibility.find_or_create_by!(id: 1)
-    @user = Client.create!(status_id: 1, visibility_id: 1)
+    @user = Client.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: 1, visibility_id: 1,
+    )
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     ClientTelephoneStatus.find_or_create_by!(id: ClientTelephoneStatus::VERIFIED)
     ClientTotpCredentialStatus.find_or_create_by!(id: ClientTotpCredentialStatus::ACTIVE)
@@ -18,11 +20,14 @@ class ClientCoverageTest < ActiveSupport::TestCase
 
   test "totp_enabled?" do
     assert_not @user.totp_enabled?
-    ClientTotpCredential.create!(user: @user, user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
+    ClientTotpCredential.create!(
+      user: @user,
+      user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+    )
 
     assert_predicate @user, :totp_enabled?
 
-    @user.client_totp_credentials.load
+    @user = Client.includes(:client_totp_credentials).find(@user.id)
 
     assert_predicate @user, :totp_enabled?
   end
@@ -42,11 +47,14 @@ class ClientCoverageTest < ActiveSupport::TestCase
   test "verified_email? and verified_telephone?" do
     assert_not @user.verified_email?
     ClientEmail.create!(user: @user, address: "v@example.com", user_email_status_id: ClientEmailStatus::VERIFIED)
+      .finalize_binding!
 
     assert_predicate @user, :verified_email?
 
     assert_not @user.verified_telephone?
-    ClientTelephone.create!(user: @user, number: "+819012345678", user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED)
+    ClientTelephone.create!(
+      user: @user, number: "+819012345678", user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
+    ).finalize_binding!
 
     assert_predicate @user, :verified_telephone?
   end
@@ -69,11 +77,14 @@ class ClientCoverageTest < ActiveSupport::TestCase
 
   test "active_social_provider?" do
     assert_not @user.active_social_provider?("google")
-    create_active_external_identity(client: @user, provider: "google", subject: "g")
+    google = create_active_external_identity(client: @user, provider: "google", subject: "g")
 
     assert @user.active_social_provider?("google")
 
     assert_not @user.active_social_provider?("apple")
+    google.release!
+
+    assert_not @user.active_social_provider?("google")
     create_active_external_identity(client: @user, provider: "apple", subject: "a")
 
     assert @user.active_social_provider?("apple")

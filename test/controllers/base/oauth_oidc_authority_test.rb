@@ -6,6 +6,8 @@ require "test_helper"
 # require "helpers/auth_helpers"
 
 class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
+  include OidcAuthorizationResponseHelper
+
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
@@ -29,7 +31,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     end
 
   test "base app well-known discovery advertises base issuer and protocol endpoints" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     get base_app_well_known_openid_configuration_url(host: host)
 
     assert_response :ok
@@ -40,18 +42,19 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "#{issuer}/oauth/authorize", body["authorization_endpoint"]
     assert_equal "#{issuer}/oauth/token", body["token_endpoint"]
     assert_equal "#{issuer}/oauth/userinfo", body["userinfo_endpoint"]
+    assert_equal %w(authorization_code refresh_token), body["grant_types_supported"]
     assert_equal "#{issuer}/oauth/revoke", body["revocation_endpoint"]
     assert_equal "#{issuer}/oidc/logout", body["end_session_endpoint"]
     assert_equal "#{issuer}/.well-known/jwks.json", body["jwks_uri"]
   end
 
   test "base com and org well-known discovery advertise surface-specific base issuers" do
-    get base_com_well_known_openid_configuration_url(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"))
+    get base_com_well_known_openid_configuration_url(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"))
 
     assert_response :ok
     assert_equal OidcIssuer.for_resource_type("visitor"), response.parsed_body["issuer"]
 
-    get base_org_well_known_openid_configuration_url(host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"))
+    get base_org_well_known_openid_configuration_url(host: ENV.fetch("PUBLIC_BASE_STAFF_URL"))
 
     assert_response :ok
     assert_equal OidcIssuer.for_resource_type("operator"), response.parsed_body["issuer"]
@@ -60,14 +63,14 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   test "sign discovery route is retired" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/.well-known/openid-configuration",
+        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/.well-known/openid-configuration",
         method: :get,
       )
     end
   end
 
   test "sign jwks remains public compatibility metadata only" do
-    get sign_app_well_known_jwks_url(host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"))
+    get sign_app_well_known_jwks_url(host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
 
     assert_response :ok
     response.parsed_body.fetch("keys").each do |key|
@@ -77,10 +80,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "oidc issuer uses base hosts and signing namespaces" do
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), OidcIssuer.host_for_resource_type("client")
-    assert_equal ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), OidcIssuer.host_for_resource_type("client")
+    assert_equal ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
                  OidcIssuer.host_for_resource_type("visitor")
-    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"), OidcIssuer.host_for_resource_type("operator")
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), OidcIssuer.host_for_resource_type("operator")
     assert_equal "surface:BASE_APP", OidcIssuer.jwt_issuer_id_for_resource_type("client")
     assert_equal "surface:BASE_COM", OidcIssuer.jwt_issuer_id_for_resource_type("visitor")
     assert_equal "surface:BASE_ORG", OidcIssuer.jwt_issuer_id_for_resource_type("operator")
@@ -93,13 +96,18 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       token_response: { access_token: "access", refresh_token: "refresh", token_type: "Bearer" },
     )
 
-    OidcTokenExchangeCoordinator.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
-      post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
+    OidcTokenExchangeCoordinator.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
+      post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            params: {
              grant_type: "authorization_code",
              code: "code",
              redirect_uri: "https://client.example/callback",
-             client_id: "core-next-rp",
+             client_id: "core-app-jp",
              client_secret: "secret",
              code_verifier: "verifier",
            },
@@ -110,9 +118,40 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "proof", captured[:dpop_proof]
     assert_equal "POST", captured[:request_method]
     assert_includes captured[:token_endpoint_uri], "/oauth/token"
-    assert_includes captured[:token_endpoint_uri], ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    assert_includes captured[:token_endpoint_uri], ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     assert_equal "no-store", response.headers["Cache-Control"]
     assert_equal "no-cache", response.headers["Pragma"]
+  end
+
+  test "base token endpoint forwards an OIDC refresh grant" do
+    captured = nil
+    result = TokenResult.new(
+      success: true,
+      token_response: { access_token: "access", refresh_token: "next-refresh", token_type: "Bearer" },
+    )
+
+    OidcTokenExchangeCoordinator.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
+      post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+           params: {
+             grant_type: "refresh_token",
+             refresh_token: "refresh-value",
+             client_id: "core-app-jp",
+             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+             client_assertion: "assertion",
+           }
+    end
+
+    assert_response :ok
+    assert_equal "refresh_token", captured[:grant_type]
+    assert_equal "refresh-value", captured[:refresh_token]
+    assert_nil captured[:code]
+    assert_nil captured[:redirect_uri]
+    assert_nil captured[:code_verifier]
   end
 
   test "base token endpoint rejects missing csrf metadata with oauth json error instead of csrf 422" do
@@ -123,12 +162,12 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     )
 
     OidcTokenExchangeCoordinator.stub(:call, ->(**) { result }) do
-      post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
+      post base_app_oauth_token_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            params: {
              grant_type: "authorization_code",
              code: "bad-code",
              redirect_uri: "https://client.example/callback",
-             client_id: "core-next-rp",
+             client_id: "core-app-jp",
              client_secret: "secret",
              code_verifier: "verifier",
            }
@@ -142,7 +181,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   test "sign token endpoint is retired" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/oauth/token",
+        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/oauth/token",
         method: :post,
       )
     end
@@ -150,21 +189,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
   test "base well-known discovery uses the external openid configuration path" do
     assert_recognizes_base_route(
-      ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+      ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       "/.well-known/openid-configuration",
       :get,
       "base/app/well_known/discoveries",
       "show",
     )
     assert_recognizes_base_route(
-      ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+      ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
       "/.well-known/openid-configuration",
       :get,
       "base/com/well_known/discoveries",
       "show",
     )
     assert_recognizes_base_route(
-      ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+      ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       "/.well-known/openid-configuration",
       :get,
       "base/org/well_known/discoveries",
@@ -175,14 +214,14 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   test "base token endpoint rejects get" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "http://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")}/oauth/token",
+        "http://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/oauth/token",
         method: :get,
       )
     end
   end
 
   test "base authorize endpoint uses request windows and ignores old token history" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     Rails.configuration.x.rate_limit.fetch(:store).clear
 
     create_old_client_tokens(count: 25)
@@ -192,7 +231,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       **oidc_authorize_params(scope: "openid"),
     ), headers: { "Host" => host }
 
-    assert_response :redirect
+    assert_response :success
+    assert_select "form#base-authorization-ceremony-start-form[method='post'][action='/oauth/authorize']"
     assert_not_equal 429, response.status
   end
 
@@ -203,7 +243,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       client_redirect_host: RateLimitProfiles::Profile.new(to: 100, within: 10.minutes, retry_after: 600),
     )
 
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     Rails.configuration.x.rate_limit.fetch(:store).clear
 
     logs = []
@@ -214,7 +254,8 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           **oidc_authorize_params(scope: "openid"),
         ), headers: { "Host" => host }
 
-        assert_response :redirect
+        assert_response :success
+        assert_select "form#base-authorization-ceremony-start-form[method='post'][action='/oauth/authorize']"
 
         get base_app_oauth_authorization_url(
           host: host,
@@ -231,18 +272,132 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert logs.any? { |message| message.include?("oidc.authorize.rate_limited") }
   end
 
+  test "base authorize checks IP browser and redirect host limits in order" do
+    profile_set = RateLimitProfiles::AuthorizeProfileSet.new(
+      ip_surface: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+      browser_client: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+      client_redirect_host: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+    )
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    calls = []
+    counts = [1, 2, 3]
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    with_oauth_authorize_counter(
+      store,
+      oauth_result: ->(key, _amount, expires_in:) {
+        calls << [key, expires_in]
+        counts.shift
+      },
+    ) do
+      RateLimitProfiles.stub(:oauth_authorize, profile_set) do
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid"),
+        ), headers: { "Host" => host }
+      end
+    end
+
+    assert_response :too_many_requests
+    assert_equal "oauth_authorize_client_redirect_host", response.headers["X-RateLimit-Rule"]
+    assert_equal %w(ip_surface browser_client client_redirect_host),
+                 calls.map { |key, _| key.split(":")[2] }
+    assert_equal [1.minute, 1.minute, 1.minute], calls.map(&:last)
+  end
+
+  test "base authorize accepts count below and at the inclusive limit and rejects the next count" do
+    profile_set = RateLimitProfiles::AuthorizeProfileSet.new(
+      ip_surface: RateLimitProfiles::Profile.new(to: 2, within: 1.minute, retry_after: 60),
+      browser_client: RateLimitProfiles::Profile.new(to: 100, within: 1.minute, retry_after: 60),
+      client_redirect_host: RateLimitProfiles::Profile.new(to: 100, within: 1.minute, retry_after: 60),
+    )
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    ip_counts = [1, 2, 3]
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    with_oauth_authorize_counter(
+      store,
+      oauth_result: ->(key, *_arguments, **_options) { key.include?(":ip_surface:") ? ip_counts.shift : 1 },
+    ) do
+      RateLimitProfiles.stub(:oauth_authorize, profile_set) do
+        2.times do
+          get base_app_oauth_authorization_url(
+            host: host,
+            **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+          ), headers: { "Host" => host }
+
+          assert_response :redirect
+        end
+
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+        ), headers: { "Host" => host }
+      end
+    end
+
+    assert_response :too_many_requests
+    assert_equal "oauth_authorize_ip_surface", response.headers["X-RateLimit-Rule"]
+  end
+
+  test "nil and malformed authorize counter results return service unavailable" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    [nil, "2", 0, -1, false].each do |counter_result|
+      with_oauth_authorize_counter(
+        store,
+        oauth_result: ->(*_arguments, **_options) { counter_result },
+      ) do
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+        ), headers: { "Host" => host }, as: :json
+      end
+
+      assert_response :service_unavailable
+      assert_equal "temporarily_unavailable", response.parsed_body.fetch("error")
+    end
+  end
+
+  test "authorize backend availability and operation errors return service unavailable" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    store = Rails.configuration.x.rate_limit.fetch(:store)
+
+    [Umaxica::Valkey::Unavailable, Umaxica::Valkey::OperationError].each do |error_class|
+      with_oauth_authorize_counter(
+        store,
+        oauth_result: ->(*_arguments, **_options) { raise error_class, "private backend detail" },
+      ) do
+        get base_app_oauth_authorization_url(
+          host: host,
+          **oidc_authorize_params(scope: "openid").merge(prompt: "none"),
+        ), headers: { "Host" => host }, as: :json
+      end
+
+      assert_response :service_unavailable
+      assert_equal "temporarily_unavailable", response.parsed_body.fetch("error")
+      assert_no_match(/private backend detail/, response.body)
+    end
+  end
+
   test "base userinfo authenticates against base request binding" do
     captured = nil
     result = AuthResult.new(success: false, error: "invalid_token")
 
-    OidcAccessTokenAuthenticator.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
-      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
+    OidcAccessTokenAuthenticator.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
+      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
           headers: { "Authorization" => "Bearer access", "DPoP" => "proof" }
     end
 
     assert_response :unauthorized
     assert_equal "client", captured[:resource_type]
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), captured[:host]
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), captured[:host]
     assert_equal "Bearer", captured[:authorization_scheme]
     assert_equal "proof", captured[:dpop_proof]
   end
@@ -258,8 +413,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     test "base #{surface} userinfo serialises the authenticated principal for its own type" do
       host = ENV.fetch(host_env)
       resource = Struct.new(:id, :public_id, :name, :email).new(1, "principal-1", "Sample Name", "sample@example.com")
-      payload = { "act" => resource_type,
-                  "scp" => %w(openid profile email),
+      payload = { "scope" => "openid profile email domain:#{resource_type}",
                   "acr" => "aal1",
                   "auth_time" => 1_756_000_000, }
       result = AuthResult.new(success: true, resource: resource, payload: payload)
@@ -284,24 +438,186 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     insufficient_result = AuthResult.new(success: false, error: "insufficient_scope")
 
     OidcAccessTokenAuthenticator.stub(:call, ->(**) { invalid_result }) do
-      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"))
+      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+          headers: { "Authorization" => "Bearer invalid" }
 
       assert_response :unauthorized
       assert_equal 'Bearer error="invalid_token"', response.headers["WWW-Authenticate"]
     end
 
     OidcAccessTokenAuthenticator.stub(:call, ->(**) { insufficient_result }) do
-      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"))
+      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+          headers: { "Authorization" => "Bearer insufficient" }
 
       assert_response :forbidden
       assert_equal 'Bearer error="insufficient_scope", scope="openid"', response.headers["WWW-Authenticate"]
     end
   end
 
+  test "base userinfo accepts GET and POST with a Bearer header on every realm" do
+    resource = Struct.new(:id, :public_id, :name, :email).new(1, "principal-1", "Sample Name", "sample@example.com")
+    results = {
+      "client" => AuthResult.new(
+        success: true,
+        resource: resource,
+        payload: { "scope" => "openid profile email domain:client" },
+      ),
+      "visitor" => AuthResult.new(
+        success: true,
+        resource: resource,
+        payload: { "scope" => "openid profile email domain:visitor" },
+      ),
+      "operator" => AuthResult.new(
+        success: true,
+        resource: resource,
+        payload: { "scope" => "openid profile email domain:operator" },
+      ),
+    }
+
+    OidcAccessTokenAuthenticator.stub(:call, ->(**kwargs) { results.fetch(kwargs.fetch(:resource_type)) }) do
+      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+          headers: { "Authorization" => "Bearer app-get" }
+
+      assert_response :ok
+      assert_equal OidcSubject.for(resource, resource_type: "client"), response.parsed_body["sub"]
+
+      post base_com_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL")),
+           headers: { "Authorization" => "Bearer com-post" }
+
+      assert_response :ok
+      assert_equal OidcSubject.for(resource, resource_type: "visitor"), response.parsed_body["sub"]
+
+      post base_org_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_STAFF_URL")),
+           headers: { "Authorization" => "Bearer org-post" }
+
+      assert_response :ok
+      assert_equal OidcSubject.for(resource, resource_type: "operator"), response.parsed_body["sub"]
+    end
+
+    assert_equal "no-store", response.headers["Cache-Control"]
+  end
+
+  test "base userinfo distinguishes missing and malformed bearer credentials" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+
+    OidcAccessTokenAuthenticator.stub(:call, ->(**) { flunk("missing credentials must not authenticate") }) do
+      get base_app_oauth_userinfo_url(host: host)
+    end
+
+    assert_response :unauthorized
+    assert_equal "Bearer", response.headers["WWW-Authenticate"]
+    assert_not response.parsed_body.key?("error")
+    assert_equal "no-store", response.headers["Cache-Control"]
+
+    get base_app_oauth_userinfo_url(host: host), headers: { "Authorization" => "Basic abc" }
+
+    assert_response :bad_request
+    assert_equal 'Bearer error="invalid_request"', response.headers["WWW-Authenticate"]
+
+    get base_app_oauth_userinfo_url(host: host), headers: { "Authorization" => "Bearer one two" }
+
+    assert_response :bad_request
+    assert_equal 'Bearer error="invalid_request"', response.headers["WWW-Authenticate"]
+  end
+
+  test "base userinfo refuses query and cookie bearer transports before authentication" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+
+    OidcAccessTokenAuthenticator.stub(:call, ->(**) { flunk("alternate transports must not authenticate") }) do
+      get base_app_oauth_userinfo_url(host: host), params: { access_token: "query-token" }
+
+      assert_response :bad_request
+
+      get base_app_oauth_userinfo_url(host: host), headers: { "Cookie" => "access_token=cookie-token" }
+
+      assert_response :bad_request
+    end
+
+    assert_equal 'Bearer error="invalid_request"', response.headers["WWW-Authenticate"]
+    assert_equal "no-store", response.headers["Cache-Control"]
+  end
+
+  test "base userinfo keeps invalid, wrong-realm and insufficient-scope failures distinct" do
+    calls = []
+    invalid = AuthResult.new(success: false, error: "invalid_token")
+    insufficient = AuthResult.new(success: false, error: "insufficient_scope")
+
+    OidcAccessTokenAuthenticator.stub(
+      :call, ->(**kwargs) {
+               calls << kwargs
+               invalid
+             },
+    ) do
+      get base_com_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL")),
+          headers: { "Authorization" => "Bearer wrong-realm" }
+    end
+
+    assert_response :unauthorized
+    assert_equal 'Bearer error="invalid_token"', response.headers["WWW-Authenticate"]
+    assert_equal "visitor", calls.first.fetch(:resource_type)
+
+    OidcAccessTokenAuthenticator.stub(:call, ->(**) { insufficient }) do
+      get base_org_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_STAFF_URL")),
+          headers: { "Authorization" => "Bearer insufficient" }
+    end
+
+    assert_response :forbidden
+    assert_equal 'Bearer error="insufficient_scope", scope="openid"', response.headers["WWW-Authenticate"]
+  end
+
+  test "base userinfo emits only claims allowed by the requested scope" do
+    resource = Struct.new(:id, :public_id, :name, :email).new(1, "principal-1", "Sample Name", "sample@example.com")
+    result = AuthResult.new(
+      success: true,
+      resource: resource,
+      payload: {
+        "scope" => "openid",
+        "acr" => "aal1",
+        "amr" => ["pwd"],
+        "auth_time" => 1_756_000_000,
+        "sid" => "restricted-session-id",
+        "session_id" => "internal-session-id",
+        "client_id" => "internal-client-id",
+        "public_id" => "internal-public-id",
+      },
+    )
+
+    OidcAccessTokenAuthenticator.stub(:call, ->(**) { result }) do
+      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+          headers: { "Authorization" => "Bearer scoped" }
+    end
+
+    assert_response :ok
+    body = response.parsed_body
+
+    assert_equal OidcSubject.for(resource, resource_type: "client"), body["sub"]
+    assert_equal "aal1", body["acr"]
+    assert_equal ["pwd"], body["amr"]
+    assert_equal 1_756_000_000, body["auth_time"]
+    assert_nil body["name"]
+    assert_nil body["email"]
+    assert_nil body["email_verified"]
+    %w(sid session_id client_id public_id).each { |key| assert_nil body[key] }
+  end
+
+  test "base userinfo reports database outages as dependency failures" do
+    error = ActiveRecord::ConnectionNotEstablished.new("database unavailable")
+
+    OidcAccessTokenAuthenticator.stub(:call, ->(**) { raise error }) do
+      get base_app_oauth_userinfo_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
+          headers: { "Authorization" => "Bearer access" }
+    end
+
+    assert_response :service_unavailable
+    assert_equal "temporarily_unavailable", response.parsed_body.fetch("error")
+    assert_nil response.headers["WWW-Authenticate"]
+    assert_equal "no-store", response.headers["Cache-Control"]
+  end
+
   test "sign userinfo endpoint is retired" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/oauth/userinfo",
+        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/oauth/userinfo",
         method: :get,
       )
     end
@@ -311,11 +627,16 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     captured = nil
     result = RevocationResult.new(success: true)
 
-    OidcTokenRevoker.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
-      post base_app_oauth_revocation_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
+    OidcTokenRevoker.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
+      post base_app_oauth_revocation_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            params: {
              token: "refresh",
-             client_id: "core-next-rp",
+             client_id: "core-app-jp",
              client_secret: "secret",
              token_type_hint: "refresh_token",
            }
@@ -323,20 +644,26 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "refresh", captured[:token]
-    assert_equal "core-next-rp", captured[:client_id]
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), captured[:host]
+    assert_equal "core-app-jp", captured[:client_id]
+    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), captured[:host]
+    assert_equal "client", captured[:expected_resource_type]
   end
 
   test "base com revocation delegates with com host binding" do
     captured = nil
     result = RevocationResult.new(success: true)
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
 
-    OidcTokenRevoker.stub(:call, ->(**kwargs) { captured = kwargs; result }) do
+    OidcTokenRevoker.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
       post base_com_oauth_revocation_url(host: host),
            params: {
              token: "refresh",
-             client_id: "core-next-rp",
+             client_id: "core-app-jp",
              client_secret: "secret",
              token_type_hint: "refresh_token",
            }
@@ -344,19 +671,44 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "refresh", captured[:token]
-    assert_equal "core-next-rp", captured[:client_id]
+    assert_equal "core-app-jp", captured[:client_id]
     assert_equal host, captured[:host]
+    assert_equal "visitor", captured[:expected_resource_type]
+  end
+
+  test "base org revocation delegates with operator realm binding" do
+    captured = nil
+    result = RevocationResult.new(success: true)
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+
+    OidcTokenRevoker.stub(
+      :call, ->(**kwargs) {
+               captured = kwargs
+               result
+             },
+    ) do
+      post base_org_oauth_revocation_url(host: host),
+           params: {
+             token: "refresh",
+             client_id: "core-org-jp",
+             client_secret: "secret",
+             token_type_hint: "refresh_token",
+           }
+    end
+
+    assert_response :ok
+    assert_equal "operator", captured[:expected_resource_type]
   end
 
   test "base com revocation returns unauthorized when the revoker fails" do
     result = RevocationResult.new(success: false, error: "invalid_client", error_description: "bad secret")
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
 
     OidcTokenRevoker.stub(:call, ->(**) { result }) do
       post base_com_oauth_revocation_url(host: host),
            params: {
              token: "refresh",
-             client_id: "core-next-rp",
+             client_id: "core-app-jp",
              client_secret: "wrong",
            }
     end
@@ -369,7 +721,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   test "sign revocation endpoint is retired" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}/oauth/revoke",
+        "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}/oauth/revoke",
         method: :post,
       )
     end
@@ -378,7 +730,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   test "base edge token refresh is post only and does not accept url-only mutation" do
     assert_raises(ActionController::RoutingError) do
       Rails.application.routes.recognize_path(
-        "http://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")}/edge/v0/token/refresh",
+        "http://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/edge/v0/token/refresh",
         method: :get,
       )
     end
@@ -386,14 +738,14 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal(
       "base/app/edge/v0/token/refreshes#create",
       Rails.application.routes.recognize_path(
-        "http://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")}/edge/v0/token/refresh",
+        "http://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/edge/v0/token/refresh",
         method: :post,
       ).values_at(:controller, :action).join("#"),
     )
   end
 
   test "base app token check authenticates a valid client session" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     token_record = ClientToken.create!(user: user)
     token_record.rotate_refresh_token!
@@ -420,7 +772,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base org token check authenticates a valid operator session" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     staff = operators(:one)
     token_record = OperatorToken.create!(staff: staff)
     token_record.rotate_refresh_token!
@@ -447,7 +799,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base app token check without credentials returns unauthorized" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
 
     host!(host)
     get "/edge/v0/token/check", headers: { "Host" => host, "Accept" => "application/json" }, as: :json
@@ -458,7 +810,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
   test "base edge token refresh rejects missing refresh token without rotation" do
     AcmeRefreshTokenIssuer.stub(:call, ->(**) { flunk("refresh rotation must not run without a token") }) do
-      post base_app_edge_v0_token_refresh_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")),
+      post base_app_edge_v0_token_refresh_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            as: :json
     end
 
@@ -478,7 +830,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base oidc logout consumes signed request and completes on base sign out" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ensure_user_token_reference_records!
     token = ClientToken.create!(
@@ -488,29 +840,149 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
     )
-    logout_request = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    logout_request = OidcLogoutRequest.issue(client_id: "core-app-jp", ri: "jp")
 
+    http_headers_2 =
+      begin
+        rp_headers = as_user_headers(user, host: host, session_public_id: token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     get(
       base_app_oidc_logout_url(host: host),
       params: {
-        client_id: "base-rails-rp",
+        client_id: "core-app-jp",
         logout_request: logout_request,
         ri: "jp",
       },
-      headers: as_user_headers(user, host: host, session_public_id: token.public_id),
+      headers: http_headers_2,
     )
 
     assert_response :ok
     assert_not_predicate token.reload, :revoked?
 
+    http_headers_1 =
+      begin
+        rp_headers = as_user_headers(user, host: host, session_public_id: token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
     post(
       base_app_oidc_logout_url(host: host),
       params: {
-        client_id: "base-rails-rp",
+        client_id: "core-app-jp",
         logout_request: logout_request,
         ri: "jp",
       },
-      headers: as_user_headers(user, host: host, session_public_id: token.public_id),
+      headers: http_headers_1,
     )
 
     assert_response :success
@@ -523,30 +995,48 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base oauth authorize starts sign in ceremony on unauthenticated requests" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
+    https!
 
-    get "/oauth/authorize", params: oidc_authorize_params, headers: browser_headers
+    assert_no_difference "ClientOidcAuthorizationTransaction.count" do
+      get("/oauth/authorize", params: oidc_authorize_params)
+    end
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(
+      form["action"], params: submission,
+                      headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" },
+    )
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
     assert_equal "/sign/in", uri.path
-    assert_predicate query["login_challenge"], :present?
+    assert_predicate query["entry_ref"], :present?
+    assert_nil query["login_challenge"]
 
-    transaction = ClientOidcAuthorizationTransaction.find_by!(login_challenge: query["login_challenge"])
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(reference: query.fetch("entry_ref"), surface: "app")
+    transaction = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
 
     assert_equal "app", transaction.surface
-    assert_equal "sign_in", transaction.intent
+    assert_equal "authentication", transaction.intent
     assert_equal "openid profile", transaction.scope
+    assert_not_predicate binding, :redeemed?
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
-  test "base oauth authorize issues a code immediately for an already authenticated browser session" do
+  test "base oauth authorize issues an SSO code from an existing Browser Session" do
     [
       {
-        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
+        host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
         actor: clients(:one),
         token: ->(actor) do
           ensure_user_token_reference_records!
@@ -556,16 +1046,77 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             user_token_status_id: ClientTokenStatus::ACTIVE,
             user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
             user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+            authentication_event_at: Time.current,
           )
         end,
         transaction_class: ClientOidcAuthorizationTransaction,
         resource_type: "client",
+        client_id: "core-app-jp",
         header_builder: ->(actor, host:, session_public_id:) do
-          as_user_headers(actor, host: host, session_public_id: session_public_id)
+          begin
+            rp_headers = as_user_headers(actor, host: host, session_public_id: session_public_id)
+            rp_host = rp_headers["Host"]
+            rp_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+              rp_client_id =
+                case rp_family
+                when "base" then "base-#{rp_surface}-ww"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
+                end
+              rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              rp_client = OidcClientRegistry.find!(rp_client_id)
+              rp_key = [rp_client.client_id, rp_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                  !(rp_token.device_session_id && OpAppGrant.exists?(
+                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                  ))
+                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+                rp_now = Time.current
+                rp_session = OpAppGrant.create!(
+                  client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                  refresh_token_expires_at: rp_now + 10.minutes,
+                )
+                rp_access = AuthenticationTokenService.encode(
+                  rp_token.actor_record, host: rp_host, resource_type: "client",
+                                         session_public_id: rp_token.public_id,
+                                         base_session_public_id: rp_token.public_id,
+                                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                         subject: OidcSubject.for(
+                                           rp_token.actor_record,
+                                           resource_type: "client",
+                                         ), client_id: rp_client.client_id,
+                )
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[rp_key]
+                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_cookie = [
+                  rp_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                ].join("; ")
+                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+              end
+            end
+            rp_headers
+          end
         end,
       },
       {
-        host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
+        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
         actor: operators(:one),
         token: ->(actor) do
           ensure_staff_token_reference_records!
@@ -575,31 +1126,154 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             staff_token_status_id: OperatorTokenStatus::ACTIVE,
             staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
             staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
+            authentication_event_at: Time.current,
           )
         end,
         transaction_class: OperatorOidcAuthorizationTransaction,
         resource_type: "operator",
+        client_id: "core-org-jp",
         header_builder: ->(actor, host:, session_public_id:) do
-          as_staff_headers(actor, host: host, session_public_id: session_public_id)
+          begin
+            rp_headers = as_staff_headers(actor, host: host, session_public_id: session_public_id)
+            rp_host = rp_headers["Host"]
+            rp_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(rp_family) && rp_surface == "org"
+              rp_client_id =
+                case rp_family
+                when "base" then "base-#{rp_surface}-ww"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
+                end
+              rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              rp_client = OidcClientRegistry.find!(rp_client_id)
+              rp_key = [rp_client.client_id, rp_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                  !(rp_token.device_session_id && OpOrgGrant.exists?(
+                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                  ))
+                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+                rp_now = Time.current
+                rp_session = OpOrgGrant.create!(
+                  operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                  refresh_token_expires_at: rp_now + 10.minutes,
+                )
+                rp_access = AuthenticationTokenService.encode(
+                  rp_token.actor_record, host: rp_host, resource_type: "operator",
+                                         session_public_id: rp_token.public_id,
+                                         base_session_public_id: rp_token.public_id,
+                                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                         subject: OidcSubject.for(
+                                           rp_token.actor_record,
+                                           resource_type: "operator",
+                                         ), client_id: rp_client.client_id,
+                )
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[rp_key]
+                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_cookie = [
+                  rp_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                ].join("; ")
+                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+              end
+            end
+            rp_headers
+          end
         end,
       },
       {
-        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
+        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
         actor: create_visitor!,
         token: ->(actor) do
           ensure_visitor_token_reference_records!
           VisitorToken.create!(
             visitor: actor,
+            skip_session_limit_check: true,
             visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
             visitor_token_status_id: VisitorTokenStatus::ACTIVE,
             visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
             visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
+            authentication_event_at: Time.current,
           )
         end,
         transaction_class: VisitorOidcAuthorizationTransaction,
         resource_type: "visitor",
+        client_id: "core-com-jp",
         header_builder: ->(actor, host:, session_public_id:) do
-          as_visitor_headers(actor, host: host, session_public_id: session_public_id)
+          begin
+            rp_headers = as_visitor_headers(actor, host: host, session_public_id: session_public_id)
+            rp_host = rp_headers["Host"]
+            rp_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(rp_family) && rp_surface == "com"
+              rp_client_id =
+                case rp_family
+                when "base" then "base-#{rp_surface}-ww"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
+                end
+              rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              rp_client = OidcClientRegistry.find!(rp_client_id)
+              rp_key = [rp_client.client_id, rp_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+                  !(rp_token.device_session_id && OpComGrant.exists?(
+                    device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                  ))
+                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+                rp_now = Time.current
+                rp_session = OpComGrant.create!(
+                  visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                  refresh_token_expires_at: rp_now + 10.minutes,
+                )
+                rp_access = AuthenticationTokenService.encode(
+                  rp_token.actor_record, host: rp_host, resource_type: "visitor",
+                                         session_public_id: rp_token.public_id,
+                                         base_session_public_id: rp_token.public_id,
+                                         oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                         expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                         subject: OidcSubject.for(
+                                           rp_token.actor_record,
+                                           resource_type: "visitor",
+                                         ), client_id: rp_client.client_id,
+                )
+                @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[rp_key]
+                rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+                rp_cookie = [
+                  rp_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+                ].join("; ")
+                rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+              end
+            end
+            rp_headers
+          end
         end,
       },
     ].each do |surface|
@@ -611,38 +1285,339 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       host!(host)
 
       assert_no_difference -> { surface.fetch(:transaction_class).pending.count } do
-        get "/oauth/authorize", params: oidc_authorize_params(resource_type: surface.fetch(:resource_type)),
-                                headers: headers
+        get "/oauth/authorize",
+            params: oidc_authorize_params(
+              resource_type: surface.fetch(:resource_type),
+              client_id: surface.fetch(:client_id),
+            ),
+            headers: headers
       end
 
       assert_response :redirect
-      uri = URI.parse(response.location)
-      callback_uri = URI.parse(jump_rt_url_from_location(response.location))
-      query = Rack::Utils.parse_nested_query(callback_uri.query.to_s)
+      target = URI.parse(jump_rt_url_from_location(response.location))
+      query = Rack::Utils.parse_nested_query(target.query.to_s)
+      callback = URI.parse(
+        OidcClientRegistry.find!(surface.fetch(:client_id)).redirect_uris_by_realm
+                .fetch(surface.fetch(:resource_type)).first,
+      )
 
-      assert_equal "jump.umaxica.net", uri.host
-      assert_equal "/oidc/callback", callback_uri.path
+      assert_equal callback.host, target.host
+      assert_equal callback.path, target.path
       assert_predicate query["code"], :present?
-      assert_equal oidc_authorize_params[:state], query["state"]
-      assert_not_includes callback_uri.query.to_s, "login_challenge"
+      assert_equal "state", query["state"]
     end
   end
 
-  test "base oauth authorize starts sign up ceremony when screen_hint requests signup" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    host!(host)
+  test "base app authorize prompt none succeeds from a fresh authenticated browser session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    actor = clients(:one)
+    ensure_user_token_reference_records!
+    token = ClientToken.create!(
+      user: actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
+    )
 
-    get "/oauth/authorize", params: oidc_authorize_params(screen_hint: "signup"), headers: browser_headers
+    host!(host)
+    http_headers_0 =
+      begin
+        rp_headers = as_user_headers(actor, host: host, session_public_id: token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id,
+                oidc_client_id: rp_client.client_id,
+                revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token,
+              oidc_client_id: rp_client.client_id,
+              oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid,
+              oidc_nonce: SecureRandom.hex(16),
+              oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record,
+              host: rp_host,
+              resource_type: "client",
+              session_public_id: rp_token.public_id,
+              base_session_public_id: rp_token.public_id,
+              oidc_sid: rp_session.public_id,
+              oidc_jti: rp_session.oidc_jti,
+              expires_at: rp_now + 10.minutes,
+              scopes: %w(openid profile),
+              issuer: OidcIssuer.for_client(rp_client),
+              audiences: [rp_client.aud],
+              jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+              subject: OidcSubject.for(
+                rp_token.actor_record,
+                resource_type: "client",
+              ),
+              client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] =
+              [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"),
+                            headers: http_headers_0
+
+    assert_response :redirect
+    target = URI.parse(jump_rt_url_from_location(response.location))
+    query = Rack::Utils.parse_nested_query(target.query.to_s)
+
+    assert_predicate query["code"], :present?
+    assert_equal "state", query["state"]
+  end
+
+  test "base app authorize prompt login starts a fresh ceremony" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    actor = clients(:one)
+    ensure_user_token_reference_records!
+    token = ClientToken.create!(
+      user: actor,
+      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
+      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
+      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
+      authentication_event_at: Time.current,
+    )
+
+    host!(host)
+    https!
+    harness =
+      begin
+        rp_headers = as_user_headers(actor, host: host, session_public_id: token.public_id)
+        rp_host = rp_headers["Host"]
+        rp_route =
+          begin
+            Rails.application.routes.recognize_path("https://#{rp_host}/") if rp_host.present?
+          rescue ActionController::RoutingError
+            nil
+          end
+        rp_family, rp_surface = rp_route&.fetch(:controller)&.split("/")
+        if %w(base warp core edit).include?(rp_family) && rp_surface == "app"
+          rp_client_id =
+            case rp_family
+            when "base" then "base-#{rp_surface}-ww"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
+            end
+          rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+          rp_client = OidcClientRegistry.find!(rp_client_id)
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
+              !(rp_token.device_session_id && OpAppGrant.exists?(
+                device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+              ))
+            rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+            rp_now = Time.current
+            rp_session = OpAppGrant.create!(
+              client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+              oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+              refresh_token_expires_at: rp_now + 10.minutes,
+            )
+            rp_access = AuthenticationTokenService.encode(
+              rp_token.actor_record, host: rp_host, resource_type: "client",
+                                     session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                                     oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                                     expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                                     issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                                     jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                                     subject: OidcSubject.for(
+                                       rp_token.actor_record,
+                                       resource_type: "client",
+                                     ), client_id: rp_client.client_id,
+            )
+            @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+          end
+          if @base_browser_rp_credentials[rp_key]
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            rp_cookie = [
+              rp_headers.fetch("Cookie"),
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ].join("; ")
+            rp_headers = rp_headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+          end
+        end
+        rp_headers
+      end
+    harness.fetch("Cookie").split("; ").each do |pair|
+      name, value = pair.split("=", 2)
+      cookies[name] = Rack::Utils.unescape(value)
+    end
+    headers = harness.except("Cookie", "HTTP_COOKIE", "Authorization").merge(
+      "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
+    )
+    get(
+      "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "login"),
+                          headers: headers,
+    )
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(form["action"], params: submission, headers: headers)
+
+    assert_response :redirect
+    target = URI.parse(jump_rt_url_from_location(response.location))
+
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), target.host
+    assert_equal "/sign/in", target.path
+    assert_predicate Rack::Utils.parse_nested_query(target.query.to_s)["entry_ref"], :present?
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
+  end
+
+  test "base oauth authorize keeps first-party ceremony neutral when screen_hint requests signup" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host!(host)
+    https!
+    headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+
+    get("/oauth/authorize", params: oidc_authorize_params(screen_hint: "signup"), headers: headers)
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(form["action"], params: submission, headers: headers)
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
 
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"), uri.host
-    assert_equal "/sign/up", uri.path
+    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
+    assert_equal "/sign/in", uri.path
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
+  end
+
+  test "first-party browser RPs keep ordinary authentication intent neutral" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    ["signup", "signin"].each do |screen_hint|
+      [
+        {
+          host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+          client_id: "core-app-jp",
+          resource_type: "client",
+          surface: "app",
+          transaction_model: ClientOidcAuthorizationTransaction,
+        },
+        {
+          host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+          client_id: "core-com-jp",
+          resource_type: "visitor",
+          surface: "com",
+          transaction_model: VisitorOidcAuthorizationTransaction,
+        },
+        {
+          host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+          client_id: "core-org-jp",
+          resource_type: "operator",
+          surface: "org",
+          transaction_model: OperatorOidcAuthorizationTransaction,
+        },
+      ].each do |surface|
+        host!(surface.fetch(:host))
+        https!
+        headers = { "Origin" => "https://#{surface.fetch(:host)}", "Sec-Fetch-Site" => "same-origin" }
+        recognized_route = Rails.application.routes.recognize_path(
+          "https://#{surface.fetch(:host)}/oauth/authorize",
+          method: :get,
+        )
+
+        assert_equal "base/#{surface.fetch(:surface)}/oauth/authorizations", recognized_route.fetch(:controller)
+        params = oidc_authorize_params(
+          client_id: surface.fetch(:client_id),
+          resource_type: surface.fetch(:resource_type),
+          screen_hint: screen_hint,
+        )
+        assert_no_changes -> { surface.fetch(:transaction_model).order(id: :desc).first&.id } do
+          get("/oauth/authorize", params: params, headers: headers)
+        end
+
+        assert_response :success
+        form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+        submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+        post(form["action"], params: submission, headers: headers)
+
+        assert_response :redirect
+        uri = URI.parse(jump_rt_url_from_location(response.location))
+        query = Rack::Utils.parse_nested_query(uri.query.to_s)
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          reference: query.fetch("entry_ref"), surface: surface.fetch(:surface),
+        )
+        transaction = surface.fetch(:transaction_model).find(binding.authorization_transaction_id)
+
+        assert_equal "authentication", transaction.intent
+        assert_equal surface.fetch(:client_id), transaction.client_id
+        assert_equal surface.fetch(:surface), transaction.surface
+        assert_equal params.fetch(:state), transaction.state
+        assert_equal transaction.id, binding.authorization_transaction_id
+        assert_not_predicate binding, :redeemed?
+      end
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
+  end
+
+  test "base app authorize returns login_required for prompt none without a session" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host!(host)
+
+    assert_no_difference "ClientOidcAuthorizationTransaction.count" do
+      get "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "none"), headers: browser_headers
+    end
+
+    assert_oidc_error_redirect(error: "login_required", redirect_uri: oidc_authorize_params.fetch(:redirect_uri))
   end
 
   test "base oauth authorize rejects requests without openid scope" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
 
     assert_no_difference "ClientOidcAuthorizationTransaction.count" do
@@ -655,7 +1630,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   end
 
   test "base oauth authorize rejects scopes outside the client allowlist" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
 
     assert_no_difference "ClientOidcAuthorizationTransaction.count" do
@@ -666,23 +1641,97 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "invalid_scope", response.parsed_body["error"]
   end
 
-  test "base oauth authorize consumes login challenge once" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+  test "base oauth authorize can retry a finalized result without a second root session" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host!(host)
-    issuance = OidcAuthorizationTransactionCoordinator.issue!(
-      surface: "app", intent: "sign_in",
-      params: oidc_authorize_params,
+    https!
+    headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+    token_count_before = ClientToken.where(user_id: clients(:one).id).count
+    get("/oauth/authorize", params: oidc_authorize_params)
+
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] }, headers: headers)
+
+    assert_response :redirect
+    entry = URI.parse(jump_rt_url_from_location(response.location))
+    entry_ref = Rack::Utils.parse_nested_query(entry.query.to_s).fetch("entry_ref")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_ref)
+    transaction = ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id)
+    cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+    lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+    cookie_line =
+      lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+        line.split(";", 2).first.start_with?("#{cookie_name}=")
+      end
+
+    assert_not_nil cookie_line
+    cookies.delete(cookie_name)
+    _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{host}/"))
+    auth = open_session
+    auth.host!(auth_host)
+    auth.https!
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth.get(entry.path, params: Rack::Utils.parse_nested_query(entry.query.to_s).merge("ri" => "jp"))
+
+    assert_equal 200, auth.response.status
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post(
+      "/ceremony_bindings", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
     )
 
-    OidcAuthorizationTransactionCoordinator.register_result!(
+    assert_equal 303, auth.response.status
+    confirmation = URI.parse(auth.response.location)
+    get(confirmation.request_uri)
+
+    assert_response :success
+    csrf = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: headers)
+
+    assert_response :see_other
+    auth.get(URI.parse(response.location).request_uri)
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post(
+      "/sign/in", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
+    )
+
+    assert_equal 303, auth.response.status
+    assert_predicate binding.reload, :redeemed?
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
       surface: "app",
-      login_challenge: issuance.transaction.login_challenge,
+      login_challenge: transaction.login_challenge,
       actor: clients(:one),
+      authentication_event_at: Time.current,
       session_ref: "session-1",
       auth_method: "passkey",
+      ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
+    get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: transaction.transaction_id })
 
-    get "/oauth/authorize", params: { login_challenge: issuance.transaction.login_challenge }, headers: browser_headers
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+
+    locks = []
+    subscriber =
+      ->(_name, _start, _finish, _id, payload) do
+        sql = payload.fetch(:sql)
+        if sql.include?("FOR UPDATE")
+          locks << :actor if sql.include?('FROM "clients"')
+          locks << :transaction if sql.include?('FROM "client_oidc_authorization_transactions"')
+        end
+      end
+    ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+      post("/oauth/authorize", params: submission, headers: headers)
+    end
+
+    assert_not_nil locks.index(:actor)
+    assert_not_nil locks.index(:transaction)
+    assert_operator locks.index(:actor), :<, locks.index(:transaction)
 
     assert_response :redirect
     uri = URI.parse(jump_rt_url_from_location(response.location))
@@ -690,42 +1739,251 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_predicate query["code"], :present?
     assert_equal oidc_authorize_params[:state], query["state"]
-    assert_predicate issuance.transaction.reload, :consumed?
+    assert_predicate transaction.reload, :consumed?
+    browser_session_ref = transaction.browser_session_ref
 
-    get "/oauth/authorize", params: { login_challenge: issuance.transaction.login_challenge }, headers: browser_headers
+    assert_predicate browser_session_ref, :present?
+    assert_equal token_count_before + 1, ClientToken.where(user_id: clients(:one).id).count
 
-    assert_response :bad_request
-    assert_equal "authorization transaction already consumed", response.parsed_body["error_description"]
+    raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+    lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+    cookie_line =
+      lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+        line.split(";", 2).first.start_with?("#{cookie_name}=")
+      end
+
+    assert_not_nil cookie_line
+    cookies.delete(cookie_name)
+    _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{host}/"))
+    get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: transaction.transaction_id })
+
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+    post(
+      "/oauth/authorize", params: submission, headers: headers,
+    )
+
+    assert_response :redirect
+    assert_equal browser_session_ref, transaction.reload.browser_session_ref
+    assert_equal token_count_before + 1, ClientToken.where(user_id: clients(:one).id).count
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
+  end
+
+  test "credential changes reject previously issued OIDC results on all Base surfaces without root issuance" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    %i(app com org).each do |surface|
+      reset!
+      actor, model, tokens, owner_key, base_host, auth_host, client_id, realm =
+        case surface
+        when :app
+          [Client.create!(id: 9_125_000_000_000), ClientOidcAuthorizationTransaction, ClientToken, :user_id,
+           ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app-jp", "client",]
+        when :com
+          [Visitor.create!(id: 9_125_000_000_000), VisitorOidcAuthorizationTransaction, VisitorToken, :visitor_id,
+           ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "core-com-jp", "visitor",]
+        when :org
+          [Operator.create!(id: 9_125_000_000_000), OperatorOidcAuthorizationTransaction, OperatorToken, :staff_id,
+           ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"), "core-org-jp", "operator",]
+        end
+      host!(base_host)
+      parameters = oidc_authorize_params(client_id: client_id, resource_type: realm)
+      https!
+      headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+      get("/oauth/authorize", params: parameters)
+
+      assert_response :success
+      form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+      post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] }, headers: headers)
+
+      assert_response :redirect
+      entry = URI.parse(jump_rt_url_from_location(response.location))
+      entry_ref = Rack::Utils.parse_nested_query(entry.query.to_s).fetch("entry_ref")
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface.to_s, reference: entry_ref)
+      parent = model.find(binding.authorization_transaction_id)
+      cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+      raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+      lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+      cookie_line =
+        lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+          line.split(";", 2).first.start_with?("#{cookie_name}=")
+        end
+
+      assert_not_nil cookie_line
+      cookies.delete(cookie_name)
+      _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{base_host}/"))
+      auth = open_session
+      auth.host!(auth_host)
+      auth.https!
+      auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+      auth.get(entry.path, params: Rack::Utils.parse_nested_query(entry.query.to_s).merge("ri" => "jp"))
+
+      assert_equal 200, auth.response.status
+      csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+      auth.post(
+        "/ceremony_bindings", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf },
+                              headers: auth_headers,
+      )
+
+      assert_equal 303, auth.response.status
+      confirmation = URI.parse(auth.response.location)
+      get(confirmation.request_uri)
+
+      assert_response :success
+      csrf = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+      post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: headers)
+
+      assert_response :see_other
+      auth.get(URI.parse(response.location).request_uri)
+      csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+      auth.post("/sign/in", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers)
+
+      assert_equal 303, auth.response.status
+      assert_predicate binding.reload, :redeemed?
+      result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+        surface: surface.to_s, login_challenge: parent.login_challenge, actor: actor,
+        authentication_event_at: model.database_now, session_ref: "ceremony-result", auth_method: "passkey",
+        ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
+      )
+      get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: parent.transaction_id })
+
+      assert_response :success
+      form = response.parsed_body.at_css("form")
+      submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+      CredentialSecurityTransition.call(
+        actor: actor, current_session: nil, reason: :mfa_reset, affected_surface: surface,
+        revoke_other_sessions: false,
+      )
+      assert_no_difference(-> { tokens.where(owner_key => actor.id).count }) do
+        post("/oauth/authorize", params: submission, headers: headers)
+      end
+
+      assert_response :bad_request
+      assert_equal "invalid_request", response.parsed_body.fetch("error")
+      assert_nil parent.reload.base_finalized_at
+      assert_nil parent.browser_session_ref
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   test "base oauth authorize rejects expired login challenge" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    host!(host)
-    issuance =
-      OidcAuthorizationTransactionCoordinator.issue!(
-        surface: "app",
-        intent: "sign_in",
-        params: oidc_authorize_params,
-        login_challenge_ttl: 1.second,
-        now: Time.current,
-      )
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host!(base_host)
+    surface = :app
+    model = ClientOidcAuthorizationTransaction
+    actor = clients(:one)
+    parameters = oidc_authorize_params
+    https!
+    headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
+    get("/oauth/authorize", params: parameters)
 
-    travel 2.seconds do
-      get "/oauth/authorize", params: { login_challenge: issuance.transaction.login_challenge },
-                              headers: browser_headers
+    assert_response :success
+    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+    post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] }, headers: headers)
+
+    assert_response :redirect
+    entry = URI.parse(jump_rt_url_from_location(response.location))
+    entry_ref = Rack::Utils.parse_nested_query(entry.query.to_s).fetch("entry_ref")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface.to_s, reference: entry_ref)
+    parent = model.find(binding.authorization_transaction_id)
+    cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
+    raw = response.headers["Set-Cookie"] || response.headers["set-cookie"]
+    lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
+    cookie_line =
+      lines.flat_map { |line| line.to_s.split("\n") }.find do |line|
+        line.split(";", 2).first.start_with?("#{cookie_name}=")
+      end
+
+    assert_not_nil cookie_line
+    cookies.delete(cookie_name)
+    _received_cookie = cookies.merge(cookie_line.split(";", 2).first, URI.parse("https://#{base_host}/"))
+    auth = open_session
+    auth.host!(auth_host)
+    auth.https!
+    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
+    auth.get(entry.path, params: Rack::Utils.parse_nested_query(entry.query.to_s).merge("ri" => "jp"))
+
+    assert_equal 200, auth.response.status
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post(
+      "/ceremony_bindings", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf },
+                            headers: auth_headers,
+    )
+
+    assert_equal 303, auth.response.status
+    confirmation = URI.parse(auth.response.location)
+    get(confirmation.request_uri)
+
+    assert_response :success
+    csrf = response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: headers)
+
+    assert_response :see_other
+    auth.get(URI.parse(response.location).request_uri)
+    csrf = auth.response.parsed_body.at_css("input[name='authenticity_token']")["value"]
+    auth.post("/sign/in", params: { entry_ref: entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers)
+
+    assert_equal 303, auth.response.status
+    assert_predicate binding.reload, :redeemed?
+    result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
+      surface: surface.to_s, login_challenge: parent.login_challenge, actor: actor,
+      authentication_event_at: model.database_now, session_ref: "ceremony-result", auth_method: "passkey",
+      ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
+    )
+    get("/oauth/authorize", params: { result_ref: result.reference, transaction_ref: parent.transaction_id })
+
+    assert_response :success
+    form = response.parsed_body.at_css("form")
+    submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+
+    parent.update!(login_challenge_expires_at: model.database_now - 1.second)
+    assert_no_difference -> { ClientToken.where(user_id: actor.id).count } do
+      post("/oauth/authorize", params: submission, headers: headers)
     end
 
     assert_response :bad_request
-    assert_equal "authorization transaction expired", response.parsed_body["error_description"]
+    assert_equal "invalid authorization request", response.parsed_body["error_description"]
+    assert_nil parent.reload.base_finalized_at
+    assert_nil parent.browser_session_ref
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
   end
 
   private
 
-  def oidc_authorize_params(screen_hint: nil, scope: "openid profile", resource_type: "client")
+  def with_oauth_authorize_counter(store, oauth_result:, &test_body)
+    backend = store.backend
+    regular_increment = backend.method(:increment)
+    increment =
+      lambda do |key, *arguments, **options|
+        if key.include?(":oauth_authorize:")
+          oauth_result.call(key, *arguments, **options)
+        else
+          regular_increment.call(key, *arguments, **options)
+        end
+      end
+
+    backend.stub(:increment, increment, &test_body)
+  end
+
+  def oidc_authorize_params(
+    screen_hint: nil,
+    scope: "openid profile",
+    resource_type: "client",
+    client_id: "core-app-jp"
+  )
     params = {
       response_type: "code",
-      client_id: "core-next-rp",
-      redirect_uri: OidcClientRegistry.find!("core-next-rp").redirect_uris_by_realm.fetch(resource_type).first,
+      client_id: client_id,
+      redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(resource_type).first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",
@@ -739,15 +1997,15 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   def create_old_client_tokens(count:)
     user = clients(:one)
 
-    OrgTicketRecord.connected_to(role: :writing) do
+    OpBaseOrgRecord.connected_to(role: :writing) do
       count.times do |index|
         token = ClientToken.new(
           user: user,
           user_token_status_id: ClientTokenStatus::ACTIVE,
           created_at: (count + index + 1).hours.ago,
           updated_at: (count + index + 1).hours.ago,
+          rotated_at: (count + index).hours.ago,
         )
-        token.send(:skip_session_limit_check=, true)
         token.save!
       end
     end
@@ -879,93 +2137,6 @@ class BaseOauthOidcAuthorityTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-    cookie_name = AuthenticationCookieName.access
-    cookies[cookie_name] = access_token if respond_to?(:cookies, true)
-    base.merge(
-      "Authorization" => "Bearer #{access_token}",
-      "HTTP_AUTHORIZATION" => "Bearer #{access_token}",
-      "Cookie" => "#{cookie_name}=#{access_token}",
-      "HTTP_COOKIE" => "#{cookie_name}=#{access_token}",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      staff, host: host, session_public_id: token.public_id,
-             resource_type: "operator",
-    )
-    cookie_name = AuthenticationCookieName.access
-    cookies[cookie_name] = access_token if respond_to?(:cookies, true)
-    base.merge(
-      "Authorization" => "Bearer #{access_token}",
-      "HTTP_AUTHORIZATION" => "Bearer #{access_token}",
-      "Cookie" => "#{cookie_name}=#{access_token}",
-      "HTTP_COOKIE" => "#{cookie_name}=#{access_token}",
-    )
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      visitor, host: host, session_public_id: token.public_id,
-               resource_type: "visitor",
-    )
-    cookie_name = AuthenticationCookieName.access
-    cookies[cookie_name] = access_token if respond_to?(:cookies, true)
-    base.merge(
-      "Authorization" => "Bearer #{access_token}",
-      "HTTP_AUTHORIZATION" => "Bearer #{access_token}",
-      "Cookie" => "#{cookie_name}=#{access_token}",
-      "HTTP_COOKIE" => "#{cookie_name}=#{access_token}",
-    )
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -1018,10 +2189,8 @@ class BaseOauthOidcAuthorityTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -1062,12 +2231,12 @@ class BaseOauthOidcAuthorityTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

@@ -1,0 +1,67 @@
+# typed: false
+# frozen_string_literal: true
+
+module Warp
+  module Org
+    module Sign
+      class OutsController < Warp::Org::ApplicationController
+        include ::AuthenticationLogoutable
+        include ::SignOutNotice
+        include ::OidcRpLogoutLauncher
+        include ::SurfaceInertiaPage
+        include ::SignOutInertiaPages
+
+        AUTHENTICATION_MODE = :open
+        declare_authentication_mode! :open
+        # The sign-out pages are regional HTML (Inertia) documents, so they run the surface's
+        # ordinary callback chain -- `set_region` included, otherwise every link they generate
+        # would drop `ri` (test/unit/security/ri_routing_contract_test.rb).
+
+        before_action :authenticate_oidc_rp_session!, only: :create,
+                                                      unless: -> { params[:logout_challenge].present? }
+        helper_method :sign_out_completed_description
+        helper_method :sign_out_confirmation_form_path
+
+        after_action :sign_out_notice_cache_headers!, only: %i(show edit)
+
+        def show
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
+          complete_oidc_rp_logout!
+        end
+
+        def new
+          redirect_to(sign_out_edit_path, status: :see_other)
+        end
+
+        def edit
+          render_sign_out_confirmation_page
+        end
+
+        def create
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
+          launch_oidc_rp_logout!(
+            client_id: RpDeploymentBindingValue.client_id("warp-org"),
+            issuer_resource_type: "operator",
+            token_issuer: "operator",
+            session_authority: :rp_session,
+          )
+        end
+
+        private
+
+        def render_oidc_rp_logout_completion
+          return super unless @sign_out_notice
+
+          session[:inertia_clear_history] = true
+          redirect_to(warp_org_root_path(ri: params[:ri]), status: :see_other)
+        end
+
+        def sign_out_confirmation_form_path
+          sign_out_post_path
+        end
+      end
+    end
+  end
+end

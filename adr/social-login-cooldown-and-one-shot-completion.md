@@ -4,6 +4,12 @@
 
 Accepted (2026-06-22)
 
+> **Supersession (2026-10-02):** `adr/root-login-establishment-boundary.md` replaces the cooldown
+> anchor and the bootstrap exemption below. The cooldown now reads `root_login_established_at`, the
+> instant the previous root login committed, not a "freshly issued `ClientToken`"; and no caller,
+> including sign-up completion and OIDC authorization resume, may skip the cooldown or the session
+> limit. One-shot social ceremony results remain as decided here.
+
 ## Context
 
 Google social sign-in can appear intermittent when a user repeats the flow shortly after a
@@ -34,6 +40,7 @@ exception just because the provider callback succeeded.
 Keep social ceremony results and candidates one-shot. If a browser retries the same
 `social_ceremony_result` after Acme has consumed it, the retry must fail closed instead of creating
 or reusing a session.
+
 
 ## Consequences
 

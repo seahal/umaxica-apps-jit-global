@@ -45,6 +45,11 @@ module CoreBrowserCredentialContract
   end
 
   def encode_access_token(resource:, token_record:, host:, resource_type:, expires_at: ACCESS_TTL.from_now)
+    expires_at = SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: expires_at,
+      absolute_expiry: token_record.discard_at,
+    )
+
     AuthenticationTokenService.encode(
       resource,
       host: host,
@@ -55,9 +60,17 @@ module CoreBrowserCredentialContract
       oidc_jti: token_record.try(:oidc_jti),
       expires_at: expires_at,
       scopes: %w(openid profile:read self:read),
-      issuer: AuthenticationJwtConfiguration.issuer(resource_type),
+      issuer: AuthenticationJwtConfiguration.issuer,
       audiences: [ACCESS_AUDIENCE],
       jwt_issuer_id: core_jwt_issuer_id(resource_type),
+      authentication_context: token_record.strict_authentication_context_value.to_s,
+    )
+  end
+
+  def access_token_expires_at_for(token_record:, now: Time.current)
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: now + ACCESS_TTL,
+      absolute_expiry: token_record.discard_at,
     )
   end
 
@@ -66,23 +79,26 @@ module CoreBrowserCredentialContract
       token,
       host: host,
       resource_type: resource_type,
-      issuer: AuthenticationJwtConfiguration.issuer(resource_type),
+      issuer: AuthenticationJwtConfiguration.issuer,
       audiences: [ACCESS_AUDIENCE],
       jwt_issuer_id: core_jwt_issuer_id(resource_type),
     )
   end
 
-  def native_or_side_audience?(payload)
+  def native_or_warp_audience?(payload)
     Array(AuthorizationTokenClaims.audiences(payload)).any? do |audience|
-      %w(palm-api side-service side:ssr:read).include?(audience.to_s)
+      %w(palm-api warp-service warp:ssr:read).include?(audience.to_s)
     end
   end
 
-  def core_jwt_issuer_id(_resource_type)
-    client_id = "core-next-rp"
-
-    namespace = OidcClientRegistry.jwt_namespace_for(client_id)
-    namespace.present? ? "surface:#{namespace}" : nil
+  # The Core Browser credential is signed by the Core *surface* issuer (surface:CORE_*), which is
+  # distinct from the per-client assertion namespace (oidc_client:CORE_*_JP) of the Core RP.
+  def core_jwt_issuer_id(resource_type)
+    case resource_type
+    when "operator" then "surface:CORE_ORG"
+    when "visitor" then "surface:CORE_COM"
+    else "surface:CORE_APP"
+    end
   end
 
   def auth_cookie_service_options(expires_at: nil)

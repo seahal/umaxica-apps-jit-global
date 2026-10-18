@@ -2,25 +2,55 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "base64"
 
-# Drives the com sign-up checkpoint sequence end to end: telephone -> OTP -> guard -> passkey ->
-# passcode. Both checkpoint controllers are exercised through the real sequence rather than by
-# assembling checkpoint state in the test, so the requirement bookkeeping in
-# SignUpSequenceControllerSupport is covered along the way.
+# Drives the com telephone sign-up checkpoint sequence through public endpoints so the
+# requirement bookkeeping is exercised through the real sequence.
 class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch::IntegrationTest
   # Rate-limit counters are a NullStore by default in test so unrelated tests
   # cannot accumulate them; this file asserts real limiting behavior, so it
   # opts into a deterministic MemoryStore.
   rate_limit_counters!
 
+  include ActiveJob::TestHelper
+
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! @host
     cookies["csrf_token"] = csrf_token_value
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+
+    VisitorSignInFlowState::DEFAULTS.each { |id| VisitorSignInFlowState.find_or_create_by!(id: id) }
+    VisitorSignUpFlowStatus::DEFAULTS.each { |id| VisitorSignUpFlowStatus.find_or_create_by!(id: id) }
+    VisitorSignUpFlowCleanupStatus::DEFAULTS.each { |id| VisitorSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    https!
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
+    )
+    binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    admission_headers = { "Origin" => "https://#{request.host}", "Sec-Fetch-Site" => "same-origin" }
+    post(
+      "/ceremony_bindings", params: { entry_ref: issuance.reference, ri: "jp", authenticity_token: csrf },
+                            headers: admission_headers,
+    )
+
+    assert_response :see_other
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get(auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference })
+
+    assert_response :success
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      auth_com_sign_up_path(ri: "jp"), params: { entry_ref: issuance.reference, authenticity_token: csrf },
+                                       headers: admission_headers,
+    )
+
+    assert_response :see_other
 
     Prosopite.pause do
       [VisitorStatus::NOTHING, VisitorStatus::ACTIVE].each { |id| VisitorStatus.find_or_create_by!(id: id) }
@@ -47,70 +77,14 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     verify_telephone_via_otp!("+819022220001")
     cycle = current_sign_up_flow
 
-    get auth_com_sign_up_check_telephone_passkey_url(ri: "jp"), headers: default_headers
+    get auth_com_sign_up_check_telephone_passkey_url(ri: "jp", fb: @flow_binding), headers: default_headers
 
     assert_response :success
 
     register_passkey!(cycle, "com_checkpoint_1")
 
     assert cycle.reload.requirement_cleared?(:passkey)
-  end
-
-  test "the passcode checkpoint shows a generated recovery passcode" do
-    advance_to_passcode_checkpoint!("+819022220002", "com_checkpoint_2")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-  end
-
-  # The page serializes the plaintext recovery passcode into the Inertia page object, so the
-  # response must never be reusable from a cache. The checkpoint concern sets `no-store` only on
-  # its age-restricted branch, which does not cover this reveal.
-  test "the passcode checkpoint forbids caching the page that reveals the passcode" do
-    advance_to_passcode_checkpoint!("+819022220004", "com_checkpoint_4")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-    assert_includes response.headers["Cache-Control"], "no-store"
-  end
-
-  test "the passcode checkpoint clears its requirement and advances to the birthdate step" do
-    cycle = advance_to_passcode_checkpoint!("+819022220003", "com_checkpoint_3")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-
-    patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-          params: { checkpoint_version: cycle.reload.checkpoint_version },
-          headers: default_headers
-
-    assert_response :redirect
-    assert cycle.reload.requirement_cleared?(:passcode)
-  end
-
-  test "the passcode checkpoint refuses a stale checkpoint version" do
-    cycle = advance_to_passcode_checkpoint!("+819022220004", "com_checkpoint_4")
-
-    get auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :success
-
-    patch auth_com_sign_up_check_telephone_passcode_url(ri: "jp"),
-          params: { checkpoint_version: cycle.reload.checkpoint_version.to_i - 1 },
-          headers: default_headers
-
-    assert_not cycle.reload.requirement_cleared?(:passcode)
-  end
-
-  test "destroying the passcode checkpoint cancels the sign-up flow" do
-    advance_to_passcode_checkpoint!("+819022220005", "com_checkpoint_5")
-
-    delete auth_com_sign_up_check_telephone_passcode_url(ri: "jp"), headers: default_headers
-
-    assert_response :redirect
+    assert_not_includes cycle.completed_requirements.keys, "passcode"
   end
 
   private
@@ -130,6 +104,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     )
 
     assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
     VisitorTelephone.order(:created_at).last
   end
 
@@ -137,14 +112,16 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     telephone = start_telephone_signup!(raw_number)
 
     patch(
-      auth_com_sign_up_check_telephone_otp_url(ri: "jp"),
+      auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
       params: { visitor_telephone: { pass_code: otp_code_for(telephone) } },
       headers: default_headers,
     )
 
-    assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp")
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
 
-    get(auth_com_sign_up_guard_telephone_url(ri: "jp"), headers: default_headers)
+    assert_redirected_to auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding)
+
+    get(auth_com_sign_up_guard_telephone_url(ri: "jp", fb: @flow_binding), headers: default_headers)
 
     telephone.reload
   end
@@ -152,7 +129,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
   # The WebAuthn verifier and the credential object are the third-party seam here; everything the
   # controller and the sequence do around them stays real.
   def register_passkey!(cycle, webauthn_suffix)
-    post(auth_com_sign_up_check_telephone_passkey_url(ri: "jp"), headers: default_headers)
+    post(auth_com_sign_up_check_telephone_passkey_url(ri: "jp", fb: @flow_binding), headers: default_headers)
 
     assert_response :ok
     challenge_id = response.parsed_body["challenge_id"]
@@ -173,7 +150,7 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     Webauthn::RegistrationVerifier.stub(:verify!, registration_context) do
       WebAuthn::Credential.stub(:from_create, mock_credential) do
         patch(
-          auth_com_sign_up_check_telephone_passkey_url(ri: "jp"),
+          auth_com_sign_up_check_telephone_passkey_url(ri: "jp", fb: @flow_binding),
           params: {
             challenge_id: challenge_id,
             checkpoint_version: cycle.reload.checkpoint_version,
@@ -189,13 +166,12 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
     end
 
     assert_response :created
-  end
+    redirect_target = URI.parse(response.parsed_body.fetch("redirect_url"))
+    @flow_binding = Rack::Utils.parse_query(redirect_target.query).fetch("fb")
+    redirect_uri = redirect_target.path
+    redirect_uri += "?#{redirect_target.query}" if redirect_target.query.present?
 
-  def advance_to_passcode_checkpoint!(raw_number, webauthn_suffix)
-    verify_telephone_via_otp!(raw_number)
-    cycle = current_sign_up_flow
-    register_passkey!(cycle, webauthn_suffix)
-    cycle
+    assert_equal auth_com_sign_up_check_telephone_birthdate_path(ri: "jp", fb: @flow_binding), redirect_uri
   end
 
   def current_sign_up_flow
@@ -206,8 +182,20 @@ class Auth::Com::Sign::Up::Check::Telephone::CheckpointFlowTest < ActionDispatch
   end
 
   def otp_code_for(telephone)
-    otp_data = telephone.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
+    transaction_ref =
+      VisitorTelephoneCeremonyTransaction.find_by!(
+        telephone_candidate_ref: telephone.public_id,
+      ).transaction_id
+    queued =
+      enqueued_jobs.reverse.find do |job|
+        next false unless job.fetch(:job) == Outbound::SmsDeliveryJob
+
+        payload = OutboundSensitivePayload.decrypt_sms_delivery(job.fetch(:args).fetch(0).fetch("encrypted_payload"))
+        payload.fetch(:otp_binding)[3] == transaction_ref
+      end
+    OutboundSensitivePayload.decrypt_sms_delivery(
+      queued.fetch(:args).fetch(0).fetch("encrypted_payload"),
+    ).fetch(:otp_code)
   end
 
   def default_headers

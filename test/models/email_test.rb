@@ -36,19 +36,29 @@ class IdentityEmailTest < ActiveSupport::TestCase
       assert_not record.valid?
     end
 
-    test "#{model} enforces case-insensitive uniqueness" do
-      record = model.new(address: "eg@example.com", confirm_policy: true)
-      assign_owner(record)
-      record.save!
+    test "#{model} enforces case-insensitive uniqueness of the effective ownership binding" do
+      if model == ClientEmail
+        owner = Client.create!
+        record = ClientEmail.create!(user: owner, address: "eg@example.com", confirm_policy: true)
+        record.finalize_binding!
+        ["eg@example.com", "EG@EXAMPLE.COM"].each do |address|
+          candidate = ClientEmail.create!(user: owner, address: address, confirm_policy: true)
+          assert_raises(ActiveRecord::RecordNotUnique) do
+            ClientEmail.transaction(requires_new: true) { candidate.finalize_binding! }
+          end
+          assert_not_predicate candidate.reload, :binding_effective?
+        end
+      else
+        record = model.new(address: "eg@example.com", confirm_policy: true)
+        assign_owner(record)
+        record.save!
+        ["eg@example.com", "EG@EXAMPLE.COM"].each do |address|
+          duplicate = model.new(address: address, confirm_policy: true)
+          assign_owner(duplicate)
 
-      same_case = model.new(address: "eg@example.com", confirm_policy: true)
-      assign_owner(same_case)
-
-      upper_case = model.new(address: "EG@EXAMPLE.COM", confirm_policy: true)
-      assign_owner(upper_case)
-
-      assert_not same_case.valid?
-      assert_not upper_case.valid?
+          assert_not_predicate duplicate, :valid?
+        end
+      end
     end
 
     test "#{model} downcases address on save" do

@@ -1,7 +1,7 @@
 # == Schema Information
 #
 # Table name: identity_totp_ceremony_candidates
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id           :bigint           not null, primary key
 #  ref          :string           not null

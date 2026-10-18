@@ -33,6 +33,7 @@
 #
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class HandleAssignmentTest < ActiveSupport::TestCase
   setup do
@@ -43,9 +44,9 @@ class HandleAssignmentTest < ActiveSupport::TestCase
       is_system: true,
       cooldown_until: 1.week.from_now,
     )
-    @avatar = Avatar.create!(
+    @avatar = AvatarTestFactory.create!(
+      moniker: "Avatar",
       capability: @capability,
-      moniker: "avatar-#{unique_suffix}",
       active_handle: @system_handle,
     )
   end
@@ -75,9 +76,9 @@ class HandleAssignmentTest < ActiveSupport::TestCase
     )
 
     other_handle = Handle.create!(handle: "other-#{SecureRandom.hex(4)}", cooldown_until: 1.week.from_now)
-    other_avatar = Avatar.create!(
+    other_avatar = AvatarTestFactory.create!(
+      moniker: "Another",
       capability: @capability,
-      moniker: "another-#{SecureRandom.hex(4)}",
       active_handle: other_handle,
     )
 

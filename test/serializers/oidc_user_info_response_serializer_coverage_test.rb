@@ -10,7 +10,7 @@ class OidcUserInfoResponseSerializerCoverageTest < ActiveSupport::TestCase
 
     claims = OidcUserInfoResponseSerializer.build(
       resource: resource,
-      payload: { "act" => "client", "scp" => %w(openid profile email) },
+      payload: { "scope" => "openid profile email domain:client" },
     )
 
     assert_equal "Ada Lovelace", claims[:name]
@@ -24,9 +24,7 @@ class OidcUserInfoResponseSerializerCoverageTest < ActiveSupport::TestCase
 
     claims = OidcUserInfoResponseSerializer.build(
       resource: resource,
-      payload: { "act" => "visitor",
-                 "acr" => "acr",
-                 "scp" => %w(openid), },
+      payload: { "acr" => "acr", "scope" => "openid domain:visitor" },
     )
 
     assert_equal "acr", claims[:acr]
@@ -42,13 +40,13 @@ class OidcUserInfoResponseSerializerCoverageTest < ActiveSupport::TestCase
     profile_claims = OidcUserInfoResponseSerializer.build(
       resource: resource,
       payload: {
-        "act" => "client", "scp" => %w(openid profile),
+        "scope" => "openid profile domain:client",
       },
     )
     email_claims = OidcUserInfoResponseSerializer.build(
       resource: resource,
       payload: {
-        "act" => "client", "scp" => %w(openid email),
+        "scope" => "openid email domain:client",
       },
     )
 

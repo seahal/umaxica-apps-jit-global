@@ -45,7 +45,7 @@ module ActorSupport
       authn: Actor::Authentication::NULL,
       authz: Actor::Authz::NULL,
       configuration: Actor::Configuration::NULL,
-      preferences: Actor::Preference::NULL,
+      preferences: Actor::Preference.new,
       selection: Actor::SelectedContext::NULL,
       step_up: Actor::StepUp::NULL,
       trace_id: nil,
@@ -75,10 +75,6 @@ module ActorSupport
 
   def current_policy_user
     Actor.authz.policy_user || safe_current_resource
-  end
-
-  def _reset_current_state
-    Actor.clear
   end
 
   def resolved_current_context
@@ -134,13 +130,10 @@ module ActorSupport
     resolved_current_token&.dig("sid")
   end
 
+  # The verified access-token claims recorded by AuthenticationBase#load_from_token. This must
+  # not fall back to another token: ApplicationPolicy reads its Emergency context from here.
   def resolved_current_token
-    payload = nil
-    payload = access_token_payload if respond_to?(:access_token_payload, true)
-    payload ||= load_access_token_payload if respond_to?(:load_access_token_payload, true)
-    payload if payload.is_a?(Hash)
-  rescue StandardError => e
-    raise_actor_resolution_error!(:access_token, e)
+    @current_access_token_payload if defined?(@current_access_token_payload)
   end
 
   def resolved_current_authentication(resource: safe_current_resource,
@@ -156,17 +149,8 @@ module ActorSupport
       amr: token&.dig("amr"),
       actor_type: actor_type,
       actor_id: resource&.id,
-      restricted: resolved_current_restricted_session?,
       active_sign_sequence_id: resolved_active_sign_sequence_id,
     )
-  end
-
-  def resolved_current_restricted_session?
-    return current_session_restricted? if respond_to?(:current_session_restricted?, true)
-
-    false
-  rescue StandardError => e
-    raise_actor_resolution_error!(:restricted_session, e)
   end
 
   def resolved_active_sign_sequence_id
@@ -187,6 +171,10 @@ module ActorSupport
   end
 
   def resolved_current_selection
+    # An RP cell process has no OP root to read; its controller supplies the owner's answer.
+    cell_selection = rp_cell_selected_context if respond_to?(:rp_cell_selected_context, true)
+    return cell_selection if cell_selection
+
     token = current_session if respond_to?(:current_session, true)
     return Actor::SelectedContext::NULL if token.blank?
 
@@ -213,10 +201,17 @@ module ActorSupport
     return Actor::StepUp::NULL unless defined?(StepUpResolver)
     return Actor::StepUp::NULL unless respond_to?(:current_session_token, true)
 
+    scope = resolved_current_step_up_scope
+    return Actor::StepUp::NULL if scope.blank?
+
+    # This runs before the authentication gate. A request without a session has no Step-Up state to
+    # resolve, and a requirement cannot be built without a session binding; the gate refuses it.
+    token = current_session_token
+    return Actor::StepUp::NULL if token.nil?
+
     StepUpResolver.call(
-      token: current_session_token,
-      scope: resolved_current_step_up_scope,
-      required_aal: resolved_current_step_up_required_aal,
+      token: token,
+      requirement: step_up_requirement(scope: scope),
     )
   rescue StandardError => e
     raise_actor_resolution_error!(:step_up, e)
@@ -226,12 +221,6 @@ module ActorSupport
     return verification_scope if respond_to?(:verification_required?, true) && verification_required?
 
     nil
-  end
-
-  def resolved_current_step_up_required_aal
-    return verification_required_aal if respond_to?(:verification_required_aal, true)
-
-    StepUpResolver::DEFAULT_REQUIRED_AAL
   end
 
   def raise_actor_resolution_error!(component, exception)
@@ -256,7 +245,9 @@ module ActorSupport
   # access tokens.
   #
   # Bearer/OIDC requests and the endpoints that skip set_preferences_cookie carry
-  # no Preference JWT cookie, so they fall back to NULL+overlay.
+  # no Preference JWT cookie, so they fall back to the default preference values
+  # (theme sy) plus the request overlay. Actor::Preference::NULL is reserved for
+  # an unbound context, not for "visitor has not chosen a theme yet".
   def resolved_current_preference(resource)
     cookie = resolved_current_cookie(resource, preference_record: nil)
 
@@ -267,7 +258,7 @@ module ActorSupport
       )
     end
 
-    preference_with_request_overlay(Actor::Preference::NULL.with_cookie(cookie))
+    preference_with_request_overlay(Actor::Preference.new(cookie: cookie))
   end
 
   # The decoded Preference JWT `preferences` hash, or nil when absent or when the
@@ -275,6 +266,7 @@ module ActorSupport
   def current_preference_payload_preferences
     return unless respond_to?(:preference_payload_preferences, true)
 
+    load_access_token_payload if respond_to?(:load_access_token_payload, true)
     preferences = preference_payload_preferences
     preferences if preferences.is_a?(Hash) && preferences.present?
   end
@@ -337,22 +329,6 @@ module ActorSupport
     nil
   end
 
-  def preference_from_record(preference_record, cookie:)
-    Actor::Preference.new(
-      language: preference_record_value(preference_record, :language),
-      region: preference_record_value(preference_record, :region),
-      timezone: preference_record_value(preference_record, :timezone),
-      theme: preference_record_value(preference_record, :theme),
-      currency: preference_record_value(preference_record, :currency),
-      date_format: preference_record_value(preference_record, :date_format),
-      time_format: preference_record_value(preference_record, :time_format),
-      motion: preference_record_value(preference_record, :motion),
-      density: preference_record_value(preference_record, :density),
-      page_size: preference_record_value(preference_record, :page_size),
-      cookie: cookie,
-    )
-  end
-
   def preference_with_request_overlay(preference)
     return preference unless respond_to?(:requested_context, true)
 
@@ -406,35 +382,11 @@ module ActorSupport
     }[region.to_s.downcase]
   end
 
-  def preference_record_value(preference_record, name)
-    return preference_adult_content_gate_value(preference_record) if name == :adult_content_gate
-
-    value = preference_record.public_send(name) if preference_record.respond_to?(name)
-    value.presence || Actor::Preference::DEFAULTS.fetch(name)
-  end
-
-  def preference_adult_content_gate_value(preference_record)
-    association = "#{preference_record.class.name.underscore}_adult_content_gate"
-    stopper = preference_record.public_send(association) if preference_record.respond_to?(association)
-    stopper&.option&.name || "nothing"
-  end
-
   def set_current_observability
-    if respond_to?(:request, true) && request.respond_to?(:request_id) && request.request_id.present?
-      Actor.install_context!(trace_id: request.request_id)
-    end
-    return unless defined?(OpenTelemetry::Trace)
-
-    preference_cookie = Actor.preferences.cookie
-    analytics_allowed = preference_cookie.performant?
-
-    span = OpenTelemetry::Trace.current_span
-    context = span.context
-    return unless context.valid?
-
+    observability_context = ObservabilityContextResolver.call
     Actor.install_context!(
-      trace_id: context.hex_trace_id,
-      span_id: analytics_allowed ? context.hex_span_id : nil,
+      trace_id: observability_context.trace_id,
+      span_id: observability_context.span_id,
     )
   end
 end

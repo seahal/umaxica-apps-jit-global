@@ -14,10 +14,11 @@ class SignInSequence
     COMPLETED
     FAILED
     EXPIRED
+    HALTED
   ).freeze
 
   PARTICIPANTS = %w(guardrail checkpoint dashboard).freeze
-  TERMINAL_STATES = %w(COMPLETED FAILED EXPIRED).freeze
+  TERMINAL_STATES = %w(COMPLETED FAILED EXPIRED HALTED).freeze
 
   attr_reader :payload
 
@@ -54,8 +55,6 @@ class SignInSequence
   def mfa_challenge_id = payload["mfa_challenge_id"]
 
   def session_limit_gate_id = payload["session_limit_gate_id"]
-
-  def restricted_login_public_id = payload["restricted_login_public_id"]
 
   def terminal_state = payload["terminal_state"]
 

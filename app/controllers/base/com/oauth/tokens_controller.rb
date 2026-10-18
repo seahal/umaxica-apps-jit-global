@@ -10,6 +10,7 @@ module Base
         include BaseOauthTokenEndpoint
 
         AUTHENTICATION_MODE = :open
+        OIDC_RESOURCE_TYPE = "visitor"
 
         before_action :skip_oauth_session!
         after_action :set_oauth_cache_headers

@@ -12,6 +12,9 @@ module Publishing
       entry = publishing_draft(audience: "app", surface: "docs", slug: "immutable-entry", title: "Immutable")
       assign_taxonomy(entry.current_revision)
       @version = PromoteRevisionOperation.call(revision: entry.current_revision)
+      @version = Docs::App::EntryVersion.includes(
+        :single_taxonomy_assignments, :multiple_taxonomy_assignments,
+      ).find(@version.id)
     end
 
     test "active record refuses to update or destroy a version" do
@@ -32,8 +35,8 @@ module Publishing
     end
 
     test "active record refuses to update or destroy a version taxonomy snapshot" do
-      single = @version.single_taxonomy_assignments.first
-      multiple = @version.multiple_taxonomy_assignments.first
+      single = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: @version.id)
+      multiple = Docs::App::VersionMultipleTaxonomyAssignment.find_by!(entry_version_id: @version.id)
 
       assert_raises(ActiveRecord::ReadOnlyRecord) { single.update!(term_name_snapshot: "changed") }
       assert_raises(ActiveRecord::ReadOnlyRecord) { single.destroy! }
@@ -42,8 +45,8 @@ module Publishing
     end
 
     test "postgresql refuses raw writes to version taxonomy snapshots" do
-      single = @version.single_taxonomy_assignments.first
-      multiple = @version.multiple_taxonomy_assignments.first
+      single = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: @version.id)
+      multiple = Docs::App::VersionMultipleTaxonomyAssignment.find_by!(entry_version_id: @version.id)
       connection = PublishingRecord.lease_connection
 
       assert_database_rejects do
@@ -66,8 +69,9 @@ module Publishing
 
     test "draft assignments stay editable" do
       entry = publishing_draft(audience: "app", surface: "docs", slug: "editable-entry", title: "Editable")
-      assign_taxonomy(entry.current_revision)
-      assignment = entry.current_revision.multiple_taxonomy_assignments.first
+      revision = entry.current_revision
+      assign_taxonomy(revision)
+      assignment = Docs::App::RevisionMultipleTaxonomyAssignment.find_by!(entry_revision_id: revision.id)
 
       assignment.update!(position: 5)
 

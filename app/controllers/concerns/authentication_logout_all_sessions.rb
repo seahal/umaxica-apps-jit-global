@@ -11,15 +11,13 @@
 #
 # Why composition (not a parallel implementation):
 #   - There must be a single chokepoint that knows what "revoke one
-#     session" means (set discarded_at, write status, etc.). If we had
+#     session" means (set discard_at, write status, etc.). If we had
 #     two independent implementations they would drift.
 #   - It keeps the failure semantics of single-revoke consistent across
 #     callers (current-session logout, bulk revoke, lifecycle suspend).
 #
-# This service handles the *batch-level* concerns that don't belong to a
-# single revoke: bumping `session_version` so still-valid JWTs are
-# rejected at refresh time, and emitting a batch failure event when an
-# individual revoke escapes the primitive's narrow rescue.
+# This service handles the batch-level iteration. A failure in one revocation
+# propagates so callers cannot observe a successful batch with a usable token.
 class AuthenticationLogoutAllSessions
   def self.call(...)
     new(...).call
@@ -31,7 +29,6 @@ class AuthenticationLogoutAllSessions
   end
 
   def call
-    increment_session_version_if_present!
     each_token { |token| revoke_one!(token) }
     true
   end
@@ -39,24 +36,6 @@ class AuthenticationLogoutAllSessions
   private
 
   attr_reader :resource, :reason
-
-  def increment_session_version_if_present!
-    return unless resource&.respond_to?(:session_version)
-
-    resource.session_version = resource.session_version.to_i + 1
-    resource.save!
-  rescue ActiveRecord::ActiveRecordError => e
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.logout_all_sessions.session_version_failed",
-        reason: reason,
-        resource_class: resource&.class&.name,
-        resource_id: resource&.id,
-        error_class: e.class.name,
-        error_message: e.message,
-      ),
-    )
-  end
 
   def each_token
     scope = token_scope
@@ -89,23 +68,5 @@ class AuthenticationLogoutAllSessions
       reason: reason,
       cascade_device_session_tokens: false,
     )
-  rescue ActiveRecord::ActiveRecordError => e
-    # Net for anything escaping the primitive's narrower rescue
-    # (e.g. ConnectionNotEstablished). Surfaced under a batch-specific
-    # event name so operators can distinguish "one token failed inside
-    # a bulk revoke" from "the only session-revoke failed".
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.logout_all_sessions.token_failed",
-        reason: reason,
-        resource_class: resource&.class&.name,
-        resource_id: resource&.id,
-        token_class: token&.class&.name,
-        token_id: token&.try(:public_id),
-        error_class: e.class.name,
-        error_message: e.message,
-      ),
-    )
-    true
   end
 end

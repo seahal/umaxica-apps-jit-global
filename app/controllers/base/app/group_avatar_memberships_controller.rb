@@ -3,66 +3,60 @@
 
 module Base
   module App
+    # Group Avatar memberships; decided and written by the Avatar owner (R5-WU14).
     class GroupAvatarMembershipsController < Base::App::FullAccessController
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_client!
-      before_action :set_group
-      before_action :set_membership, only: %i(update destroy)
+      public
 
       def create
-        avatar = Avatar.find_by!(public_id: membership_params.fetch(:avatar_public_id))
-        membership = GroupAvatarMembership.new(avatar_group: @group, avatar: avatar)
-        authorize!(membership, to: :create?)
-
-        membership = GroupAvatarMemberships::Attach.call(
-          group: @group,
-          avatar: avatar,
-          role: membership_params[:role].presence || "member",
-          position: membership_params[:position],
-        )
-        render json: { membership: serialize_membership(membership) }, status: :created
+        result = relay!(avatar_authority.attach_avatar(params.expect(:group_id), membership_params.to_h))
+        render(json: result.data, status: :created) if result
       end
 
       def update
-        authorize!(@membership, to: :update?)
-        membership = GroupAvatarMemberships::Reorder.call(
-          membership: @membership,
-          position: membership_params.fetch(:position),
+        result = relay!(
+          avatar_authority.reorder_avatar(
+            params.expect(:group_id), params.expect(:id),
+            membership_params.to_h,
+          ),
         )
-        render json: { membership: serialize_membership(membership) }
+        render(json: result.data) if result
       end
 
       def destroy
-        authorize!(@membership, to: :destroy?)
-        GroupAvatarMemberships::Detach.call(membership: @membership)
-        head :no_content
+        head(:no_content) if relay!(avatar_authority.detach_avatar(params.expect(:group_id), params.expect(:id)))
       end
 
       private
 
-      def set_group
-        @group = AvatarGroup.find_by!(public_id: params.expect(:group_id))
+      # R5-WU14: the Avatar owner decides and writes; this Base Self-RP relays its answer.
+      def avatar_authority
+        @avatar_authority ||= AvatarAuthorityClient.new(
+          surface: "app",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
+        )
       end
 
-      def set_membership
-        @membership = @group.group_avatar_memberships.find_by!(public_id: params.expect(:id))
+      # Owner-lock denials stay 403 as before; policy refusals go through the authorization handler.
+      def relay!(result)
+        if result.status == :forbidden && result.data.to_h["error"] == "owner_denied"
+          authorize!(result, to: :relay?, with: AvatarRemoteResultPolicy)
+          head :forbidden
+          return
+        end
+        authorize!(result, to: :show?, with: AvatarRemoteResultPolicy)
+        raise ActiveRecord::RecordNotFound, "not found" if result.status == :not_found
+        return head(:service_unavailable) if result.status == :dependency
+        return head(:unprocessable_content) if result.status == :unprocessable
+
+        result
       end
 
       def membership_params
-        params.expect(membership: %i(avatar_public_id role position))
-      end
-
-      def serialize_membership(membership)
-        {
-          public_id: membership.public_id,
-          group_public_id: membership.avatar_group.public_id,
-          avatar_public_id: membership.avatar.public_id,
-          role: membership.role,
-          position: membership.position,
-          state: membership.state,
-        }
+        params.expect(membership: %i(avatar_public_id position))
       end
     end
   end

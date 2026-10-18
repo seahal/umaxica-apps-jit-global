@@ -187,5 +187,3 @@ the public route helper becomes `base_app_*`.
 - `adr/four-engine-split.md`
 - `adr/three-engine-consolidation.md`
 - `adr/four-app-wrapper-runtime-and-root-retirement.md`
-- `plans/active/four-engine-reframe.md`
-- `plans/active/dev-audience-tier.md`

@@ -8,208 +8,148 @@ module OidcClientStoresStaticClientStore
   module_function
 
   def clients
-    sign_and_browser_rp_clients.merge(native_and_content_rp_clients).freeze
+    first_party_browser_rp_clients
+      .freeze
   end
 
-  def sign_and_browser_rp_clients
-    {
-      "sign-rp" => sign_rp_client,
-      "base-rails-rp" => base_rails_rp_client,
-      "side-rails-rp" => side_rails_rp_client,
-      "core-next-rp" => core_next_rp_client,
+  # First-party Browser RP clients use independent audiences, keys, callbacks, and RP sessions.
+  # Specs are keyed by family-realm; the exact Client ID (and its audience) comes from the trusted
+  # deployment binding, so a JP process registers core-app-jp and never a US or unsuffixed ID.
+  def first_party_browser_rp_clients
+    FIRST_PARTY_RP_SPECS.to_h do |family_realm, spec|
+      client_id = RpDeploymentBindingValue.client_id(family_realm)
+      # Key namespace follows the exact Client ID (core-app-jp -> CORE_APP_JP); only the Base
+      # Self-RPs keep their explicit BASE_RP_* namespaces.
+      jwt_namespace = spec.fetch(:jwt_namespace) { client_id.upcase.tr("-", "_") }
+      [client_id, face_rp_client(**spec, aud: client_id, jwt_namespace:)]
+    end
+  end
+
+  FIRST_PARTY_RP_SPECS = {
+    "core-app" => {
+      env_key: "PUBLIC_CORE_SERVICE_URL",
+      resource_type: "client",
+      name: "Core App RP",
+    },
+    "core-com" => {
+      env_key: "PUBLIC_CORE_CORPORATE_URL",
+      resource_type: "visitor",
+      name: "Core Com RP",
+    },
+    "core-org" => {
+      env_key: "PUBLIC_CORE_STAFF_URL",
+      resource_type: "operator",
+      name: "Core Org RP",
+    },
+    "warp-app" => {
+      env_key: "PUBLIC_WARP_SERVICE_URL",
+      default_host: "warp.app.localhost",
+      resource_type: "client",
+      name: "Warp App RP",
+    },
+    "warp-com" => {
+      env_key: "PUBLIC_WARP_CORPORATE_URL",
+      default_host: "warp.com.localhost",
+      resource_type: "visitor",
+      name: "Warp Com RP",
+    },
+    "warp-org" => {
+      env_key: "PUBLIC_WARP_STAFF_URL",
+      default_host: "warp.org.localhost",
+      resource_type: "operator",
+      name: "Warp Org RP",
+    },
+    "edit-org" => {
+      env_key: "PUBLIC_EDIT_STAFF_URL",
+      default_host: "edit.org.localhost",
+      resource_type: "operator",
+      name: "Edit Org RP",
+    },
+    "palm-app" => {
+      env_key: "PUBLIC_PALM_SERVICE_URL",
+      resource_type: "client",
+      name: "Palm App RP",
+    },
+    "tech-org" => {
+      env_key: %w(PUBLIC_TECH_STAFF_URL PRIVATE_TECH_STAFF_URL),
+      resource_type: "operator",
+      name: "Tech Org RP",
+      required_operator_capability: OperatorCapabilityGrant::TECH_ACCESS,
+    },
+    "base-app" => {
+      env_key: "BASE_SERVICE_URL",
+      resource_type: "client",
+      name: "Base App Self RP",
+      jwt_namespace: "BASE_RP_APP_WW",
+    },
+    "base-com" => {
+      env_key: "BASE_CORPORATE_URL",
+      resource_type: "visitor",
+      name: "Base Com Self RP",
+      jwt_namespace: "BASE_RP_COM_WW",
+    },
+    "base-org" => {
+      env_key: "BASE_STAFF_URL",
+      resource_type: "operator",
+      name: "Base Org Self RP",
+      jwt_namespace: "BASE_RP_ORG_WW",
+    },
+  }.freeze
+
+  RP_BACKCHANNEL_LOGOUT_PATH = "/oidc/backchannel-logout"
+
+  # The frozen back-channel logout endpoint for an active first-party RP (R5-WU10, one.md 7.6).
+  # It is derived from the same registered host as the RP callback; no logout delivery target is
+  # ever taken from a grant, token or request.
+  def backchannel_logout_uri(client_id)
+    family_realm, spec =
+      FIRST_PARTY_RP_SPECS.find { |key, _|
+      RpDeploymentBindingValue.client_id(key) == client_id.to_s
     }
+    raise KeyError, "no registered back-channel logout endpoint for #{client_id.inspect}" unless family_realm
+
+    build_redirect_uris(spec.fetch(:env_key), spec[:default_host], path: RP_BACKCHANNEL_LOGOUT_PATH).first
   end
 
-  def native_and_content_rp_clients
-    {
-      "app-ios-rp" => native_rp_client(["umaxica://oidc/callback"], "App iOS RP"),
-      "app-android-rp" => native_rp_client(["com.umaxica.app:/oidc/callback"], "App Android RP"),
-    }.merge(content_surface_rp_clients)
-  end
-
-  def sign_rp_client
+  def face_rp_client(env_key:, resource_type:, aud:, name:, jwt_namespace:, default_host: nil,
+                     callback_path: AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH,
+                     sign_out_path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH,
+                     required_operator_capability: nil)
     {
       redirect_uris_by_realm: {
-        "client" => build_redirect_uris("PUBLIC_AUTH_SERVICE_URL") + build_redirect_uris("PRIVATE_AUTH_SERVICE_URL"),
-        "operator" => build_redirect_uris("PUBLIC_AUTH_STAFF_URL") + build_redirect_uris("PRIVATE_AUTH_STAFF_URL"),
-        "visitor" => build_redirect_uris("PUBLIC_AUTH_CORPORATE_URL") +
-          build_redirect_uris("PRIVATE_AUTH_CORPORATE_URL"),
+        resource_type => build_redirect_uris(env_key, default_host, path: callback_path),
       },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("PUBLIC_AUTH_SERVICE_URL") +
-        build_post_logout_redirect_uris("PRIVATE_AUTH_SERVICE_URL") +
-        build_post_logout_redirect_uris("PUBLIC_AUTH_STAFF_URL") +
-        build_post_logout_redirect_uris("PRIVATE_AUTH_STAFF_URL") +
-        build_post_logout_redirect_uris("PUBLIC_AUTH_CORPORATE_URL") +
-        build_post_logout_redirect_uris("PRIVATE_AUTH_CORPORATE_URL"),
-      backchannel_logout_uris: build_logout_uris("PUBLIC_AUTH_SERVICE_URL", "backchannel/logout") +
-        build_logout_uris("PRIVATE_AUTH_SERVICE_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_AUTH_STAFF_URL", "backchannel/logout") +
-        build_logout_uris("PRIVATE_AUTH_STAFF_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_AUTH_CORPORATE_URL", "backchannel/logout") +
-        build_logout_uris("PRIVATE_AUTH_CORPORATE_URL", "backchannel/logout"),
-      backchannel_logout_session_required: true,
-      aud: "sign-rp",
-      resource_type: "client",
-      name: "Sign RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "SIGN_APP",
-    }
-  end
-
-  def base_rails_rp_client
-    {
-      redirect_uris_by_realm: {
-        "client" => build_redirect_uris("BASE_SERVICE_URL", "www.app.localhost") +
-          build_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost"),
-        "operator" => build_redirect_uris("BASE_STAFF_URL", "www.org.localhost") +
-          build_redirect_uris("SIDE_STAFF_URL", "side.org.localhost"),
-        "visitor" => build_redirect_uris("BASE_CORPORATE_URL", "www.com.localhost") +
-          build_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
-      },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("BASE_SERVICE_URL", "www.app.localhost") +
-        build_post_logout_redirect_uris("BASE_STAFF_URL", "www.org.localhost") +
-        build_post_logout_redirect_uris("BASE_CORPORATE_URL", "www.com.localhost") +
-        build_post_logout_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost") +
-        build_post_logout_redirect_uris("SIDE_STAFF_URL", "side.org.localhost") +
-        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
-      aud: "base-rails-rp",
-      resource_type: "client",
-      name: "Base Rails RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "BASE_APP",
-    }
-  end
-
-  def side_rails_rp_client
-    {
-      redirect_uris_by_realm: {
-        "client" => build_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost"),
-        "operator" => build_redirect_uris("SIDE_STAFF_URL", "side.org.localhost"),
-        "visitor" => build_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
-      },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("SIDE_SERVICE_URL", "side.app.localhost") +
-        build_post_logout_redirect_uris("SIDE_STAFF_URL", "side.org.localhost") +
-        build_post_logout_redirect_uris("SIDE_CORPORATE_URL", "side.com.localhost"),
-      backchannel_logout_uris: build_logout_uris("SIDE_SERVICE_URL", "backchannel/logout", "side.app.localhost") +
-        build_logout_uris("SIDE_STAFF_URL", "backchannel/logout", "side.org.localhost") +
-        build_logout_uris("SIDE_CORPORATE_URL", "backchannel/logout", "side.com.localhost"),
-      backchannel_logout_session_required: true,
-      aud: "side-rails-rp",
-      resource_type: "client",
-      name: "Side Rails RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "BASE_APP",
-    }
-  end
-
-  def core_next_rp_client
-    {
-      redirect_uris_by_realm: {
-        "client" => build_redirect_uris("PUBLIC_CORE_SERVICE_URL"),
-        "operator" => build_redirect_uris("PUBLIC_CORE_STAFF_URL"),
-        "visitor" => build_redirect_uris("PUBLIC_CORE_CORPORATE_URL"),
-      },
-      post_logout_redirect_uris: build_post_logout_redirect_uris("PUBLIC_CORE_SERVICE_URL") +
-        build_post_logout_redirect_uris("PUBLIC_CORE_STAFF_URL") +
-        build_post_logout_redirect_uris("PUBLIC_CORE_CORPORATE_URL"),
-      backchannel_logout_uris: build_logout_uris("PUBLIC_CORE_SERVICE_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_CORE_STAFF_URL", "backchannel/logout") +
-        build_logout_uris("PUBLIC_CORE_CORPORATE_URL", "backchannel/logout"),
-      backchannel_logout_session_required: true,
-      aud: "core-next-rp",
-      resource_type: "client",
-      name: "Core Next RP",
-      allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "private_key_jwt",
-      jwt_namespace: "CORE_APP",
-    }
-  end
-
-  def native_rp_client(redirect_uris, name)
-    {
-      redirect_uris: redirect_uris,
-      aud: "palm-api",
-      resource_type: "client",
-      name: name,
-      allowed_scopes: OidcClientRegistry::PALM_ALLOWED_SCOPES,
-      token_endpoint_auth_method: "none",
-    }
-  end
-
-  def content_surface_rp_clients
-    {
-      "docs_app" => content_rp_client(
-        "DOCS_SERVICE_URL", "docs.app.localhost", "umaxica-docs-app", "client",
-        "Docs App",
+      post_logout_redirect_uris: build_post_logout_redirect_uris(
+        env_key, default_host, path: sign_out_path,
       ),
-      "docs_org" => content_rp_client(
-        "DOCS_STAFF_URL", "docs.org.localhost", "umaxica-docs-org", "operator",
-        "Docs Org",
-      ),
-      "docs_com" => content_rp_client(
-        "DOCS_CORPORATE_URL", "docs.com.localhost", "umaxica-docs-com", "visitor", "Docs Com",
-      ),
-      "news_app" => content_rp_client(
-        "NEWS_SERVICE_URL", "news.app.localhost", "umaxica-news-app", "client",
-        "News App",
-      ),
-      "news_org" => content_rp_client(
-        "NEWS_STAFF_URL", "news.org.localhost", "umaxica-news-org", "operator",
-        "News Org",
-      ),
-      "news_com" => content_rp_client(
-        "NEWS_CORPORATE_URL", "news.com.localhost", "umaxica-news-com", "visitor", "News Com",
-      ),
-      "help_app" => content_rp_client(
-        "HELP_SERVICE_URL", "help.app.localhost", "umaxica-help-app", "client",
-        "Help App",
-      ),
-      "help_org" => content_rp_client(
-        "HELP_STAFF_URL", "help.org.localhost", "umaxica-help-org", "operator",
-        "Help Org",
-      ),
-      "help_com" => content_rp_client(
-        "HELP_CORPORATE_URL", "help.com.localhost", "umaxica-help-com", "visitor", "Help Com",
-      ),
-    }
-  end
-
-  def content_rp_client(env_key, default_host, aud, resource_type, name)
-    {
-      redirect_uris: build_redirect_uris(env_key, default_host),
       aud: aud,
       resource_type: resource_type,
       name: name,
       allowed_scopes: OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      token_endpoint_auth_method: "private_key_jwt",
+      jwt_namespace: jwt_namespace,
+      required_operator_capability: required_operator_capability,
     }
   end
 
   # default_host is only consulted for env keys boot_host_for does not map; keys it maps resolve
   # from boot config and must not carry a literal default that can drift from the real host.
-  def build_redirect_uris(env_key, default_host = nil)
+  def build_redirect_uris(env_key, default_host = nil, path: "/oidc/callback")
     configured_hosts_for(env_key, default_host).map do |host|
       protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
       port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}/oidc/callback"
+      "#{protocol}://#{host}#{port_suffix}#{path}"
     end
   end
 
-  def build_post_logout_redirect_uris(env_key, default_host = nil)
-    configured_hosts_for(env_key, default_host).map do |host|
+  def build_post_logout_redirect_uris(env_key, default_host = nil,
+                                      path: AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH)
+    configured_hosts_for(env_key, default_host).flat_map do |host|
       protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
       port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}/sign/out/complete"
-    end
-  end
-
-  def build_logout_uris(env_key, endpoint, default_host = nil)
-    configured_hosts_for(env_key, default_host).map do |host|
-      protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
-      port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}/oidc/#{endpoint}"
+      RequestContextContract.allowed_regions.map do |region|
+        "#{protocol}://#{host}#{port_suffix}#{path}?ri=#{region}"
+      end
     end
   end
 
@@ -222,11 +162,13 @@ module OidcClientStoresStaticClientStore
     false
   end
 
-  def configured_hosts_for(env_key, default_host = nil)
-    hosts = [
-      ENV.fetch(env_key, nil).presence,
-      boot_host_for(env_key, default_host),
-    ].compact
+  def configured_hosts_for(env_keys, default_host = nil)
+    hosts = []
+    Array(env_keys).each do |env_key|
+      env_host = ENV[env_key]
+      hosts << env_host if env_host.present?
+      hosts << boot_host_for(env_key, default_host)
+    end
     hosts.map! { |host| normalize_host(host) }
     hosts.uniq!
     hosts
@@ -242,12 +184,14 @@ module OidcClientStoresStaticClientStore
       when "BASE_SERVICE_URL" then hosts.base_service.to_s
       when "BASE_STAFF_URL" then hosts.base_staff.to_s
       when "BASE_CORPORATE_URL" then hosts.base_corporate.to_s
-      when "SIDE_SERVICE_URL" then hosts.side_service.to_s
-      when "SIDE_STAFF_URL" then hosts.side_staff.to_s
-      when "SIDE_CORPORATE_URL" then hosts.side_corporate.to_s
+      when "PUBLIC_WARP_SERVICE_URL" then hosts.warp_service.to_s
+      when "PUBLIC_WARP_STAFF_URL" then hosts.warp_staff.to_s
+      when "PUBLIC_WARP_CORPORATE_URL" then hosts.warp_corporate.to_s
       when "PUBLIC_CORE_SERVICE_URL", "CORE_SERVICE_URL" then hosts.core_service.to_s
       when "PUBLIC_CORE_STAFF_URL", "CORE_STAFF_URL" then hosts.core_staff.to_s
       when "PUBLIC_CORE_CORPORATE_URL", "CORE_CORPORATE_URL" then hosts.core_corporate.to_s
+      when "PUBLIC_PALM_SERVICE_URL" then hosts.palm_service.to_s
+      when "PUBLIC_TECH_STAFF_URL", "PRIVATE_TECH_STAFF_URL" then hosts.tech_staff.to_s
       else
         raise KeyError, "No boot host mapping for #{env_key} and no default host given" if default_host.blank?
 
@@ -264,6 +208,8 @@ module OidcClientStoresStaticClientStore
     host.to_s
   end
 
-  private_class_method :build_redirect_uris, :build_post_logout_redirect_uris, :build_logout_uris,
-                       :public_host?, :configured_hosts_for, :boot_host_for, :normalize_host
+  private_class_method :first_party_browser_rp_clients, :face_rp_client, :build_redirect_uris,
+                       :build_post_logout_redirect_uris,
+                       :public_host?, :configured_hosts_for, :boot_host_for,
+                       :normalize_host
 end

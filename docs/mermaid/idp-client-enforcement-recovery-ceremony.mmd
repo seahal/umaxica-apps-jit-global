@@ -1,0 +1,17 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "ACTIVE id=1" as ACTIVE
+    state "CONSUMED id=2" as CONSUMED
+    state "REVOKED id=3" as REVOKED
+    [*] --> ACTIVE
+    ACTIVE --> CONSUMED: consume!
+    ACTIVE --> REVOKED: revoke!
+    CONSUMED --> CONSUMED: consume!
+    CONSUMED --> REVOKED: revoke!
+    REVOKED --> CONSUMED: consume!
+    REVOKED --> REVOKED: revoke!
+    note right of ACTIVE
+        consume!/revoke! lack source/expiry guards.
+        TTL is a predicate; EXPIRED setter UNKNOWN.
+        Authentication proof does not issue a normal session.
+    end note

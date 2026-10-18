@@ -6,12 +6,6 @@ class ProtocolControllerCsrfBoundaryTest < ActiveSupport::TestCase
   PROTOCOL_CONTROLLERS = [
     Base::App::Oauth::TokensController,
     Auth::App::Apple::NotificationsController,
-    Auth::App::Oidc::Backchannel::LogoutsController,
-    Auth::Com::Oidc::Backchannel::LogoutsController,
-    Auth::Org::Oidc::Backchannel::LogoutsController,
-    Core::App::Oidc::Backchannel::LogoutsController,
-    Core::Com::Oidc::Backchannel::LogoutsController,
-    Core::Org::Oidc::Backchannel::LogoutsController,
   ].freeze
 
   test "token and signed-message protocol endpoints do not load browser session CSRF protection" do

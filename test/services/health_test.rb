@@ -80,7 +80,7 @@ class HealthTest < ActiveSupport::TestCase
     assert_equal [AppRpRecord, AppSettingRecord, AppSignalRecord, AvatarRecord, OccurrenceRecord],
                  Health::Profiles::App.record_classes
     assert_equal [OrgRpRecord, OrgSettingRecord, OrgSignalRecord], Health::Profiles::Org.record_classes
-    assert_equal [AppPrincipalRecord, AppTicketRecord, AppSettingRecord], Health::Profiles::SignApp.record_classes
+    assert_equal [AppPrincipalRecord, OpBaseAppRecord, AppSettingRecord], Health::Profiles::SignApp.record_classes
   end
 
   test "liveness check never touches dependencies" do
@@ -193,6 +193,7 @@ class HealthTest < ActiveSupport::TestCase
     fake_connection = Object.new
     fake_connection.define_singleton_method(:execute) { |_| 1 }
     record_class = Class.new
+    record_class.define_singleton_method(:connection_class_for_self) { record_class }
     record_class.define_singleton_method(:connected_to) do |**, &block|
       block.call
     end

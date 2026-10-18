@@ -24,6 +24,8 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     other_user = clients(:two)
     ChronicleRecord.connected_to(role: :writing) { ClientChronicle.delete_all }
     create_user_audit(user: user, tag: "my-login-event")
+    create_user_audit(user: user, tag: "own-failed-event", event_id: ClientChronicleEvent::LOGIN_FAILED)
+    create_user_audit(user: user, tag: "refresh-internal", event_id: ClientChronicleEvent::TOKEN_REFRESHED)
     create_user_audit(user: other_user, tag: "other-login-event")
 
     token = create_user_token!(user)
@@ -32,8 +34,15 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     get base_app_identity_activities_url(ri: "jp", host: host), headers: app_session_headers(host, token, user)
 
     assert_response :success
-    assert_no_match(/id\.umaxica/, response.body)
-    assert_includes response.body, "my-login-event"
+    rows = inertia_props.fetch("activities")
+
+    assert_equal 2, rows.size
+    assert_equal ["サインインに失敗", "サインイン"], rows.map { |row| row.fetch("activity") }
+    assert_equal ["中", "低"], rows.map { |row| row.fetch("risk") }
+    assert_equal %w(occurred_at activity device source risk risk_rank), rows.first.keys
+    assert_not_includes response.body, "my-login-event"
+    assert_not_includes response.body, "own-failed-event"
+    assert_not_includes response.body, "refresh-internal"
     assert_not_includes response.body, "other-login-event"
   end
 
@@ -156,7 +165,6 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    token.send(:skip_session_limit_check=, true)
     token.save!
     token
   end
@@ -167,10 +175,29 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
   end
 
   def app_session_headers(host, token, user)
-    bearer_headers(
-      jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client"),
-      host: host,
+    headers = as_user_headers(user, host: host, session_public_id: token.public_id)
+    rp_client = OidcClientRegistry.find!("base-app-ww")
+    token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
+    rp_session = OpAppGrant.create!(
+      client_token: token, oidc_client_id: rp_client.client_id,
+      oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.current, refresh_token_expires_at: 10.minutes.from_now,
     )
+    rp_access = AuthenticationTokenService.encode(
+      user, host: host, resource_type: "client", session_public_id: token.public_id,
+            base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+            expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(rp_client),
+            audiences: [rp_client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+            subject: OidcSubject.for(user, resource_type: "client"), client_id: rp_client.client_id,
+    )
+    rp_cookie = [headers.fetch("Cookie"),
+                 "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+                 "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(
+                   rp_session
+                                      .issue_refresh_token!,
+                 )}",].join("; ")
+    headers.merge("Cookie" => rp_cookie, "HTTP_COOKIE" => rp_cookie)
+
   end
 
   def host_headers(host = nil)
@@ -179,13 +206,6 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
 
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-
-  def jwt_access_token_for(resource, host: nil, session_public_id: nil, resource_type: nil)
-    AuthenticationToken.encode(
-      resource, host: host, session_public_id: session_public_id, resource_type: resource_type,
-                jwt_issuer_id: jwt_issuer_id_for_test_host(host, resource_type),
-    )
   end
 
   # Base shares its production origin with Acme (both `https://www.umaxica.<tld>`), so the
@@ -201,9 +221,9 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     }
     return "surface:BASE_#{base_hosts.key(normalized)}" if base_hosts.value?(normalized)
 
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -219,12 +239,12 @@ class BaseSettingsAuthoritySlice1GTest < ActionDispatch::IntegrationTest
     "surface:#{service}_#{surface}"
   end
 
-  def create_user_audit(user:, tag:)
+  def create_user_audit(user:, tag:, event_id: ClientChronicleEvent::LOGGED_IN)
     ChronicleRecord.connected_to(role: :writing) do
       ClientChronicle.create!(
         subject_id: user.id,
         subject_type: "Client",
-        event_id: ClientChronicleEvent::LOGGED_IN,
+        event_id: event_id,
         context: { tag: tag },
         occurred_at: Time.current,
       )

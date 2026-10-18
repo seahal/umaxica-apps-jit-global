@@ -45,12 +45,9 @@ class ClientChronicleEvent < ChronicleRecord
   EMAIL_REGISTERED = 31
   TELEPHONE_REGISTERED = 32
   CREDENTIAL_SECURITY_TRANSITION = 33
-
-  # Association with client_chronicles
-  has_many :client_chronicles,
-           foreign_key: :event_id,
-           dependent: :restrict_with_error,
-           inverse_of: :user_chronicle_event
+  STEP_UP_FAILED = 34
+  REFRESH_TOKEN_REUSE_DETECTED = 35
+  SIGN_FLOW_HALTED = 36
 
   DEFAULTS = [
     ACCOUNT_RECOVERED,
@@ -86,7 +83,16 @@ class ClientChronicleEvent < ChronicleRecord
     EMAIL_REGISTERED,
     TELEPHONE_REGISTERED,
     CREDENTIAL_SECURITY_TRANSITION,
+    STEP_UP_FAILED,
+    REFRESH_TOKEN_REUSE_DETECTED,
+    SIGN_FLOW_HALTED,
   ].freeze
+
+  # Association with client_chronicles
+  has_many :client_chronicles,
+           foreign_key: :event_id,
+           dependent: :restrict_with_error,
+           inverse_of: :user_chronicle_event
 
   public_constant :ACCOUNT_RECOVERED
   public_constant :ACCOUNT_WITHDRAWN
@@ -121,6 +127,9 @@ class ClientChronicleEvent < ChronicleRecord
   public_constant :EMAIL_REGISTERED
   public_constant :TELEPHONE_REGISTERED
   public_constant :CREDENTIAL_SECURITY_TRANSITION
+  public_constant :STEP_UP_FAILED
+  public_constant :REFRESH_TOKEN_REUSE_DETECTED
+  public_constant :SIGN_FLOW_HALTED
   public_constant :DEFAULTS
 
   def self.ensure_defaults!

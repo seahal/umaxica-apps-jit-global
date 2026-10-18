@@ -4,27 +4,37 @@
 module JumpRtReturnPolicy
   module_function
 
-  ALLOWED_SOURCES = {
-    "https://www.umaxica.app" => %w(https://log.umaxica.app https://www.umaxica.app),
-    "https://www.umaxica.com" => %w(https://log.umaxica.com https://www.umaxica.com),
-    "https://www.umaxica.org" => %w(https://log.umaxica.org https://www.umaxica.org),
-    "https://jpx.umaxica.app" => %w(https://jpx.umaxica.app),
-    "https://jpx.umaxica.com" => %w(https://jpx.umaxica.com),
-    "https://jpx.umaxica.org" => %w(https://jpx.umaxica.org),
-    "https://www.jp.umaxica.app" => %w(https://log.umaxica.app https://www.jp.umaxica.app),
-    "https://www.jp.umaxica.com" => %w(https://log.umaxica.com https://www.jp.umaxica.com),
-    "https://www.jp.umaxica.org" => %w(https://log.umaxica.org https://www.jp.umaxica.org),
-  }.freeze
+  # Frozen directed graph of exactly twenty [source, destination] edges between logical Jump
+  # issuer namespaces. Each namespace resolves to its origin through JumpRtSurface, so the graph
+  # never depends on host shape and an environment's identities map onto the same edges.
+  ALLOWED_EDGES = [
+    %w(AUTH_APP BASE_APP), %w(AUTH_COM BASE_COM), %w(AUTH_ORG BASE_ORG),
+    %w(BASE_APP AUTH_APP), %w(BASE_COM AUTH_COM), %w(BASE_ORG AUTH_ORG),
+    %w(BASE_APP CORE_APP), %w(BASE_COM CORE_COM), %w(BASE_ORG CORE_ORG),
+    %w(CORE_APP BASE_APP), %w(CORE_COM BASE_COM), %w(CORE_ORG BASE_ORG),
+    %w(BASE_APP WARP_APP), %w(BASE_COM WARP_COM), %w(BASE_ORG WARP_ORG),
+    %w(WARP_APP BASE_APP), %w(WARP_COM BASE_COM), %w(WARP_ORG BASE_ORG),
+    %w(BASE_APP PALM_APP), %w(PALM_APP BASE_APP),
+  ].map(&:freeze).freeze
 
   def allowed_source?(destination_origin:, source:)
-    sources = allowed_sources.fetch(normalize_origin(destination_origin), [])
-    sources.include?(normalize_origin(source))
+    destination = namespace_for_origin(normalize_origin(destination_origin))
+    source_namespace = namespace_for_origin(normalize_origin(source))
+    return false if destination.nil? || source_namespace.nil?
+
+    ALLOWED_EDGES.include?([source_namespace, destination])
   end
 
-  def allowed_sources
-    ALLOWED_SOURCES.merge(env_allowed_sources) do |_origin, left, right|
-      (left + right).uniq
-    end
+  # Configured origins must be pairwise distinct; an ambiguous identity is a configuration error,
+  # not a reason to pick one namespace.
+  def namespace_for_origin(origin)
+    return nil if origin.nil?
+
+    matches = JumpRtSurface::ISSUER_NAMESPACES.select { |namespace| JumpRtSurface.issuer_origin(namespace) == origin }
+    raise JumpRtConfigurationError,
+          "Jump issuer origin #{origin} is configured for #{matches.join(", ")}" if matches.size > 1
+
+    matches.first
   end
 
   def normalize_origin(value)
@@ -42,54 +52,5 @@ module JumpRtReturnPolicy
 
   def default_port_for(scheme)
     scheme.to_s.casecmp("https").zero? ? 443 : 80
-  end
-
-  def env_allowed_sources
-    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
-    env_base_and_core_sources(hosts).merge(env_sign_sources(hosts)).compact
-  end
-
-  def env_base_and_core_sources(hosts)
-    {
-      normalize_origin(hosts.base_service.to_s) => env_sources(
-        destination_host: hosts.base_service.to_s, issuer_host: hosts.sign_service.to_s,
-      ),
-      normalize_origin(hosts.base_corporate.to_s) => env_sources(
-        destination_host: hosts.base_corporate.to_s, issuer_host: hosts.sign_corporate.to_s,
-      ),
-      normalize_origin(hosts.base_staff.to_s) => env_sources(
-        destination_host: hosts.base_staff.to_s, issuer_host: hosts.sign_staff.to_s,
-      ),
-      normalize_origin(hosts.core_service.to_s) => env_sources(
-        destination_host: hosts.core_service.to_s, issuer_host: hosts.sign_service.to_s,
-      ),
-      normalize_origin(hosts.core_corporate.to_s) => env_sources(
-        destination_host: hosts.core_corporate.to_s, issuer_host: hosts.sign_corporate.to_s,
-      ),
-      normalize_origin(hosts.core_staff.to_s) => env_sources(
-        destination_host: hosts.core_staff.to_s, issuer_host: hosts.sign_staff.to_s,
-      ),
-    }
-  end
-
-  def env_sign_sources(hosts)
-    {
-      normalize_origin(hosts.sign_service.to_s) => env_sources(
-        destination_host: hosts.sign_service.host, issuer_host: hosts.base_service.host,
-      ),
-      normalize_origin(hosts.sign_corporate.to_s) => env_sources(
-        destination_host: hosts.sign_corporate.host, issuer_host: hosts.base_corporate.host,
-      ),
-      normalize_origin(hosts.sign_staff.to_s) => env_sources(
-        destination_host: hosts.sign_staff.host, issuer_host: hosts.base_staff.host,
-      ),
-    }
-  end
-
-  def env_sources(destination_host:, issuer_host:)
-    sources = [normalize_origin("https://#{issuer_host}"), normalize_origin("https://#{destination_host}")]
-    sources.compact!
-    sources.uniq!
-    sources
   end
 end

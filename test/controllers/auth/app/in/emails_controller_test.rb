@@ -4,18 +4,88 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
+# Boolean comparisons keep Source OTP secrets and Ticket digests out of assertion output.
 class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTest
-  # Rate-limit counters are a NullStore by default in test so unrelated tests
-  # cannot accumulate them; this file asserts real limiting behavior, so it
-  # opts into a deterministic MemoryStore.
+  # Real rate-limit counters follow the travelled request clock; the shared
+  # verification budget and admitted Auth state still use their real stores.
   rate_limit_counters!
 
   fixtures :clients, :operators, :client_statuses, :operator_statuses, :client_email_statuses
 
   include ActiveSupport::Testing::TimeHelpers
 
+  test "dummy sign in verification consumes the same destination failure budget without creating an identity" do
+    address = "dummy-budget-#{SecureRandom.hex(8)}@example.test"
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: { :user_email => { address: address }, "cf-turnstile-response" => "test_token" },
+         headers: { "Host" => @host }
+
+    assert_response :redirect
+    assert_predicate SignAppInEmailAuthenticationState.load(session), :dummy?
+    # Different callers preserve genuine IP throttling while exercising the destination-owned budget.
+    [nil, "", " ", "12345", "1234567", "abcdef", "-12345"].each_with_index do |code, index|
+      patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+            params: { user_email: { pass_code: code } },
+            headers: { "Host" => @host, "REMOTE_ADDR" => "198.51.100.#{index + 1}" }
+
+      assert_response :unprocessable_content
+      assert_equal :verified, EmailOtpVerificationFailureBudget.new.verify!(
+        surface: :app, purpose: :authentication, channel: :email,
+        destination_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app), valid: true,
+      )
+    end
+    assert_no_difference ["Client.count", "ClientEmail.count", "ClientToken.count"] do
+      5.times do |index|
+        patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+              params: { user_email: { pass_code: "000000" } },
+              headers: { "Host" => @host, "REMOTE_ADDR" => "198.51.100.#{index + 20}" }
+
+        assert_response :unprocessable_content
+      end
+    end
+    assert_equal :locked, EmailOtpVerificationFailureBudget.new.verify!(
+      surface: :app, purpose: :authentication, channel: :email,
+      destination_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app), valid: true,
+    )
+  end
+
+  test "shared authentication budget refuses a correct OTP without consuming an unlocked candidate" do
+    contact = clients(:one).client_emails.create!(address: "shared-signin-#{SecureRandom.hex(8)}@example.test")
+    contact.finalize_binding!
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: { :user_email => { address: contact.address }, "cf-turnstile-response" => "test_token" },
+         headers: { "Host" => @host }
+
+    assert_equal contact.id, SignAppInEmailAuthenticationState.load(session)&.id
+
+    code = @current_auth_ceremony.issue_email_otp!(contact: contact, destination: contact.address)
+    retained = @current_auth_ceremony.reload.email_otp_context.deep_dup
+    source_generation = contact.reload.attributes.slice(
+      "otp_private_key", "otp_counter", "otp_expires_at", "otp_last_sent_at",
+    )
+    5.times do
+      EmailOtpVerificationFailureBudget.new.verify!(
+        surface: :app, purpose: :authentication, channel: :email,
+        destination_digest: contact.address_digest, valid: false,
+      )
+    end
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { user_email: { pass_code: code } },
+          headers: { "Host" => @host }
+
+    assert_response :unprocessable_content
+    assert_withheld("budget refusal must preserve the unconsumed flow challenge") {
+      retained == @current_auth_ceremony.reload.email_otp_context
+    }
+    assert_withheld("budget refusal must preserve Source OTP generation") {
+      source_generation == contact.reload.attributes.slice(*source_generation.keys)
+    }
+    assert_not contact.locked?
+    assert_equal 0, contact.otp_attempts_count
+  end
+
   test "should get new" do
-    get new_auth_app_sign_in_email_url(ri: "jp"), headers: { "Host" => @host }
+    get new_auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), headers: { "Host" => @host }
 
     assert_response :success
 
@@ -33,24 +103,26 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "reject already logged in user" do
     user = clients(:one)
-    get new_auth_app_sign_in_email_url(ri: "jp"),
+    get new_auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
         headers: as_user_headers(user, host: @host)
 
-    assert_response :bad_request
-    assert_includes response.body, I18n.t("sign.app.authentication.email.new.you_have_already_logged_in")
+    assert_response :forbidden
+    assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
+    assert_includes response.headers["Cache-Control"], "no-store"
   end
 
   test "reject already logged in staff" do
     staff = operators(:one)
-    get new_auth_app_sign_in_email_url(ri: "jp"),
+    get new_auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
         headers: { "Host" => @host, "X-TEST-CURRENT-STAFF" => staff.id }
 
     assert_response :success
     # assert_equal I18n.t("sign.app.authentication.email.new.you_have_already_logged_in"), response.body
   end
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @original_queue_adapter = ActiveJob::Base.queue_adapter
     ActiveJob::Base.queue_adapter = :test
     ActionMailer::Base.deliveries.clear
@@ -58,9 +130,51 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @original_login_cooldown = login_cooldown
     self.login_cooldown = 0.seconds
+
+    # These are Auth endpoint tests. Base issuance and browser binding are exercised separately
+    # in local_authentication_boundary_test; this admission grants only the credential ceremony.
+    @local_admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
+    )
+    get auth_app_sign_in_url(ri: "jp", entry_ref: @local_admission.reference), headers: { "Host" => @host }
+    admission_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings",
+         params: { entry_ref: @local_admission.reference, authenticity_token: admission_csrf, ri: "jp" },
+         headers: { "Host" => @host }
+
+    assert_response :see_other
+
+    # Independent Base HTTP tests cover confirmation; isolate OTP behavior after public binding transitions.
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: "app",
+      reference: @local_admission.reference,
+    )
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_app_sign_in_url(ri: "jp", entry_ref: @local_admission.reference), headers: { "Host" => @host }
+    admission_csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_sign_in_url(ri: "jp"),
+         params: { entry_ref: @local_admission.reference, authenticity_token: admission_csrf },
+         headers: { "Host" => @host }
+
+    assert_response :see_other
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    @current_auth_ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(cookies[cookie_name])
+
+    assert_withheld("expected this browser's active Auth continuity") { @current_auth_ceremony.present? }
+    assert_withheld("expected confirmed admission before issuing a code") { @current_auth_ceremony.admitted? }
+    assert_equal @local_admission.transaction.public_id, @current_auth_ceremony.local_sign_in_flow_ref
+
+    flow = ClientSignInFlow.find_by!(public_id: @current_auth_ceremony.local_sign_in_flow_ref)
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
   end
 
   teardown do
+    travel_back
     ActiveJob::Base.queue_adapter = @original_queue_adapter
     self.login_cooldown = @original_login_cooldown
     TurnstileVerifierStub.challenge_enabled = false
@@ -68,14 +182,14 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "GET new displays email form" do
-    get new_auth_app_sign_in_email_url(ri: "jp"), headers: { "Host" => @host }
+    get new_auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), headers: { "Host" => @host }
 
     assert_response :success
     assert_equal "client_email[address]", inertia_props.fetch("form").fetch("address_field").fetch("name")
   end
 
   test "POST create without valid email redirects (enumeration protection)" do
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: "nonexistent@example.com" } },
          headers: { "Host" => @host }
 
@@ -87,9 +201,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "POST create accepts the form scope used by the sign-in page" do
     user = clients(:one)
-    email = user.client_emails.create!(address: "scope_test_#{SecureRandom.hex(4)}@example.com")
+    email = user.client_emails.create!(
+      address: "scope_test_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :client_email => { address: email.address },
            "cf-turnstile-response" => "test_token",
@@ -103,24 +219,70 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "POST create responds the same for existing and missing emails" do
     user = clients(:one)
-    existing_email = user.client_emails.create!(address: "enum_test@example.com")
+    existing_email = user.client_emails.create!(address: "enum_test@example.com").tap(&:finalize_binding!)
 
     existing_session = open_session
+    missing_session = open_session
+    browser_bindings = {}
+    [existing_session, missing_session].each do |browser|
+      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: "app",
+        intent: "sign_in",
+        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: nil,
+      )
+      browser.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host })
+      csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }, headers: { "Host" => @host },
+      )
+
+      assert_equal 303, browser.response.status
+      # Public confirmation isolates parity; the Base browser boundary is covered independently.
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      browser.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host })
+      csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      browser.post(
+        auth_app_sign_in_url(ri: "jp"),
+        params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: { "Host" => @host },
+      )
+
+      assert_equal 303, browser.response.status
+      browser_flow = ClientSignInFlow.find_by!(
+        public_id: ClientAuthCeremonySession.find(
+          binding.reload.admitted_auth_ceremony_session_id,
+        ).local_sign_in_flow_ref,
+      )
+      browser_bindings[browser] = SignInFlowBindingCodec.encode(
+        flow: browser_flow, surface: "app", phase: "PRIMARY_PENDING",
+      )
+    end
     existing_session.post(
-      auth_app_sign_in_email_url(ri: "jp"),
+      auth_app_sign_in_email_url(ri: "jp", fb: browser_bindings.fetch(existing_session)),
       params: { user_email: { address: existing_email.address } },
       headers: { "Host" => @host },
     )
 
-    missing_session = open_session
     missing_session.post(
-      auth_app_sign_in_email_url(ri: "jp"),
+      auth_app_sign_in_email_url(ri: "jp", fb: browser_bindings.fetch(missing_session)),
       params: { user_email: { address: "missing-enum@example.com" } },
       headers: { "Host" => @host },
     )
 
     assert_equal existing_session.response.status, missing_session.response.status
-    assert_equal existing_session.response.location, missing_session.response.location
+    existing_location = URI.parse(existing_session.response.location)
+    missing_location = URI.parse(missing_session.response.location)
+
+    assert_equal URI.parse(edit_auth_app_sign_in_email_url(ri: "jp")).path, existing_location.path
+    assert_equal existing_location.path, missing_location.path
+    assert_equal "app", SignInFlowBindingCodec.decode(
+      Rack::Utils.parse_nested_query(existing_location.query).fetch("fb"),
+    ).surface
+    assert_equal "app", SignInFlowBindingCodec.decode(
+      Rack::Utils.parse_nested_query(missing_location.query).fetch("fb"),
+    ).surface
     assert_equal existing_session.response.body, missing_session.response.body
 
     if existing_session.flash[:notice].nil?
@@ -134,11 +296,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     # Create a test email in the database
     user = clients(:one)
     test_email = "auth_test_#{SecureRandom.hex(4)}@example.com"
-    user.client_emails.create!(address: test_email)
+    user.client_emails.create!(address: test_email).tap(&:finalize_binding!)
 
     # Make the POST request with valid email and Turnstile response
     # Turnstile is automatically mocked to return true in test environment
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email },
            "cf-turnstile-response" => "test_token",
@@ -170,61 +332,95 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "timing attack protection in update action" do
-    # Create and verify an email
     user = clients(:one)
-    test_email = user.client_emails.create!(address: "timing_test@example.com")
-    test_email.update!(pass_code: "123456", otp_attempts_count: 0)
-
-    # Start session
-    post auth_app_sign_in_email_url(ri: "jp"),
-         params: {
-           :user_email => { address: test_email.address },
-           "cf-turnstile-response" => "test_token",
-         },
+    contact = user.client_emails.create!(address: "timing-#{SecureRandom.hex(8)}@example.test").tap(&:finalize_binding!)
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: { :user_email => { address: contact.address }, "cf-turnstile-response" => "test_token" },
          headers: { "Host" => @host }
 
-    follow_redirect!
-    session_id = cookies["user_email_authentication_id"]
-
-    # Measure time for valid code
+    assert_response :found
+    code = @current_auth_ceremony.issue_email_otp!(contact: contact, destination: contact.address)
     start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    patch auth_app_sign_in_email_url(ri: "jp"),
-          params: { user_email: { pass_code: "123456" } },
-          headers: { "Host" => @host, "Cookie" => "user_email_authentication_id=#{session_id}" }
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { user_email: { pass_code: code } }, headers: { "Host" => @host }
     valid_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
 
-    # Reset for invalid code test
-    test_email.update!(pass_code: "123456", otp_attempts_count: 0)
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
-      post auth_app_sign_in_email_url(ri: "jp"),
-           params: {
-             :user_email => { address: test_email.address },
-             "cf-turnstile-response" => "test_token",
-           },
-           headers: { "Host" => @host }
+    assert_response :found
+    # Successful evidence advances the first parent; the refusal needs its own
+    # admitted browser and parent, not a reopened checkpoint transaction.
+    refused_browser = open_session
+    refused_browser.host!(@host)
+    refused_admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    refused_browser.get("/sign/in", params: { entry_ref: refused_admission.reference, ri: "jp" })
+    csrf = refused_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    refused_browser.post(
+      "/ceremony_bindings", params: {
+        entry_ref: refused_admission.reference, authenticity_token: csrf, ri: "jp",
+      },
+    )
+
+    assert_equal 303, refused_browser.response.status
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: "app",
+      reference: refused_admission.reference,
+    )
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    refused_browser.get("/sign/in", params: { entry_ref: refused_admission.reference, ri: "jp" })
+    csrf = refused_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    refused_browser.post(
+      "/sign/in",
+      params: { entry_ref: refused_admission.reference, authenticity_token: csrf, ri: "jp" },
+    )
+
+    assert_equal 303, refused_browser.response.status
+    refused_flow = ClientSignInFlow.find_by!(
+      public_id: ClientAuthCeremonySession.find(
+        binding.reload.admitted_auth_ceremony_session_id,
+      ).local_sign_in_flow_ref,
+    )
+    refused_binding = SignInFlowBindingCodec.encode(
+      flow: refused_flow, surface: "app", phase: "PRIMARY_PENDING",
+    )
+    travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
+      refused_browser.post(
+        auth_app_sign_in_email_url(ri: "jp", fb: refused_binding),
+        params: { :user_email => { address: contact.address },
+                  "cf-turnstile-response" => "test_token", },
+        headers: { "Host" => @host },
+      )
+
+      assert_equal 302, refused_browser.response.status
+      cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+      refused_ceremony = ClientAuthCeremonySession.find_active_by_raw_sid(refused_browser.cookies[cookie_name])
+
+      assert_withheld("expected the second browser's active continuity") { refused_ceremony.present? }
+      assert_withheld("expected confirmed admission for the second flow") { refused_ceremony.admitted? }
+      assert_equal refused_admission.transaction.public_id, refused_ceremony.local_sign_in_flow_ref
+      code = refused_ceremony.issue_email_otp!(contact:, destination: contact.address)
+      wrong = (code == "000000") ? "111111" : "000000"
+      start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      refused_browser.patch(
+        auth_app_sign_in_email_url(ri: "jp", fb: refused_binding),
+        params: { user_email: { pass_code: wrong } }, headers: { "Host" => @host },
+      )
+      invalid_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
+
+      assert_equal 422, refused_browser.response.status
+      time_difference = (valid_time - invalid_time).abs
+      max_allowed_difference = [valid_time, invalid_time].max * 1
+
+      assert_operator time_difference, :<=, max_allowed_difference,
+                      "Response times differ too much: valid=#{valid_time.round(4)}s, invalid=#{invalid_time.round(4)}s"
+      assert_operator valid_time, :>=, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS
+      assert_operator invalid_time, :>=, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS
     end
-
-    follow_redirect!
-    session_id = cookies["user_email_authentication_id"]
-
-    # Measure time for invalid code
-    start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    patch auth_app_sign_in_email_url(ri: "jp"),
-          params: { user_email: { pass_code: "999999" } },
-          headers: { "Host" => @host, "Cookie" => "user_email_authentication_id=#{session_id}" }
-    invalid_time = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
-
-    # Times should be similar (within 50% tolerance for timing attack protection)
-    time_difference = (valid_time - invalid_time).abs
-    max_allowed_difference = [valid_time, invalid_time].max * 1
-
-    assert_operator time_difference, :<=, max_allowed_difference,
-                    "Response times differ too much: valid=#{valid_time.round(4)}s, invalid=#{invalid_time.round(4)}s"
   end
 
   # Turnstile Widget Verification Tests
   test "new authentication email page renders Turnstile widget" do
-    get new_auth_app_sign_in_email_url(ri: "jp"), headers: { "Host" => @host }
+    get new_auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), headers: { "Host" => @host }
 
     assert_response :success
     # The widget is drawn by the client from this configuration; the site key is public by design
@@ -235,15 +431,15 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   # Login Tests
 
-  test "successful OTP verification redirects to dashboard" do
+  test "successful OTP verification advances the admitted flow to the checkpoint without a root session" do
     # Create email with user association
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "login_test_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
     # Start authentication process to trigger email discovery
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -254,77 +450,188 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
     # Generate valid OTP code
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
-
-    # Store OTP on the email manually (bypasses application logic)
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
     # Verify OTP to log in
-    patch auth_app_sign_in_email_url(ri: "jp"),
-          params: { user_email: { pass_code: valid_pass_code } },
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: {
+            "user_email" => { "pass_code" => valid_pass_code },
+            "cf-turnstile-response" => "valid-turnstile-token",
+          },
           headers: { "Host" => @host }
 
     assert_response :found
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
 
     cycle = ClientSignInFlow.where(principal_id: user.id).recent_first.first
 
-    assert_equal "CHECKPOINT_PENDING", cycle.state
-    assert_equal cycle.public_id, session.dig(:app_sign_in_flow_locator, "public_id")
+    assert_equal ClientSignInFlowState::CHECKPOINT_PENDING, cycle.state_id
+    assert_equal @local_admission.transaction.public_id, cycle.public_id
+    assert_nil session.dig(:app_sign_in_flow_locator, "public_id")
+    assert_nil cycle.token_id
   end
 
-  test "post create is refused while the record-level otp cooldown is still running" do
+  test "patch with a correct otp and missing or invalid Turnstile does not authenticate" do
     user = clients(:one)
-    test_email = user.client_emails.create!(address: "otp_cooldown_#{SecureRandom.hex(4)}@example.com")
-    test_email.update!(otp_last_sent_at: Time.current)
+    email = user.client_emails.create!(
+      address: "turnstile-update-#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: {
+           "user_email" => { "address" => email.address },
+           "cf-turnstile-response" => "valid-create-token",
+         },
+         headers: { "Host" => @host }
+
+    assert_response :found
+
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: email, destination: email.address)
+    challenge_before = @current_auth_ceremony.reload.email_otp_context.deep_dup
+    expires_at_before = challenge_before.fetch("expires_at")
+    attempts_before = email.otp_attempts_count
+    state_id = SignAppInEmailAuthenticationState.load(session)&.id
+    token_count_before = ClientToken.where(user_id: user.id).count
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+
+    [nil, "invalid-turnstile-token"].each do |turnstile_token|
+      params = { user_email: { pass_code: valid_pass_code } }
+      params["cf-turnstile-response"] = turnstile_token if turnstile_token
+
+      patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding), params: params,
+                                                                                headers: { "Host" => @host }
+
+      assert_response :unprocessable_content
+      assert_equal "auth/app/sign/in/emails/edit", inertia_component
+      assert_equal "render", inertia_props.fetch("turnstile").fetch("mode")
+      assert_includes inertia_props.fetch("form_errors"), I18n.t("turnstile_error")
+    end
+
+    assert_equal expires_at_before, @current_auth_ceremony.reload.email_otp_context.fetch("expires_at")
+    assert_withheld("Turnstile rejection must leave the flow challenge unconsumed") {
+      challenge_before == @current_auth_ceremony.email_otp_context
+    }
+    assert_not email.reload.attributes.key?("otp_expires_at")
+    assert_equal attempts_before, email.reload.otp_attempts_count
+    assert_equal state_id, SignAppInEmailAuthenticationState.load(session)&.id
+    assert_equal token_count_before, ClientToken.where(user_id: user.id).count
+    assert_nil cookies["auth_access"]
+    assert_nil cookies["auth_refresh"]
+    assert_not_includes response.body, valid_pass_code
+  end
+
+  test "degraded Turnstile on sign-in otp accepts only upstream-unavailable results" do
+    user = clients(:one)
+    email = user.client_emails.create!(
+      address: "turnstile-degraded-#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
+
+    post(
+      auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+      params: {
+        "user_email" => { "address" => email.address },
+        "cf-turnstile-response" => "valid-create-token",
+      },
+      headers: { "Host" => @host },
+    )
+
+    assert_response :found
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: email, destination: email.address)
+    attempts_before = email.reload.otp_attempts_count
+    Flipper.enable(:turnstile_degraded_mode)
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+
+    patch(
+      auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+      params: {
+        :user_email => { pass_code: valid_pass_code },
+        "cf-turnstile-response" => "invalid-turnstile-token",
+      },
+      headers: { "Host" => @host },
+    )
+
+    assert_response :unprocessable_content
+    assert_equal attempts_before, email.reload.otp_attempts_count
+    assert_not_includes response.body, valid_pass_code
+
+    TurnstileVerifierStub.challenge_response = { "success" => false, "unavailable" => true }
+    patch(
+      auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+      params: {
+        :user_email => { pass_code: valid_pass_code },
+        "cf-turnstile-response" => "provider-outage-token",
+      },
+      headers: { "Host" => @host },
+    )
+
+    assert_response :found
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
+  ensure
+    Flipper.disable(:turnstile_degraded_mode)
+  end
+
+  test "post create preserves Source OTP cooldown and enforces the sign-in dispatch window" do
+    user = clients(:one)
+    test_email = user.client_emails.create!(
+      address: "otp_cooldown_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
+    test_email.update!(otp_last_sent_at: Time.current)
+    source_sent_at = test_email.reload.otp_last_sent_at
+
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
          },
          headers: { "Host" => @host }
 
+    # The retained Source cooldown is an additional dispatch cap, independent of
+    # the flow-owned challenge and the destination/IP counters.
     assert_response :too_many_requests
     assert_equal I18n.t("sign.app.authentication.email.create.cooldown"), response.body
+    challenge = @current_auth_ceremony.reload.email_otp_context.deep_dup
+
+    assert_equal source_sent_at, test_email.reload.otp_last_sent_at
+
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: {
+           :user_email => { address: test_email.address }, "cf-turnstile-response" => "test_token",
+         }, headers: { "Host" => @host }
+
+    assert_response :too_many_requests
+    assert_equal I18n.t("sign.app.authentication.email.create.cooldown"), response.body
+    assert_withheld("dispatch refusal must not rotate the flow challenge") {
+      challenge == @current_auth_ceremony.reload.email_otp_context
+    }
+    assert_equal source_sent_at, test_email.reload.otp_last_sent_at
   end
 
-  test "post create is refused when the user already holds a restricted session at the limit" do
-    # A fixture user carries sessions of its own, and the model refuses a fourth row
-    # outright; start from a user whose whole session list is the one built here.
+  # The retired restricted placeholder no longer refuses the whole account: the address is
+  # verified as usual, and the limit is decided when the session would be committed.
+  test "post create proceeds to verification even when a leftover restricted session exists" do
     user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
-    test_email = user.client_emails.create!(address: "session_limit_#{SecureRandom.hex(4)}@example.com")
-    ClientToken::MAX_SESSIONS_PER_USER.times do
-      ClientToken.create!(
-        user: user,
-        user_token_status_id: ClientTokenStatus::ACTIVE,
-        user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      )
-    end
+    test_email = user.client_emails.create!(
+      address: "session_limit_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
     ClientToken.create!(
       user: user,
       user_token_status_id: ClientTokenStatus::RESTRICTED,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
 
-    assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-      post auth_app_sign_in_email_url(ri: "jp"),
-           params: {
-             :user_email => { address: test_email.address },
-             "cf-turnstile-response" => "test_token",
-           },
-           headers: { "Host" => @host }
-    end
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: {
+           :user_email => { address: test_email.address },
+           "cf-turnstile-response" => "test_token",
+         },
+         headers: { "Host" => @host }
 
-    assert_response :forbidden
-    assert_equal I18n.t("session_limit.login_limit_exceeded"), response.body
+    assert_response :redirect
+    assert_equal "/sign/in/email/edit", URI.parse(response.location).path
   end
 
   test "patch update after an unknown address is rejected without disclosing that no account exists" do
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: "no-such-user-#{SecureRandom.hex(4)}@example.com" },
            "cf-turnstile-response" => "test_token",
@@ -334,7 +641,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :found
     assert_nil SignAppInEmailAuthenticationState.load(session)&.id
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: "123456" } },
           headers: { "Host" => @host }
 
@@ -344,9 +651,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "patch update is rejected when the account stopped allowing login after the code was sent" do
     user = clients(:one)
-    test_email = user.client_emails.create!(address: "blocked_#{SecureRandom.hex(4)}@example.com")
+    test_email = user.client_emails.create!(
+      address: "blocked_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -356,13 +665,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :found
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
-    user.update!(status_id: ClientStatus::RESERVED)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
+    user.reload.update!(status_id: ClientStatus::RESERVED)
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
-          params: { user_email: { pass_code: ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s } },
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
     assert_response :unprocessable_content
@@ -371,9 +678,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "patch update with a malformed pass code answers json requests with the error body" do
     user = clients(:one)
-    test_email = user.client_emails.create!(address: "json_invalid_#{SecureRandom.hex(4)}@example.com")
+    test_email = user.client_emails.create!(
+      address: "json_invalid_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -382,7 +691,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :found
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: "not-a-code" } },
           headers: { "Host" => @host, "Accept" => "application/json" }
 
@@ -392,9 +701,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "successful OTP verification accepts the form scope used by the sign-in page" do
     user = clients(:one)
-    test_email = user.client_emails.create!(address: "form_scope_test_#{SecureRandom.hex(4)}@example.com")
+    test_email = user.client_emails.create!(
+      address: "form_scope_test_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :client_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -404,38 +715,32 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :found
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    valid_pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { client_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
     assert_response :found
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
   end
 
-  test "successful OTP verification sets host-only auth cookies" do
+  test "successful OTP verification issues no root authentication cookies on Auth" do
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "cookie_domain_in_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
          },
          headers: { "Host" => @host }
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 67_890
-    valid_pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
@@ -444,12 +749,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
         line.start_with?("#{AuthenticationCookieName.access}=", "#{AuthenticationCookieName.refresh}=")
       end
 
-    assert_equal 2, auth_cookie_lines.size
-    auth_cookie_lines.each do |line|
-      assert_includes line, "path=/"
-      assert_match(/httponly/i, line)
-      assert_no_match(/domain=/i, line)
-    end
+    assert_empty auth_cookie_lines
+    assert_equal "email", @local_admission.transaction.reload.authentication_method
   end
 
   test "email sign-in redirects to MFA challenge when MFA is enabled" do
@@ -457,26 +758,30 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     user.update!(mfa_level_enabled: true)
     test_email = user.client_emails.create!(
       address: "mfa_email_login_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
          },
          headers: { "Host" => @host }
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 55_555
-    valid_pass_code = ROTP::HOTP.new(otp_private_key).at(otp_counter).to_s
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
     assert_response :found
-    assert_redirected_to auth_app_sign_in_challenge_path(ri: "jp")
+    location = URI.parse(response.location)
+
+    assert_equal URI.parse(auth_app_sign_in_challenge_path).path, location.path
+    query = Rack::Utils.parse_nested_query(location.query.to_s)
+    binding = SignInFlowBindingCodec.decode(query.fetch("fb"))
+
+    assert_equal "app", binding.surface
+    assert_equal "MFA_PENDING", binding.phase
   end
 
   def test_setup_cooldown_test_email
@@ -484,12 +789,19 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     test_email = user.client_emails.create!(
       address: "cooldown_test_#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
+    @source_generation_before = test_email.reload.attributes.slice(
+      "otp_private_key", "otp_counter", "otp_expires_at", "otp_last_sent_at",
     )
+    # Anchor actual MemoryStore expiry to the same integral request clock; Source
+    # and Ticket database clocks retain their normal authoritative behavior.
+    freeze_time
+    @sign_in_receipt_at = Time.current
 
     assert_difference -> { ActionMailer::Base.deliveries.count }, 1 do
       perform_enqueued_jobs do
         post(
-          auth_app_sign_in_email_url(ri: "jp"),
+          auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: {
             :user_email => { address: test_email.address },
             "cf-turnstile-response" => "test_token",
@@ -507,15 +819,16 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   test "otp initial request sends email" do
     test_email = test_setup_cooldown_test_email
 
-    assert_not_nil test_email.otp_last_sent_at
+    assert_withheld { @current_auth_ceremony.reload.email_otp_context.fetch("issued_at").present? }
+    assert_withheld { @source_generation_before == test_email.reload.attributes.slice(*@source_generation_before.keys) }
   end
 
   test "otp immediate resend is rejected with cooldown" do
     test_email = test_setup_cooldown_test_email
-    initial_sent_at = test_email.otp_last_sent_at
+    initial_challenge = @current_auth_ceremony.reload.email_otp_context.deep_dup
 
     assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-      post auth_app_sign_in_email_url(ri: "jp"),
+      post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
            params: {
              :user_email => { address: test_email.address },
              "cf-turnstile-response" => "test_token",
@@ -526,47 +839,47 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :too_many_requests
     # The cooldown message must not depend on whether the address is registered.
     assert_includes @response.body, I18n.t("sign.app.authentication.email.create.cooldown")
-    assert_equal initial_sent_at, test_email.reload.otp_last_sent_at
+    assert_withheld { initial_challenge == @current_auth_ceremony.reload.email_otp_context }
+    assert_withheld { @source_generation_before == test_email.reload.attributes.slice(*@source_generation_before.keys) }
   end
 
   test "otp resend still rejected after 29 seconds" do
-    test_email = test_setup_cooldown_test_email
-
-    # Anchored to when the code was actually sent, not to now. `travel` moves
-    # from the current moment, so on a slow run the setup alone can push the gap
-    # past the cooldown and the case silently inverts into its opposite.
-    travel_to test_email.otp_last_sent_at + 29.seconds do
-      assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-        post auth_app_sign_in_email_url(ri: "jp"),
-             params: {
-               :user_email => { address: test_email.address },
-               "cf-turnstile-response" => "test_token",
-             },
-             headers: { "Host" => @host }
-      end
-
-      assert_response :too_many_requests
+    contact = test_setup_cooldown_test_email
+    initial = @current_auth_ceremony.reload.email_otp_context.deep_dup
+    travel_to(@sign_in_receipt_at + 29.seconds)
+    assert_no_difference -> { ActionMailer::Base.deliveries.count } do
+      post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+           params: { :user_email => { address: contact.address }, "cf-turnstile-response" => "test_token" },
+           headers: { "Host" => @host }
     end
+
+    assert_response :too_many_requests
+    assert_withheld { initial == @current_auth_ceremony.reload.email_otp_context }
+    assert_withheld { @source_generation_before == contact.reload.attributes.slice(*@source_generation_before.keys) }
   end
 
-  test "otp resend succeeds after cooldown expires" do
-    test_email = test_setup_cooldown_test_email
-    initial_sent_at = test_email.otp_last_sent_at
-
-    travel 31.seconds do
+  [30, 31].each do |seconds|
+    name =
+      if seconds == 31
+        "otp resend succeeds after cooldown expires"
+      else
+        "otp resend succeeds at the exact 30 second boundary"
+      end
+    test name do
+      contact = test_setup_cooldown_test_email
+      initial = @current_auth_ceremony.reload.email_otp_context.deep_dup
+      travel_to(@sign_in_receipt_at + seconds.seconds)
       assert_difference -> { ActionMailer::Base.deliveries.count }, 1 do
         perform_enqueued_jobs do
-          post auth_app_sign_in_email_url(ri: "jp"),
-               params: {
-                 :user_email => { address: test_email.address },
-                 "cf-turnstile-response" => "test_token",
-               },
+          post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+               params: { :user_email => { address: contact.address }, "cf-turnstile-response" => "test_token" },
                headers: { "Host" => @host }
         end
       end
 
       assert_response :found
-      assert_operator test_email.reload.otp_last_sent_at, :>, initial_sent_at
+      assert_not_equal initial.fetch("generation"), @current_auth_ceremony.reload.email_otp_context.fetch("generation")
+      assert_withheld { @source_generation_before == contact.reload.attributes.slice(*@source_generation_before.keys) }
     end
   end
 
@@ -576,17 +889,20 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       address: "lockout_#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    test_email.finalize_binding!
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
          },
          headers: { "Host" => @host }
 
+    code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
+    wrong_code = (code == "000000") ? "111111" : "000000"
     Email::MAX_OTP_ATTEMPTS.times do
-      patch auth_app_sign_in_email_url(ri: "jp"),
-            params: { user_email: { pass_code: "000000" } },
+      patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+            params: { user_email: { pass_code: wrong_code } },
             headers: { "Host" => @host }
     end
 
@@ -604,11 +920,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       user_email_status_id: ClientEmailStatus::VERIFIED,
       locked_at: 5.minutes.from_now,
       otp_attempts_count: Email::MAX_OTP_ATTEMPTS,
-    )
+    ).tap(&:finalize_binding!)
 
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
+    travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
       assert_no_difference -> { ActionMailer::Base.deliveries.count } do
-        post auth_app_sign_in_email_url(ri: "jp"),
+        post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
              params: {
                :user_email => { address: test_email.address },
                "cf-turnstile-response" => "test_token",
@@ -621,11 +937,13 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_redirected_to %r{/sign/in/email/edit}
   end
 
-  test "successful OTP verification records login audit event" do
+  test "successful OTP verification records ceremony evidence before Base login audit" do
     user = clients(:one)
-    test_email = user.client_emails.create!(address: "audit_login_#{SecureRandom.hex(4)}@example.com")
+    test_email = user.client_emails.create!(
+      address: "audit_login_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -634,32 +952,27 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
-    assert_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::LOGGED_IN).count }, 1 do
-      patch auth_app_sign_in_email_url(ri: "jp"),
+    assert_no_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::LOGGED_IN).count } do
+      patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
             params: { user_email: { pass_code: valid_pass_code } },
             headers: { "Host" => @host }
     end
 
-    audit = ClientChronicle.order(created_at: :desc).first
-
-    assert_equal ClientChronicleEvent::LOGGED_IN, audit.event_id
-    assert_equal user, audit.user
+    assert_equal user.id, @local_admission.transaction.reload.principal_id
+    assert_equal "email", @local_admission.transaction.authentication_method
+    assert_not_nil @local_admission.transaction.authentication_event_at
   end
 
   test "invalid OTP code returns error message" do
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "invalid_otp_test_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
     # Start authentication
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -668,14 +981,12 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
-    # Set up valid OTP but provide wrong code
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
+    wrong_pass_code = (valid_pass_code == "999999") ? "888888" : "999999"
 
     # Try with invalid code
-    patch auth_app_sign_in_email_url(ri: "jp"),
-          params: { user_email: { pass_code: "999999" } },
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { user_email: { pass_code: wrong_pass_code } },
           headers: { "Host" => @host }
 
     # Should render edit page with error
@@ -687,9 +998,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "blank_otp_test_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -698,7 +1009,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: "" } },
           headers: { "Host" => @host }
 
@@ -710,9 +1021,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "audit_login_failed_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -721,13 +1032,12 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_equal test_email.id, SignAppInEmailAuthenticationState.load(session)&.id
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 56_789
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
+    wrong_pass_code = (valid_pass_code == "000000") ? "111111" : "000000"
 
     assert_difference -> { ClientChronicle.where(event_id: ClientChronicleEvent::LOGIN_FAILED).count }, 1 do
-      patch auth_app_sign_in_email_url(ri: "jp"),
-            params: { user_email: { pass_code: "000000" } },
+      patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+            params: { user_email: { pass_code: wrong_pass_code } },
             headers: { "Host" => @host }
     end
 
@@ -739,12 +1049,18 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "email post starts sign-in challenge when no browser session is present" do
     user = clients(:one)
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { user_email: { address: "some@example.com" } },
          headers: { "Host" => @host, "X-TEST-CURRENT-USER" => user.id }
 
     assert_response :found
-    assert_redirected_to edit_auth_app_sign_in_email_path(ri: "jp")
+    location = URI.parse(response.location)
+
+    assert_equal URI.parse(edit_auth_app_sign_in_email_path(ri: "jp")).path, location.path
+    binding = SignInFlowBindingCodec.decode(Rack::Utils.parse_nested_query(location.query).fetch("fb"))
+
+    assert_equal "app", binding.surface
+    assert_equal "PRIMARY_PENDING", binding.phase
   end
 
   test "redirects to encoded URL after successful login when pt parameter is provided" do
@@ -752,13 +1068,13 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "redirect_login_test_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
     redirect_url = auth_app_settings_path(ri: "jp")
     pt = redirect_url
 
     # Start authentication with pt parameter
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -772,16 +1088,10 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_nil session[:user_email_authentication_rt]
 
     # Generate valid OTP code
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
-
-    # Store OTP
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
     # Verify OTP with pt parameter
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: {
             user_email: { pass_code: valid_pass_code },
             pt: pt,
@@ -789,13 +1099,13 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: { "Host" => @host }
 
     assert_response :found
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
 
     cycle = ClientSignInFlow.where(principal_id: user.id).recent_first.first
 
-    assert_equal "CHECKPOINT_PENDING", cycle.state
+    assert_equal ClientSignInFlowState::CHECKPOINT_PENDING, cycle.state_id
     assert_nil cycle.return_to
-    assert_equal "CHECKPOINT_PENDING", cycle.reload.state
+    assert_equal ClientSignInFlowState::CHECKPOINT_PENDING, cycle.reload.state_id
     assert_nil cycle.return_to
   end
 
@@ -803,11 +1113,11 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "redirect_external_test_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
     pt = "https://example.com/evil"
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -818,14 +1128,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :found
     assert_no_match(/pt=/, response.location)
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
-
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: {
             user_email: { pass_code: valid_pass_code },
             pt: pt,
@@ -833,7 +1138,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
           headers: { "Host" => @host }
 
     assert_response :found
-    assert_redirected_to auth_app_sign_in_check_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
   end
 
   test "resets session ID after successful email login" do
@@ -841,10 +1146,10 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     user = clients(:one)
     test_email = user.client_emails.create!(
       address: "session_reset_login_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
     # Start authentication
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -855,19 +1160,13 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_predicate SignAppInEmailAuthenticationState.load(session)&.id, :present?
 
     # Generate valid OTP code
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
-
-    # Store OTP
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
     # Ensure we have a session
     old_session_id = session.id
 
     # Verify OTP to log in
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
@@ -876,7 +1175,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_not_equal old_session_id, session.id
   end
 
-  test "email login with session limit exceeded redirects to session management" do
+  test "Auth verifies email at the session limit and leaves limit evaluation to Base" do
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
 
@@ -887,10 +1186,10 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     test_email = user.client_emails.create!(
       address: "session_limit_email_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
     # Start authentication
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
@@ -898,30 +1197,26 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          headers: { "Host" => @host }
 
     # Generate valid OTP code
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
     # Verify OTP - should redirect to session management, not "/"
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
     assert_response :found
-    assert_redirected_to auth_app_sign_in_session_path(ri: "jp")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
 
     # The current session-limit gate keeps the pending login in session state.
     restricted = ClientToken.where(user_id: user.id, user_token_status_id: ClientTokenStatus::RESTRICTED)
 
     assert_equal 0, restricted.count
 
-    # Session limit gate should be issued
-    assert_predicate session[SessionLimitGate::GATE_SESSION_KEY], :present?
+    assert_nil session[SessionLimitGate::GATE_SESSION_KEY]
+    assert_nil @local_admission.transaction.reload.token_id
   end
 
-  test "email login hard rejects when a restricted session already exists" do
+  test "email login at the limit beside a leftover restricted session waits without issuing anything" do
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
 
@@ -930,34 +1225,31 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     end
 
     test_email = user.client_emails.create!(
-      address: "session_limit_hard_reject_#{SecureRandom.hex(4)}@example.com",
-    )
+      address: "session_limit_conflict_#{SecureRandom.hex(4)}@example.com",
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
          },
          headers: { "Host" => @host }
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
     ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::RESTRICTED)
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host }
 
-    assert_response :forbidden
-    assert_includes response.body, "セッション数の上限に達しました"
+    assert_response :redirect
+    assert_equal "/sign/in/check", URI.parse(response.location).path
     assert_equal 1, ClientToken.where(user_id: user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).count
+    assert_predicate @local_admission.transaction.reload, :sign_in_checkpoint_pending?
   end
 
-  test "email login (JSON) with session limit exceeded returns session_restricted" do
+  test "email verification JSON at the session limit records evidence and leaves root capacity evaluation to Base" do
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
 
@@ -967,22 +1259,20 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     test_email = user.client_emails.create!(
       address: "session_limit_json_#{SecureRandom.hex(4)}@example.com",
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: test_email.address },
            "cf-turnstile-response" => "test_token",
          },
          headers: { "Host" => @host }
 
-    otp_private_key = ROTP::Base32.random_base32
-    otp_counter = 12_345
-    hotp = ROTP::HOTP.new(otp_private_key)
-    valid_pass_code = hotp.at(otp_counter).to_s
-    test_email.store_otp(otp_private_key, otp_counter, 12.minutes.from_now.to_i)
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
-    patch auth_app_sign_in_email_url(ri: "jp"),
+    root_ids = ClientToken.where(user_id: user.id).order(:id).pluck(:id)
+
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
           headers: { "Host" => @host, "Accept" => "application/json" },
           as: :json
@@ -990,15 +1280,20 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :ok
     json = response.parsed_body
 
-    assert_equal "session_restricted", json["status"]
-    assert_equal auth_app_sign_in_session_path(ri: "jp"), json["redirect_url"]
+    assert_equal "authentication_evidence_recorded", json["status"]
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(json.fetch("redirect_url")).path
+    assert_equal root_ids, ClientToken.where(user_id: user.id).order(:id).pluck(:id)
+    flow = ClientSignInFlow.find_by!(public_id: @local_admission.transaction.public_id)
+
+    assert_equal ClientSignInFlowState::CHECKPOINT_PENDING, flow.state_id
+    assert_nil flow.token_id
   end
 
   test "cooldown applies identically for non-existing emails (anti-enumeration)" do
     non_existing = "does_not_exist_#{SecureRandom.hex(4)}@example.com"
 
     # First attempt -- redirect (same as existing email)
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: non_existing },
            "cf-turnstile-response" => "test_token",
@@ -1008,7 +1303,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :found
 
     # Second attempt immediately -- 429 (same as existing email)
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: non_existing },
            "cf-turnstile-response" => "test_token",
@@ -1019,8 +1314,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_includes @response.body, I18n.t("sign.app.authentication.email.create.cooldown")
 
     # After cooldown -- allowed again
-    travel CommonOtpPolicy::SEND_COOLDOWN + 1.second do
-      post auth_app_sign_in_email_url(ri: "jp"),
+    travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
+      post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
            params: {
              :user_email => { address: non_existing },
              "cf-turnstile-response" => "test_token",
@@ -1036,9 +1331,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     email = user.client_emails.create!(
       address: "cooldown_login_#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            user_email: { address: email.address },
            "cf-turnstile-response": "test_token",
@@ -1047,7 +1342,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :found
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            user_email: { address: email.address },
            "cf-turnstile-response": "test_token",
@@ -1064,7 +1359,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     first_email = "first_signin_#{SecureRandom.hex(4)}@example.com"
     second_email = "second_signin_#{SecureRandom.hex(4)}@example.com"
 
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: first_email },
            "cf-turnstile-response" => "test_token",
@@ -1074,7 +1369,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :found
 
     # Different email should not be blocked
-    post auth_app_sign_in_email_url(ri: "jp"),
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: {
            :user_email => { address: second_email },
            "cf-turnstile-response" => "test_token",
@@ -1116,31 +1411,11 @@ class Auth::App::Sign::In::EmailsControllerTest
 
   private
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -1193,10 +1468,8 @@ class Auth::App::Sign::In::EmailsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -1208,10 +1481,8 @@ class Auth::App::Sign::In::EmailsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -1432,87 +1703,6 @@ class Auth::App::Sign::In::EmailsControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -1539,10 +1729,8 @@ class Auth::App::Sign::In::EmailsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -1562,12 +1750,12 @@ class Auth::App::Sign::In::EmailsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

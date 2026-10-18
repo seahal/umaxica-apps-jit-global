@@ -90,11 +90,4 @@ class TypedResultAndEnvelopeRefusalsTest < ActiveSupport::TestCase
       adapter.callback_decision(provider: "entra", ceremony: nil, context: {})
     end
   end
-
-  test "a sign-in cycle from another surface is refused by its locator" do
-    locator = SignInCycleLocator.new({}, surface: :app)
-
-    assert_raises(ArgumentError) { locator.send(:ensure_supported_cycle!, VisitorSignInFlow.new) }
-    assert_nil locator.send(:ensure_supported_cycle!, ClientSignInFlow.new)
-  end
 end

@@ -12,8 +12,8 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
 
     get edit_base_app_identity_withdrawal_url(ri: "jp", host: host)
@@ -36,8 +36,8 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     visitor.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
 
     get edit_base_com_identity_withdrawal_url(ri: "jp", host: host)
@@ -60,8 +60,8 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)
     cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
@@ -82,8 +82,8 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
     ceremony = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)
     cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
@@ -103,8 +103,8 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     client.update!(
       withdrawal_started_at: 2.hours.ago,
       deactivated_at: 90.minutes.ago,
-      discarded_at: 31.days.from_now,
-      purged_at: 31.days.from_now,
+      discard_at: 31.days.from_now,
+      purge_eligible_at: 31.days.from_now,
     )
 
     expired = ClientWithdrawalCeremony.issue!(subject: client, request: ActionDispatch::TestRequest.create)

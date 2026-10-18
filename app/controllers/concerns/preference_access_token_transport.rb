@@ -14,6 +14,9 @@ module PreferenceAccessTokenTransport
     # reproduces the same payload, so short-circuit. Cookies are request input
     # and do not change within a request.
     return true if @preference_payload.is_a?(Hash)
+    # A detached credential stays detached for the whole request: re-scanning the cookies would
+    # resurrect the payload that the refusal just dropped.
+    return false if preference_credential_detached?
 
     token = matching_access_token_value
     return false if token.blank?
@@ -25,7 +28,7 @@ module PreferenceAccessTokenTransport
     @preference_payload.is_a?(Hash)
   end
 
-  def load_access_token_preference_record!
+  def load_access_token_preference_record!(clear_invalid_cookie: true)
     return @preferences if @preferences.present?
     return unless @preference_payload.is_a?(Hash) || load_access_token_payload
 
@@ -51,19 +54,33 @@ module PreferenceAccessTokenTransport
         end
       end
     @preferences = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
-    return unless keep_loaded_access_token_payload?(@preference_payload)
+    return unless keep_loaded_access_token_payload?(
+      @preference_payload,
+      clear_invalid_cookie: clear_invalid_cookie,
+    )
 
     @preferences
   end
 
-  def keep_loaded_access_token_payload?(payload)
+  def keep_loaded_access_token_payload?(payload, clear_invalid_cookie: true)
     if @preferences.blank?
+      unless clear_invalid_cookie
+        @preference_payload = nil
+        return false
+      end
+
       cookies.delete(access_token_cookie_name, **preference_cookie_deletion_options)
       @preference_payload = nil
       return false
     end
 
     return true if preference_access_token_current?(@preferences, payload)
+
+    unless clear_invalid_cookie
+      @preferences = nil
+      @preference_payload = nil
+      return false
+    end
 
     cookies.delete(access_token_cookie_name, **preference_cookie_deletion_options)
     @preferences = nil
@@ -83,7 +100,7 @@ module PreferenceAccessTokenTransport
 
   def matching_access_token_value
     access_token_cookie_names.lazy.filter_map do |cookie_name|
-      token = cookies[cookie_name].to_s.presence
+      token = BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
       next if token.blank?
 
       payload = decode_matching_access_token(token)
@@ -104,7 +121,7 @@ module PreferenceAccessTokenTransport
 
   def ensure_preference_access_token_audience_for_write!
     access_token_cookie_names.each do |cookie_name|
-      token = cookies[cookie_name].to_s.presence
+      token = BrowserCredentialCookie.read(cookies, cookie_name).to_s.presence
       next if token.blank?
 
       PreferenceToken.decode(

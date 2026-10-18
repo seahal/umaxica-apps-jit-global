@@ -9,8 +9,8 @@ previously shipped as defects, so static tests reject their reintroduction.
 
 - Resolve every ceremony's UV policy through the closed `Webauthn::UvPolicy` registry. Call sites
   must not directly specify `"required"`, `"preferred"`, or `"discouraged"` strings.
-- Every current registry entry is `required`: `registration`, `direct_sign_in`, `mfa_challenge`,
-  `ordinary_step_up`, and `high_risk_step_up`. Purposes are separated so that only
+- Every current registry entry is `required`: `registration`, `direct_sign_in`, `emergency_sign_in`,
+  `mfa_challenge`, `ordinary_step_up`, and `high_risk_step_up`. Purposes are separated so that only
   `ordinary_step_up` can be relaxed by a future explicit decision. Such a change must update this
   document and `adr/passkey-uv-policy.md`.
 - Enforce UV on the server as well as in client options. In addition to
@@ -19,6 +19,18 @@ previously shipped as defects, so static tests reject their reintroduction.
 - Never accept a response with UV=false for a purpose whose registry policy requires UV. Record
   achieved assurance separately from UV, freshness, phishing resistance, and step-up completion; UV
   alone does not imply AAL2.
+
+## Ceremony Purposes Are Namespaces
+
+- `Webauthn::ChallengeStore::PURPOSES` is closed, and a challenge issued for one purpose is rejected
+  by every other verifier in both directions. Consumption deletes the entry before any binding is
+  checked, so a rejected attempt still burns the challenge.
+- Org Emergency Access uses `emergency_sign_in`, distinct from normal sign-in's `authentication` and
+  from `step_up`. A new purpose must state what it may not be confused with; the exhaustive
+  cross-purpose check lives in `test/unit/webauthn/challenge_store_test.rb`.
+- Emergency Access must not grow a parallel verifier, challenge store, or credential store. It is a
+  different authentication policy running the same cryptographic implementation
+  (`docs/security/org-emergency-access.md`).
 
 ## Duplicate Registration by Credential ID
 
@@ -39,6 +51,25 @@ previously shipped as defects, so static tests reject their reintroduction.
 - RP IDs differ across app/com/org, so one authenticator creates separate credentials for each
   surface. Cross-surface credential sharing and duplication do not occur within this architecture;
   see `docs/security/webauthn-rp-id-origin-boundary.md`.
+
+## Discoverable Direct Sign-in
+
+- App and com direct Passkey options are anonymous and do not accept an identifier as an account
+  selection input. Their `allowCredentials` response is empty (or omitted by the serializer), so
+  no real credential ID, credential count, credential length, or account/Passkey existence is
+  disclosed during options issuance.
+- Direct app/com verification resolves the surface-local passkey from the assertion credential ID,
+  then verifies the assertion with that row's saved public key. The browser's `userHandle`, any
+  submitted identifier, and client-side metadata are not identity authorities.
+- Verification rechecks ACTIVE credential status, active actor state, verified-PII and existing
+  session-limit rules (full-access limit, waiting slot, refusal) before establishing a session. A disabled, revoked,
+  unknown, or cross-surface credential fails with the existing generic unauthorized contract.
+- App and com registration require a discoverable credential (`residentKey: "required"`) while org
+  registration keeps its existing policy. Existing non-discoverable app/com credentials are not
+  migrated or supported by a compatibility path; users must register again.
+- Org normal sign-in, Emergency Access, MFA, and Step-Up remain actor-known ceremonies. Their
+  actor-scoped descriptor behavior and security checks are not replaced by this direct-sign-in
+  change.
 
 ## User Handle
 
@@ -67,3 +98,12 @@ previously shipped as defects, so static tests reject their reintroduction.
   `WebAuthn.configure` state.
 - `from_get` and `from_create` always receive an explicit `relying_party:` argument.
 - Origin comparison requires an exact scheme, host, and effective port match.
+
+## Delivered reconciliation (2026-10-06)
+
+These invariants now cover the shared assertion path as well as registration: decoded returned
+`userHandle` bytes must equal the stored opaque Identity handle, and actor-known assertions must
+belong to the current Identity. Passkey registration is a separate bootstrap or credential-
+registration transaction and never silently becomes step-up freshness. The implementation and
+tests are current for app, com and org; real authenticator/provider deployment verification is
+still an operational prerequisite.

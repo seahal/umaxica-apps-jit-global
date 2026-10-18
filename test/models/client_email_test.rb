@@ -9,16 +9,13 @@
 #  id                        :bigint           not null, primary key
 #  address                   :string           default(""), not null
 #  address_digest            :string
-#  discarded_at              :datetime         default(Infinity), not null
+#  discard_at              :datetime         default(Infinity), not null
 #  locked_at                 :datetime         default(Infinity), not null
 #  notifiable                :boolean          default(TRUE), not null
 #  otp_attempts_count        :integer          default(0), not null
-#  otp_counter               :text             default(""), not null
-#  otp_expires_at            :datetime         default(-Infinity), not null
 #  otp_last_sent_at          :datetime         default(-Infinity), not null
-#  otp_private_key           :string           default(""), not null
 #  promotional               :boolean          default(TRUE), not null
-#  purged_at                 :datetime         default(Infinity), not null
+#  purge_eligible_at                 :datetime         default(Infinity), not null
 #  subscribable              :boolean          default(TRUE), not null
 #  undeletable               :boolean          default(FALSE), not null
 #  verification_token_digest :binary
@@ -31,10 +28,10 @@
 # Indexes
 #
 #  index_client_emails_on_active_address_digest  (address_digest) UNIQUE WHERE ((address_digest IS NOT NULL) AND (user_email_status_id <> 4))
-#  index_client_emails_on_discarded_at           (discarded_at)
+#  index_client_emails_on_discard_at           (discard_at)
 #  index_client_emails_on_otp_last_sent_at       (otp_last_sent_at)
 #  index_client_emails_on_public_id              (public_id) UNIQUE
-#  index_client_emails_on_purged_at              (purged_at)
+#  index_client_emails_on_purge_eligible_at              (purge_eligible_at)
 #  index_client_emails_on_user_email_status_id   (user_email_status_id)
 #  index_client_emails_on_user_id                (user_id)
 #
@@ -70,6 +67,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     next if @identifier_race_digests.blank?
 
     ClientEmail.where(address_digest: @identifier_race_digests).delete_all
+    ClientAuthorityLock.where(client_id: @identifier_race_client_ids).delete_all if @identifier_race_client_ids.present?
     Client.where(id: @identifier_race_client_ids).delete_all if @identifier_race_client_ids.present?
   end
 
@@ -109,12 +107,12 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_not_empty user_email.errors[:confirm_policy]
   end
 
-  test "should require unique email addresses" do
-    ClientEmail.create!(@valid_attributes)
-    duplicate_email = ClientEmail.new(@valid_attributes)
+  test "effective email addresses are unique at finalization" do
+    ClientEmail.create!(@valid_attributes).finalize_binding!
+    duplicate_email = ClientEmail.create!(@valid_attributes)
 
-    assert_not duplicate_email.valid?
-    assert_not_empty duplicate_email.errors[:address]
+    assert_predicate duplicate_email, :valid?
+    assert_raises(ActiveRecord::RecordNotUnique) { duplicate_email.finalize_binding! }
   end
 
   test "deleted sign-up email does not reserve address forever" do
@@ -122,8 +120,8 @@ class ClientEmailTest < ActiveSupport::TestCase
       @valid_attributes.merge(
         address: "cancelled-retry@example.com",
         user_email_status_id: ClientEmailStatus::DELETED,
-        discarded_at: 1.minute.ago,
-        purged_at: 29.minutes.from_now,
+        discard_at: 1.minute.ago,
+        purge_eligible_at: 29.minutes.from_now,
       ),
     )
     retry_email = ClientEmail.new(@valid_attributes.merge(address: "cancelled-retry@example.com"))
@@ -141,7 +139,7 @@ class ClientEmailTest < ActiveSupport::TestCase
       user: @user,
     )
 
-    expected = IdentifierBlindIndex.bidx_for_email("test@example.com")
+    expected = IdentifierBlindIndex.bidx_for_email("test@example.com", realm: :app)
 
     assert_equal expected, user_email.address_digest
   end
@@ -154,14 +152,16 @@ class ClientEmailTest < ActiveSupport::TestCase
     )
 
     assert_equal "digest-order@example.com", user_email.address
-    assert_equal IdentifierBlindIndex.bidx_for_email("digest-order@example.com"), user_email.address_digest
+    assert_equal IdentifierBlindIndex.bidx_for_email("digest-order@example.com", realm: :app), user_email.address_digest
   end
 
-  test "initializes otp defaults for new records" do
+  test "new Email candidates initialize failures while only a typed ceremony owns OTP proof defaults" do
     user_email = ClientEmail.new(@valid_attributes)
+    ceremony = ClientEmailCeremonyTransaction.new
 
-    assert_equal "0", user_email.otp_counter
-    assert_not_empty user_email.otp_private_key
+    assert_nil ceremony.otp_generation
+    assert_nil ceremony.otp_verifier
+    assert_nil ceremony.otp_expires_at
     assert_equal 0, user_email.otp_attempts_count
   end
 
@@ -173,8 +173,10 @@ class ClientEmailTest < ActiveSupport::TestCase
     )
 
     assert_equal user_email,
-                 ClientEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("USER-FIND@example.com"))
-    assert_nil ClientEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email(""))
+                 ClientEmail.find_by(
+                   address_digest: IdentifierBlindIndex.bidx_for_email("USER-FIND@example.com", realm: :app),
+                 )
+    assert_nil ClientEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("", realm: :app))
   end
 
   test "should downcase email address before saving" do
@@ -206,26 +208,37 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_predicate user_email.reload, :undeletable?
   end
 
-  test "enforces maximum emails per user" do
-    user = clients(:one)
-    Prosopite.pause do
-      ClientEmail::MAX_EMAILS_PER_USER.times do |i|
+  test "pending email rows do not reserve capacity and the database permits only one effective binding" do
+    owner = Client.create!
+
+    assert_equal 0, owner.client_emails.effective_binding.count
+    candidates =
+      5.times.map do |index|
         ClientEmail.create!(
-          address: "user#{i}@example.com",
-          confirm_policy: true,
-          user: user,
+          user: owner, address: "contact-limit-#{SecureRandom.hex(4)}-#{index}@example.test",
+          confirm_policy: "1",
         )
       end
+
+    assert candidates.none?(&:binding_effective?)
+    first, second = candidates
+    first.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+    assert_difference -> { ClientEmail.effective_binding.where(user_id: owner.id).count }, 1 do
+      first.finalize_binding!
     end
+    second.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
+    assert_raises(ActiveRecord::RecordNotUnique) do
+      ClientEmail.transaction(requires_new: true) { second.finalize_binding! }
+    end
+    assert_predicate first.reload, :binding_effective?
+    assert_not_predicate second.reload, :binding_effective?
+    assert_equal 1, ClientEmail.effective_binding.where(user_id: owner.id).count
+    first.release_binding!
+    second.finalize_binding!
 
-    extra_email = ClientEmail.new(
-      address: "overflow@example.com",
-      confirm_policy: true,
-      user: user,
-    )
-
-    assert_not extra_email.valid?
-    assert_includes extra_email.errors[:base], "exceeds maximum emails per user (#{ClientEmail::MAX_EMAILS_PER_USER})"
+    assert_predicate first.reload, :binding_released?
+    assert_predicate second.reload, :binding_effective?
+    assert_equal 1, ClientEmail.effective_binding.where(user_id: owner.id).count
   end
 
   test "verification token generation and verification" do
@@ -255,22 +268,22 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_equal user_email.public_id, user_email.to_param
   end
 
-  test "otp is active just before expiry and expired exactly at expiry" do
+  test "Email ceremony OTP is active immediately below but not at or above its finite expiry" do
     user_email = ClientEmail.create!(@valid_attributes.merge(address: "otp-expiry@example.com"))
-    now = Time.zone.parse("2026-05-25 12:00:00")
-
-    travel_to now do
-      user_email.store_otp("SECRET", "2", 30.seconds.from_now.to_i)
+    now = ClientEmailCeremonyTransaction.database_now
+    ceremony = ClientEmailCeremonyTransaction.create_transaction!(
+      actor_ref: @user.public_id, session_ref: "client-email-model-browser", operation: "registration",
+      email_candidate_ref: user_email.public_id, normalized_email_digest: user_email.address_digest,
+      now: now, expires_at: now + 30.seconds,
+    )
+    ClientEmailCeremonyTransaction.stub(:database_now, now) do
+      ceremony.issue_email_otp!(purpose: "credential_registration")
     end
 
-    travel_to now + 29.seconds do
-      assert_predicate user_email.reload, :otp_active?
-      assert_not user_email.otp_expired?
-    end
-
-    travel_to now + 30.seconds do
-      assert_predicate user_email.reload, :otp_expired?
-      assert_not user_email.otp_active?
+    [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
+      assert_equal offset.negative?, ceremony.reload.email_otp_deliverable?(
+        generation: ceremony.otp_generation, at: now + 30.seconds + offset,
+      )
     end
   end
 
@@ -278,7 +291,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     user_email = ClientEmail.create!(@valid_attributes.merge(address: "otp-lock@example.com"))
     now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
+    ClientEmail.stub(:database_now, now) do
       user_email.update!(otp_attempts_count: 3, otp_last_sent_at: now)
       user_email.increment_attempts!
 
@@ -289,20 +302,25 @@ class ClientEmailTest < ActiveSupport::TestCase
 
       assert_equal 5, user_email.otp_attempts_count
       assert_predicate user_email, :locked?
-      assert_in_delta 15.minutes.from_now.to_i, user_email.locked_at.to_i, 1
+      assert_in_delta (now + 15.minutes).to_i, user_email.locked_at.to_i, 1
     end
   end
 
-  test "otp attempt window resets just after fifteen minutes" do
-    user_email = ClientEmail.create!(@valid_attributes.merge(address: "otp-window@example.com"))
-    now = Time.zone.parse("2026-05-25 12:00:00")
+  [-1, 0, 1].each do |microseconds|
+    test "email failures survive fifteen minute issuance age boundary #{microseconds} microseconds" do
+      user_email = ClientEmail.create!(@valid_attributes.merge(address: "otp-window@example.com"))
+      now = Time.zone.parse("2026-05-25 12:00:00")
 
-    travel_to now do
-      user_email.update!(otp_attempts_count: 4, otp_last_sent_at: 15.minutes.ago - 1.second)
-      user_email.increment_attempts!
+      ClientEmail.stub(:database_now, now) do
+        user_email.update!(
+          otp_attempts_count: EmailOtpPolicy::MAX_OTP_ATTEMPTS - 1,
+          otp_last_sent_at: now - EmailOtpPolicy::OTP_ATTEMPT_WINDOW - Rational(microseconds, 1_000_000),
+        )
+        user_email.increment_attempts!
 
-      assert_equal 1, user_email.otp_attempts_count
-      assert_not user_email.locked?
+        assert_equal EmailOtpPolicy::MAX_OTP_ATTEMPTS, user_email.otp_attempts_count
+        assert_predicate user_email, :locked?
+      end
     end
   end
 
@@ -310,7 +328,26 @@ class ClientEmailTest < ActiveSupport::TestCase
     address = "email-race-#{SecureRandom.hex(4)}@example.com"
     results = create_emails_concurrently(address, address)
 
-    assert_identifier_race_protected(results, IdentifierBlindIndex.bidx_for_email(address))
+    begin
+      fv5021 = results
+      fv5019 = IdentifierBlindIndex.bidx_for_email(
+        address,
+        realm: :app,
+      )
+
+      assert_equal 2, fv5021.size
+      assert fv5021.none? { |fv5020|
+        fv5020[:status] == :error
+      }
+      assert_equal 2, fv5021.count { |fv5020|
+        fv5020[:status] == :created
+      }, fv5021.inspect
+      assert_empty fv5021.select { |fv5020|
+        fv5020[:status] == :conflict
+      }
+      assert_equal 2,
+                   ClientEmail.where(address_digest: fv5019).where(binding_finalized_at: nil).count
+    end
   end
 
   test "concurrent creates for case and whitespace equivalent address commit at most one active email" do
@@ -319,7 +356,134 @@ class ClientEmailTest < ActiveSupport::TestCase
     second = "#{local}@example.com"
     results = create_emails_concurrently(first, second)
 
-    assert_identifier_race_protected(results, IdentifierBlindIndex.bidx_for_email(second))
+    begin
+      fv5018 = results
+      fv5016 = IdentifierBlindIndex.bidx_for_email(
+        second,
+        realm: :app,
+      )
+
+      assert_equal 2, fv5018.size
+      assert fv5018.none? { |fv5017|
+        fv5017[:status] == :error
+      }
+      assert_equal 2, fv5018.count { |fv5017|
+        fv5017[:status] == :created
+      }, fv5018.inspect
+      assert_empty fv5018.select { |fv5017|
+        fv5017[:status] == :conflict
+      }
+      assert_equal 2,
+                   ClientEmail.where(address_digest: fv5016).where(binding_finalized_at: nil).count
+    end
+  end
+
+  test "concurrent finalization for one destination leaves one effective email binding" do
+    address = "email-finalize-destination-#{SecureRandom.hex(4)}@example.com"
+    first = create_email_record(address)
+    second = create_email_record(address)
+
+    results =
+      begin
+        fv5015 = first
+        fv5014 = second
+        track_email_race_address(fv5015.address)
+        track_email_race_address(fv5014.address)
+        fv5011 = Queue.new
+        fv5010 = Queue.new
+        fv5008 = Queue.new
+        ActiveRecord::Base.connection_handler.clear_active_connections!
+
+        fv5009 =
+          [fv5015.id, fv5014.id].map do |fv5012|
+            Thread.new do
+              ClientEmail.connection_pool.with_connection do |fv5013|
+                configure_identifier_race_connection!(fv5013)
+                fv5011 << true
+                fv5010.pop
+                ClientEmail.find(fv5012).finalize_binding!
+                fv5008 << { status: :finalized }
+              rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::LockWaitTimeout => e
+                fv5008 << {
+                  status: :conflict,
+                  error: "#{e.class}: #{e.message}",
+                }
+              rescue StandardError => e
+                fv5008 << {
+                  status: :error,
+                  error: "#{e.class}: #{e.message}",
+                }
+              end
+            end
+          end
+        2.times { fv5011.pop }
+        2.times { fv5010 << true }
+        fv5009.each(&:join)
+        2.times.map { fv5008.pop }
+      end
+
+    assert_equal 1, results.count { |result| result[:status] == :finalized }, results.inspect
+    assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
+    assert_equal 1, ClientEmail.effective_binding.where(address_digest: first.address_digest).count
+  end
+
+  test "concurrent finalization for one client leaves one effective email binding" do
+    first = ClientEmail.create!(@valid_attributes.merge(address: "owner-first-#{SecureRandom.hex(4)}@example.com"))
+    second = ClientEmail.create!(@valid_attributes.merge(address: "owner-second-#{SecureRandom.hex(4)}@example.com"))
+
+    results =
+      begin
+        fv5007 = first
+        fv5006 = second
+        track_email_race_address(fv5007.address)
+        track_email_race_address(fv5006.address)
+        fv5003 = Queue.new
+        fv5002 = Queue.new
+        fv5000 = Queue.new
+        ActiveRecord::Base.connection_handler.clear_active_connections!
+
+        fv5001 =
+          [fv5007.id, fv5006.id].map do |fv5004|
+            Thread.new do
+              ClientEmail.connection_pool.with_connection do |fv5005|
+                configure_identifier_race_connection!(fv5005)
+                fv5003 << true
+                fv5002.pop
+                ClientEmail.find(fv5004).finalize_binding!
+                fv5000 << { status: :finalized }
+              rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::LockWaitTimeout => e
+                fv5000 << {
+                  status: :conflict,
+                  error: "#{e.class}: #{e.message}",
+                }
+              rescue StandardError => e
+                fv5000 << {
+                  status: :error,
+                  error: "#{e.class}: #{e.message}",
+                }
+              end
+            end
+          end
+        2.times { fv5003.pop }
+        2.times { fv5002 << true }
+        fv5001.each(&:join)
+        2.times.map { fv5000.pop }
+      end
+
+    assert_equal 1, results.count { |result| result[:status] == :finalized }, results.inspect
+    assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
+    assert_equal 1, ClientEmail.effective_binding.where(user_id: @user.id).count
+  end
+
+  test "released email binding can be reattached without reactivating its history" do
+    original = ClientEmail.create!(@valid_attributes).finalize_binding!
+    original.release_binding!
+    replacement = ClientEmail.create!(@valid_attributes.merge(address: original.address))
+
+    replacement.finalize_binding!
+
+    assert_not_predicate original.reload, :binding_effective?
+    assert_predicate replacement.reload, :binding_effective?
   end
 
   test "active delete transaction versus same address create keeps active email invariant" do
@@ -330,15 +494,16 @@ class ClientEmailTest < ActiveSupport::TestCase
     ready = Queue.new
     release = Queue.new
     results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
     updater =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ClientEmail.transaction do
             locked = ClientEmail.lock.find(existing.id)
             ready << true
             release.pop
-            locked.update!(user_email_status_id: ClientEmailStatus::DELETED, discarded_at: Time.current)
+            locked.update!(user_email_status_id: ClientEmailStatus::DELETED, discard_at: Time.current)
           end
           results << { status: :deleted }
         rescue StandardError => e
@@ -346,7 +511,7 @@ class ClientEmailTest < ActiveSupport::TestCase
         end
       end
     creator =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ready.pop
@@ -369,7 +534,7 @@ class ClientEmailTest < ActiveSupport::TestCase
 
   test "rolled back concurrent email conflict leaves one active email" do
     address = "email-rollback-race-#{SecureRandom.hex(4)}@example.com"
-    digest = IdentifierBlindIndex.bidx_for_email(address)
+    digest = IdentifierBlindIndex.bidx_for_email(address, realm: :app)
     track_email_race_address(address)
 
     ClientEmail.transaction do
@@ -383,21 +548,20 @@ class ClientEmailTest < ActiveSupport::TestCase
       create_email_record(address)
     end
 
-    assert_operator ClientEmail.where(address_digest: digest).where.not(user_email_status_id: ClientEmailStatus::DELETED).count,
-                    :<=,
-                    1
+    assert_operator ClientEmail.effective_binding.where(address_digest: digest).count, :<=, 1
   end
 
   test "concurrent email create while competing insert rolls back does not commit duplicates" do
     address = "email-rollback-concurrent-#{SecureRandom.hex(4)}@example.com"
-    digest = IdentifierBlindIndex.bidx_for_email(address)
+    digest = IdentifierBlindIndex.bidx_for_email(address, realm: :app)
     track_email_race_address(address)
     ready = Queue.new
     release = Queue.new
     results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
 
     holder =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ClientEmail.transaction do
@@ -412,7 +576,7 @@ class ClientEmailTest < ActiveSupport::TestCase
         end
       end
     releaser =
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ready.pop
         release << true
         results << { status: :released }
@@ -427,9 +591,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_nothing_raised do
       create_email_record(address)
     end
-    assert_operator ClientEmail.where(address_digest: digest).where.not(user_email_status_id: ClientEmailStatus::DELETED).count,
-                    :<=,
-                    1
+    assert_operator ClientEmail.effective_binding.where(address_digest: digest).count, :<=, 1
   end
 
   private
@@ -440,9 +602,10 @@ class ClientEmailTest < ActiveSupport::TestCase
     ready = Queue.new
     release = Queue.new
     results = Queue.new
+    ActiveRecord::Base.connection_handler.clear_active_connections!
 
     [first_address, second_address].map do |address|
-      Thread.new do # rubocop:disable ThreadSafety/NewThread
+      Thread.new do
         ClientEmail.connection_pool.with_connection do |connection|
           configure_identifier_race_connection!(connection)
           ready << true
@@ -476,7 +639,7 @@ class ClientEmailTest < ActiveSupport::TestCase
   end
 
   def track_email_race_address(address)
-    @identifier_race_digests << IdentifierBlindIndex.bidx_for_email(address)
+    @identifier_race_digests << IdentifierBlindIndex.bidx_for_email(address, realm: :app)
     @identifier_race_digests.uniq!
   end
 
@@ -484,20 +647,7 @@ class ClientEmailTest < ActiveSupport::TestCase
     connection.execute("SET lock_timeout = '2000ms'")
   end
 
-  def assert_identifier_race_protected(results, digest)
-    assert_equal 2, results.size
-    assert results.none? { |result| result[:status] == :error }
-    assert_equal 1, results.count { |result| result[:status] == :created }, results.inspect
-    assert_equal 1, results.count { |result| result[:status] == :conflict }, results.inspect
-    assert_operator ClientEmail.where(address_digest: digest).where.not(user_email_status_id: ClientEmailStatus::DELETED).count,
-                    :<=,
-                    1
-  end
-
   def active_email_digest_count(address)
-    ClientEmail
-      .where(address_digest: IdentifierBlindIndex.bidx_for_email(address))
-      .where.not(user_email_status_id: ClientEmailStatus::DELETED)
-      .count
+    ClientEmail.effective_binding.where(address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app)).count
   end
 end

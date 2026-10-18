@@ -82,10 +82,10 @@ export default function SignInEmailNew({
         </Button>
       </form>
 
-      <p className="text-sm">
+      <p className="text-base">
         <a
           href={backLink.href}
-          className="text-fg underline-offset-4 hover:underline"
+          className="ui-text-link text-fg underline underline-offset-4 hover:underline"
         >
           <span>{backLink.label}</span>
         </a>

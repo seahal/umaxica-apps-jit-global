@@ -29,14 +29,19 @@ module Publishing
     test "recreates draft assignments from live identifiers and preserves tag order" do
       revision = RestoreVersionOperation.call(version: @version)
 
-      assert_equal @guide.id, revision.single_taxonomy_assignments.sole.taxonomy_term_id
+      assert_equal @guide.id,
+                   Docs::App::RevisionSingleTaxonomyAssignment.find_by!(entry_revision_id: revision.id)
+                     .taxonomy_term_id
       assert_equal(
         %w(rails ruby),
-        revision.multiple_taxonomy_assignments.includes(:taxonomy_term).map { |assignment|
+        Docs::App::RevisionMultipleTaxonomyAssignment.where(entry_revision_id: revision.id)
+          .includes(:taxonomy_term).order(:position).map { |assignment|
           assignment.taxonomy_term.slug
         },
       )
-      assert_equal [0, 1], revision.multiple_taxonomy_assignments.map(&:position)
+      assert_equal [0, 1],
+                   Docs::App::RevisionMultipleTaxonomyAssignment.where(entry_revision_id: revision.id)
+                     .order(:position).map(&:position)
     end
 
     test "restoring twice deliberately produces two distinct revisions" do
@@ -53,10 +58,12 @@ module Publishing
 
       revision = RestoreVersionOperation.call(version: @version)
 
-      assert_equal @guide.id, revision.single_taxonomy_assignments.sole.taxonomy_term_id
+      assert_equal @guide.id,
+                   Docs::App::RevisionSingleTaxonomyAssignment.find_by!(entry_revision_id: revision.id)
+                     .taxonomy_term_id
       assert_raises(ArchivedTaxonomyAssignmentError) { PromoteRevisionOperation.call(revision:) }
 
-      revision.single_taxonomy_assignments.destroy_all
+      Docs::App::RevisionSingleTaxonomyAssignment.where(entry_revision_id: revision.id).destroy_all
 
       assert_nothing_raised { PromoteRevisionOperation.call(revision: revision.reload) }
     end
@@ -67,14 +74,16 @@ module Publishing
       MoveTaxonomySubtreeOperation.call(term: @guide, new_parent: renamed)
 
       revision = RestoreVersionOperation.call(version: @version)
-      assignment = revision.single_taxonomy_assignments.includes(:taxonomy_term).sole
+      assignment = Docs::App::RevisionSingleTaxonomyAssignment.includes(:taxonomy_term)
+        .find_by!(entry_revision_id: revision.id)
 
       # The live foreign key still points at the same term row, which now
       # carries its current name and place in the tree.
       assert_equal @guide.id, assignment.taxonomy_term_id
       assert_equal "renamed", assignment.taxonomy_term.slug
       # The published version keeps what it published.
-      assert_equal "guide", @version.single_taxonomy_assignments.sole.term_slug_snapshot
+      assert_equal "guide", Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: @version.id)
+        .term_slug_snapshot
     end
 
     test "a restored draft can be promoted into a second immutable version" do
@@ -84,7 +93,9 @@ module Publishing
 
       assert_not_equal @version.id, promoted.id
       assert_equal 2, promoted.sequence
-      assert_equal %w(rails ruby), promoted.multiple_taxonomy_assignments.map(&:term_slug_snapshot)
+      assert_equal %w(rails ruby),
+                   Docs::App::VersionMultipleTaxonomyAssignment.where(entry_version_id: promoted.id)
+                     .order(:position).map(&:term_slug_snapshot)
     end
 
     private

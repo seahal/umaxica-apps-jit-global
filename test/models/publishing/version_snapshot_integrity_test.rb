@@ -18,7 +18,7 @@ module Publishing
 
     test "forged snapshot values are overwritten with the live vocabulary and term" do
       version = promote(category: @leaf)
-      forged = version.single_taxonomy_assignments.sole
+      forged = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: version.id)
 
       # Every snapshot column was supplied by the operation, yet the row holds
       # what the database derived.
@@ -63,7 +63,7 @@ module Publishing
 
     test "a forged ordered position snapshot is replaced by the assigned position" do
       version = promote(tags: [@ruby])
-      stored = version.multiple_taxonomy_assignments.sole
+      stored = Docs::App::VersionMultipleTaxonomyAssignment.find_by!(entry_version_id: version.id)
 
       assert_equal stored.position, stored.position_snapshot
     end
@@ -88,12 +88,12 @@ module Publishing
         end
       end
 
-      assert_equal 1, version.reload.multiple_taxonomy_assignments.count
+      assert_equal 1, Docs::App::VersionMultipleTaxonomyAssignment.where(entry_version_id: version.id).count
     end
 
     test "a snapshot at a position the revision never used is rejected at commit" do
       version = promote(tags: [@ruby])
-      assignment = version.multiple_taxonomy_assignments.sole
+      assignment = Docs::App::VersionMultipleTaxonomyAssignment.find_by!(entry_version_id: version.id)
 
       assert_database_rejects do
         PublishingRecord.transaction(requires_new: true) do
@@ -111,7 +111,10 @@ module Publishing
         end
       end
 
-      assert_equal [0], version.reload.multiple_taxonomy_assignments.map(&:position)
+      assignments = Docs::App::VersionMultipleTaxonomyAssignment.where(entry_version_id: version.id)
+      positions = assignments.order(:position).pluck(:position)
+
+      assert_equal [0], positions
     end
 
     test "the breadcrumb path rejects extra keys and non-array shapes" do
@@ -139,8 +142,8 @@ module Publishing
 
     test "as_public_json renders the frozen term identity and no database identifiers" do
       version = promote(category: @leaf, tags: [@ruby])
-      single = version.single_taxonomy_assignments.sole
-      multiple = version.multiple_taxonomy_assignments.sole
+      single = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: version.id)
+      multiple = Docs::App::VersionMultipleTaxonomyAssignment.find_by!(entry_version_id: version.id)
 
       assert_equal(
         { "public_id" => @leaf.public_id, "slug" => "leaf", "name" => "Leaf" },

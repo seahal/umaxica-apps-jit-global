@@ -31,6 +31,7 @@ module SocialAuth
   SOCIAL_CEREMONY_GRANT_SESSION_KEY = :social_ceremony_grant
   STATE_TTL = 5.minutes
   STEP_UP_TTL = 10.minutes
+  SOCIAL_LINK_COMPLETION_SESSION_KEY = :social_link_completion
   SOCIAL_LINK_SCOPE = "social_link"
 
   VALID_INTENTS = %w(login link step_up).freeze
@@ -77,7 +78,7 @@ module SocialAuth
     else
       session[SOCIAL_INTENT_SESSION_KEY] = intent
       session[SOCIAL_STARTED_AT_SESSION_KEY] = Time.current.to_i
-      session[SOCIAL_FLOW_ID_SESSION_KEY] = SecureRandom.hex(16)
+      session[SOCIAL_FLOW_ID_SESSION_KEY] = PublicId.generate
       session[SOCIAL_PROVIDER_SESSION_KEY] = provider
     end
     session[:social_auth_nonce] = SecureRandom.urlsafe_base64(32) if provider.to_s == "apple"
@@ -136,10 +137,6 @@ module SocialAuth
 
   def current_social_auth_intent
     session[SOCIAL_INTENT_SESSION_KEY] || "login"
-  end
-
-  def current_social_auth_pt
-    session[SOCIAL_PT_SESSION_KEY].presence
   end
 
   def current_social_auth_entry
@@ -209,11 +206,20 @@ module SocialAuth
   def social_auth_step_up_requirement(token, ttl:)
     StepUpRequirement.new(
       scope: SOCIAL_LINK_SCOPE,
+      step_up_required: true,
+      allowed_methods: step_up_supported_methods,
+      phishing_resistant_required: false,
+      user_verification_required: false,
+      full_reauthentication_required: false,
       session_binding: token&.public_id,
       token_binding: token&.public_id,
       ttl: ttl,
       purpose: :step_up,
       audience: social_auth_step_up_audience,
+      require_session_binding: true,
+      actor_ref: current_resource&.public_id,
+      resource_ref: nil,
+      tenant_ref: nil,
     )
   end
 
@@ -250,63 +256,6 @@ module SocialAuth
     clear_social_auth_intent!
     log_social_auth_callback_completed(intent, flow_id)
     result
-  end
-
-  def reject_grantless_established_social_login!(principal, intent)
-    return unless intent.to_s == "login"
-    return if social_ceremony_grant_token.present?
-    return unless acme_social_login_completion_supported?(principal)
-
-    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
-  end
-
-  def process_social_ceremony_login_callback(callback_result)
-    grant = social_ceremony_grant
-    result_token = IdentitySocialCeremonyResultIssuer.issue!(
-      grant_token: social_ceremony_grant_token,
-      callback_result: callback_result,
-      surface: "app",
-      actor_ref: grant["actor_ref"],
-      session_ref: grant["session_ref"],
-      operation: "login",
-      challenge_id: extract_callback_state,
-    )
-    clear_social_auth_intent!
-    render(
-      "sign/shared/social_completion",
-      locals: {
-        # The browser posts this form, so the target must be the public base
-        # host, not the internal one, and https, because the CSP form-action
-        # allowlist carries https origins only.
-        completion_url: base_app_social_authentication_completion_url(
-          id: callback_result.principal.provider,
-          host: base_authority_host,
-          protocol: "https",
-        ),
-        result_token: result_token,
-        ri: params[:ri],
-      },
-      layout: false,
-    )
-    nil
-  end
-
-  # Whether a callback identity is an *established / completed* account that must
-  # complete login through acme rather than the bounded-legacy sign-side signup
-  # path.
-  #
-  # Bounded legacy: "completed account" is currently approximated by
-  # birthdate-present, because birthdate is the final required checkpoint of the
-  # client sign-up flow (an account that has it has finished signup). This is a
-  # heuristic, not a status check; it is intentionally conservative so that only
-  # accounts that have clearly finished signup are routed to (and, when grantless,
-  # rejected by) the acme-owned established-login path. Unknown / incomplete
-  # accounts remain on the compatibility signup path. If account completeness
-  # gains a first-class status predicate, replace this with that predicate.
-  def acme_social_login_completion_supported?(principal)
-    identity = social_auth_identity_for_callback(principal)
-
-    identity&.user&.birthdate.present?
   end
 
   def social_auth_identity_for_callback(principal)
@@ -459,7 +408,6 @@ module SocialAuth
 
     respond_to do |format|
       format.html do
-        flash[:alert] = error.message
         clear_social_auth_intent!
         redirect_to(social_auth_failure_redirect_path_for_intent(intent: intent, provider: provider))
       end
@@ -477,13 +425,12 @@ module SocialAuth
     Rails.logger.info(
       JitLogEvent.format(
         "social_auth.record_not_unique",
-        error_message: error.message,
+        error_class: error.class.name,
       ),
     )
 
     respond_to do |format|
       format.html do
-        flash[:alert] = I18n.t("errors.social_auth.identity_conflict")
         clear_social_auth_intent!
         redirect_to(social_auth_failure_redirect_path_for_intent(intent: intent, provider: provider))
       end
@@ -607,23 +554,20 @@ module SocialAuth
   end
 
   def resolve_social_auth_callback_result(callback_result, intent)
-    principal = callback_result.principal
-    if social_ceremony_grant_token.present? && social_ceremony_grant_operation == "login" &&
-        acme_social_login_completion_supported?(principal)
-      process_social_ceremony_login_callback(callback_result)
-    else
-      reject_grantless_established_social_login!(principal, intent)
-      resolve_external_authentication_use_case(callback_result, intent)
-    end
+    binding = auth_social_admission_binding! if intent.to_s == "login"
+    resolve_external_authentication_use_case(
+      callback_result, intent, ceremony_started_at: binding&.created_at,
+    )
   end
 
-  def resolve_external_authentication_use_case(callback_result, intent)
+  def resolve_external_authentication_use_case(callback_result, intent, ceremony_started_at:)
     case intent.to_s
     when "login"
       login_result = ExternalAuthenticationLoginUseCase.call(
         principal: callback_result.principal,
         credential_candidate: callback_result.credential_candidate,
-        sign_up_entry: true,
+        sign_up_entry: current_social_auth_entry == "sign_up",
+        ceremony_started_at: ceremony_started_at,
       )
       return ExternalAuthentication::CallbackOutcome.new(
         status: :signup_required,
@@ -639,20 +583,48 @@ module SocialAuth
         existing_account: login_result.existing_account,
       )
     when "link"
-      link_result = ExternalAuthenticationLinkUseCase.call(
-        principal: callback_result.principal,
-        credential_candidate: callback_result.credential_candidate,
-        user: social_auth_user,
-      )
-      ExternalAuthentication::CallbackOutcome.new(
-        status: :link_completed,
-        user: link_result.user,
-        identity: link_result.identity,
-        existing_account: nil,
-      )
+      stage_social_link_completion!(callback_result)
     else
       raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
     end
+  end
+
+  def stage_social_link_completion!(callback_result)
+    token = social_auth_current_session_token
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in") unless token
+
+    device_session = token.device_session_record!
+    transaction = active_social_link_transaction!(callback_result.principal.provider, device_session.public_id)
+
+    candidate = IdentitySocialCeremonyCandidateStore.store!(
+      surface: "app", actor_ref: current_client.public_id,
+      session_ref: device_session.public_id, transaction_id: transaction.transaction_id,
+      operation: "link", provider: callback_result.principal.provider, callback_result: callback_result,
+      expires_at: [transaction.expires_at, IdentitySocialCeremonyCandidate.database_now + STATE_TTL].min,
+    )
+    session[SOCIAL_LINK_COMPLETION_SESSION_KEY] = [candidate.ref, token.public_id]
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; form-action 'self'"
+    render "auth/shared/social_link_completion", layout: false,
+                                                 locals: { candidate_ref: candidate.ref, ri: params[:ri] }
+    nil
+  end
+
+  def active_social_link_transaction!(provider, device_session_public_id)
+    grant = social_ceremony_grant
+    unless grant["operation"] == "link" && grant["actor_ref"] == current_client.public_id &&
+        grant["session_ref"] == device_session_public_id && grant["provider"] == provider
+      raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+    end
+
+    transaction = IdentitySocialCeremonyReplayStore.for("app").find_transaction!(grant["transaction_id"])
+    return transaction if transaction.grant_jti == grant["jti"] &&
+      transaction.status == SocialCeremonyTransactionable::STATUS_PENDING &&
+      transaction.consumed_at.nil? &&
+      transaction.expires_at > IdentitySocialCeremonyCandidate.database_now
+
+    raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
   end
 
   def classify_social_auth_error_reason(error)
@@ -680,7 +652,6 @@ module SocialAuth
       JitLogEvent.format(
         "social_auth.error",
         error_class: error.class.name,
-        error_message: error.message,
         status_code: error.status_code,
       ),
     )

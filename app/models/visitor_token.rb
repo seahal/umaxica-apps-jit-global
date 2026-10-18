@@ -4,15 +4,15 @@
 # == Schema Information
 #
 # Table name: visitor_tokens
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
-#  last_step_up_aal                   :string
+#  last_step_up_aal                   :string           # @deprecated label only; remove after AAL ledger retirement
 #  last_step_up_at                    :datetime
 #  last_step_up_audience              :string
 #  last_step_up_method                :string
@@ -22,16 +22,22 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
 #  selected_at                        :datetime
 #  created_at                         :datetime         not null
+#  authentication_event_at            :datetime
 #  updated_at                         :datetime         not null
 #  dbsc_session_id                    :string
 #  device_session_id                  :bigint
 #  last_step_up_session_public_id     :string
+#  last_step_up_user_verified         :boolean
+#  last_step_up_credential_ref        :string
+#  last_step_up_full_reauthentication :boolean
+#  last_step_up_resource_ref          :string
+#  last_step_up_tenant_ref            :string
 #  oidc_client_id                     :string(64)
 #  oidc_connection_id                 :bigint
 #  public_id                          :string(21)       default(""), not null
@@ -50,12 +56,12 @@
 #  index_visitor_tokens_on_created_at                       (created_at)
 #  index_visitor_tokens_on_dbsc_session_id                  (dbsc_session_id) UNIQUE
 #  index_visitor_tokens_on_device_session_id                (device_session_id)
-#  index_visitor_tokens_on_discarded_at                     (discarded_at)
+#  index_visitor_tokens_on_discard_at                     (discard_at)
 #  index_visitor_tokens_on_oidc_connection_id               (oidc_connection_id)
 #  index_visitor_tokens_on_oidc_jti                         (oidc_jti)
 #  index_visitor_tokens_on_oidc_sid                         (oidc_sid)
 #  index_visitor_tokens_on_public_id                        (public_id) UNIQUE
-#  index_visitor_tokens_on_purged_at                        (purged_at)
+#  index_visitor_tokens_on_purge_eligible_at                        (purge_eligible_at)
 #  index_visitor_tokens_on_refresh_token_digest             (refresh_token_digest) UNIQUE
 #  index_visitor_tokens_on_refresh_token_family_id          (refresh_token_family_id)
 #  index_visitor_tokens_on_rotated_at                       (rotated_at)
@@ -75,7 +81,7 @@
 #  fk_customer_tokens_on_customer_token_kind_id            (visitor_token_kind_id => visitor_token_kinds.id)
 #  fk_customer_tokens_on_customer_token_status_id          (visitor_token_status_id => visitor_token_statuses.id)
 #
-class VisitorToken < ComTicketRecord
+class VisitorToken < OpBaseComRecord
   self.belongs_to_required_by_default = false
 
   include ::PublicId
@@ -87,6 +93,10 @@ class VisitorToken < ComTicketRecord
   include ::SessionOidcConnection
   include ::SelectedActorContext
 
+  SELECTED_ACTOR_CONTEXT_COLUMNS = %i(
+    selected_account_public_id selected_collective_public_id selected_collective_unit_public_id selected_at
+  ).freeze
+
   DBSC_BINDING_METHOD_CLASS = VisitorTokenBindingMethod
   DBSC_STATUS_CLASS = VisitorTokenDbscStatus
 
@@ -96,6 +106,13 @@ class VisitorToken < ComTicketRecord
   MAX_TOTAL_SESSIONS_PER_VISITOR = 2
   session_oidc_connection_config actor_name: :visitor, connection_class: VisitorOidcConnection
 
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+
+  attribute :visitor_token_status_id, default: VisitorTokenStatus::ACTIVE
+  attribute :visitor_token_kind_id, default: VisitorTokenKind::BROWSER_WEB
+  attribute :visitor_token_binding_method_id, default: VisitorTokenBindingMethod::NOTHING
+  attribute :visitor_token_dbsc_status_id, default: VisitorTokenDbscStatus::NOTHING
+
   belongs_to :visitor, inverse_of: :visitor_tokens
   has_many :visitor_verifications, dependent: :delete_all, inverse_of: :visitor_token
   belongs_to :visitor_token_status
@@ -104,17 +121,16 @@ class VisitorToken < ComTicketRecord
   belongs_to :visitor_token_dbsc_status
   belongs_to :oidc_connection, class_name: "VisitorOidcConnection"
   belongs_to :device_session, class_name: "VisitorDeviceSession", inverse_of: :visitor_tokens
-  has_many :visitor_token_usages, inverse_of: :visitor_token, dependent: :delete_all
+  has_many :visitor_sign_up_flows,
+           foreign_key: :token_id,
+           inverse_of: :token,
+           dependent: :restrict_with_exception
+  has_many :op_com_grants, inverse_of: :visitor_token, dependent: :restrict_with_exception
   has_one :step_up_session,
           class_name: "VisitorStepUpSession",
           inverse_of: :visitor_token,
           strict_loading: false,
           dependent: :destroy
-
-  attribute :visitor_token_status_id, default: VisitorTokenStatus::ACTIVE
-  attribute :visitor_token_kind_id, default: VisitorTokenKind::BROWSER_WEB
-  attribute :visitor_token_binding_method_id, default: VisitorTokenBindingMethod::NOTHING
-  attribute :visitor_token_dbsc_status_id, default: VisitorTokenDbscStatus::NOTHING
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
 
@@ -123,11 +139,15 @@ class VisitorToken < ComTicketRecord
 
   private
 
+  def step_up_authority_binding
+    [VisitorStepUpSession, VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession, :visitor_token_id]
+  end
+
   def enforce_concurrent_session_limit
     return if skip_session_limit_check
     return unless visitor_id
 
-    operation = -> { self.class.not_revoked.where(visitor_id: visitor_id, rotated_at: nil).count }
+    operation = -> { self.class.active_status.where(visitor_id: visitor_id, rotated_at: nil).count }
     count = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     return if count < MAX_TOTAL_SESSIONS_PER_VISITOR
 

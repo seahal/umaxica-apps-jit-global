@@ -22,23 +22,6 @@ class SurfaceScopedPolicyRefusalsTest < ActiveSupport::TestCase
     assert_not OrganizationMembershipPolicy.new(Object.new, user: nil).manage_memberships?
   end
 
-  # These raise rather than answer false: an unmapped class means the policy was
-  # extended without teaching it the new association, and a silent false would
-  # read as "denied" while actually being "not implemented".
-  test "an account or membership class with no mapping is named in the error" do
-    policy = OrganizationMembershipPolicy.new(Object.new, user: operators(:one))
-
-    account_error =
-      assert_raises(ArgumentError) { policy.send(:account_identity_association, Operator) }
-
-    assert_match(/unsupported account class: Operator/, account_error.message)
-
-    membership_error =
-      assert_raises(ArgumentError) { policy.send(:membership_account_association, Operator) }
-
-    assert_match(/unsupported membership class: Operator/, membership_error.message)
-  end
-
   # Lifecycle requests are staff-only, and an operator may never approve or
   # execute their own -- that separation is the whole point of the request.
   test "lifecycle requests are refused to anyone who is not an operator" do
@@ -53,24 +36,23 @@ class SurfaceScopedPolicyRefusalsTest < ActiveSupport::TestCase
     assert_not policy.execute?
   end
 
-  test "an operator may list and raise lifecycle requests but not action their own" do
+  # The lifecycle policy is closed until operator-to-operator capabilities are specified.
+  test "an operator can neither raise nor action a lifecycle request, their own or another's" do
     operator = operators(:one)
     own = Struct.new(:requested_by_operator_id, :pending?, :approved?).new(operator.id, true, true)
     someone_elses = Struct.new(:requested_by_operator_id, :pending?, :approved?).new(operator.id + 1, true, true)
 
     own_policy = OperatorLifecycleRequestPolicy.new(own, user: operator)
 
-    assert_predicate own_policy, :index?
-    assert_predicate own_policy, :show?
-    assert_predicate own_policy, :create?
-    assert_not own_policy.approve?, "an operator must not approve their own request"
-    assert_not own_policy.execute?, "an operator must not execute their own request"
+    assert_not own_policy.index?
+    assert_not own_policy.create?
+    assert_not own_policy.approve?
 
     others_policy = OperatorLifecycleRequestPolicy.new(someone_elses, user: operator)
 
-    assert_predicate others_policy, :approve?
-    assert_predicate others_policy, :reject?
-    assert_predicate others_policy, :execute?
+    assert_not others_policy.approve?
+    assert_not others_policy.reject?
+    assert_not others_policy.execute?
   end
 
   test "an unapproved request cannot be executed even by another operator" do

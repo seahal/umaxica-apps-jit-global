@@ -29,7 +29,8 @@ module Publishing
       term.class.transaction do
         # Locking the vocabulary serializes concurrent moves within one tree,
         # so two moves cannot interleave into a cycle that each alone avoids.
-        term.vocabulary.lock!
+        vocabulary_class = ContentFamilies.cell_for_taxonomy_term(term).fetch(:vocabulary)
+        vocabulary_class.find(term.vocabulary_id).lock!
 
         term.reload
         validate_scope!
@@ -50,6 +51,9 @@ module Publishing
     def validate_scope!
       return unless new_parent
 
+      unless new_parent.class == term.class
+        raise(ScopeMismatchError, "cannot move term #{term.id} into a different taxonomy scope")
+      end
       unless new_parent.vocabulary_id == term.vocabulary_id
         raise(ScopeMismatchError, "cannot move term #{term.id} into a different vocabulary")
       end

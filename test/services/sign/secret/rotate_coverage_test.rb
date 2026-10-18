@@ -22,8 +22,18 @@ class SignSecretRotateCoverageTest < ActiveSupport::TestCase
     captured_issue_kwargs = nil
     captured_revoke_kwargs = nil
 
-    SignSecretIssue.stub(:call, ->(**kwargs) { captured_issue_kwargs = kwargs; issued_result }) do
-      SignSecretRevoke.stub(:call, ->(**kwargs) { captured_revoke_kwargs = kwargs; true }) do
+    SignSecretIssue.stub(
+      :call, ->(**kwargs) {
+               captured_issue_kwargs = kwargs
+               issued_result
+             },
+    ) do
+      SignSecretRevoke.stub(
+        :call, ->(**kwargs) {
+                 captured_revoke_kwargs = kwargs
+                 true
+               },
+      ) do
         result =
           SignSecretRotate.call(
             credential_collection: credential_collection,

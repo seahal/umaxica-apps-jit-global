@@ -57,7 +57,7 @@ export default function PasskeyIndex({
         </ButtonLink>
       }
     >
-      <Table>
+      <Table label={title}>
         <thead>
           <tr>
             <th scope="col">{columns.description}</th>
@@ -74,7 +74,7 @@ export default function PasskeyIndex({
                 <div className="flex items-center gap-2">
                   <a
                     href={passkey.edit_href}
-                    className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+                    className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
                   >
                     {editLabel}
                   </a>

@@ -10,17 +10,18 @@ module Auth
           include ::TurnstilePageProps
           include ::CloudflareTurnstile
           include CommonRedirect
-          include CommonOtp
           include SignEmailRegistrable
           include EnforcementIdentifierGate
 
           include SignUpSuspensionGuard
           include AppSignUpEntryPage
+          include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
           REGISTRATION_EMAIL_PERMITTED_KEYS = %i(raw_address address confirm_policy promotional notifiable).freeze
 
+          before_action :require_sign_up_ceremony_admission!
           before_action :reject_suspended_sign_up!
           before_action :enforce_email_flow!
 
@@ -65,6 +66,8 @@ module Auth
           end
 
           def create
+            supersede_active_sign_up_flow!
+
             log_sign_signup_event(
               "sign.signup.email.create.received",
               sign_signup_request_flags.merge(step: "email_otp"),
@@ -84,7 +87,6 @@ module Auth
             result = initiate_email_verification!(
               email_address,
               confirm_policy: email_params[:confirm_policy],
-              allow_existing: true,
               email_preferences: email_params.slice(:promotional, :notifiable),
             )
 
@@ -105,16 +107,37 @@ module Auth
               return
             end
 
-            bind_sign_up_flow_to_email!(@user_email) unless dummy_existing_email_flow?
             progress_email_flow!(:create)
             redirect_params = {}
             sanitize_redirect_params!(redirect_params)
-            redirect_to(auth_app_sign_up_check_email_otp_path(redirect_params))
+            redirect_to(auth_app_sign_up_check_email_otp_path(sign_up_flow_binding_params.merge(redirect_params)))
           end
 
           private
 
           def sign_up_surface = :app
+
+          def email_otp_purpose = :sign_up
+
+          def process_email_registration_under_lock
+            has_errors = @user_email.errors.details.except(:user, :user_id).any?
+            cleanup_pending_signup!
+            return { status: false } if has_errors
+
+            @pending_user = EmailSignUpCandidateCreator.call(email: @user_email)
+            { status: :ok, otp_number: nil }
+          end
+
+          def send_verification_email(_otp_number)
+            bind_sign_up_flow_to_email!(@user_email)
+            issued = EmailSignUpOtpDeliveryIssuer.call(
+              flow: current_sign_up_flow, email: @user_email,
+              session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+            )
+            raise ArgumentError, "initial Email signup challenge was refused" unless issued.success?
+
+            true
+          end
 
           # The registration form. `pt` travels in the generated action URL rather than as a prop,
           # so the signed target never becomes page data the browser holds separately.
@@ -134,6 +157,7 @@ module Auth
                 label: ClientEmail.human_attribute_name(:address),
                 type: "email",
                 autocomplete: "email",
+                value: sign_up_email_input_value,
               },
               checkboxes: sign_up_email_checkboxes,
               error_heading: sign_up_email_errors.any? ? t("sign.app.registration.email.new.error_summary") : nil,
@@ -187,23 +211,40 @@ module Auth
             {
               title: t("sign.app.authentication.email.edit.page_title"),
               description: t("sign.app.registration.email.create.verification_code_sent"),
-              action: auth_app_sign_up_check_email_otp_path(ri: params[:ri], pt: signed_pt_param),
+              action: auth_app_sign_up_check_email_otp_path(
+                **sign_up_flow_binding_params, ri: params[:ri],
+                                               pt: signed_pt_param,
+              ),
               scope: "client_email",
               code_label: t("sign.app.authentication.email.edit.code_label"),
               code_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
               submit_label: t("sign.app.authentication.email.edit.submit"),
               delivery_help: t("sign.app.authentication.email.edit.delivery_help"),
+              turnstile: turnstile_visible_props(challenge_id: SecureRandom.uuid),
               error_heading: nil,
               errors: sign_up_email_errors,
-              return_link: {
-                label: t("sign.app.registration.email.edit.return_page"),
-                href: auth_app_sign_up_path,
-              },
+              # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
+              # ends the sign-up through the existing DELETE cancellation.
+              cancel: { label: t("actions.cancel"),
+                        action: auth_app_sign_up_check_email_otp_path(
+                          **sign_up_flow_binding_params, ri: params[:ri],
+                                                         pt: signed_pt_param,
+                        ),
+                        method: "delete", },
             }
           end
 
           def sign_up_email_errors
             @user_email&.errors&.map(&:full_message) || []
+          end
+
+          def sign_up_email_input_value
+            return "" unless request.post?
+
+            email_params = registration_email_params
+            value = email_params&.[](:raw_address)
+            value = email_params&.[](:address) unless value.is_a?(String)
+            value if value.is_a?(String)
           end
 
           # Mirrors the label `form.submit` looked up, so the button keeps its wording.
@@ -270,41 +311,10 @@ module Auth
           end
 
           def valid_email_session?
-            return dummy_existing_email_session_valid? if dummy_existing_email_flow?
-            return false if @user_email.blank?
-
-            if existing_signup_email_flow?
-              return false unless Integer(session_existing_email_id.to_s, 10) == @user_email.id
-
-              existing_signup_skip_otp? || !@user_email.otp_expired?
-            else
-              return false if @user_email.otp_expired?
-
-              @user_email.user_email_status_id == ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP
-            end
-          end
-
-          def existing_signup_email_flow?
-            session_existing_email_id.present?
-          end
-
-          def dummy_existing_email_flow?
-            session[SignEmailRegistrable::DUMMY_EXISTING_EMAIL_SESSION_KEY].present?
-          end
-
-          def dummy_existing_email_session_valid?
-            payload = session[SignEmailRegistrable::DUMMY_EXISTING_EMAIL_SESSION_KEY]
-            return false unless payload.is_a?(Hash) && payload["dummy"] == true
-
-            payload["expires_at"].to_i > Time.current.to_i
-          end
-
-          def session_existing_email_id
-            session[SignEmailRegistrable::EXISTING_EMAIL_SESSION_KEY]
-          end
-
-          def existing_signup_skip_otp?
-            session[SignEmailRegistrable::EXISTING_EMAIL_SKIP_OTP_SESSION_KEY] == true
+            EmailSignUpOtpFormQuery.call(
+              flow: @sign_up_ticket, email: @user_email,
+              session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
+            )
           end
 
           def log_signup_email_errors
@@ -326,12 +336,6 @@ module Auth
           end
 
           def current_registration_email
-            return ClientEmail.new if dummy_existing_email_flow?
-
-            if existing_signup_email_flow?
-              return ClientEmail.find_by(id: session_existing_email_id)
-            end
-
             # Resolve the pending email through the same ticket lookup the step
             # gate uses (`current_sign_up_flow_ticket`), which falls back to the
             # sequence id when the locator session payload is absent or its nonce
@@ -371,10 +375,6 @@ module Auth
           end
 
           def issue_sign_up_flow!
-            AppTicketRecord.connected_to(role: :writing) do
-              ClientSignUpFlowStatus.ensure_defaults!
-            end
-
             sign_up_flow_locator.issue!(
               ClientSignUpFlow.create!(
                 principal_id: nil,
@@ -395,7 +395,7 @@ module Auth
 
           def bind_sign_up_flow_to_email!(email)
             cycle = current_sign_up_flow
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               cycle.update!(
                 principal_id: email.user_id,
                 pending_contact_type: "email",

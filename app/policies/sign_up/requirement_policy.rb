@@ -27,10 +27,6 @@ module SignUp
       clear_named_requirement?(:passkey)
     end
 
-    def confirm_passcode?
-      clear_named_requirement?(:passcode)
-    end
-
     private
 
     def clear_named_requirement?(requirement)

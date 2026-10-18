@@ -13,28 +13,31 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
   end
 
   test "includes email_otp for verified user email status" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "verified-stepup@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
 
     assert_includes StepUpAvailableMethods.call(@user), :email_otp
   end
 
   test "matches configured methods without cooldown or lockout" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "available-baseline@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
 
     assert_equal StepUpConfiguredMethodsQuery.call(@user), StepUpAvailableMethods.call(@user)
   end
 
-  test "cooldown stamp does not hide methods while cache-backed cooldowns are disabled" do
-    @user.client_emails.create!(
+  test "verified email and an active Passkey are both available" do
+    email = @user.client_emails.create!(
       address: "available-cooldown@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     passkey = @user.client_passkeys.new(
       webauthn_id: "available_cooldown_passkey_#{SecureRandom.hex(4)}",
       external_id: SecureRandom.uuid,
@@ -45,45 +48,33 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     )
     passkey.save!(validate: false)
 
-    StepUpCooldownStamp.call(@user, :email_otp)
-
     result = StepUpAvailableMethods.call(@user)
 
     assert_includes result, :email_otp
     assert_includes result, :passkey
   end
 
-  test "email otp cooldown window is sixty seconds" do
-    assert_equal 60.seconds, StepUpCooldowns::WINDOWS.fetch(:email_otp)
-    assert_equal StepUpCooldowns::WINDOWS.fetch(:email_otp),
-                 SignAppVerificationBase::EMAIL_OTP_RESEND_COOLDOWN
-  end
-
-  test "step up cooldown key uses the actor class, id, and method" do
-    actor = Client.new(id: 42)
-
-    assert_equal "step_up_cooldown:client:42:email_otp", StepUpCooldowns.key(actor, :email_otp)
-  end
-
-  test "step up cooldown active methods stays empty" do
-    assert_equal [], StepUpCooldowns.active_methods(Client.new(id: 42))
+  test "Email OTP issuer resend interval is sixty seconds" do
+    assert_equal 60.seconds, IdentityStepUpEmailCodeIssuer::RESEND_INTERVAL
   end
 
   test "ticket lockout returns no methods" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "available-lockout@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     ticket = Struct.new(:attempt_count).new(5)
 
     assert_equal [], StepUpAvailableMethods.call(@user, ticket: ticket)
   end
 
   test "ticket attempt count four still returns configured methods" do
-    @user.client_emails.create!(
+    email = @user.client_emails.create!(
       address: "available-attempt-four@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
+    email.finalize_binding!
     ticket = Struct.new(:attempt_count).new(4)
 
     assert_includes StepUpAvailableMethods.call(@user, ticket: ticket), :email_otp
@@ -154,27 +145,22 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     @staff.operator_emails.create!(
       address: "staff-active-stepup@example.com",
       staff_identity_email_status_id: OperatorEmailStatus::ACTIVE,
-      otp_counter: "0",
-      otp_private_key: "private_key",
     )
 
     assert_not_includes StepUpAvailableMethods.call(@staff), :email_otp
   end
 
-  test "available methods ignore cooldown stamps for visitor actors while cache-backed cooldowns are disabled" do
+  test "a verified Visitor email is available" do
     ensure_visitor_reference_records!
     @visitor = Visitor.create!(
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::BOTH,
     )
-    @visitor.visitor_emails.create!(
+    email = @visitor.visitor_emails.create!(
       address: "available-visitor@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
-
-    assert_includes StepUpAvailableMethods.call(@visitor), :email_otp
-
-    StepUpCooldownStamp.call(@visitor, :email_otp)
+    email.finalize_binding!
 
     assert_includes StepUpAvailableMethods.call(@visitor), :email_otp
   end
@@ -198,8 +184,6 @@ class StepUpAvailableMethodsTest < ActiveSupport::TestCase
     @staff.operator_emails.create!(
       address: "staff-inactive-stepup@example.com",
       staff_identity_email_status_id: OperatorEmailStatus::INACTIVE,
-      otp_counter: "0",
-      otp_private_key: "private_key",
     )
 
     assert_not_includes StepUpAvailableMethods.call(@staff), :email_otp
@@ -223,31 +207,11 @@ class StepUpAvailableMethodsTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -307,10 +271,8 @@ class StepUpAvailableMethodsTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -322,10 +284,8 @@ class StepUpAvailableMethodsTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -546,63 +506,6 @@ class StepUpAvailableMethodsTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -618,10 +521,8 @@ class StepUpAvailableMethodsTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -641,12 +542,12 @@ class StepUpAvailableMethodsTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

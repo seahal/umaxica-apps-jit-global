@@ -1,0 +1,15 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "active eligibility predicate" as active
+    state "closing predicate (started, not suspended/terminated)" as closing
+    state "suspended predicate" as suspended
+    state "terminated predicate" as terminated
+    state "withdrawn_at fact (overlapping)" as withdrawn
+    [*] --> active
+    active --> active: start withdrawal request
+    active --> suspended: suspend!
+    closing --> suspended: suspend!
+    suspended --> suspended: suspend!
+    suspended --> active: recover!
+    suspended --> terminated: terminate! after7days
+    suspended --> terminated: clock reaches finite purge deadline

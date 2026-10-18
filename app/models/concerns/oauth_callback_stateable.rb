@@ -6,6 +6,7 @@ module OauthCallbackStateable
 
   TTL_SECONDS = 300
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     scope :active_at, ->(time) { where(arel_table[:expires_at].gt(time)) }
     scope :unconsumed, -> { where(consumed_at: nil) }
@@ -51,10 +52,10 @@ module OauthCallbackStateable
     end
 
     def connection_owner
-      if self <= AppTicketRecord
-        AppTicketRecord
-      elsif self <= OrgTicketRecord
-        OrgTicketRecord
+      if self <= OpBaseAppRecord
+        OpBaseAppRecord
+      elsif self <= OpBaseOrgRecord
+        OpBaseOrgRecord
       end
     end
   end

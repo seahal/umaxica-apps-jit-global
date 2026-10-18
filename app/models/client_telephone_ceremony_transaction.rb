@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: client_telephone_ceremony_transactions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                       :bigint           not null, primary key
 #  actor_ref                :string           not null
@@ -32,8 +32,11 @@
 #  index_client_telephone_ceremony_transactions_on_result_jti      (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  index_client_telephone_ceremony_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class ClientTelephoneCeremonyTransaction < AppTicketRecord
+class ClientTelephoneCeremonyTransaction < OpBaseAppRecord
   include TelephoneCeremonyTransactionable
+  include TelephoneCeremonyOtp
+
+  validate :immutable_telephone_otp_terminal_facts
 
   ceremony_surface "app"
 end

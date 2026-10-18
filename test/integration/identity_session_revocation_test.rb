@@ -4,21 +4,13 @@
 require "test_helper"
 
 # Self-service session management on the app and com browser surfaces:
-# listing sessions, revoking one selected session, revoking every other
-# session, and revoking all sessions.
+# listing sessions, revoking one selected session, and revoking every other session.
 #
 # The org surface runs the same controllers with an operator actor. It is
 # covered at the service level in
 # `test/services/authentication_other_sessions_revoker_test.rb` instead,
 # because org HTML requests without an OIDC RP browser session are answered
 # by the SSO initiator before any controller under test runs.
-#
-# "Revoke all" is account-wide and destructive, so it sits behind the
-# `session_revoke_all` step-up scope the catalog reserves for it and runs
-# through the `logout_all_sessions_for!` chokepoint (session-version bump,
-# logout audit, cookie clear, Rails session reset). Selected/other revokes
-# stay step-up free: they cannot lock the actor out of the surface they are
-# currently using.
 class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   fixtures :clients
 
@@ -26,7 +18,19 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     ensure_token_reference_records!
 
     @app_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    @com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  end
+
+  test "self-service routes cannot revoke every session" do
+    {
+      @app_host => "/identity/sessions",
+      @com_host => "/identity/sessions",
+      ENV.fetch("PUBLIC_BASE_STAFF_URL") => "/identity/sessions",
+    }.each do |host, path|
+      assert_raises(ActionController::RoutingError, host) do
+        Rails.application.routes.recognize_path("https://#{host}#{path}", method: :delete)
+      end
+    end
   end
 
   # --- app surface -------------------------------------------------------
@@ -38,8 +42,31 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     get base_app_identity_sessions_url(ri: "jp", host: @app_host), headers: @app_headers
 
     assert_response :success
-    assert_match "/identity/other_sessions", response.body
+    assert_match "/sessions/other", response.body
     assert_match @other_token.public_id, response.body
+  end
+
+  test "app refuses a foreign session id without mutating the owner sessions" do
+    host! @app_host
+    setup_app_actor!
+    foreign = ClientToken.create!(user: clients(:two))
+
+    delete base_app_identity_session_url(foreign.public_id, ri: "jp", host: @app_host), headers: @app_headers
+
+    assert_response :not_found
+    assert_predicate foreign.reload, :currently_usable?
+    assert_predicate @current_token.reload, :currently_usable?
+    assert_predicate @other_token.reload, :currently_usable?
+  end
+
+  test "app session destroy is not reachable with GET" do
+    host! @app_host
+    setup_app_actor!
+
+    get base_app_identity_session_url(@other_token.public_id, ri: "jp", host: @app_host), headers: @app_headers
+
+    assert_response :success
+    assert_predicate @other_token.reload, :currently_usable?
   end
 
   test "app revoke selected session revokes only that session" do
@@ -66,6 +93,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   test "app revoke other sessions keeps the current session" do
     host! @app_host
     setup_app_actor!
+    mark_step_up_satisfied!(@current_token, audience: "step_up:app")
 
     delete base_app_identity_other_sessions_url(ri: "jp", host: @app_host), headers: @app_headers
 
@@ -74,40 +102,15 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     assert_predicate @current_token.reload, :currently_usable?
   end
 
-  test "app revoke all is rejected without step-up and leaves sessions active" do
+  test "app revoke other sessions requires a fresh step-up" do
     host! @app_host
     setup_app_actor!
 
-    delete base_app_identity_session_set_url(ri: "jp", host: @app_host), headers: @app_headers
+    delete base_app_identity_other_sessions_url(ri: "jp", host: @app_host), headers: @app_headers
 
     assert_response :unauthorized
     assert_predicate @current_token.reload, :currently_usable?
     assert_predicate @other_token.reload, :currently_usable?
-  end
-
-  test "app revoke all with a step-up for another scope is still rejected" do
-    host! @app_host
-    setup_app_actor!
-    satisfy_client_verification(@current_token)
-    mark_step_up_satisfied!(@current_token, scope: "settings_email", audience: "step_up:app")
-
-    delete base_app_identity_session_set_url(ri: "jp", host: @app_host), headers: @app_headers
-
-    assert_response :unauthorized
-    assert_predicate @other_token.reload, :currently_usable?
-  end
-
-  test "app revoke all revokes every session once step-up is satisfied" do
-    host! @app_host
-    setup_app_actor!
-    satisfy_client_verification(@current_token)
-    mark_step_up_satisfied!(@current_token, scope: "session_revoke_all", audience: "step_up:app")
-
-    delete base_app_identity_session_set_url(ri: "jp", host: @app_host), headers: @app_headers
-
-    assert_response :see_other
-    assert_not_predicate @current_token.reload, :currently_usable?
-    assert_not_predicate @other_token.reload, :currently_usable?
   end
 
   # --- com surface -------------------------------------------------------
@@ -119,13 +122,14 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     get base_com_identity_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
 
     assert_response :success
-    assert_match "/identity/other_sessions", response.body
+    assert_match "/sessions/other", response.body
     assert_match @other_token.public_id, response.body
   end
 
   test "com revoke other sessions keeps the current session" do
     host! @com_host
     setup_com_actor!
+    mark_step_up_satisfied!(@current_token, audience: "step_up:com")
 
     delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host), headers: @com_headers
 
@@ -134,59 +138,34 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     assert_predicate @current_token.reload, :currently_usable?
   end
 
-  test "com revoke all is rejected without step-up" do
+  test "com revoke other sessions requires a fresh step-up" do
     host! @com_host
     setup_com_actor!
+    sessions_url = base_com_identity_sessions_url(ri: "jp", host: @com_host)
+    with_forgery_protection do
+      get sessions_url, headers: @com_headers
 
-    delete base_com_identity_session_set_url(ri: "jp", host: @com_host), headers: @com_headers
+      assert_response :success
+      csrf_token = response.parsed_body.at_css('meta[name="csrf-token"]')&.[]("content")
 
-    assert_step_up_challenged
-    assert_predicate @current_token.reload, :currently_usable?
-    assert_predicate @other_token.reload, :currently_usable?
-  end
+      assert_predicate csrf_token, :present?
 
-  test "com revoke all revokes every session once step-up is satisfied" do
-    host! @com_host
-    setup_com_actor!
-    satisfy_visitor_verification(@current_token)
-    mark_step_up_satisfied!(@current_token, scope: "session_revoke_all", audience: "step_up:com")
+      delete base_com_identity_other_sessions_url(ri: "jp", host: @com_host),
+             headers: @com_headers.merge("X-CSRF-Token" => csrf_token)
 
-    delete base_com_identity_session_set_url(ri: "jp", host: @com_host), headers: @com_headers
+      assert_response :see_other
+      gateway = URI.parse(response.location)
 
-    assert_response :see_other
-    assert_not_predicate @current_token.reload, :currently_usable?
-    assert_not_predicate @other_token.reload, :currently_usable?
-  end
-
-  # The org controller's HTTP path is not exercisable here (see the note at the
-  # top of this file), so pin its step-up declaration structurally: the scope
-  # must stay the one `StepUpScopeCatalog` reserves, on every surface.
-  test "every surface declares the session_revoke_all step-up scope" do
-    [
-      Base::App::Identity::Revocations::AllsController,
-      Base::Com::Identity::Revocations::AllsController,
-      Base::Org::Identity::Revocations::AllsController,
-    ].each do |controller_class|
-      assert_equal "session_revoke_all", controller_class.new.send(:verification_scope),
-                   "#{controller_class} must gate revoke-all on the session_revoke_all scope"
+      assert_equal @com_host, gateway.host
+      assert_includes %w(/verification /verification/setup), gateway.path
+      assert_equal "session_revoke_all", Rack::Utils.parse_nested_query(gateway.query)["scope"]
+      assert_nil Rack::Utils.parse_nested_query(gateway.query)["rt"]
+      assert_predicate @current_token.reload, :currently_usable?
+      assert_predicate @other_token.reload, :currently_usable?
     end
-
-    assert StepUpScopeCatalog::APP.key?("session_revoke_all")
-    assert StepUpScopeCatalog::COM.key?("session_revoke_all")
-    assert StepUpScopeCatalog::ORG.key?("session_revoke_all")
   end
 
   private
-
-  # A revoke-all attempt without satisfied step-up is either answered with 401
-  # (step-up possible for this actor) or redirected into the verification flow
-  # (actor still has to set a step-up credential up). Both mean "not revoked".
-  def assert_step_up_challenged
-    return assert_response(:unauthorized) if response.status == 401
-
-    assert_response :redirect
-    assert_match %r{\A/verification}, URI.parse(response.location).path
-  end
 
   def setup_app_actor!
     @actor = clients(:one)
@@ -212,6 +191,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     @actor = Visitor.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: VisitorStatus::NOTHING,
       visibility_id: VisitorVisibility::VISITOR,
       mfa_level_id: VisitorMfaLevel::NOTHING,
@@ -223,19 +203,44 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   end
 
   def bearer_session_headers(actor, token, host:, resource_type:)
-    bearer_headers(
-      jwt_access_token_for(actor, host: host, session_public_id: token.public_id, resource_type: resource_type),
-      host: host,
-    ).merge("X-TEST-SESSION-PUBLIC-ID" => token.public_id)
+    https!
+    client_id = (resource_type == "client") ? "base-app-ww" : "base-com-ww"
+    client = OidcClientRegistry.find!(client_id)
+    attributes = {
+      oidc_client_id: client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: Time.current,
+      refresh_token_expires_at: 10.minutes.from_now,
+    }
+    rp_session =
+      case token
+      when ClientToken then OpAppGrant.create!(attributes.merge(client_token: token))
+      when VisitorToken then OpComGrant.create!(attributes.merge(visitor_token: token))
+      end
+    access = AuthenticationTokenService.encode(
+      actor, host: host, resource_type: resource_type, session_public_id: token.public_id,
+             base_session_public_id: token.public_id, oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+             expires_at: 10.minutes.from_now, scopes: %w(openid profile), issuer: OidcIssuer.for_client(client),
+             audiences: [client.aud], jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(client),
+             subject: OidcSubject.for(actor, resource_type: resource_type), client_id: client.client_id,
+    )
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = rp_session.issue_refresh_token!
+    {
+      "Host" => host,
+      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
+    }
   end
 
   def create_client_token
     token = ClientToken.create!(
       user: @actor,
-      user_token_status_id: ClientTokenStatus::NOTHING,
+      user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "revoke_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     token.update!(created_at: 1.hour.ago)
     token
@@ -244,34 +249,34 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   def create_visitor_token
     token = VisitorToken.create!(
       visitor: @actor,
-      visitor_token_status_id: VisitorTokenStatus::NOTHING,
+      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       public_id: "revoke_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     token.update!(created_at: 1.hour.ago)
     token
   end
 
-  def satisfy_client_verification(token)
-    _verification, raw_token = ClientVerification.issue_for_token!(token: token)
-    cookies[ClientVerification.cookie_name] = raw_token
-  end
-
-  def satisfy_visitor_verification(token)
-    _verification, raw_token = VisitorVerification.issue_for_token!(token: token)
-    cookies[VisitorVerification.cookie_name] = raw_token
-  end
-
-  def mark_step_up_satisfied!(token, scope:, audience:, at: 1.minute.ago, method: "passkey", aal: "aal2")
-    token.update!(
-      last_step_up_at: at,
-      last_step_up_scope: scope,
-      last_step_up_aal: aal,
-      last_step_up_method: method,
+  def mark_step_up_satisfied!(token, audience:)
+    token.update_columns(
+      last_step_up_at: Time.current,
+      last_step_up_scope: "session_revoke_all",
+      last_step_up_aal: "aal2",
+      last_step_up_method: "passkey",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
       last_step_up_session_public_id: token.public_id,
-      last_step_up_purpose: ("step_up" if token.respond_to?(:last_step_up_purpose)),
-      last_step_up_audience: (audience if token.respond_to?(:last_step_up_audience)),
+      last_step_up_purpose: "step_up",
+      last_step_up_audience: audience,
     )
+  end
+
+  def with_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    yield
+  ensure
+    ActionController::Base.allow_forgery_protection =
+      Rails.configuration.action_controller.allow_forgery_protection
   end
 end

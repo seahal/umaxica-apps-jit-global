@@ -4,13 +4,13 @@
 # == Schema Information
 #
 # Table name: client_tokens
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
 #  last_step_up_aal                   :string
 #  last_step_up_at                    :datetime
@@ -22,7 +22,7 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
@@ -51,12 +51,12 @@
 #  index_client_tokens_on_created_at                     (created_at)
 #  index_client_tokens_on_dbsc_session_id                (dbsc_session_id) UNIQUE
 #  index_client_tokens_on_device_session_id              (device_session_id)
-#  index_client_tokens_on_discarded_at                   (discarded_at)
+#  index_client_tokens_on_discard_at                   (discard_at)
 #  index_client_tokens_on_oidc_connection_id             (oidc_connection_id)
 #  index_client_tokens_on_oidc_jti                       (oidc_jti)
 #  index_client_tokens_on_oidc_sid                       (oidc_sid)
 #  index_client_tokens_on_public_id                      (public_id) UNIQUE
-#  index_client_tokens_on_purged_at                      (purged_at)
+#  index_client_tokens_on_purge_eligible_at                      (purge_eligible_at)
 #  index_client_tokens_on_refresh_token_digest           (refresh_token_digest) UNIQUE
 #  index_client_tokens_on_refresh_token_family_id        (refresh_token_family_id)
 #  index_client_tokens_on_rotated_at                     (rotated_at)
@@ -81,18 +81,17 @@ require "test_helper"
 
 class ClientTokenTest < ActiveSupport::TestCase
   def setup
-    @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    @user = Client.create!(
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING,
+    )
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 
-  test "inherits from AppTicketRecord" do
-    assert_operator ClientToken, :<, AppTicketRecord
+  test "inherits from OpBaseAppRecord" do
+    assert_operator ClientToken, :<, OpBaseAppRecord
     assert_operator ClientToken, :<, ApplicationRecord
-    assert_not_operator ClientToken, :<, OrgTicketRecord
-  end
-
-  test "signed ref lookup uses mark connection owner" do
-    assert_equal AppTicketRecord, ClientToken.send(:connection_owner)
+    assert_not_operator ClientToken, :<, OpBaseOrgRecord
   end
 
   test "signed ref lookup role defaults to reading" do
@@ -106,9 +105,137 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_equal :belongs_to, association.macro
   end
 
+  test "does not delete a token while a sign-up flow still references it" do
+    ClientSignUpFlowStatus.ensure_defaults!
+    ClientSignUpFlowCleanupStatus.ensure_defaults!
+    flow = ClientSignUpFlow.create!(
+      token: @token,
+      status_id: ClientSignUpFlowStatus::CANCELLED,
+      step: "cancelled",
+      nonce_digest: ClientSignUpFlow.digest_nonce("nonce"),
+      issued_at: 20.minutes.ago,
+      expires_at: 5.minutes.ago,
+      entry_method: "email",
+      cleanup_status_id: ClientSignUpFlowCleanupStatus::COMPLETED,
+    )
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { @token.destroy }
+    assert ClientToken.exists?(@token.id)
+    assert ClientSignUpFlow.exists?(flow.id)
+
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        ClientToken.transaction(requires_new: true) do
+          ClientToken.where(id: @token.id).delete_all
+        end
+      end
+    assert_kind_of PG::RestrictViolation, error.cause
+
+    assert ClientToken.exists?(@token.id)
+    assert ClientSignUpFlow.exists?(flow.id)
+  end
+
   test "can be created with user" do
     assert_not_nil @token
     assert_equal @user.id, @token.user_id
+  end
+
+  test "device session rejects a current token owned by another session" do
+    other_token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    session = @token.device_session
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientDeviceSession.transaction(requires_new: true) do
+          session.update_column(:current_refresh_token_id, other_token.id)
+          ClientDeviceSession.lease_connection.execute(
+            "SET CONSTRAINTS fk_client_device_sessions_on_current_refresh_token_owner IMMEDIATE",
+          )
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_client_device_sessions_on_current_refresh_token_owner",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "token device session reference must exist and cannot be NULL" do
+    missing_session_id = ClientDeviceSession.lease_connection.select_value(
+      "SELECT nextval(pg_get_serial_sequence('client_device_sessions', 'id'))",
+    )
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, missing_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_client_tokens_on_device_session_id fk_client_tokens_on_user_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert_raises(ActiveRecord::NotNullViolation) do
+      ClientToken.transaction(requires_new: true) do
+        @token.update_column(:device_session_id, nil)
+      end
+    end
+
+    assert_not_nil @token.reload.device_session_id
+  end
+
+  test "token device session must belong to the same user" do
+    other_user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    other_token = ClientToken.create!(user: other_user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+
+    error =
+      assert_raises(ActiveRecord::InvalidForeignKey) do
+        ClientToken.transaction(requires_new: true) do
+          @token.update_column(:device_session_id, other_token.device_session_id)
+        end
+      end
+    assert_equal "23503", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_equal "fk_client_tokens_on_user_id_and_device_session_id",
+                 error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+  end
+
+  test "deleting the current token clears only its session pointer" do
+    session = @token.device_session
+    session.update!(current_refresh_token: @token)
+
+    @token.delete
+
+    assert_nil session.reload.current_refresh_token_id
+    assert_predicate session, :persisted?
+  end
+
+  test "device session cannot be destroyed while token history references it" do
+    session = @token.device_session
+
+    assert_raises(ActiveRecord::DeleteRestrictionError) { session.destroy! }
+
+    error =
+      assert_raises(ActiveRecord::StatementInvalid) do
+        ClientDeviceSession.transaction(requires_new: true) do
+          ClientDeviceSession.where(id: session.id).delete_all
+        end
+      end
+    assert_equal "23001", error.cause.result.error_field(PG::Result::PG_DIAG_SQLSTATE)
+    assert_includes %w(fk_client_tokens_on_device_session_id fk_client_tokens_on_user_id_and_device_session_id),
+                    error.cause.result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+
+    assert ClientDeviceSession.exists?(session.id)
+    assert ClientToken.exists?(@token.id)
+  end
+
+  test "destroying the actor removes tokens before its device sessions" do
+    session_id = @token.device_session.id
+
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    @user.reload.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
+    @user = StrictLoadingAssociationPreloader.for_destruction(@user.reload)
+    @user.destroy!
+
+    assert_not ClientToken.exists?(@token.id)
+    assert_not ClientDeviceSession.exists?(session_id)
   end
 
   test "assigns numeric id automatically" do
@@ -215,7 +342,7 @@ class ClientTokenTest < ActiveSupport::TestCase
 
     ClientToken.create!(base_attrs.merge(user_token_status: expired_status))
     ClientToken.create!(base_attrs.merge(user_token_status: revoked_status))
-    ClientToken.create!(base_attrs.merge(user_token_status: active_status, discarded_at: 1.minute.ago))
+    ClientToken.create!(base_attrs.merge(user_token_status: active_status, discard_at: 1.minute.ago))
     ClientToken.create!(base_attrs.merge(user_token_status: active_status, rotated_at: Time.current))
 
     extra_token = ClientToken.new(base_attrs.merge(user_token_status: active_status))
@@ -245,12 +372,12 @@ class ClientTokenTest < ActiveSupport::TestCase
       assert_predicate token, :active?
 
       travel 1.minute
-      token.update!(discarded_at: 30.seconds.from_now)
+      token.update!(discard_at: 30.seconds.from_now)
 
       assert_not token.expired_refresh?
       assert_predicate token, :active?
 
-      token.update_columns(discarded_at: 30.seconds.ago)
+      token.update_columns(discard_at: 30.seconds.ago)
 
       assert_predicate token, :expired_refresh?
       assert_not token.active?
@@ -263,8 +390,8 @@ class ClientTokenTest < ActiveSupport::TestCase
     token.revoke!
 
     assert_predicate token, :expired?
-    assert_predicate token.discarded_at, :present?
-    assert_predicate token.discarded_at, :present?
+    assert_predicate token.discard_at, :present?
+    assert_predicate token.discard_at, :present?
   end
 
   test "rotate_refresh_token! updates digest and timestamps" do
@@ -296,8 +423,8 @@ class ClientTokenTest < ActiveSupport::TestCase
       token = ClientToken.create!(
         user: @user,
         user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-        discarded_at: 3.hours.from_now,
-        purged_at: 4.days.from_now,
+        discard_at: 3.hours.from_now,
+        purge_eligible_at: 4.days.from_now,
       )
       token.rotate_refresh_token!
 
@@ -308,8 +435,8 @@ class ClientTokenTest < ActiveSupport::TestCase
       replacement = result[:token]
 
       assert_equal :rotated, result[:status]
-      assert_equal token.discarded_at.to_i, replacement.discarded_at.to_i
-      assert_equal token.purged_at.to_i, replacement.purged_at.to_i
+      assert_equal token.discard_at.to_i, replacement.discard_at.to_i
+      assert_equal token.purge_eligible_at.to_i, replacement.purge_eligible_at.to_i
       assert_equal token.oidc_sid, replacement.oidc_sid
       assert_not_equal token.oidc_jti, replacement.oidc_jti
     end
@@ -355,47 +482,47 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_not_empty @token.errors[:public_id]
   end
 
-  test "discarded_at is required" do
-    @token.discarded_at = nil
+  test "discard_at is required" do
+    @token.discard_at = nil
 
     assert_not @token.valid?
-    assert_not_empty @token.errors[:discarded_at]
+    assert_not_empty @token.errors[:discard_at]
   end
 
-  test "purged_at persists on create when provided" do
-    discarded_at = 1.day.from_now
-    purged_at = 2.days.from_now
+  test "purge_eligible_at persists on create when provided" do
+    discard_at = 1.day.from_now
+    purge_eligible_at = 2.days.from_now
     token = ClientToken.create!(
       user: Client.create!,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: discarded_at,
-      purged_at: purged_at,
+      discard_at: discard_at,
+      purge_eligible_at: purge_eligible_at,
     )
 
-    assert_equal purged_at.to_i, token.purged_at.to_i
+    assert_equal purge_eligible_at.to_i, token.purge_eligible_at.to_i
   end
 
-  test "purged_at is preserved when discarded_at changes" do
-    purged_at = 4.days.from_now
+  test "purge_eligible_at is preserved when discard_at changes" do
+    purge_eligible_at = 4.days.from_now
     token = ClientToken.create!(
       user: Client.create!,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
-      purged_at: purged_at,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: purge_eligible_at,
     )
     new_lapses_at = 2.days.from_now
 
-    token.update!(discarded_at: new_lapses_at)
+    token.update!(discard_at: new_lapses_at)
 
-    assert_equal purged_at.to_i, token.purged_at.to_i
+    assert_equal purge_eligible_at.to_i, token.purge_eligible_at.to_i
   end
 
   test "purgeability query returns only tokens purgeable at or before now" do
     user = Client.create!
-    past_token = ClientToken.create!(user: user, discarded_at: 20.minutes.ago, purged_at: 10.minutes.ago)
-    future_token = ClientToken.create!(user: user, discarded_at: 10.minutes.ago, purged_at: 10.minutes.from_now)
+    past_token = ClientToken.create!(user: user, discard_at: 20.minutes.ago, purge_eligible_at: 10.minutes.ago)
+    future_token = ClientToken.create!(user: user, discard_at: 10.minutes.ago, purge_eligible_at: 10.minutes.from_now)
 
-    purgeable_ids = ClientToken.where(purged_at: ..Time.current).pluck(:id)
+    purgeable_ids = ClientToken.where(purge_eligible_at: ..Time.current).pluck(:id)
 
     assert_includes purgeable_ids, past_token.id
     assert_not_includes purgeable_ids, future_token.id
@@ -403,6 +530,9 @@ class ClientTokenTest < ActiveSupport::TestCase
 
   test "association deletion: destroys when user is destroyed" do
     @token.reload # Ensure it exists
+    # An Identity is physically erased only once it has lapsed and is purgeable.
+    @user.reload.update!(discard_at: @user.created_at, purge_eligible_at: @user.created_at)
+    @user = StrictLoadingAssociationPreloader.for_destruction(@user.reload)
     @user.destroy
     assert_raise(ActiveRecord::RecordNotFound) { @token.reload }
   end
@@ -445,21 +575,26 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_equal :rotated, result[:status]
   end
 
-  test "rotate_refresh_token! accepts explicit discarded_at and replaces infinite discarded_at" do
+  test "rotate_refresh_token! preserves a finite absolute expiry and replaces an infinite cutoff" do
     token = ClientToken.create!(
       user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
-    explicit_lapses_at = 2.days.from_now
+    absolute_expiry = token.discard_at
+    requested_extension = absolute_expiry + 1.day
 
-    token.rotate_refresh_token!(discarded_at: explicit_lapses_at)
+    token.rotate_refresh_token!(discard_at: requested_extension)
 
-    assert_equal explicit_lapses_at.to_i, token.discarded_at.to_i
+    assert_equal absolute_expiry.to_i, token.discard_at.to_i
 
-    token.update_columns(discarded_at: Float::INFINITY)
+    token.update_columns(discard_at: Float::INFINITY)
     token.rotate_refresh_token!
 
-    assert_in_delta 30.days.from_now.to_f, Float(token.discarded_at), 2
+    assert_in_delta 30.days.from_now.to_f, Float(token.discard_at), 2
+    absolute_expiry = token.discard_at
+    token.rotate_refresh_token!(discard_at: absolute_expiry + 1.day)
+
+    assert_equal absolute_expiry.to_i, token.discard_at.to_i
   end
 
   test "refresh token assignment and authentication handle blank values" do
@@ -533,9 +668,9 @@ class ClientTokenTest < ActiveSupport::TestCase
     compromised_raw = compromised.rotate_refresh_token!
     expired_raw = expired.rotate_refresh_token!
     travel 1.minute do
-      revoked.update_columns(discarded_at: 30.seconds.ago)
-      expired.update_columns(discarded_at: 30.seconds.ago)
-      compromised.update!(discarded_at: Time.current)
+      revoked.update_columns(discard_at: 30.seconds.ago)
+      expired.update_columns(discard_at: 30.seconds.ago)
+      compromised.update!(discard_at: Time.current)
 
       revoked_digest = ClientToken.digest_refresh_token(ClientToken.parse_refresh_token(revoked_raw).last)
       compromised_digest = ClientToken.digest_refresh_token(ClientToken.parse_refresh_token(compromised_raw).last)

@@ -14,8 +14,8 @@ require "test_helper"
 class UnknownHostRootTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
-  # Admitted by Host Authorization (config/environments/test.rb mirrors development here), claimed
-  # by no route.
+  # No Palm corporate route or host-authorization entry exists; this remains useful for confirming
+  # that an unclaimed product hostname cannot reach the framework welcome page.
   UNSERVED_HOST = "palm-jp.umaxica.com"
 
   test "a host no surface claims does not answer 200 on root" do

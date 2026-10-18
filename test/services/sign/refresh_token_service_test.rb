@@ -24,8 +24,8 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
   test "rotation increments generation counter" do
     token = ClientToken.create!(
       user: create_verified_user_with_email(email_address: "refresh-rotate-#{SecureRandom.hex(4)}@example.com"),
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
     first_refresh = token.rotate_refresh_token!
     result = SignRefreshTokenIssuer.call(refresh_token: first_refresh)
@@ -43,8 +43,8 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
   test "rotation preserves device_session and advances current refresh token pointer" do
     token = ClientToken.create!(
       user: create_verified_user_with_email(email_address: "refresh-device-session-#{SecureRandom.hex(4)}@example.com"),
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
     device_session = token.device_session
     refresh = token.rotate_refresh_token!
@@ -62,8 +62,8 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     jkt = "dpop-jkt-#{SecureRandom.hex(8)}"
     token = ClientToken.create!(
       user: create_verified_user_with_email(email_address: "refresh-dpop-#{SecureRandom.hex(4)}@example.com"),
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
       dpop_jkt: jkt,
     )
     first_refresh = token.rotate_refresh_token!
@@ -76,20 +76,39 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "reuse detection revokes all actor tokens" do
     user = create_verified_user_with_email(email_address: "refresh-reuse-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     initial_refresh = token.rotate_refresh_token!
     rotated = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
     rotated_refresh = rotated[:refresh_token]
 
+    log_output = StringIO.new
+    previous_logger = Rails.logger
+    Rails.logger = Logger.new(log_output)
+
     reuse_result = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
+  ensure
+    Rails.logger = previous_logger if previous_logger
 
     assert_not reuse_result.success?
     assert_equal :refresh_token_reuse_detected, reuse_result.reason
+    assert_includes log_output.string, "Refresh token reuse detected"
+
+    reuse_audit =
+      ChronicleRecord.connected_to(role: :writing) do
+        ClientChronicle.where(
+          event_id: ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+          subject_id: user.id.to_s,
+          subject_type: "Client",
+        ).order(occurred_at: :desc).first
+      end
+
+    assert_predicate reuse_audit, :present?
+    assert_equal "token_family_revoked", reuse_audit.context.deep_stringify_keys.fetch("result")
 
     token.reload
 
-    assert_operator token.discarded_at, :<=, Time.current, "Original token should be revoked"
-    assert_operator ClientToken.where(user_id: user.id).maximum(:discarded_at), :<=, Time.current,
+    assert_operator token.discard_at, :<=, Time.current, "Original token should be revoked"
+    assert_operator ClientToken.where(user_id: user.id).maximum(:discard_at), :<=, Time.current,
                     "All actor tokens should be revoked"
 
     rotated_result = SignRefreshTokenIssuer.call(refresh_token: rotated_refresh)
@@ -100,27 +119,27 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "reuse detection revokes the token family while the request is readonly" do
     user = create_verified_user_with_email(email_address: "refresh-reuse-readonly-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     initial_refresh = token.rotate_refresh_token!
 
     rotated = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
 
-    AppTicketRecord.connected_to(role: :reading, prevent_writes: true) do
+    OpBaseAppRecord.connected_to(role: :reading, prevent_writes: true) do
       reuse_result = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
 
       assert_not reuse_result.success?
       assert_equal :refresh_token_reuse_detected, reuse_result.reason
     end
 
-    assert_operator token.reload.discarded_at, :<=, Time.current
-    assert_operator rotated.fetch(:token).reload.discarded_at, :<=, Time.current
+    assert_operator token.reload.discard_at, :<=, Time.current
+    assert_operator rotated.fetch(:token).reload.discard_at, :<=, Time.current
   end
 
   test "revoked tokens stay invalid without marking compromise" do
     token = ClientToken.create!(
       user: create_verified_user_with_email(email_address: "refresh-revoked-#{SecureRandom.hex(4)}@example.com"),
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
     refresh = token.rotate_refresh_token!
     token.revoke!
@@ -130,13 +149,13 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal :inactive_token, result.reason
 
-    assert_predicate token.reload.discarded_at, :present?
+    assert_predicate token.reload.discard_at, :present?
     assert_equal ClientTokenStatus::REVOKED, token.reload.user_token_status_id
   end
 
   test "invalid verifier for known public id does not revoke actor tokens" do
     user = create_verified_user_with_email(email_address: "refresh-invalid-digest-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     refresh = token.rotate_refresh_token!
     public_id, = ClientToken.parse_refresh_token(refresh)
     forged_refresh = ClientToken.build_refresh_token(public_id, "wrong-verifier")
@@ -146,20 +165,20 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal :invalid_digest, result.reason
 
-    assert_operator token.reload.discarded_at, :>, Time.current
+    assert_operator token.reload.discard_at, :>, Time.current
     assert_nil token.rotated_at
   end
 
-  test "scheduled revoked tokens are invalid after discarded_at passes" do
-    freeze_time do
-      token = ClientToken.create!(
-        user: create_verified_user_with_email(email_address: "refresh-scheduled-#{SecureRandom.hex(4)}@example.com"),
-        discarded_at: 5.minutes.from_now,
-        purged_at: 1.day.from_now,
-      )
-      refresh = token.rotate_refresh_token!
-      travel 6.minutes
+  test "scheduled revoked tokens are invalid after discard_at passes" do
+    database_time = ClientToken.database_now
+    token = ClientToken.create!(
+      user: create_verified_user_with_email(email_address: "refresh-scheduled-#{SecureRandom.hex(4)}@example.com"),
+      discard_at: database_time + 5.minutes,
+      purge_eligible_at: database_time + 1.day,
+    )
+    refresh = token.rotate_refresh_token!
 
+    ClientToken.stub(:database_now, database_time + 6.minutes) do
       result = SignRefreshTokenIssuer.call(refresh_token: refresh)
 
       assert_not result.success?
@@ -180,8 +199,8 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
     token = ClientToken.create!(
       user: create_verified_user_with_email(email_address: "refresh-writing-#{SecureRandom.hex(4)}@example.com"),
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
     refresh = token.rotate_refresh_token!
 
@@ -200,8 +219,8 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     # even when using SELECT ... FOR UPDATE
     token = ClientToken.create!(
       user: create_verified_user_with_email(email_address: "refresh-readonly-#{SecureRandom.hex(4)}@example.com"),
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
     refresh = token.rotate_refresh_token!
 
@@ -217,8 +236,8 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     visitor = create_refresh_visitor
     token = VisitorToken.create!(
       visitor: visitor,
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
     refresh = token.rotate_refresh_token!
 
@@ -233,7 +252,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "visitor refresh reuse revokes all visitor tokens" do
     visitor = create_refresh_visitor
-    token = VisitorToken.create!(visitor: visitor, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    token = VisitorToken.create!(visitor: visitor, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
     first_refresh = token.rotate_refresh_token!
     rotated = SignRefreshTokenIssuer.call(refresh_token: first_refresh)
 
@@ -242,7 +261,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     assert_not reuse_result.success?
     assert_equal :refresh_token_reuse_detected, reuse_result.reason
 
-    assert_operator VisitorToken.where(visitor_id: visitor.id).maximum(:discarded_at), :<=, Time.current
+    assert_operator VisitorToken.where(visitor_id: visitor.id).maximum(:discard_at), :<=, Time.current
     rotated_result = SignRefreshTokenIssuer.call(refresh_token: rotated[:refresh_token])
 
     assert_not rotated_result.success?
@@ -283,31 +302,11 @@ class SignRefreshTokenIssuerTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -367,10 +366,8 @@ class SignRefreshTokenIssuerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -382,10 +379,8 @@ class SignRefreshTokenIssuerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -606,63 +601,6 @@ class SignRefreshTokenIssuerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -678,10 +616,8 @@ class SignRefreshTokenIssuerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -701,12 +637,12 @@ class SignRefreshTokenIssuerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

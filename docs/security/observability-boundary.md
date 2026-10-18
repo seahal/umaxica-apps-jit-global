@@ -41,10 +41,29 @@ The current access log pipeline is:
 - `config/initializers/lograge.rb`
 - `config.lograge.enabled = !Rails.env.test?`
 - `config.lograge.formatter = Lograge::Formatters::Json.new`
-- `config.lograge.logger` writes one JSON object per line to stdout
+- The `before_format` boundary redacts Base/Auth admission confirmation references in request and
+  redirect paths. Parameter filtering also covers admission references, ceremony sid values, and
+  browser-proof digests; the Rails performance path sanitizer applies the same path redaction before
+  writing telemetry. Query stripping alone does not protect an opaque reference in a path segment.
+- `config.lograge.logger` writes one JSON object per line to stdout, and in development also to
+  `log/development.access.jsonl` so Alloy can ship it to Loki
+  (`adr/application-logging-boundary.md`). The line is identical; only the destinations differ.
 
-Access logs should contain request-level fields such as method, path, status, duration, request id,
-and host. Do not add domain behavior to Lograge.
+Access logs should contain request-level fields such as method, path, status, duration,
+`request_id`, and host. When a valid current OpenTelemetry span exists, the same JSON access-log
+record also contains `trace_id` and `span_id`. Do not add domain behavior to Lograge.
+
+The identifiers have distinct meanings and sources:
+
+- `request_id` is the HTTP request correlation identifier managed by Rails
+  `ActionDispatch::RequestId` and may originate from `X-Request-ID`.
+- `trace_id` is the OpenTelemetry/W3C Trace ID from a valid current `SpanContext`.
+- `span_id` is the OpenTelemetry Span ID from that valid current `SpanContext`.
+
+`request_id` must never be substituted for `trace_id` or `span_id`. If OpenTelemetry is disabled or
+the current span context is invalid, `request_id` remains available while `trace_id` and `span_id`
+are absent or null. These identifiers are correlation metadata only; they are not authentication,
+authorization, rate-limit, user-identity, or audit-integrity inputs.
 
 ## Application Logs
 
@@ -64,6 +83,11 @@ Rails.logger.warn(LogEvent.format("auth.policy.missing", controller: self.class.
 Use `LogEvent.format` only for event-shaped application log messages that need an event name and
 structured payload. Plain operational messages can go directly to `Rails.logger`.
 
+`JitLogEvent` applies `ObservabilityRedactor` to structured values. The redactor also removes
+token-shaped JWT, Bearer, and named credential values when they appear inside free-form diagnostic
+strings, including exception messages. Logging an exception is not permission to retain its raw
+credentials or token material.
+
 Do not add new uses of:
 
 ```ruby
@@ -76,6 +100,12 @@ Rails.event.record(...)
 
 Those methods were custom application logging shims and are not part of the current logging
 contract.
+
+ActionMailer raw message content is not application logging data. The shared Rails configuration
+sets `config.action_mailer.logger = nil`, which leaves delivery, delivery jobs, interceptors and
+Noticed orchestration intact while preventing ActionMailer DEBUG logging from writing raw MIME
+through its logger. The framework notification payload may still exist internally; it must not be
+treated as an application log or forwarded by a new subscriber.
 
 ## Non-Log Observability Events
 
@@ -101,12 +131,12 @@ constrained explicitly:
   the same three `csrf_*.action_controller` events and writes `payload[:message]` verbatim. That
   message is built by `unverified_request_warning_message` and can read
   `HTTP Origin header (...) didn't match request.base_url (...)` — free text that never passes
-  through `JitLogEvent.format`, so `ObservabilityRedactor` does not see it.
-  `config/application.rb` sets `config.action_controller.log_warning_on_csrf_failure = false` so the
-  redacted event is the single record. `config/environments/development.rb` sets it back to `true`:
-  locally the raw reason is the signal that makes a blocked request diagnosable, and the log holds no
-  real user data. The test environment inherits `false`, where `allow_forgery_protection` is off by
-  default and CSRF detection is opt-in per test.
+  through `JitLogEvent.format`, so `ObservabilityRedactor` does not see it. `config/application.rb`
+  sets `config.action_controller.log_warning_on_csrf_failure = false` so the redacted event is the
+  single record. `config/environments/development.rb` sets it back to `true`: locally the raw reason
+  is the signal that makes a blocked request diagnosable, and the log holds no real user data. The
+  test environment inherits `false`, where `allow_forgery_protection` is off by default and CSRF
+  detection is opt-in per test.
 - **Every `Rails.event` subscription must be name-filtered.** `ObservabilityRedactor` is wired into
   `Rails.logger`, Sentry, and OpenTelemetry, but not into `Rails.event`. Framework structured-event
   subscribers are attached by default and forward raw payloads with filtering disabled
@@ -118,6 +148,36 @@ constrained explicitly:
 The CSP report payload is allowlisted and scrubbed before emission. Raw CSP report bodies,
 `script-sample`, cookies, authorization values, query strings, fragments, and unknown report keys
 must not be emitted.
+
+## Where Each Layer Is Stored In Development
+
+Storage does not merge the layers; it only makes them queryable in one place.
+
+```text
+Lograge access logs      -> log/development.access.jsonl -> Alloy -> Loki    (14d)
+Rails.logger application -> log/development.log          -> Alloy -> Loki    (14d)
+OpenTelemetry traces     -> OTLP 127.0.0.1:4318          -> Alloy -> Tempo   (24h)
+metrics                  -> Alloy self-metrics           -> Alloy -> Prometheus (24h)
+audit / security records -> database tables                                  (authoritative)
+```
+
+Grafana reads all three backends and is published on `127.0.0.1:13000` for this machine's browser
+only — never through Cloudflare Tunnel, Tailscale, or the LAN.
+
+Two rules follow from this and are not negotiable:
+
+- **Audit and security records never move to Loki.** Loki is a bounded 14-day development copy of
+  diagnostic output. It is not a record of fact, it is not retained, and it is not access-controlled
+  the way the audit tables are. A durable record belongs in the database whether or not the same
+  event also produces a log line.
+- **Shipping logs adds no data.** The lines Alloy tails are the lines Rails already wrote, forwarded
+  unmodified. Nothing about a log reaching Loki makes a cookie, authorization value, token, or
+  request body loggable that was not loggable before — `JitLogEvent`, `ObservabilityRedactor`, and
+  the allowlists described above remain the only gates on what enters a log line.
+
+Telemetry redaction stays two-stage and independent of this: `ObservabilitySpanScrubber` in the
+Rails process, then `otelcol.processor.attributes` in Alloy
+(`adr/traces-and-metrics-routing-via-alloy.md`).
 
 ## Observability Layers
 
@@ -153,6 +213,19 @@ Primary audience:
 - incident responders
 
 OTEL should remain focused on technical observability.
+
+Technical OpenTelemetry correlation is independent of product analytics consent. The optional
+`performant` preference may govern a separately defined analytics layer, but it must not replace,
+remove, or fabricate a `trace_id` or `span_id` supplied by a valid OpenTelemetry context.
+
+ActionMailer telemetry is an explicit pre-export allowlist. With the installed ActionMailer
+instrumentation, delivery spans retain only the non-secret mailer attribute and process spans
+retain only the mailer and action. Addresses, subject, arguments, body, MIME, OTPs, tokens and
+unknown future payload keys are excluded before the exporter. The Rails span scrubber remains a
+secondary in-process control: every `email.*` span attribute other than `email.x_mailer`, and
+every `args` attribute, is removed if it reaches that boundary. The development Alloy processor
+remains a second downstream deletion boundary. This local policy does not assert that a production
+collector or retention topology exists.
 
 ## Layer 2: Audit And Security Events
 
@@ -236,6 +309,17 @@ The repository already shows:
 
 This means the repository can support separation, but the product analytics layer is not yet fully
 defined.
+
+The authentication security-event emitter follows this boundary: it writes a sanitized Chronicle
+row using the existing security retention policy and may additionally write a redacted application
+log for operational correlation. The log line is never treated as the authoritative audit record.
+Provider delivery acceptance, delivery outcome, retry, and permanent failure remain distinct facts.
+The existing SMS transport records enqueue, provider acceptance, and provider failure facts in
+Chronicle without recipient or message content. The OTP email adapters record successful email
+enqueue and enqueue failure, bound to the email record as the Chronicle subject and without
+recipient or message content. An audit-write failure after enqueue is diagnostic only and must not
+make one queued email appear failed to the caller. The repository does not infer delivery from an
+enqueue result or introduce a generic delivery ledger without an approved provider contract.
 
 ## Minimum Rule For Implementation
 

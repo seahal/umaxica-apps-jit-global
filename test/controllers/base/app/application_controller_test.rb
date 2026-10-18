@@ -13,7 +13,6 @@ module Base
         assert_includes controller.class, RateLimit
         assert_includes controller.class, ::PreferenceGlobal
         assert_includes controller.class, ::PreferenceAdoption
-        assert_includes controller.class, ::AuthenticationClient
         assert_includes controller.class, ::AuthorizationClient
         assert_includes controller.class, ::VerificationClient
         assert_includes controller.class, ActionPolicy::Controller
@@ -37,12 +36,12 @@ module Base
         before_filters = callbacks.select { |c| c.kind == :before }.map(&:filter)
 
         expected_order = %i(
+          authenticate_browser_rp_safe_request!
           set_current_context
           reset_flash
           set_preferences_cookie
           resolve_param_context
           set_region
-          transparent_refresh_access_token
           set_current_actor
           apply_localization_preferences
           set_color_theme
@@ -69,31 +68,10 @@ module Base
         assert_includes around_filters, :with_actor_lifecycle
       end
 
-      def test_has_oidc_client_id_method
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_client_id
-        assert_equal "base-rails-rp", controller.send(:oidc_client_id)
-      end
-
-      def test_has_oidc_sign_host_method
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_sign_host
-      end
-
-      def test_has_oidc_base_host_method
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_base_host
-        assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), controller.send(:oidc_base_host)
-      end
-
-      def test_trusts_only_the_base_app_origin_by_default
+      def test_does_not_add_cross_host_origins_to_rails_csrf_allowlist
         trusted_origins = ApplicationController.forgery_protection_trusted_origins
 
-        assert_includes trusted_origins, "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")}"
-        assert_not_includes trusted_origins, "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")}"
+        assert_empty trusted_origins
       end
     end
   end

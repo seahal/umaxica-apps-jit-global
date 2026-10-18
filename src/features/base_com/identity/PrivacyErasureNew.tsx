@@ -2,6 +2,7 @@ import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
 
 // Replaces `app/views/base/com/identity/privacy/erasures/new.html.erb`.
 
@@ -27,14 +28,15 @@ export default function PrivacyErasureNew({ title, paragraphs, form }: PrivacyEr
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-
+    <Page
+      title={title}
+      width="narrow"
+    >
       <div className="flex flex-col gap-3">
         {paragraphs.map((paragraph) => (
           <p
             key={paragraph}
-            className="text-sm text-fg-muted"
+            className="text-base text-fg-muted"
           >
             {paragraph}
           </p>
@@ -60,6 +62,6 @@ export default function PrivacyErasureNew({ title, paragraphs, form }: PrivacyEr
           {form.submit_label}
         </Button>
       </form>
-    </section>
+    </Page>
   );
 }

@@ -15,11 +15,11 @@
 module SignOutInertiaPages
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
-    # Captured at include time so the completion controller, which subclasses the sign-out
-    # controller, keeps naming the sign-out pages of its own surface rather than deriving
-    # `auth/<surface>/sign/outs/completions/complete` from its own controller_path.
+    # Captured at include time so the sign-out controller keeps naming pages from its own surface controller_path.
     prefix = controller_path
+    # FIXME: do not use define_method!
     define_method(:sign_out_page_prefix) { prefix }
     private :sign_out_page_prefix
   end
@@ -31,6 +31,8 @@ module SignOutInertiaPages
   end
 
   def sign_out_confirmation_props
+    browser_rp_flow = respond_to?(:browser_rp_logout_flow?, true) && browser_rp_logout_flow?
+
     {
       title: t("sign.shared.sign_out.title"),
       heading: t("sign.shared.sign_out.title"),
@@ -41,8 +43,12 @@ module SignOutInertiaPages
       form: {
         action: sign_out_confirmation_form_path,
         logout_challenge: params[:logout_challenge].presence,
+        logout_intent_proof: if params[:logout_challenge].present? &&
+            respond_to?(:browser_rp_logout_intent_proof_for, true)
+                               browser_rp_logout_intent_proof_for(@logout_transaction)
+                             end,
       },
-      cancel: {
+      cancel: browser_rp_flow ? nil : {
         label: t("actions.cancel"),
         action: sign_out_post_path,
       },
@@ -80,13 +86,18 @@ module SignOutInertiaPages
     render inertia: sign_out_page_component("edit"), props: sign_out_confirmation_props
   end
 
+  def render_browser_rp_logout_continuation!
+    render_sign_out_confirmation_page
+  end
+
   # `clear_history` is what actually ends the signed-in session's presence in the browser.
   # `encrypt_history` is on globally, but it only encrypts each history entry; the key that decrypts
   # them lives in the tab's own sessionStorage and `reset_session` does not reach it, so without this
-  # Back after signing out decrypts and restores the privileged page. It is passed at the render
-  # rather than through `session[:inertia_clear_history]` because the session must be empty after
-  # logout - `Authentication::LogoutableTest` asserts exactly that - and every sign-out completion
-  # page sets it for itself. The other surfaces' completion renders carry the same option.
+  # Back after signing out decrypts and restores the privileged page. Ending a session also sets
+  # `session[:inertia_clear_history]` (AuthenticationLogoutable#reset_session_and_clear_inertia_history!),
+  # but this completion page can be reached in a later request on a session that no longer
+  # carries that flag, so it states the clear itself. The other surfaces' completion renders carry
+  # the same option.
   def render_oidc_rp_logout_completion
     @sign_out_notice = consume_sign_out_notice
     render inertia: sign_out_page_component("complete"),
@@ -95,13 +106,32 @@ module SignOutInertiaPages
            clear_history: true
   end
 
-  # The surface guard is the one `OidcRpLogoutLauncher` applies: only the app surface answers an
-  # incomplete RP logout with the unavailable screen, the other surfaces answer with completion.
+  # An unverified or incomplete continuation must not present a successful completion in any realm.
   def render_oidc_rp_logout_unavailable
-    return render_oidc_rp_logout_completion unless logout_surface_name == "app"
-
     render inertia: sign_out_page_component("unavailable"),
            props: sign_out_unavailable_props,
            status: :unprocessable_content
+  end
+
+  # A lost COMMIT response is neither success nor failure (REQ-003), so it offers no retry and does
+  # not say the sign-out was not completed.
+  def render_oidc_rp_logout_indeterminate
+    render inertia: sign_out_page_component("complete"),
+           props: {
+             title: t("sign.shared.sign_out.indeterminate_title"),
+             heading: t("sign.shared.sign_out.indeterminate_title"),
+             description: t("sign.shared.sign_out.indeterminate_description"),
+             home_link: sign_out_home_link,
+           },
+           status: :service_unavailable
+  end
+
+  # The parent COMMIT happened but this origin's own cleanup did not finish (DEC-046).
+  def render_oidc_rp_logout_cleanup_incomplete
+    @sign_out_cleanup_incomplete = true
+    render inertia: sign_out_page_component("complete"),
+           props: sign_out_completion_props,
+           status: :ok,
+           clear_history: true
   end
 end

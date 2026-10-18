@@ -11,6 +11,7 @@ class SocialAuthSignupFinalizerTest < ActiveSupport::TestCase
           principal: Object.new,
           credential_candidate: nil,
           birthdate: Date.new(2000, 1, 1),
+          ceremony_started_at: Time.current,
         )
       end
 

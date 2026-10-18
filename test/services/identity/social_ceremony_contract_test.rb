@@ -8,7 +8,7 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    @now = Time.zone.parse("2026-06-03 12:00:00")
+    @now = ClientSocialCeremonyTransaction.database_now.change(usec: 0)
   end
 
   teardown do
@@ -59,6 +59,15 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
     end
   end
 
+  test "rejects an authentication event time from the future" do
+    assert_social_ceremony_error("auth_time must not be in the future") do
+      IdentitySocialCeremonyResult.new(
+        valid_result_claims.merge("auth_time" => (@now + 2.minutes).to_i),
+        now: @now,
+      )
+    end
+  end
+
   test "candidate store is one-shot and persists only a verified principal" do
     travel_to(@now) do
       callback_result = ExternalAuthentication::CallbackResult.verified(
@@ -85,6 +94,8 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
 
       fetched = IdentitySocialCeremonyCandidateStore.fetch!(candidate.ref)
 
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, candidate.ref)
+      assert IdentitySocialCeremonyCandidate.valid_reference?(candidate.ref)
       assert_equal "candidate-google", fetched.callback_result.principal.subject
       assert_nil fetched.callback_result.credential_candidate
       assert_equal candidate.digest, fetched.digest
@@ -97,6 +108,83 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
       assert_not_nil IdentitySocialCeremonyCandidate.find_by!(ref: candidate.ref).consumed_at
       assert_social_ceremony_error("candidate is not found") do
         IdentitySocialCeremonyCandidateStore.fetch!(candidate.ref)
+      end
+    end
+  end
+
+  test "candidate reference contract accepts new NanoID and retained UUID values only" do
+    assert IdentitySocialCeremonyCandidate.valid_reference?("a" * 21)
+    assert IdentitySocialCeremonyCandidate.valid_reference?(SecureRandom.uuid)
+    assert_not IdentitySocialCeremonyCandidate.valid_reference?("short")
+    assert_not IdentitySocialCeremonyCandidate.valid_reference?("a" * 22)
+    assert_not IdentitySocialCeremonyCandidate.valid_reference?("candidate/ref")
+  end
+
+  test "candidate store retries a generated ref collision without changing the callback binding" do
+    callback_result = ExternalAuthentication::CallbackResult.verified(
+      principal: ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google",
+        subject: "collision-google",
+        issuer: "https://accounts.google.com",
+        audience: "google-client-id",
+        verified_at: @now,
+        verification_authority: "omniauth-google-oauth2/contract",
+      ),
+      credential_candidate: nil,
+    )
+    existing = IdentitySocialCeremonyCandidateStore.store!(
+      surface: "app", actor_ref: "anonymous", session_ref: "collision-session-1",
+      transaction_id: "collision-transaction-1", operation: "login", provider: "google",
+      callback_result: callback_result, expires_at: @now + 5.minutes,
+    )
+    generated = [existing.ref, "b" * 21]
+
+    replacement =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        IdentitySocialCeremonyCandidateStore.store!(
+          surface: "app", actor_ref: "anonymous", session_ref: "collision-session-2",
+          transaction_id: "collision-transaction-2", operation: "login", provider: "google",
+          callback_result: callback_result, expires_at: @now + 5.minutes,
+        )
+      end
+
+    assert_equal "b" * 21, replacement.ref
+    assert_equal "collision-google", replacement.callback_result.principal.subject
+    assert_equal 2, IdentitySocialCeremonyCandidate.count
+  end
+
+  [-1, 0, 1].each do |offset|
+    test "candidate fetch and consume enforce the deadline at #{offset} microseconds" do
+      deadline = (IdentitySocialCeremonyCandidate.database_now + 5.minutes).change(usec: 500_000)
+      now = deadline + Rational(offset, 1_000_000)
+      principal = ExternalAuthentication::VerifiedPrincipal.new(
+        provider: "google", subject: "candidate-boundary-#{SecureRandom.hex(8)}",
+        issuer: "https://accounts.google.com", audience: "google-client-id",
+        verified_at: IdentitySocialCeremonyCandidate.database_now,
+        verification_authority: "test-provider-contract",
+      )
+      stored = IdentitySocialCeremonyCandidateStore.store!(
+        surface: "app", actor_ref: "anonymous", session_ref: "candidate-boundary-session",
+        transaction_id: SecureRandom.uuid, operation: "login", provider: "google",
+        callback_result: ExternalAuthentication::CallbackResult.verified(principal:, credential_candidate: nil),
+        expires_at: deadline,
+      )
+      arguments = {
+        now: now,
+        error_class: IdentitySocialCeremonyContract::Error,
+        not_found_message: "candidate unavailable",
+        expired_message: "candidate expired",
+      }
+      record = IdentitySocialCeremonyCandidate.find_by!(ref: stored.ref)
+      if offset.negative?
+        assert_equal record.id, IdentitySocialCeremonyCandidate.find_active_by_ref!(stored.ref, **arguments).id
+        assert_equal now, record.consume!(**arguments).consumed_at
+      else
+        assert_raises(IdentitySocialCeremonyContract::Error) do
+          IdentitySocialCeremonyCandidate.find_active_by_ref!(stored.ref, **arguments)
+        end
+        assert_raises(IdentitySocialCeremonyContract::Error) { record.consume!(**arguments) }
+        assert_nil record.reload.consumed_at
       end
     end
   end
@@ -277,6 +365,20 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
       assert_social_ceremony_error("token verification failed") do
         IdentitySocialCeremonyGrant.decode(tampered, issuer_id: acme_issuer_id, now: @now)
       end
+    end
+  end
+
+  test "decode_untrusted_routing_payload rejects a token whose payload is not a JSON object" do
+    header = Base64.urlsafe_encode64(%q({"alg":"none"}), padding: false)
+
+    ["[1]", "5", %q("surface")].each do |body|
+      token = "#{header}.#{Base64.urlsafe_encode64(body, padding: false)}."
+
+      error =
+        assert_raises(IdentitySocialCeremonyContract::Error) do
+          IdentitySocialCeremonyContract.decode_untrusted_routing_payload(token)
+        end
+      assert_includes error.message, "must be a JSON object", "payload #{body}"
     end
   end
 

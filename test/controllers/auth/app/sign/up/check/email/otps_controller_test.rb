@@ -2,7 +2,6 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
 class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::IntegrationTest
   # Rate-limit counters are a NullStore by default in test so unrelated tests
@@ -10,47 +9,351 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   # opts into a deterministic MemoryStore.
   rate_limit_counters!
 
+  include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    host! @host
-    cookies["csrf_token"] = csrf_token_value
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
+    ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
+    ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    @previous_forgery_protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
     Rails.configuration.x.rate_limit.fetch(:store).clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
+    browser = self
+    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    auth_host = @host
+    browser.host!(base_host)
+    browser.https!
+    browser.get("/sign", params: { ri: "jp" })
+    csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    browser.post(
+      "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
+        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+      },
+    )
+    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+    2.times do |index|
+      target = URI.parse(browser.response.location)
+      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+      unless target.host == base_host
+        rt = Rack::Utils.parse_query(target.query).fetch("rt")
+        payload, = JWT.decode(
+          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
+          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+        )
+        target = URI.parse(payload.fetch("url"))
+      end
+
+      assert_includes [base_host, auth_host], target.host
+      browser.host!(target.host)
+      browser.get(target.request_uri, params: { ri: "jp" })
+      next if index == 1
+
+      form = browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      browser.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{target.host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+    end
+    # Redeem through Auth POST, Base confirmation POST, then Auth POST.
+    # No admission, browser marker or signed flow locator is installed directly.
+    3.times do |index|
+      form = browser.response.parsed_body.at_css("form")
+
+      assert_not_nil form, "admission step #{index}, HTTP #{browser.response.status}"
+      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+      browser.post(
+        form["action"], params: fields, headers: {
+          "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+      break if index == 2
+
+      target = URI.parse(browser.response.location)
+
+      assert_includes [base_host, auth_host], target.host
+      browser.host!(target.host)
+      browser.get(target.request_uri, params: { ri: "jp" })
+    end
+
+    assert_equal 303, browser.response.status
+    browser.get("/sign/up/email/new", params: { ri: "jp" })
+
+    assert_equal 200, browser.response.status
+    csrf = browser.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+    @headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf }
   end
 
   teardown do
+    ActionController::Base.allow_forgery_protection = @previous_forgery_protection
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil
     Rails.configuration.x.rate_limit.fetch(:store).clear
   end
 
   test "show renders the otp form" do
-    start_email_signup!("email-show@example.com")
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-show@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
 
-    get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    assert_not user_email.attributes.values.include?(otp_code), "Source must not hold the random OTP code"
+    assert_not user_email.attributes.values.include?(transaction.otp_verifier), "Source must not hold the keyed proof"
+    transaction = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole
+
+    assert_equal "sign_up", transaction.purpose
+    assert_predicate transaction.otp_verifier, :present?
+
+    get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
 
     assert_response :success
-    assert_equal "auth/app/sign/up/emails/edit", inertia_component
-    props = inertia_props
+    assert_equal "auth/app/sign/up/emails/edit",
+                 JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("component")
+    props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
 
     assert_equal I18n.t("sign.app.authentication.email.edit.page_title"), props.fetch("title")
     assert_equal I18n.t("sign.app.authentication.email.edit.code_label"), props.fetch("code_label")
     assert_equal I18n.t("sign.app.authentication.email.edit.submit"), props.fetch("submit_label")
+    assert_equal "render", props.fetch("turnstile").fetch("mode")
+    assert_predicate props.fetch("turnstile").fetch("site_key"), :present?
+    assert_predicate props.fetch("turnstile").fetch("challenge_id"), :present?
+  end
+
+  test "patch with a valid otp and missing, invalid, or unavailable Turnstile does not consume the otp" do
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-turnstile@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    attempts_before = user_email.reload.otp_attempts_count
+    proof_before = transaction.attributes
+    [
+      [nil, { "success" => false }],
+      ["invalid-turnstile-token", { "success" => false }],
+      ["provider-outage-token", { "success" => false, "unavailable" => true }],
+    ].each do |turnstile_token, verification_result|
+      TurnstileVerifierStub.challenge_response = verification_result
+      params = { client_email: { pass_code: otp_code } }
+      params["cf-turnstile-response"] = turnstile_token if turnstile_token
+
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), params: params, headers: @headers
+
+      assert_response :unprocessable_content
+      assert_equal "render",
+                   JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+                     .fetch("turnstile").fetch("mode")
+    end
+
+    assert_equal attempts_before, user_email.reload.otp_attempts_count
+    assert_withheld("Turnstile refusal must preserve the entire live OTP proof") {
+      proof_before == transaction.reload.attributes
+    }
+    assert_equal ClientSignUpFlowStatus::CONTACT_PENDING, cycle.reload.status_id
+    assert_nil cycle.completed_requirements["otp"]
+  end
+
+  test "degraded Turnstile accepts only upstream-unavailable results and never re-renders the otp" do
+    clear_enqueued_jobs
+    post(
+      auth_app_sign_up_email_url(ri: "jp"),
+      params: { :client_email => { raw_address: "email-degraded@example.com",
+                                   confirm_policy: "1", },
+                "cf-turnstile-response" => "test", },
+      headers: @headers,
+    )
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    attempts_before = user_email.reload.otp_attempts_count
+    proof_before = transaction.attributes
+    Flipper.enable(:turnstile_degraded_mode)
+
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+    patch(
+      auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+      params: {
+        "client_email" => { "pass_code" => otp_code },
+        "cf-turnstile-response" => "invalid-turnstile-token",
+      },
+      headers: @headers,
+    )
+
+    assert_response :unprocessable_content
+    assert_not_includes response.body, otp_code
+    assert_equal attempts_before, user_email.reload.otp_attempts_count
+    assert_withheld("Turnstile refusal must preserve the entire live OTP proof") {
+      proof_before == transaction.reload.attributes
+    }
+    TurnstileVerifierStub.challenge_response = { "success" => false, "unavailable" => true }
+    patch(
+      auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+      params: {
+        "client_email" => { "pass_code" => otp_code },
+        "cf-turnstile-response" => "provider-outage-token",
+      },
+      headers: @headers,
+    )
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
+    assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
+  ensure
+    Flipper.disable(:turnstile_degraded_mode)
   end
 
   test "patch with a valid otp advances to the birthdate checkpoint" do
-    user_email = start_email_signup!("email-valid@example.com")
-    cycle = current_sign_up_cycle
-
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-          params: { client_email: { pass_code: otp_code_for(user_email) } },
-          headers: default_headers
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-valid@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
 
     assert_response :redirect
-    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp")
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+          params: {
+            "client_email" => { "pass_code" => otp_code },
+            "cf-turnstile-response" => "valid-turnstile-token",
+          },
+          headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
     assert_equal ClientEmailStatus::VERIFIED_WITH_SIGN_UP, user_email.reload.user_email_status_id
     assert_equal ClientSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
     assert_equal "checkpoint", cycle.reload.step
@@ -59,60 +362,467 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
   end
 
   test "show with an expired otp redirects to the start" do
-    user_email = start_email_signup!("email-show-expired@example.com")
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-show-expired@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
 
-    travel_to(user_email.reload.otp_expires_at + 1.second) do
-      get auth_app_sign_up_check_email_otp_url(ri: "jp"), headers: default_headers
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    expiry = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole.otp_expires_at
+    ClientEmailCeremonyTransaction.stub(:database_now, expiry + 1.second) do
+      travel_to(expiry + 1.second) do
+        get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
+      end
     end
 
     assert_response :redirect
     assert_redirected_to new_auth_app_sign_up_email_url(ri: "jp")
+  end
+
+  test "show at the exact independent Email OTP deadline redirects to the start" do
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-show-exact-expiry@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    expiry = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole.otp_expires_at
+    ClientEmailCeremonyTransaction.stub(:database_now, expiry) do
+      travel_to(expiry) do
+        get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
+      end
+    end
+
+    assert_response :redirect
+    assert_redirected_to new_auth_app_sign_up_email_url(ri: "jp")
+  end
+
+  test "show one second before the independent Email OTP deadline remains available" do
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-show-before-expiry@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    expiry = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole.otp_expires_at
+    ClientEmailCeremonyTransaction.stub(:database_now, expiry - 1.second) do
+      travel_to(expiry - 1.second) do
+        get auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding), headers: @headers
+      end
+    end
+
+    assert_response :success
+    assert_nil transaction.reload.otp_consumed_at
   end
 
   test "patch with an expired otp redirects to the start" do
-    user_email = start_email_signup!("email-expired@example.com")
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-expired@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
 
-    travel_to(user_email.reload.otp_expires_at + 1.second) do
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-            params: { client_email: { pass_code: "000000" } },
-            headers: default_headers
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    expiry = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole.otp_expires_at
+    ClientEmailCeremonyTransaction.stub(:database_now, expiry + 1.second) do
+      travel_to(expiry + 1.second) do
+        patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+              params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
+              headers: @headers
+      end
     end
 
     assert_response :redirect
     assert_redirected_to new_auth_app_sign_up_email_url(ri: "jp")
   end
 
-  test "patch with a blank otp returns a validation error" do
-    start_email_signup!("email-blank@example.com")
+  test "patch at the exact independent Email OTP deadline refuses even the delivered correct code" do
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-exact-expiry@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-          params: { client_email: { pass_code: "" } },
-          headers: default_headers
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    expiry = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole.otp_expires_at
+    ClientEmailCeremonyTransaction.stub(:database_now, expiry) do
+      travel_to(expiry) do
+        patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+              params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
+              headers: @headers
+      end
+    end
+
+    assert_response :redirect
+    assert_redirected_to new_auth_app_sign_up_email_url(ri: "jp")
+    assert_nil transaction.reload.otp_consumed_at
+  end
+
+  test "patch one second before the independent Email OTP deadline consumes the delivered code" do
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-before-expiry@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    expiry = ClientEmailCeremonyTransaction.where(
+      operation: "sign_up",
+      email_candidate_ref: user_email.public_id,
+    ).sole.otp_expires_at
+    ClientEmailCeremonyTransaction.stub(:database_now, expiry - 1.second) do
+      travel_to(expiry - 1.second) do
+        patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+              params: { :client_email => { pass_code: otp_code }, "cf-turnstile-response" => "test" },
+              headers: @headers
+      end
+    end
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+
+    assert_redirected_to auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: @flow_binding)
+    assert_not_nil transaction.reload.otp_consumed_at
+    assert_nil transaction.otp_verifier
+    assert_not_nil transaction.otp_receipt_verifier
+  end
+
+  test "patch with a blank otp returns a validation error" do
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-blank@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+          params: { :client_email => { pass_code: "" }, "cf-turnstile-response" => "test" },
+          headers: @headers
 
     assert_response :unprocessable_content
     assert_includes response.body, I18n.t("sign.app.registration.email.update.code_required")
   end
 
   test "patch with an invalid otp returns a validation error" do
-    start_email_signup!("email-wrong@example.com")
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-wrong@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
 
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-          params: { client_email: { pass_code: "000000" } },
-          headers: default_headers
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+
+    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+          params: { :client_email => { pass_code: ((otp_code == "000000") ? "000001" : "000000") },
+                    "cf-turnstile-response" => "test", },
+          headers: @headers
 
     assert_response :unprocessable_content
     assert_includes response.body, I18n.t("sign.app.registration.email.update.invalid_code")
   end
 
   test "patch with repeated invalid otp attempts locks the flow" do
-    user_email = start_email_signup!("email-lock@example.com")
-    cycle = current_sign_up_cycle
+    clear_enqueued_jobs
+    post auth_app_sign_up_email_url(ri: "jp"),
+         params: { :client_email => { raw_address: "email-lock@example.com",
+                                      confirm_policy: "1", },
+                   "cf-turnstile-response" => "test", },
+         headers: @headers
+
+    assert_response :redirect
+    @flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
+    user_email = ClientEmail.find(cycle.pending_contact_id)
+    job = enqueued_jobs.reverse.find { |entry| entry.fetch(:job) == OtpNotifierEmailDeliveryJob }
+
+    assert_not_nil job
+    notification = ActiveJob::Arguments.deserialize(job.fetch(:args)).last
+    delivery = notification.fetch(:params).symbolize_keys
+    transaction = ClientEmailCeremonyTransaction.find_by!(
+      transaction_id: delivery.fetch(:sign_up_email_transaction_ref),
+    )
+    otp_code = OutboundSensitivePayload.decrypt_email_otp(delivery.fetch(:encrypted_hotp_token))
+
+    # Boolean assertions keep ceremony binding material out of failure output.
+    assert_withheld("Delivery must address this flow's Email candidate") {
+      notification.fetch(:recipient).public_id == user_email.public_id
+    }
+    assert_withheld { delivery.fetch(:sign_up_flow_ref) == cycle.public_id }
+    assert_withheld { delivery.fetch(:sign_up_email_otp_generation) == transaction.otp_generation }
+    assert_withheld { transaction.email_candidate_ref == user_email.public_id }
+    assert_withheld { transaction.purpose == "sign_up" }
+    assert_withheld { transaction.operation == "sign_up" }
+    assert_withheld { transaction.actor_ref == contact_owner_for_test(user_email).public_id }
+    assert_withheld {
+      transaction.session_ref ==
+        Digest::SHA256.hexdigest(JSON.generate(["email_sign_up", cycle.public_id, cycle.nonce_digest]))
+    }
+    assert_not job.fetch(:args).to_s.include?(otp_code), "Queued delivery must not contain plaintext code"
+    cycle = ClientSignUpFlow.find_by!(public_id: session.fetch(:auth_app_up_sequence_id))
     completed_requirements = cycle.completed_requirements.deep_dup
 
-    Email::MAX_OTP_ATTEMPTS.times do
-      patch auth_app_sign_up_check_email_otp_url(ri: "jp"),
-            params: { client_email: { pass_code: "000000" } },
-            headers: default_headers
+    EmailOtpPolicy::MAX_OTP_ATTEMPTS.times do
+      patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: @flow_binding),
+            params: { :client_email => { pass_code: ((otp_code == "000000") ? "000001" : "000000") },
+                      "cf-turnstile-response" => "test", },
+            headers: @headers
     end
 
     assert_response :too_many_requests
@@ -121,38 +831,6 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     assert_equal "init", session[SignEmailRegistrable::SESSION_KEY]
     assert_equal completed_requirements, cycle.reload.completed_requirements
     assert_nil cycle.reload.completed_requirements["otp"]
-  end
-
-  private
-
-  def start_email_signup!(email)
-    post(
-      auth_app_sign_up_email_url(ri: "jp"),
-      params: {
-        user_email: {
-          raw_address: email,
-          confirm_policy: "1",
-        },
-        "cf-turnstile-response": "test",
-      },
-      headers: default_headers,
-    )
-
-    assert_response :redirect
-    ClientEmail.order(:created_at).last
-  end
-
-  def current_sign_up_cycle
-    ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
-  end
-
-  def otp_code_for(user_email)
-    otp_data = user_email.get_otp
-    ROTP::HOTP.new(otp_data[:otp_private_key]).at(otp_data[:otp_counter]).to_s
-  end
-
-  def default_headers
-    { "Host" => @host, "HTTPS" => "on", "X-CSRF-Token" => csrf_token_value }
   end
 end
 
@@ -173,31 +851,11 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -257,10 +915,8 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -272,10 +928,8 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -496,87 +1150,6 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -592,10 +1165,8 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -615,12 +1186,12 @@ class Auth::App::Sign::Up::Check::Email::OtpsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

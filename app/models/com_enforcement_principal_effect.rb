@@ -10,6 +10,10 @@ class ComEnforcementPrincipalEffect < ComPrincipalRecord
 
   validates :principal_public_id, presence: true
   validates :effective_at, presence: true
+  # The columns are NOT NULL; a blank or unparseable flag is refused as invalid input instead of
+  # reaching the database as a constraint violation.
+  validates :access_blocking, :recovery_blocked, :reactivation_blocked, :withdrawal_purge_blocked,
+            :principal_hard_delete_blocked, inclusion: { in: [true, false] }
   validate :kind_permits_principal_effect
 
   private

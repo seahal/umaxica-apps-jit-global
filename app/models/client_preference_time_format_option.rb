@@ -15,22 +15,22 @@ class ClientPreferenceTimeFormatOption < AppPrincipalRecord
   HOUR_24 = 1
   HOUR_12 = 2
 
+  DEFAULTS = [NOTHING, HOUR_24, HOUR_12].freeze
+
   has_many :client_preference_time_formats,
            class_name: "ClientPreferenceTimeFormat",
            foreign_key: :option_id,
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when 1 then "24"
     when 2 then "12"
     end
-  end
-
-  DEFAULTS = [NOTHING, HOUR_24, HOUR_12].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

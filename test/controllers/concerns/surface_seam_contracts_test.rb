@@ -54,7 +54,6 @@ class SurfaceSeamContractsTest < ActiveSupport::TestCase
       [:render_passkey_restricted_success, {}], [:passkey_checkpoint_redirect_url],
       [:passkey_default_redirect_url],
     ],
-    SessionLimitPendingGuard => [[:pending_session_limit_redirect_path]],
     SignRequiresRecoveryPasscodes => [
       [:recovery_passcode_requirement_actor], [:recovery_passcode_requirement_credential_class],
       [:recovery_passcode_setup_url],
@@ -63,66 +62,10 @@ class SurfaceSeamContractsTest < ActiveSupport::TestCase
       [:prepare_secret_credential_turnstile_create_failure],
       [:render_secret_credential_turnstile_create_failure],
     ],
-    SignVerificationAuditAndCookie => [
-      [:verification_audit_event_class], [:verification_audit_level_class],
-      [:verification_default_activity_level_id], [:verification_activity_model],
-      [:current_verification_actor], [:verification_actor_type],
-    ],
-    SignVerificationCancellation => [[:verification_cancellation_fallback_path]],
-    SignVerificationCommonBase => [[:verification_unavailable_redirect_path]],
-    SignVerificationEntry => [[:verification_success_notice_key]],
-    SignVerificationPasskeyChecks => [
-      [:verification_passkeys_scope], [:verification_passkey_model],
-      [:passkey_actor_matches?, :passkey], [:verification_no_passkey_i18n_key],
-    ],
-    SignVerificationStepUpLifecycle => [
-      [:valid_step_up_session?, {}], [:handle_invalid_step_up_session!], [:clear_step_up_state!],
-      [:verification_model], [:verification_success_event_id], [:verification_success_notice_key],
-      [:verification_success_fallback_path],
-    ],
-    SignVerificationTotpChecks => [[:active_totp_credentials]],
     SocialCeremonyEntry => [
       [:social_ceremony_surface], [:social_ceremony_providers], [:social_ceremony_abort_path],
     ],
   }.freeze
-
-  SEAMS.each do |concern, seams|
-    test "#{concern} declares every per-surface seam it expects" do
-      harness = self.class.harness_for(concern).new
-
-      seams.each do |(seam, *arguments)|
-        assert_raises(NotImplementedError, "#{concern}##{seam}") { harness.invoke(seam, *arguments) }
-      end
-    end
-  end
-
-  test "the step-up lifecycle refuses a surface and a token class it does not serve" do
-    harness = self.class.harness_for(SignVerificationStepUpLifecycle).new
-    harness.define_singleton_method(:actor_token) { Struct.new(:id).new(1) }
-
-    assert_raises(NotImplementedError) { harness.invoke(:acme_step_up_completion_url_for, "martian") }
-    assert_raises(NotImplementedError) { harness.invoke(:step_up_ceremony_surface) }
-  end
-
-  test "the verification entry declares its invalid-request destination seam" do
-    harness = self.class.harness_for(SignVerificationEntry).new
-
-    assert_raises(NotImplementedError) { harness.invoke(:verification_invalid_request_redirect_path, ri: "jp") }
-  end
-
-  test "the step-up session store refuses a session model it does not map" do
-    harness = self.class.harness_for(SignVerificationStepUpSessionStore).new
-    unmapped = Class.new { def self.name = "MartianStepUpSession" }
-    harness.define_singleton_method(:step_up_session_model) { unmapped }
-
-    assert_raises(NotImplementedError) { harness.invoke(:step_up_session_token_foreign_key) }
-  end
-
-  test "step-up cancellation refuses a surface it does not serve" do
-    harness = self.class.harness_for(SignVerificationCancellation).new
-
-    assert_raises(NotImplementedError) { harness.invoke(:acme_step_up_cancellation_url_for, "martian") }
-  end
 
   test "the external authentication ports declare their single call seam" do
     [

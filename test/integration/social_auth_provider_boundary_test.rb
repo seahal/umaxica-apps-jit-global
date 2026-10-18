@@ -9,7 +9,7 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
 
   setup do
     OmniAuth.config.test_mode = true
-    @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL", "auth.app.localhost")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! @host
     https! unless @host.include?("localhost")
   end
@@ -34,7 +34,143 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
         },
       },
     )
-    state = seed_social_auth_session(provider: "google", intent: "login", ri: "jp")
+    state =
+      begin
+        flow0_provider = "google"
+        flow0_intent = "login"
+        flow0_user = nil
+        flow0_entry = nil
+        flow0_ri = "jp"
+        flow0_rt = nil
+        flow0_referer = nil
+        unless flow0_intent.to_s == "link"
+          @base_browser = open_session
+          flow0_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          flow0_auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          @base_browser.host!(flow0_base_host)
+          @base_browser.https!
+          @base_browser.get("/sign", params: { ri: flow0_ri, pt: "/dashboard?ri=#{flow0_ri}" })
+          flow0_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+          flow0_fields =
+            flow0_form.css("input[name]").to_h { |flow0_input|
+              [
+                flow0_input["name"],
+                flow0_input["value"],
+              ]
+            }
+          @base_browser.post(
+            flow0_form["action"], params: flow0_fields, headers: {
+              "Origin" => "https://#{flow0_base_host}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          flow0_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          2.times do |flow0_index|
+            flow0_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow0_target.host == flow0_base_host
+              flow0_rt = Rack::Utils.parse_query(flow0_target.query).fetch("rt")
+              flow0_payload, = JWT.decode(
+                flow0_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow0_issuer.id,
+                  flow0_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow0_target = URI.parse(flow0_payload.fetch("url"))
+            end
+            if flow0_index.zero?
+              raise RuntimeError,
+                    "Base authorization host mismatch" unless flow0_target.host == flow0_base_host
+
+              @base_browser.get(flow0_target.request_uri)
+              flow0_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+              flow0_fields =
+                flow0_form.css("input[name]").to_h { |flow0_input|
+                  [
+                    flow0_input["name"],
+                    flow0_input["value"],
+                  ]
+                }
+              @base_browser.post(
+                flow0_form["action"], params: flow0_fields, headers: {
+                  "Origin" => "https://#{flow0_base_host}", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+            else
+              raise RuntimeError, "Auth admission host mismatch" unless flow0_target.host == flow0_auth_host
+
+              host!(flow0_auth_host)
+              https!
+              get(flow0_target.request_uri)
+            end
+          end
+          3.times do |flow0_index|
+            flow0_sender = (flow0_index == 1) ? @base_browser : self
+            flow0_form = Nokogiri::HTML(flow0_sender.response.body).at_css("form")
+            flow0_fields =
+              flow0_form.css("input[name]").to_h { |flow0_input|
+                [
+                  flow0_input["name"],
+                  flow0_input["value"],
+                ]
+              }
+            flow0_sender.post(
+              flow0_form["action"], params: flow0_fields, headers: {
+                "Origin" => "https://#{(flow0_index == 1) ? flow0_base_host : flow0_auth_host}",
+                "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            raise RuntimeError,
+                  "Social admission failed at step #{flow0_index}" unless flow0_sender.response.status == 303
+            next if flow0_index == 2
+
+            flow0_receiver = flow0_index.zero? ? @base_browser : self
+            flow0_receiver.get(URI.parse(flow0_sender.response.location).request_uri)
+          end
+        end
+        flow0_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        host!(flow0_host)
+        flow0_normalized_provider = SocialIdentifiable.normalize_provider(flow0_provider)
+        flow0_continue_path =
+          if flow0_intent.to_s == "link"
+            ((if flow0_normalized_provider == "google"
+                auth_app_settings_google_path(ri: flow0_ri)
+              else
+                auth_app_settings_apple_path(ri: flow0_ri)
+              end))
+          elsif flow0_entry.to_s == "sign_up"
+            ((flow0_normalized_provider == "google") ? auth_app_social_google_registration_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ) : auth_app_social_apple_registration_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ))
+          else
+            ((flow0_normalized_provider == "google") ? auth_app_social_google_session_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ) : auth_app_social_apple_session_path(
+              ri: flow0_ri,
+              rt: flow0_rt,
+            ))
+          end
+        flow0_headers = social_callback_headers(flow0_host)
+        flow0_headers["Referer"] = flow0_referer if flow0_referer.present?
+        if flow0_user
+          flow0_user_headers =
+            as_user_headers(flow0_user, host: flow0_host)
+          flow0_token = ClientToken.find_by(public_id: flow0_user_headers["X-TEST-SESSION-PUBLIC-ID"])
+          mark_token_step_up_satisfied_for_test(
+            flow0_token,
+            scope: SocialAuth::SOCIAL_LINK_SCOPE,
+          ) if flow0_intent.to_s == "link" && flow0_token
+          flow0_headers = flow0_headers.merge(flow0_user_headers)
+        end
+        post(flow0_continue_path, headers: flow0_headers)
+        social_auth_state_from_response
+      end
 
     assert_no_difference("ClientGoogleIdentity.count") do
       get auth_app_social_google_callback_url(ri: "jp"),
@@ -57,7 +193,143 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
         expires_at: 1.week.from_now.to_i,
       },
     )
-    state = seed_social_auth_session(provider: "google", intent: "login", ri: "jp")
+    state =
+      begin
+        flow1_provider = "google"
+        flow1_intent = "login"
+        flow1_user = nil
+        flow1_entry = nil
+        flow1_ri = "jp"
+        flow1_rt = nil
+        flow1_referer = nil
+        unless flow1_intent.to_s == "link"
+          @base_browser = open_session
+          flow1_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          flow1_auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          @base_browser.host!(flow1_base_host)
+          @base_browser.https!
+          @base_browser.get("/sign", params: { ri: flow1_ri, pt: "/dashboard?ri=#{flow1_ri}" })
+          flow1_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+          flow1_fields =
+            flow1_form.css("input[name]").to_h { |flow1_input|
+              [
+                flow1_input["name"],
+                flow1_input["value"],
+              ]
+            }
+          @base_browser.post(
+            flow1_form["action"], params: flow1_fields, headers: {
+              "Origin" => "https://#{flow1_base_host}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          flow1_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          2.times do |flow1_index|
+            flow1_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow1_target.host == flow1_base_host
+              flow1_rt = Rack::Utils.parse_query(flow1_target.query).fetch("rt")
+              flow1_payload, = JWT.decode(
+                flow1_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow1_issuer.id,
+                  flow1_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow1_target = URI.parse(flow1_payload.fetch("url"))
+            end
+            if flow1_index.zero?
+              raise RuntimeError,
+                    "Base authorization host mismatch" unless flow1_target.host == flow1_base_host
+
+              @base_browser.get(flow1_target.request_uri)
+              flow1_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+              flow1_fields =
+                flow1_form.css("input[name]").to_h { |flow1_input|
+                  [
+                    flow1_input["name"],
+                    flow1_input["value"],
+                  ]
+                }
+              @base_browser.post(
+                flow1_form["action"], params: flow1_fields, headers: {
+                  "Origin" => "https://#{flow1_base_host}", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+            else
+              raise RuntimeError, "Auth admission host mismatch" unless flow1_target.host == flow1_auth_host
+
+              host!(flow1_auth_host)
+              https!
+              get(flow1_target.request_uri)
+            end
+          end
+          3.times do |flow1_index|
+            flow1_sender = (flow1_index == 1) ? @base_browser : self
+            flow1_form = Nokogiri::HTML(flow1_sender.response.body).at_css("form")
+            flow1_fields =
+              flow1_form.css("input[name]").to_h { |flow1_input|
+                [
+                  flow1_input["name"],
+                  flow1_input["value"],
+                ]
+              }
+            flow1_sender.post(
+              flow1_form["action"], params: flow1_fields, headers: {
+                "Origin" => "https://#{(flow1_index == 1) ? flow1_base_host : flow1_auth_host}",
+                "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            raise RuntimeError,
+                  "Social admission failed at step #{flow1_index}" unless flow1_sender.response.status == 303
+            next if flow1_index == 2
+
+            flow1_receiver = flow1_index.zero? ? @base_browser : self
+            flow1_receiver.get(URI.parse(flow1_sender.response.location).request_uri)
+          end
+        end
+        flow1_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        host!(flow1_host)
+        flow1_normalized_provider = SocialIdentifiable.normalize_provider(flow1_provider)
+        flow1_continue_path =
+          if flow1_intent.to_s == "link"
+            ((if flow1_normalized_provider == "google"
+                auth_app_settings_google_path(ri: flow1_ri)
+              else
+                auth_app_settings_apple_path(ri: flow1_ri)
+              end))
+          elsif flow1_entry.to_s == "sign_up"
+            ((flow1_normalized_provider == "google") ? auth_app_social_google_registration_path(
+              ri: flow1_ri,
+              rt: flow1_rt,
+            ) : auth_app_social_apple_registration_path(
+              ri: flow1_ri,
+              rt: flow1_rt,
+            ))
+          else
+            ((flow1_normalized_provider == "google") ? auth_app_social_google_session_path(
+              ri: flow1_ri,
+              rt: flow1_rt,
+            ) : auth_app_social_apple_session_path(
+              ri: flow1_ri,
+              rt: flow1_rt,
+            ))
+          end
+        flow1_headers = social_callback_headers(flow1_host)
+        flow1_headers["Referer"] = flow1_referer if flow1_referer.present?
+        if flow1_user
+          flow1_user_headers =
+            as_user_headers(flow1_user, host: flow1_host)
+          flow1_token = ClientToken.find_by(public_id: flow1_user_headers["X-TEST-SESSION-PUBLIC-ID"])
+          mark_token_step_up_satisfied_for_test(
+            flow1_token,
+            scope: SocialAuth::SOCIAL_LINK_SCOPE,
+          ) if flow1_intent.to_s == "link" && flow1_token
+          flow1_headers = flow1_headers.merge(flow1_user_headers)
+        end
+        post(flow1_continue_path, headers: flow1_headers)
+        social_auth_state_from_response
+      end
 
     assert_no_difference("ClientAppleIdentity.count") do
       assert_no_difference("ClientGoogleIdentity.count") do
@@ -85,7 +357,143 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
         },
       },
     )
-    state = seed_social_auth_session(provider: "google", intent: "login", ri: "jp")
+    state =
+      begin
+        flow2_provider = "google"
+        flow2_intent = "login"
+        flow2_user = nil
+        flow2_entry = nil
+        flow2_ri = "jp"
+        flow2_rt = nil
+        flow2_referer = nil
+        unless flow2_intent.to_s == "link"
+          @base_browser = open_session
+          flow2_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          flow2_auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          @base_browser.host!(flow2_base_host)
+          @base_browser.https!
+          @base_browser.get("/sign", params: { ri: flow2_ri, pt: "/dashboard?ri=#{flow2_ri}" })
+          flow2_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+          flow2_fields =
+            flow2_form.css("input[name]").to_h { |flow2_input|
+              [
+                flow2_input["name"],
+                flow2_input["value"],
+              ]
+            }
+          @base_browser.post(
+            flow2_form["action"], params: flow2_fields, headers: {
+              "Origin" => "https://#{flow2_base_host}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          flow2_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          2.times do |flow2_index|
+            flow2_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow2_target.host == flow2_base_host
+              flow2_rt = Rack::Utils.parse_query(flow2_target.query).fetch("rt")
+              flow2_payload, = JWT.decode(
+                flow2_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow2_issuer.id,
+                  flow2_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow2_target = URI.parse(flow2_payload.fetch("url"))
+            end
+            if flow2_index.zero?
+              raise RuntimeError,
+                    "Base authorization host mismatch" unless flow2_target.host == flow2_base_host
+
+              @base_browser.get(flow2_target.request_uri)
+              flow2_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+              flow2_fields =
+                flow2_form.css("input[name]").to_h { |flow2_input|
+                  [
+                    flow2_input["name"],
+                    flow2_input["value"],
+                  ]
+                }
+              @base_browser.post(
+                flow2_form["action"], params: flow2_fields, headers: {
+                  "Origin" => "https://#{flow2_base_host}", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+            else
+              raise RuntimeError, "Auth admission host mismatch" unless flow2_target.host == flow2_auth_host
+
+              host!(flow2_auth_host)
+              https!
+              get(flow2_target.request_uri)
+            end
+          end
+          3.times do |flow2_index|
+            flow2_sender = (flow2_index == 1) ? @base_browser : self
+            flow2_form = Nokogiri::HTML(flow2_sender.response.body).at_css("form")
+            flow2_fields =
+              flow2_form.css("input[name]").to_h { |flow2_input|
+                [
+                  flow2_input["name"],
+                  flow2_input["value"],
+                ]
+              }
+            flow2_sender.post(
+              flow2_form["action"], params: flow2_fields, headers: {
+                "Origin" => "https://#{(flow2_index == 1) ? flow2_base_host : flow2_auth_host}",
+                "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            raise RuntimeError,
+                  "Social admission failed at step #{flow2_index}" unless flow2_sender.response.status == 303
+            next if flow2_index == 2
+
+            flow2_receiver = flow2_index.zero? ? @base_browser : self
+            flow2_receiver.get(URI.parse(flow2_sender.response.location).request_uri)
+          end
+        end
+        flow2_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        host!(flow2_host)
+        flow2_normalized_provider = SocialIdentifiable.normalize_provider(flow2_provider)
+        flow2_continue_path =
+          if flow2_intent.to_s == "link"
+            ((if flow2_normalized_provider == "google"
+                auth_app_settings_google_path(ri: flow2_ri)
+              else
+                auth_app_settings_apple_path(ri: flow2_ri)
+              end))
+          elsif flow2_entry.to_s == "sign_up"
+            ((flow2_normalized_provider == "google") ? auth_app_social_google_registration_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ) : auth_app_social_apple_registration_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ))
+          else
+            ((flow2_normalized_provider == "google") ? auth_app_social_google_session_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ) : auth_app_social_apple_session_path(
+              ri: flow2_ri,
+              rt: flow2_rt,
+            ))
+          end
+        flow2_headers = social_callback_headers(flow2_host)
+        flow2_headers["Referer"] = flow2_referer if flow2_referer.present?
+        if flow2_user
+          flow2_user_headers =
+            as_user_headers(flow2_user, host: flow2_host)
+          flow2_token = ClientToken.find_by(public_id: flow2_user_headers["X-TEST-SESSION-PUBLIC-ID"])
+          mark_token_step_up_satisfied_for_test(
+            flow2_token,
+            scope: SocialAuth::SOCIAL_LINK_SCOPE,
+          ) if flow2_intent.to_s == "link" && flow2_token
+          flow2_headers = flow2_headers.merge(flow2_user_headers)
+        end
+        post(flow2_continue_path, headers: flow2_headers)
+        social_auth_state_from_response
+      end
 
     assert_no_difference("ClientGoogleIdentity.count") do
       get auth_app_social_google_callback_url(ri: "jp"),
@@ -113,7 +521,143 @@ class SocialAuthProviderBoundaryTest < ActionDispatch::IntegrationTest
         },
       },
     )
-    state = seed_social_auth_session(provider: "apple", intent: "login", ri: "jp")
+    state =
+      begin
+        flow3_provider = "apple"
+        flow3_intent = "login"
+        flow3_user = nil
+        flow3_entry = "sign_up"
+        flow3_ri = "jp"
+        flow3_rt = nil
+        flow3_referer = nil
+        unless flow3_intent.to_s == "link"
+          @base_browser = open_session
+          flow3_base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+          flow3_auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          @base_browser.host!(flow3_base_host)
+          @base_browser.https!
+          @base_browser.get("/sign", params: { ri: flow3_ri, pt: "/dashboard?ri=#{flow3_ri}" })
+          flow3_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+          flow3_fields =
+            flow3_form.css("input[name]").to_h { |flow3_input|
+              [
+                flow3_input["name"],
+                flow3_input["value"],
+              ]
+            }
+          @base_browser.post(
+            flow3_form["action"], params: flow3_fields, headers: {
+              "Origin" => "https://#{flow3_base_host}", "Sec-Fetch-Site" => "same-origin",
+            },
+          )
+          flow3_issuer = JitSecurityJwtRegistry.surface("BASE_APP")
+          2.times do |flow3_index|
+            flow3_target = URI.parse(@base_browser.response.location)
+            # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
+            unless flow3_target.host == flow3_base_host
+              flow3_rt = Rack::Utils.parse_query(flow3_target.query).fetch("rt")
+              flow3_payload, = JWT.decode(
+                flow3_rt, JitSecurityJwtRegistry.public_key_for(
+                  flow3_issuer.id,
+                  flow3_issuer.current_kid,
+                ), true,
+                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow3_base_host}",
+                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+              )
+              flow3_target = URI.parse(flow3_payload.fetch("url"))
+            end
+            if flow3_index.zero?
+              raise RuntimeError,
+                    "Base authorization host mismatch" unless flow3_target.host == flow3_base_host
+
+              @base_browser.get(flow3_target.request_uri)
+              flow3_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
+              flow3_fields =
+                flow3_form.css("input[name]").to_h { |flow3_input|
+                  [
+                    flow3_input["name"],
+                    flow3_input["value"],
+                  ]
+                }
+              @base_browser.post(
+                flow3_form["action"], params: flow3_fields, headers: {
+                  "Origin" => "https://#{flow3_base_host}", "Sec-Fetch-Site" => "same-origin",
+                },
+              )
+            else
+              raise RuntimeError, "Auth admission host mismatch" unless flow3_target.host == flow3_auth_host
+
+              host!(flow3_auth_host)
+              https!
+              get(flow3_target.request_uri)
+            end
+          end
+          3.times do |flow3_index|
+            flow3_sender = (flow3_index == 1) ? @base_browser : self
+            flow3_form = Nokogiri::HTML(flow3_sender.response.body).at_css("form")
+            flow3_fields =
+              flow3_form.css("input[name]").to_h { |flow3_input|
+                [
+                  flow3_input["name"],
+                  flow3_input["value"],
+                ]
+              }
+            flow3_sender.post(
+              flow3_form["action"], params: flow3_fields, headers: {
+                "Origin" => "https://#{(flow3_index == 1) ? flow3_base_host : flow3_auth_host}",
+                "Sec-Fetch-Site" => "same-origin",
+              },
+            )
+            raise RuntimeError,
+                  "Social admission failed at step #{flow3_index}" unless flow3_sender.response.status == 303
+            next if flow3_index == 2
+
+            flow3_receiver = flow3_index.zero? ? @base_browser : self
+            flow3_receiver.get(URI.parse(flow3_sender.response.location).request_uri)
+          end
+        end
+        flow3_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+        host!(flow3_host)
+        flow3_normalized_provider = SocialIdentifiable.normalize_provider(flow3_provider)
+        flow3_continue_path =
+          if flow3_intent.to_s == "link"
+            ((if flow3_normalized_provider == "google"
+                auth_app_settings_google_path(ri: flow3_ri)
+              else
+                auth_app_settings_apple_path(ri: flow3_ri)
+              end))
+          elsif flow3_entry.to_s == "sign_up"
+            ((flow3_normalized_provider == "google") ? auth_app_social_google_registration_path(
+              ri: flow3_ri,
+              rt: flow3_rt,
+            ) : auth_app_social_apple_registration_path(
+              ri: flow3_ri,
+              rt: flow3_rt,
+            ))
+          else
+            ((flow3_normalized_provider == "google") ? auth_app_social_google_session_path(
+              ri: flow3_ri,
+              rt: flow3_rt,
+            ) : auth_app_social_apple_session_path(
+              ri: flow3_ri,
+              rt: flow3_rt,
+            ))
+          end
+        flow3_headers = social_callback_headers(flow3_host)
+        flow3_headers["Referer"] = flow3_referer if flow3_referer.present?
+        if flow3_user
+          flow3_user_headers =
+            as_user_headers(flow3_user, host: flow3_host)
+          flow3_token = ClientToken.find_by(public_id: flow3_user_headers["X-TEST-SESSION-PUBLIC-ID"])
+          mark_token_step_up_satisfied_for_test(
+            flow3_token,
+            scope: SocialAuth::SOCIAL_LINK_SCOPE,
+          ) if flow3_intent.to_s == "link" && flow3_token
+          flow3_headers = flow3_headers.merge(flow3_user_headers)
+        end
+        post(flow3_continue_path, headers: flow3_headers)
+        social_auth_state_from_response
+      end
 
     get auth_app_social_apple_callback_url(ri: "jp"),
         params: { state: state },
@@ -141,31 +685,11 @@ class SocialAuthProviderBoundaryTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -225,10 +749,8 @@ class SocialAuthProviderBoundaryTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -240,10 +762,8 @@ class SocialAuthProviderBoundaryTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -363,33 +883,6 @@ class SocialAuthProviderBoundaryTest
     end
   end
 
-  def seed_social_auth_session(provider:, intent: "login", user: nil, entry: nil, ri: "jp", rt: nil, referer: nil)
-    host = configured_host(:sign_service)
-    host!(host) if respond_to?(:host!)
-    normalized_provider = SocialIdentifiable.normalize_provider(provider)
-    continue_path =
-      if intent.to_s == "link"
-        public_send(:"auth_app_settings_#{normalized_provider}_path", ri: ri)
-      elsif entry.to_s == "sign_up"
-        public_send(:"auth_app_social_#{normalized_provider}_registration_path", ri: ri, rt: rt)
-      else
-        public_send(:"auth_app_social_#{normalized_provider}_session_path", ri: ri, rt: rt)
-      end
-    headers = social_callback_headers(host)
-    headers["Referer"] = referer if referer.present?
-    if user
-      user_headers = as_user_headers(user, host: host)
-      token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
-      mark_token_step_up_satisfied_for_test(
-        token,
-        scope: SocialAuth::SOCIAL_LINK_SCOPE,
-      ) if intent.to_s == "link" && token
-      headers = headers.merge(user_headers)
-    end
-    post(continue_path, headers: headers)
-    social_auth_state_from_response
-  end
-
   def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
@@ -464,63 +957,6 @@ class SocialAuthProviderBoundaryTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -536,10 +972,8 @@ class SocialAuthProviderBoundaryTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -559,12 +993,12 @@ class SocialAuthProviderBoundaryTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

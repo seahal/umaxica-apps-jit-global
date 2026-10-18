@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_oidc_connections
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id           :bigint           not null, primary key
 #  last_used_at :datetime
@@ -21,7 +21,7 @@
 #  index_operator_oidc_connections_on_public_id               (public_id) UNIQUE
 #  index_operator_oidc_connections_on_staff_id_and_client_id  (staff_id,client_id) UNIQUE
 #
-class OperatorOidcConnection < OrgTicketRecord
+class OperatorOidcConnection < OpBaseOrgRecord
   include OidcConnectionRecord
 
   belongs_to :staff, class_name: "Operator"

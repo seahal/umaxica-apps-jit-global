@@ -6,31 +6,25 @@ module Auth
     module Sign
       class InsController < ::Auth::App::ApplicationController
         include ::SurfaceInertiaPage
+        include ::AuthenticationModeSwitchGuard
+        include ::AuthCeremonyAdmission
+        include ::SignInPhaseBindingControllerSupport
 
-        AUTHENTICATION_MODE = :open
-        declare_authentication_mode! :open
+        AUTHENTICATION_MODE = :guest
+        declare_authentication_mode! :guest
+
+        before_action -> {
+          enforce_sign_in_phase_binding!(expected_phase: "PRIMARY_PENDING") if params[:entry_ref].blank?
+        }
 
         def show
-          return redirect_logged_in_direct_entry! if logged_in? && params[:login_challenge].blank?
-          return render_method_selection! if params[:login_challenge].blank?
-
-          transaction = load_sign_in_authorization_transaction!
-          return redirect_signed_in_authorization_transaction!(transaction) if logged_in?
-
-          session[:oidc_authorization_login_challenge] = transaction.login_challenge
-          @oidc_authorization_intent = transaction.intent
-          render_method_selection!
-        rescue ActiveRecord::RecordNotFound
-          render plain: I18n.t("errors.messages.invalid_request"),
-                 status: :bad_request
+          admit_or_render_sign_ceremony!(expected_intent: auth_ceremony_entry_intent) { render_method_selection! }
         end
 
         private
 
-        # Direct entry without an authorization transaction lists the sign-in methods instead of
-        # bouncing through Base. Every method page it links to is already reachable directly, and
-        # AuthenticationSequenceGate already branches on a missing
-        # `oidc_authorization_login_challenge` after login, so no ceremony state is skipped here.
+        def auth_ceremony_entry_intent = "sign_in"
+
         def render_method_selection!
           render inertia: "auth/app/sign_ins/new", props: method_selection_props
         end
@@ -42,6 +36,7 @@ module Auth
             title: page_t("#{scope}.page_title"),
             description: page_t("#{scope}.description"),
             methods: method_selection_links(scope),
+            cancel_label: t("actions.cancel"),
             social_providers: [google_provider_button(scope), apple_provider_button(scope)],
             registration_link: {
               key: "registration",
@@ -53,17 +48,24 @@ module Auth
 
         def method_selection_links(scope)
           pt = signed_pt_param
+          binding = sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING")
 
           [
-            { key: "email", label: page_t("#{scope}.links.email"), href: new_auth_app_sign_in_email_path(pt: pt) },
+            {
+              key: "email",
+              label: page_t("#{scope}.links.email"),
+              href: new_auth_app_sign_in_email_path(pt: pt, **binding),
+            },
             { key: "passkey",
               label: page_t("#{scope}.links.passkey"),
-              href: new_auth_app_sign_in_passkey_path(pt: pt), },
-            {
-              key: "secret_credential",
-              label: page_t("#{scope}.links.secret_credential"),
-              href: new_auth_app_sign_in_secret_path(pt: pt),
-            },
+              href: new_auth_app_sign_in_passkey_path(pt: pt, **binding), },
+            { key: "secret",
+              label: t("sign.app.authentication.new.links.secret"),
+              href: new_auth_app_sign_in_secret_url(
+                pt: pt, ri: current_region_identifier,
+                **binding,
+                host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+              ), },
           ]
         end
 
@@ -78,7 +80,9 @@ module Auth
           {
             key: "google",
             label: page_t("#{scope}.links.google"),
-            action: auth_app_social_google_session_path,
+            action: auth_app_social_google_session_path(
+              **sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING"),
+            ),
             authenticity_token: form_authenticity_token,
             aria_label: "Sign in with Google",
             artwork: {
@@ -100,40 +104,14 @@ module Auth
           {
             key: "apple",
             label: page_t("#{scope}.links.apple"),
-            action: auth_app_social_apple_session_path,
+            action: auth_app_social_apple_session_path(
+              **sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING"),
+            ),
             authenticity_token: form_authenticity_token,
             aria_label: nil,
             artwork: nil,
             logos: logos && { white: logos[:white], black: logos[:black], width: 28, height: 40 },
           }
-        end
-
-        def redirect_logged_in_direct_entry!
-          redirect_to(
-            base_app_dashboard_url(ri: current_region_identifier, host: base_authority_host),
-            allow_other_host: true,
-          )
-        end
-
-        def redirect_signed_in_authorization_transaction!(transaction)
-          session.delete(:oidc_authorization_login_challenge)
-          result = register_oidc_authorization_result!(transaction.login_challenge)
-          redirect_to(result.resume_url, allow_other_host: true)
-        end
-
-        def load_sign_in_authorization_transaction!
-          transaction =
-            OidcAuthorizationTransactionCoordinator.find_by_login_challenge!(
-              surface: "app",
-              login_challenge: params[:login_challenge].to_s,
-            )
-          raise ActionController::BadRequest,
-                "authorization transaction expired" if transaction.login_challenge_expired?
-          raise ActionController::BadRequest, "authorization transaction already consumed" if transaction.consumed?
-          raise ActionController::BadRequest,
-                "authorization transaction intent mismatch" unless transaction.intent == "sign_in"
-
-          transaction
         end
       end
     end

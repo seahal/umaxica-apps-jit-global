@@ -7,6 +7,7 @@ module VerificationBase
   include CommonRedirect
   include ::RedirectsSignedTargetSupport
   include VerificationStepUpGuard
+  include StepUpCeremonyLogging
 
   STEP_UP_TTL = 15.minutes
   STEP_UP_REQUIRED_MESSAGE = "Step-up authentication required\nYour changes have not been saved"
@@ -21,10 +22,6 @@ module VerificationBase
     @required_verification = requirement.to_sym
   end
 
-  def clear_verification_requirement!
-    @required_verification = nil
-  end
-
   def verification_required?
     verification_requirement.present? ||
       (respond_to?(:verification_required_action?, true) && verification_required_action?)
@@ -34,17 +31,13 @@ module VerificationBase
     verification_requirement
   end
 
-  def verification_required_aal
-    StepUpRequirement::NO_AAL
-  end
-
   def verification_satisfied?
     actor_token = current_actor_token
     return false unless actor_token
 
     scope = verification_scope
     if scope.present?
-      return recorded_step_up_satisfied?(actor_token, scope: scope, required_aal: verification_required_aal)
+      return recorded_step_up_satisfied?(actor_token, scope: scope)
     end
 
     verification_record_satisfied?(actor_token)
@@ -71,31 +64,33 @@ module VerificationBase
     true
   end
 
-  def recorded_step_up_satisfied?(token, scope:, required_aal: verification_required_aal)
+  def recorded_step_up_satisfied?(token, scope:)
     StepUpResolver.call(
       token: token,
-      requirement: step_up_requirement(scope: scope, required_aal: required_aal),
+      requirement: step_up_requirement(scope: scope),
     ).satisfied?
   end
 
-  def step_up_satisfied?(scope:, required_aal: verification_required_aal)
+  def step_up_satisfied?(scope:)
     step_up = StepUpResolver.call(
       token: current_session_token,
-      requirement: step_up_requirement(scope: scope, required_aal: required_aal),
+      requirement: step_up_requirement(scope: scope),
     )
     Actor.install_context!(step_up: step_up) if defined?(Actor)
     step_up.satisfied?
   end
 
-  def require_step_up!(scope:, required_aal: verification_required_aal)
+  def require_step_up!(scope:, **policy)
+    return false if reject_step_up_for_authentication_context!
     return false if step_up_session_revoked?
-    return if step_up_satisfied?(scope: scope, required_aal: required_aal)
 
-    log_step_up_required!(scope: scope, required_aal: required_aal)
+    requirement = step_up_requirement(scope: scope, **policy)
+    return if step_up_satisfied_with_requirement?(requirement)
+
+    log_step_up_required!(requirement: requirement)
     require_verification!(scope)
     return false unless enforce_step_up_prereqs!(scope_override: scope)
 
-    flash[:alert] = I18n.t("auth.step_up.required")
     if request.get? || request.head?
       redirect_to(
         actor_verification_path(
@@ -115,27 +110,78 @@ module VerificationBase
     false
   end
 
-  def require_step_up_unless_bootstrap!(scope:, required_aal: verification_required_aal)
+  def require_step_up_unless_bootstrap!(scope:, **policy)
     return true if step_up_bootstrap_unconfigured?
 
-    require_step_up!(scope: scope, required_aal: required_aal)
+    require_step_up!(scope: scope, **policy)
   end
 
-  def step_up_requirement(scope:, required_aal: verification_required_aal, allowed_methods: step_up_strong_methods)
+  def step_up_requirement(scope:, allowed_methods: step_up_strong_methods,
+                          step_up_required: true, phishing_resistant_required: false,
+                          user_verification_required: false, full_reauthentication_required: false,
+                          purpose: "step_up", resource_ref: nil, tenant_ref: nil)
+    actor = current_verification_actor
+    token = current_session_token
     StepUpRequirement.new(
       scope: scope,
-      required_aal: required_aal,
+      step_up_required: step_up_required,
       allowed_methods: allowed_methods,
-      session_binding: current_session_token&.public_id,
-      token_binding: current_session_token&.public_id,
+      phishing_resistant_required: phishing_resistant_required,
+      user_verification_required: user_verification_required,
+      full_reauthentication_required: full_reauthentication_required,
+      session_binding: token&.public_id,
+      token_binding: token&.public_id,
       ttl: STEP_UP_TTL,
-      purpose: :step_up,
+      purpose: purpose,
       audience: step_up_audience,
       require_session_binding: true,
+      actor_ref: actor&.public_id,
+      resource_ref: resource_ref,
+      tenant_ref: tenant_ref,
     )
   end
 
+  def step_up_satisfied_with_requirement?(requirement)
+    step_up = StepUpResolver.call(token: current_session_token, requirement: requirement)
+    Actor.install_context!(step_up: step_up) if defined?(Actor)
+    step_up.satisfied?
+  end
+
   private
+
+  # An authentication context that is not eligible for Step-Up is rejected at
+  # the ceremony entry, before any credential is requested. This is not "step-up
+  # has not happened yet": no assertion can satisfy it, so offering the ceremony
+  # would only produce a credential prompt that can never succeed. Changing
+  # authentication mode requires signing out and signing in again.
+  #
+  # Rendered inline rather than through flash, and 403 rather than 401, because
+  # the session is valid and the operation is unavailable to it.
+  def reject_step_up_for_authentication_context!
+    return false unless standby_authentication_context?
+    return true if performed?
+
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.step_up.authentication_context_ineligible",
+        authentication_context: AuthenticationContextValue::STANDBY_KEY,
+        session_public_id: current_session_token&.public_id,
+      ),
+    )
+
+    message = I18n.t("auth.step_up.emergency_unavailable")
+    if request.format.json?
+      render json: { error: message }, status: :forbidden
+    else
+      render plain: message, status: :forbidden
+    end
+    true
+  end
+
+  def standby_authentication_context?
+    token = current_session_token
+    token.respond_to?(:standby_authentication_context?) && token.standby_authentication_context?
+  end
 
   # Check whether the underlying refresh token record has been revoked,
   # expired, or compromised.  If so, force-logout the session so that a
@@ -143,7 +189,7 @@ module VerificationBase
   def step_up_session_revoked?
     token = current_session_token
     return true if token.nil? # no record at all - dead
-    return false if token.currently_usable? # alive
+    return false if token.active_status? # alive
 
     # Session is dead in DB - tear it down.
     log_out if respond_to?(:log_out, true)
@@ -177,52 +223,47 @@ module VerificationBase
   end
 
   def enforce_step_up_prereqs!(scope_override: nil)
+    return false if reject_step_up_for_authentication_context!
     return true if available_step_up_methods.present?
 
+    if signed_in_client_without_step_up_methods?
+      return reject_signed_in_client_without_step_up_methods
+    end
+
     if request.get? || request.head?
-      return true if configured_step_up_methods.present? && verification_entry_request?
+      return true if configured_step_up_entry_request?
 
-      destination =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_path(pt: encoded_step_up_pt)
-        else
-          verification_redirect_path(pt: encoded_step_up_pt, scope_override: scope_override)
-        end
-      fallback =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_fallback
-        else
-          verification_redirect_fallback
-        end
-
-      safe_redirect_to(destination, fallback: fallback, status: :found)
+      redirect_to_step_up_prerequisite(scope_override, status: :found)
     elsif request.format.json?
       render json: { error: I18n.t("auth.step_up.register_methods_required") }, status: :unprocessable_content
     else
-      destination =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_path(pt: encoded_step_up_pt)
-        else
-          verification_redirect_path(pt: encoded_step_up_pt, scope_override: scope_override)
-        end
-      fallback =
-        if step_up_bootstrap_unconfigured?
-          verification_setup_redirect_fallback
-        else
-          verification_redirect_fallback
-        end
-
-      safe_redirect_to(
-        destination,
-        fallback: fallback,
-        status: :see_other,
-        alert: I18n.t("auth.step_up.register_methods_required"),
-      )
+      redirect_to_step_up_prerequisite(scope_override, status: :see_other)
     end
     false
   end
 
-  def log_step_up_required!(scope:, required_aal:)
+  def configured_step_up_entry_request?
+    configured_step_up_methods.present? && verification_entry_request?
+  end
+
+  def redirect_to_step_up_prerequisite(scope_override, status:)
+    destination, fallback = step_up_prerequisite_destination(scope_override)
+    redirect_to_verification_destination(destination, fallback: fallback, status: status)
+  end
+
+  def step_up_prerequisite_destination(scope_override)
+    if step_up_bootstrap_unconfigured?
+      [
+        verification_setup_redirect_path(pt: encoded_step_up_pt, scope: scope_override || verification_scope),
+        verification_setup_redirect_fallback,
+      ]
+    else
+      [verification_redirect_path(pt: encoded_step_up_pt, scope_override: scope_override),
+       verification_redirect_fallback,]
+    end
+  end
+
+  def log_step_up_required!(requirement:)
     step_up = defined?(Actor) ? Actor.step_up : nil
 
     Rails.logger.info(
@@ -234,8 +275,10 @@ module VerificationBase
         format: request.format&.to_s,
         surface: (defined?(Actor) ? Actor.tld : nil),
         actor_type: (defined?(Actor) ? Actor.actor_type : nil),
-        scope: scope,
-        required_aal: required_aal,
+        scope: requirement.scope,
+        phishing_resistant_required: requirement.phishing_resistant_required?,
+        user_verification_required: requirement.user_verification_required?,
+        full_reauthentication_required: requirement.full_reauthentication_required?,
         step_up_satisfied: step_up&.satisfied?,
         step_up_usable_token: step_up&.usable_token?,
         step_up_method: step_up&.method,
@@ -331,22 +374,6 @@ module VerificationBase
     end
   end
 
-  def decode_pt_path(encoded)
-    resolve_step_up_pt(encoded)
-  end
-
-  def setup_pt_path(encoded, root_path:)
-    path = decode_pt_path(encoded)
-    return nil if path.blank?
-
-    uri = URI.parse(path)
-    return root_path if uri.path.start_with?("/settings/") && uri.path != root_path
-
-    path
-  rescue URI::InvalidURIError
-    nil
-  end
-
   def existing_step_up_pt_path
     encoded = params[:pt].presence
     resolve_step_up_pt(encoded)
@@ -376,21 +403,40 @@ module VerificationBase
 
   def current_session_token
     return @current_session_token if defined?(@current_session_token)
-    return @current_session_token = current_session if respond_to?(:current_session, true) && current_session.present?
+
+    if browser_rp_controller?
+      token = current_browser_session_security_context&.root_token
+      return @current_session_token = token if token&.active_status?
+
+      return @current_session_token = nil
+    end
+
+    if respond_to?(:current_session, true) && current_session&.active_status?
+      return @current_session_token = current_session
+    end
     return @current_session_token = nil if current_session_public_id.blank?
 
-    @current_session_token = token_class.find_by(public_id: current_session_public_id)
+    token = token_class.find_by(public_id: current_session_public_id)
+    @current_session_token = token&.active_status? ? token : nil
   end
 
   def current_actor_token
     return @current_actor_token if defined?(@current_actor_token)
-    if respond_to?(:current_session, true) && current_session&.currently_usable?
+
+    if browser_rp_controller?
+      token = current_browser_session_security_context&.root_token
+      return @current_actor_token = token if token&.active_status?
+
+      return @current_actor_token = nil
+    end
+
+    if respond_to?(:current_session, true) && current_session&.active_status?
       return @current_actor_token = current_session
     end
     return @current_actor_token = nil if current_session_public_id.blank?
 
     token = token_class.find_by(public_id: current_session_public_id)
-    return @current_actor_token = token if token&.currently_usable?
+    return @current_actor_token = token if token&.active_status?
 
     @current_actor_token = nil
   end
@@ -431,15 +477,30 @@ module VerificationBase
     ::StepUpMethodsResolver.call(
       actor: actor,
       ticket: current_step_up_ticket,
-      supported_methods: step_up_permitted_methods,
+      supported_methods: step_up_supported_methods,
     )
+  end
+
+  def reject_signed_in_client_without_step_up_methods
+    message = I18n.t("auth.step_up.register_methods_required")
+    if request.format.json?
+      render json: { error: message }, status: :unprocessable_content
+    else
+      render plain: message, status: :forbidden
+    end
+    false
+  end
+
+  def signed_in_client_without_step_up_methods?
+    current_verification_actor.is_a?(Client) && current_session_token.is_a?(ClientToken) &&
+      current_session_token.established_authentication_method == "secret"
   end
 
   def step_up_bootstrap_unconfigured?(actor = current_verification_actor)
     return false unless actor
 
     refresh_actor_mfa_status(actor)
-    configured_step_up_methods(actor).empty?
+    configured_step_up_methods(actor).empty? && StepUpBootstrapEligibilityQuery.call(actor: actor)
   end
 
   def step_up_bootstrap_active?(actor = current_verification_actor)
@@ -455,34 +516,6 @@ module VerificationBase
     return token.step_up_session if token&.respond_to?(:step_up_session)
 
     nil
-  end
-
-  # The signed acme transaction is the authoritative operation policy.  A local
-  # verification endpoint may offer only the intersection of that policy and the
-  # fixed surface policy; no client parameter can expand either set.
-  def step_up_permitted_methods
-    supported = step_up_supported_methods
-    return supported unless respond_to?(:current_step_up_session, true)
-
-    scope = current_step_up_session&.scope
-    return supported if scope.blank?
-
-    transaction = current_step_up_ceremony_transaction_for_policy(scope)
-    return supported unless transaction
-
-    supported & transaction.allowed_methods_array.map(&:to_sym)
-  end
-
-  def current_step_up_ceremony_transaction_for_policy(scope)
-    if respond_to?(:acme_step_up_completion_state?, true) && acme_step_up_completion_state?
-      return current_step_up_ceremony_transaction!(scope: scope)
-    end
-
-    IdentityStepUpCeremonyReplayStore.for(step_up_ceremony_surface).latest_pending_for(
-      actor_ref: step_up_ceremony_actor_ref,
-      session_ref: actor_token.public_id,
-      required_scope: scope,
-    )
   end
 
   def step_up_supported_methods
@@ -514,15 +547,31 @@ module VerificationBase
   end
 
   def verification_redirect_fallback
-    actor_root_path(ri: params[:ri])
+    destination = actor_dashboard_path(ri: params[:ri])
+    log_step_up_return_target(destination, reason: "authenticated_dashboard_fallback", protected_flow: false)
+    destination
   end
 
-  def verification_setup_redirect_path(pt: nil)
-    actor_verification_setup_path(pt: pt, ri: params[:ri])
+  def verification_setup_redirect_path(pt: nil, scope: nil)
+    actor_verification_setup_path(pt: pt, scope: scope, ri: params[:ri])
   end
 
   def verification_setup_redirect_fallback
-    actor_root_path(ri: params[:ri])
+    destination = actor_dashboard_path(ri: params[:ri])
+    log_step_up_return_target(destination, reason: "authenticated_dashboard_fallback", protected_flow: false)
+    destination
+  end
+
+  def redirect_to_verification_destination(destination, fallback:, **redirect_options)
+    if destination.to_s.start_with?("/")
+      safe_redirect_to(destination, fallback: fallback, **redirect_options)
+    else
+      redirect_to_surface_url(
+        destination,
+        preserve_query_keys: ["pt"],
+        **redirect_options,
+      )
+    end
   end
 
   def actor_verification_path(**args)
@@ -536,4 +585,17 @@ module VerificationBase
   def actor_root_path(**args)
     actor_operator? ? auth_org_root_path(**args) : auth_app_root_path(**args)
   end
+
+  def actor_dashboard_path(**args)
+    surface = bootstrap_pt_surface
+    raise ArgumentError, "unsupported verification surface" unless %w(app com org).include?(surface)
+
+    case surface
+    when "app" then base_app_dashboard_path(**args)
+    when "com" then base_com_dashboard_path(**args)
+    when "org" then base_org_dashboard_path(**args)
+    end
+  end
+
+  private :verification_requirement, :recorded_step_up_satisfied?
 end

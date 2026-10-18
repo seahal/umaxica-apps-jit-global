@@ -31,8 +31,11 @@ Creating a reset request must notify the account through every safe registered n
 for that actor and surface. Existing sessions should also receive an in-product warning when
 practical.
 
-While a request is active, sessions may be placed into a restricted state when the risk model
-requires it. Restricted sessions must still obey the normal step-up gate for sensitive actions.
+An MFA reset request never places a session into a restricted or other limited state, and no session
+below full access may reach any MFA-reset entry point. In particular, a session-limit waiting unit
+and a `RESTRICTED` (103) token cannot reach `base/{app,com,org}/identity/mfa/resets`. The retired
+session guard and its MFA-reset allowlist entries have been removed; normal ACTIVE Browser RP
+authentication remains the entry boundary.
 
 ## Operator Review
 

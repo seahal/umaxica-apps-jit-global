@@ -45,6 +45,8 @@ class AccountAccessEvent < ChronicleRecord
 
   ACCOUNT_TYPES = %w(Client Visitor Operator).freeze
 
+  encrypts :reason_note
+
   validates :account_type, presence: true, inclusion: { in: ACCOUNT_TYPES }
   validates :account_id, presence: true, numericality: { only_integer: true }
   validates :event_type, presence: true, inclusion: { in: EVENT_TYPES }

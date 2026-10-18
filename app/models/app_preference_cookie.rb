@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preference_cookies
@@ -24,20 +26,18 @@
 #  fk_rails_...  (preference_id => app_preferences.id)
 #
 
-# frozen_string_literal: true
-
 class AppPreferenceCookie < AppSettingRecord
   belongs_to :preference,
              class_name: "AppPreference",
              inverse_of: :app_preference_cookie
-
-  after_initialize :set_defaults
 
   validates :preference_id, uniqueness: true
   validates :targetable, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :functional, inclusion: { in: [true, false] }
   validates :consented, inclusion: { in: [true, false] }
+
+  after_initialize :set_defaults
 
   private
 

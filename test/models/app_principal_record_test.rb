@@ -41,8 +41,9 @@ class AppPrincipalRecordTest < ActiveSupport::TestCase
     assert_respond_to AppPrincipalRecord, :transaction
   end
 
-  test "keeps principal semantic base separate from rp semantic base" do
-    assert_not_equal AppRpRecord.connection_specification_name, AppPrincipalRecord.connection_specification_name
+  test "shares the app zenith writer pool with the rp semantic base" do
+    assert_equal AppRpRecord.connection_specification_name, AppPrincipalRecord.connection_specification_name
+    assert_same AppRpRecord.connection_pool, AppPrincipalRecord.connection_pool
   end
 
   test "should support encryption functionality" do

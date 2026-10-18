@@ -10,14 +10,6 @@ require "test_helper"
 class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
   fixtures :clients, :client_statuses, :client_visibilities
 
-  test "a notification naming no linked identity applies nothing" do
-    event = ClientAppleNotificationEvent.new(jti: SecureRandom.uuid, event_type: "consent-revoked")
-    processor = ExternalAuthenticationAppleNotificationProcessor.new(event: event)
-
-    assert_not processor.send(:apply_consent_revocation!)
-    assert_not processor.send(:apply_account_deletion!)
-  end
-
   test "a processor without a notification event at all is refused at construction" do
     assert_raises(ArgumentError) { ExternalAuthenticationAppleNotificationProcessor.new(event: nil) }
   end
@@ -29,9 +21,9 @@ class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
     result = AuthenticationCredentialInventory.call(nil)
 
     assert_nil result.actor
-    assert_empty result.aal1_methods
-    assert_empty result.aal2_methods
-    assert_empty result.aal3_methods
+    assert_empty result.sign_in_methods
+    assert_empty result.step_up_methods
+    assert_empty result.uv_step_up_methods
     assert_empty result.contact_identifiers
     assert_empty result.phishing_resistant_methods
   end
@@ -40,7 +32,7 @@ class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
     result = AuthenticationCredentialInventory.call(clients(:one))
 
     assert_equal clients(:one), result.actor
-    assert_empty result.aal3_methods, "no surface issues a third factor yet"
+    assert_equal [], result.phishing_resistant_methods, "no surface issues a phishing-resistant method yet"
   end
 
   test "each principal kind is counted through the contact table its own surface owns" do
@@ -72,7 +64,7 @@ class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
       [slot.new(:first, %w(shared.example.test)), slot.new(:second, %w(shared.example.test))]
     end
 
-    error = assert_raises(ArgumentError) { registry.send(:index) }
+    error = assert_raises(ArgumentError) { registry.slot_for("shared.example.test") }
 
     assert_match(/claimed by both/, error.message)
   end

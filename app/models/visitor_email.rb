@@ -9,16 +9,13 @@
 #  id                        :bigint           not null, primary key
 #  address                   :string           default(""), not null
 #  address_digest            :string
-#  discarded_at              :datetime         default(Infinity), not null
+#  discard_at              :datetime         default(Infinity), not null
 #  locked_at                 :datetime         default(Infinity), not null
 #  notifiable                :boolean          default(TRUE), not null
 #  otp_attempts_count        :integer          default(0), not null
-#  otp_counter               :text             default(""), not null
-#  otp_expires_at            :datetime         default(-Infinity), not null
 #  otp_last_sent_at          :datetime         default(-Infinity), not null
-#  otp_private_key           :string           default(""), not null
 #  promotional               :boolean          default(TRUE), not null
-#  purged_at                 :datetime         default(Infinity), not null
+#  purge_eligible_at                 :datetime         default(Infinity), not null
 #  subscribable              :boolean          default(TRUE), not null
 #  undeletable               :boolean          default(FALSE), not null
 #  verification_token_digest :binary
@@ -31,10 +28,10 @@
 # Indexes
 #
 #  index_visitor_emails_on_active_address_digest    (address_digest) UNIQUE WHERE ((address_digest IS NOT NULL) AND (visitor_email_status_id <> 4))
-#  index_visitor_emails_on_discarded_at             (discarded_at)
+#  index_visitor_emails_on_discard_at             (discard_at)
 #  index_visitor_emails_on_otp_last_sent_at         (otp_last_sent_at)
 #  index_visitor_emails_on_public_id                (public_id) UNIQUE
-#  index_visitor_emails_on_purged_at                (purged_at)
+#  index_visitor_emails_on_purge_eligible_at                (purge_eligible_at)
 #  index_visitor_emails_on_visitor_email_status_id  (visitor_email_status_id)
 #  index_visitor_emails_on_visitor_id               (visitor_id)
 #
@@ -47,40 +44,39 @@ class VisitorEmail < ComPrincipalRecord
   include PublicId
   include Retainable
   include Email
+  include EmailDeadIdentifierHistory
+
   include MfaStatusCredential
   include PromotionalEmailUnsubscribable
+  include EmailContactBinding
 
-  self.filter_attributes += %w(address)
-
-  MAX_EMAILS_PER_VISITOR = 4
+  IDENTIFIER_REALM = "com"
+  encrypts :address, downcase: true,
+                     key_provider: RealmIdentifierEncryptionKeyProvider.key_provider(realm: IDENTIFIER_REALM)
 
   attribute :visitor_email_status_id, default: VisitorEmailStatus::UNVERIFIED
 
   belongs_to :visitor, inverse_of: :visitor_emails
-  mfa_status_owner :visitor
   belongs_to :visitor_email_status, inverse_of: :visitor_emails
+
+  validate :effective_binding_has_digest
 
   validates :address, presence: true
   validates :otp_attempts_count, presence: true, numericality: { only_integer: true }
-  validates :otp_counter, presence: true
-  validates :otp_private_key, presence: true, length: { maximum: 255 }
   validates :visitor_email_status_id, numericality: { only_integer: true }
-  validates :address_digest,
-            blind_index_uniqueness: {
-              error_attribute: :address,
-              status_column: :visitor_email_status_id,
-              deleted_status_id: VisitorEmailStatus::DELETED,
-            },
-            allow_blank: true
-  validates_with AssociatedRecordLimitValidator,
-                 on: :create,
-                 owner: :visitor,
-                 association: :visitor_emails,
-                 foreign_key: :visitor_id,
-                 limit: :MAX_EMAILS_PER_VISITOR,
-                 record_name: "emails",
-                 owner_name: "visitor"
+  validates :address_digest, presence: true, if: :binding_effective?
+
+  after_initialize :initialize_email_otp_state
+
+  before_destroy :archive_dead_email_identifier, prepend: true
   before_destroy :prevent_destroy_when_undeletable
+
+  scope :effective_binding, -> { where.not(binding_finalized_at: nil).where(binding_released_at: nil) }
+
+  self.filter_attributes += %w(address)
+  mfa_status_owner :visitor
+
+  public
 
   def to_param
     public_id
@@ -104,6 +100,10 @@ class VisitorEmail < ComPrincipalRecord
 
   def promotional_unsubscribe_scope
     :visitor
+  end
+
+  def contact_binding_digest
+    address_digest
   end
 
   private

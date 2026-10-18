@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preference_languages
@@ -20,8 +22,6 @@
 #  fk_com_preference_languages_on_option_id  (option_id => com_preference_language_options.id)
 #  fk_rails_...                              (preference_id => com_preferences.id)
 #
-
-# frozen_string_literal: true
 
 require "test_helper"
 

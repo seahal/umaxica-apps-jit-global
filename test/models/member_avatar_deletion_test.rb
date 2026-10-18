@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: member_avatar_deletions
@@ -19,8 +21,6 @@
 #
 #  fk_rails_...  (avatar_id => avatars.id)
 #
-
-# frozen_string_literal: true
 
 require "test_helper"
 

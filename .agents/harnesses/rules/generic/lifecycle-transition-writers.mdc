@@ -1,0 +1,19 @@
+---
+name: lifecycle-transition-writers
+description: Keep authentication lifecycle state under one named, database-clock transition boundary.
+---
+
+# Lifecycle Transition Writer Contract
+
+- Each covered sign-in, sign-up, sign-out and session-limit carrier has one migration-owned state
+  reference and one named transition surface. The transition table is the only legal-edge source.
+- Lock and reload the owner, use the owning database clock, recheck expiry and source state, and
+  write auxiliary facts in the same transaction. Caller-supplied `allowed_from`, `now`, state or
+  terminal fields are not transition authority.
+- Terminal states are absorbing. Refuse stale, illegal, conflicting, already-terminal and
+  unexpected transitions; do not write `FAILED` as a generic escape hatch or turn a refusal into a
+  guessed terminal outcome.
+- Do not write lifecycle `status_id`, `state_id`, `state` or `step` directly from controllers,
+  jobs, operations or callbacks. Initial row construction is distinct from a later transition.
+- When a state or status axis changes, update its canonical Mermaid diagram and the matching section
+  of `docs/mermaid/idp-state-machine-transition-inventory.md` in the same change.

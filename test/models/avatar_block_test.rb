@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_blocks
@@ -23,9 +25,8 @@
 #  fk_rails_...  (blocker_avatar_id => avatars.id) ON DELETE => cascade
 #
 
-# frozen_string_literal: true
-
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarBlockTest < ActiveSupport::TestCase
   setup do
@@ -85,13 +86,14 @@ class AvatarBlockTest < ActiveSupport::TestCase
     blocked = create_avatar("Incoming Blocked")
 
     blocker.outgoing_blocks.create!(blocked_avatar: blocked)
+    blocked = Avatar.includes(incoming_blocks: :blocker_avatar, blocking_avatars: []).find(blocked.id)
 
     assert_includes blocked.incoming_blocks.map(&:blocker_avatar), blocker
     assert_includes blocked.blocking_avatars, blocker
   end
 
   test "block creation does not destroy follow state" do
-    blocker = create_avatar("Block Keeps Follow")
+    blocker = create_avatar("Block Follow")
     target = create_avatar("Block Target")
     blocker.outgoing_follows.create!(followed_avatar: target)
 
@@ -104,7 +106,7 @@ class AvatarBlockTest < ActiveSupport::TestCase
   private
 
   def create_avatar(moniker)
-    Avatar.create!(
+    AvatarTestFactory.create!(
       capability: @capability,
       active_handle: @handle,
       moniker: moniker,

@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_capabilities
@@ -7,9 +9,8 @@
 #  id :bigint           not null, primary key
 #
 
-# frozen_string_literal: true
-
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarCapabilityTest < ActiveSupport::TestCase
   setup do
@@ -23,7 +24,7 @@ class AvatarCapabilityTest < ActiveSupport::TestCase
   test "association deletion: restriction by avatars" do
     @capability.save!
     handle = Handle.create!(handle: "cap_test_handle", cooldown_until: Time.current)
-    Avatar.create!(
+    AvatarTestFactory.create!(
       moniker: "Cap Test Avatar",
       active_handle: handle,
       capability: @capability,

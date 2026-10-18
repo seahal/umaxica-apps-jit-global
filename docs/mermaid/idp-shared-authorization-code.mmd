@@ -1,0 +1,9 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "issued (Valkey JSON state)" as issued
+    state "consumed (tombstone)" as consumed
+    [*] --> issued
+    issued --> consumed: consume! / Lua CAS
+    consumed --> consumed: link_family!
+    consumed --> consumed: mark_replay!
+    consumed --> [*]

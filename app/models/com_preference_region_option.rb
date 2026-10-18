@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preference_region_options
@@ -7,12 +9,12 @@
 #  id :bigint           not null, primary key
 #
 
-# frozen_string_literal: true
-
 class ComPreferenceRegionOption < ComSettingRecord
   # Fixed IDs - do not modify these values
   US = 1
   JP = 2
+
+  DEFAULTS = [US, JP].freeze
 
   has_many :com_preference_regions,
            class_name: "ComPreferenceRegion",
@@ -20,17 +22,15 @@ class ComPreferenceRegionOption < ComSettingRecord
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when US then "US"
     when JP then "JP"
     end
-  end
-
-  DEFAULTS = [US, JP].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 
   self.primary_key = :id

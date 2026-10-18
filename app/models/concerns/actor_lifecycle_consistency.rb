@@ -4,6 +4,7 @@
 module ActorLifecycleConsistency
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     validate :lifecycle_timestamps_are_consistent
     validate :mfa_level_requirement_columns_are_consistent
@@ -31,7 +32,6 @@ module ActorLifecycleConsistency
     return if has_attribute?(:withdrawn_at) && withdrawn_at.present? && !lifecycle_infinite_time?(withdrawn_at)
 
     errors.add(:terminated_at, "requires a finite withdrawn_at")
-
   end
 
   def mfa_level_requirement_columns_are_consistent

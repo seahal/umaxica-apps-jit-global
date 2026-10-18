@@ -54,5 +54,12 @@ Normal revoke state also blocks later refresh attempts.
 
 ## Related
 
-- Former plan: `plans/backlog/gh612-harden-refresh-revoke-aal.md`
 - Related notes: `adr/oidc-claims-decision.md`
+
+## Delivered reconciliation (2026-10-06)
+
+Refresh rotation now locates and locks the device session before issuing a replacement, excludes
+unusable device sessions from capacity, and requires the device-session foreign-key boundary.
+Per-RP single-flight coalescing uses a fixed five-second encrypted delivery receipt. A dependency
+failure preserves cookies and returns an explicit failure; an invalid credential clears the RP
+credential. AAL labels are not used to authorize refreshed sessions.

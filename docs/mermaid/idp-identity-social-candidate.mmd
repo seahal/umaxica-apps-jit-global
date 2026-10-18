@@ -1,0 +1,13 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "available: unconsumed, before deadline" as available
+    state "consumed_at present" as consumed
+    state "expired (derived; no stored status)" as expired
+    [*] --> available
+    available --> consumed: store.consume!
+    available --> consumed: store.delete
+    expired --> consumed: store.delete
+    consumed --> consumed: store.delete
+    available --> expired: clock reaches deadline
+    consumed --> [*]
+    expired --> [*]

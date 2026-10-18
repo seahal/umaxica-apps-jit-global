@@ -20,7 +20,7 @@ class Base::Com::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
       visitor: @visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: @visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: @visitor, session: @token)
@@ -31,6 +31,8 @@ class Base::Com::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
       last_step_up_scope: "withdrawal",
       last_step_up_aal: "aal2",
       last_step_up_method: "passkey",
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
       last_step_up_session_public_id: @token.public_id,
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:com",
@@ -40,6 +42,50 @@ class Base::Com::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
                 resource_type: "visitor", jwt_issuer_id: "surface:BASE_COM",
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = access_token
+    # Base pages authenticate by the Browser RP credential; the root cookie alone does not.
+    begin
+      rp_cookie_pairs =
+        begin
+          rp_host = @host
+          rp_token = @token
+          rp_client = OidcClientRegistry.find!("base-com-ww")
+          rp_key = [rp_client.client_id, rp_token.public_id]
+          @base_browser_rp_credentials ||= {}
+          if @base_browser_rp_credentials[rp_key] ||
+              (rp_token.currently_usable? &&
+                !(rp_token.device_session_id && OpComGrant.exists?(
+                  device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
+                )))
+            unless @base_browser_rp_credentials[rp_key]
+              rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
+              rp_now = Time.current
+              rp_session = OpComGrant.create!(
+                visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
+                oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
+                refresh_token_expires_at: rp_now + 10.minutes,
+              )
+              rp_access = AuthenticationTokenService.encode(
+                @visitor, host: rp_host, resource_type: "visitor",
+                          session_public_id: rp_token.public_id, base_session_public_id: rp_token.public_id,
+                          oidc_sid: rp_session.public_id, oidc_jti: rp_session.oidc_jti,
+                          expires_at: rp_now + 10.minutes, scopes: %w(openid profile),
+                          issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
+                          jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
+                          subject: OidcSubject.for(@visitor, resource_type: "visitor"), client_id: rp_client.client_id,
+              )
+              @base_browser_rp_credentials[rp_key] = [rp_access, rp_session.issue_refresh_token!]
+            end
+            rp_access, rp_refresh = @base_browser_rp_credentials.fetch(rp_key)
+            [
+              "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(rp_access)}",
+              "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(rp_refresh)}",
+            ]
+          else
+            []
+          end
+        end
+      cookies.merge(rp_cookie_pairs, URI.parse("https://#{rp_host}/"))
+    end
     @headers = {
       "Authorization" => "Bearer #{access_token}",
       "Client-Agent" => "Mozilla/5.0",
@@ -110,7 +156,9 @@ class Base::Com::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
     assert_response :see_other
     assert_redirected_to edit_base_com_identity_withdrawal_path(ri: "jp")
     assert_not_nil @visitor.reload.deactivated_at
-    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY].presence
+    assert_nil cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].presence
+    assert_nil cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE].presence
+    assert_not_predicate @token.reload, :currently_usable?
   end
   test "recovery page and privacy erasure pages are reachable once the ceremony is issued" do
     patch base_com_identity_withdrawal_url(ri: "jp", host: @host),

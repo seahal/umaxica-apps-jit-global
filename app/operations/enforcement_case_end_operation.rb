@@ -10,6 +10,8 @@
 #
 # This was EnforcementCaseApplicable#end_case!.
 class EnforcementCaseEndOperation
+  public
+
   def self.call(...)
     new(...).call
   end
@@ -25,23 +27,42 @@ class EnforcementCaseEndOperation
       raise ArgumentError, "reason must be one of #{EnforcementCaseApplicable::END_REASONS}"
     end
 
-    now = Time.current
+    committed_end_reason = nil
     enforcement_case.class.transaction do
-      enforcement_case.update!(
-        ended_at: now,
-        end_reason: reason,
-        ended_by_operator_public_id: ended_by_operator_public_id,
-      )
-      enforcement_case.principal_effect&.update!(ended_at: now)
-      # rubocop:disable Rails/SkipsModelValidations
-      enforcement_case.authentication_method_effects.where(ended_at: nil).update_all(ended_at: now)
-      enforcement_case.identifier_effects.where(ended_at: nil).update_all(ended_at: now)
-      # rubocop:enable Rails/SkipsModelValidations
+      enforcement_case.with_lock do
+        if enforcement_case.ended_at.blank?
+          now = Time.current
+          enforcement_case.update!(
+            ended_at: now,
+            end_reason: reason,
+            ended_by_operator_public_id: ended_by_operator_public_id,
+          )
+          effect = enforcement_case.principal_effect_record
+          effect&.update!(ended_at: now)
+          # rubocop:disable Rails/SkipsModelValidations
+          enforcement_case.authentication_method_effects.where(ended_at: nil).update_all(ended_at: now)
+          enforcement_case.identifier_effects.where(ended_at: nil).update_all(ended_at: now)
+          # rubocop:enable Rails/SkipsModelValidations
+        end
+
+        committed_end_reason = enforcement_case.end_reason
+      end
     end
 
     release_principal_access_effect!
-    enforcement_case.write_audit_event!((reason == "expired") ? "expired" : "ended")
+    enforcement_case.write_audit_event_once!(audit_event_type(committed_end_reason), **audit_actor)
 
+    true
+  end
+
+  # The state transaction may already have committed when a release or audit
+  # side effect fails. Retry only the convergent work; do not write the Case
+  # state a second time or treat a missing Solid Queue execution as a rollback.
+  def reconcile
+    return false if enforcement_case.ended_at.blank?
+
+    release_principal_access_effect!
+    enforcement_case.write_audit_event_once!(audit_event_type(enforcement_case.end_reason), **audit_actor)
     true
   end
 
@@ -49,8 +70,17 @@ class EnforcementCaseEndOperation
 
   attr_reader :enforcement_case, :reason, :ended_by_operator_public_id
 
+  # The operator who ended the Case; nil when no operator did (expiry, principal verification).
+  def audit_actor
+    { actor_operator_public_id: enforcement_case.ended_by_operator_public_id }
+  end
+
+  def audit_event_type(end_reason)
+    (end_reason == "expired") ? "expired" : "ended"
+  end
+
   def release_principal_access_effect!
-    effect = enforcement_case.principal_effect
+    effect = enforcement_case.principal_effect_record
     return unless effect&.access_blocking?
     return if other_blocking_case_in_force?
 

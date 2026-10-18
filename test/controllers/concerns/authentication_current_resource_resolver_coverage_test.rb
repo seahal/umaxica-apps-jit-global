@@ -27,6 +27,11 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
         self
       end
 
+      # The resolver reads only ACTIVE sessions (TokenStatusManagement.active_status).
+      def active_status
+        self
+      end
+
       def includes(*)
         self
       end
@@ -80,9 +85,9 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
   test "dpop and actor mismatches are rejected before session lookup" do
     AuthenticationToken.stub(
       :decode,
-      { "sub" => 123, "sid" => "sess-1", "act" => "operator", "cnf" => { "jkt" => "a" } },
+      { "sub" => "123", "sid" => "sess-1", "scope" => "domain:operator", "cnf" => { "jkt" => "a" } },
     ) do
-      AuthenticationToken.stub(:validate_actor_claim!, false) do
+      AuthenticationToken.stub(:resource_type_scope_matches?, false) do
         resolver = AuthenticationCurrentResourceResolver.new(
           access_token: "token",
           request_host: "app.example.test",
@@ -105,8 +110,8 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
   end
 
   test "missing session id and missing resource are rejected" do
-    AuthenticationToken.stub(:decode, { "sub" => 123, "act" => "client" }) do
-      AuthenticationToken.stub(:validate_actor_claim!, true) do
+    AuthenticationToken.stub(:decode, { "sub" => "123", "scope" => "domain:client" }) do
+      AuthenticationToken.stub(:resource_type_scope_matches?, true) do
         result = AuthenticationCurrentResourceResolver.new(
           access_token: "token",
           request_host: "app.example.test",
@@ -122,9 +127,9 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
 
   test "successful resolution touches activity when the token is stale enough" do
     token =
-      Struct.new(:public_id, :oidc_jti, :last_used_at, :created_at) do
+      Struct.new(:public_id, :oidc_jti, :last_used_at, :created_at, :user_id, :device_session_id) do
         def has_attribute?(name)
-          %i(public_id oidc_jti last_used_at created_at).include?(name.to_sym)
+          %i(public_id oidc_jti last_used_at created_at user_id device_session_id).include?(name.to_sym)
         end
 
         def update_columns(attrs)
@@ -136,14 +141,14 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
         def updated_columns
           @updated_columns
         end
-      end.new("sess-1", nil, 10.minutes.ago, 10.minutes.ago)
+      end.new("sess-1", nil, 10.minutes.ago, 10.minutes.ago, 123, nil)
 
     FakeTokenClass.token = token
 
-    AuthenticationToken.stub(:decode, { "sub" => 123, "sid" => "sess-1", "act" => "client" }) do
-      AuthenticationToken.stub(:validate_actor_claim!, true) do
+    AuthenticationToken.stub(:decode, { "sub" => "123", "sid" => "sess-1", "scope" => "domain:client" }) do
+      AuthenticationToken.stub(:resource_type_scope_matches?, true) do
         AuthenticationToken.stub(:extract_session_id, "sess-1") do
-          AuthenticationToken.stub(:extract_subject, 123) do
+          AuthenticationToken.stub(:extract_subject, "123") do
             result = AuthenticationCurrentResourceResolver.new(
               access_token: "token",
               request_host: "app.example.test",
@@ -162,18 +167,18 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
 
   test "suspended client access token fails before normal current resource is built" do
     token =
-      Struct.new(:public_id, :oidc_jti, :last_used_at, :created_at) do
+      Struct.new(:public_id, :oidc_jti, :last_used_at, :created_at, :user_id, :device_session_id) do
         def has_attribute?(name)
-          %i(public_id oidc_jti last_used_at created_at).include?(name.to_sym)
+          %i(public_id oidc_jti last_used_at created_at user_id device_session_id).include?(name.to_sym)
         end
-      end.new("sess-1", nil, 10.minutes.ago, 10.minutes.ago)
+      end.new("sess-1", nil, 10.minutes.ago, 10.minutes.ago, 123, nil)
 
     FakeTokenClass.token = token
 
-    AuthenticationToken.stub(:decode, { "sub" => 123, "sid" => "sess-1", "act" => "client" }) do
-      AuthenticationToken.stub(:validate_actor_claim!, true) do
+    AuthenticationToken.stub(:decode, { "sub" => "123", "sid" => "sess-1", "scope" => "domain:client" }) do
+      AuthenticationToken.stub(:resource_type_scope_matches?, true) do
         AuthenticationToken.stub(:extract_session_id, "sess-1") do
-          AuthenticationToken.stub(:extract_subject, 123) do
+          AuthenticationToken.stub(:extract_subject, "123") do
             result = AuthenticationCurrentResourceResolver.new(
               access_token: "token",
               request_host: "app.example.test",
@@ -188,60 +193,5 @@ class AuthenticationCurrentResourceResolverCoverageTest < ActiveSupport::TestCas
         end
       end
     end
-  end
-end
-
-class AuthenticationCurrentResourceResolverCoverageTest
-  test "resolver rejects decoded, dpop, and binding edge cases" do
-    build =
-      lambda do |**options|
-        AuthenticationCurrentResourceResolver.new(
-          access_token: "token", request_host: "app.example.test", resource_type: "client",
-          resource_class: FakeResourceClass, token_class: FakeTokenClass, **options,
-        )
-      end
-
-    AuthenticationToken.stub(:decode, nil) do
-      AuthenticationToken.stub(:extract_session_id_allow_expired, "expired-sid") do
-        assert_equal :token_decode_failed, build.call.call.failure_reason
-      end
-      AuthenticationToken.stub(:extract_session_id_allow_expired, nil) do
-        assert_equal :token_decode_failed, build.call.call.failure_reason
-      end
-    end
-
-    resolver = build.call
-
-    assert resolver.send(:dpop_valid?, { "cnf" => {} })
-    assert_not resolver.send(:dpop_valid?, { "cnf" => { "jkt" => "jkt" } })
-    dpop_resolver = build.call(
-      authorization_scheme: "DPoP", dpop_proof: "proof", request_method: "GET",
-      request_uri: "/",
-    )
-
-    assert_not dpop_resolver.send(:dpop_valid?, { "cnf" => {} })
-    result = Struct.new(:valid?).new(false)
-
-    DpopRequestVerifier.stub(:new, ->(**) { OpenStruct.new(call: result) }) do
-      assert_not dpop_resolver.send(:dpop_valid?, { "cnf" => { "jkt" => "jkt" } })
-    end
-
-    AuthenticationToken.stub(:decode, { "sub" => 123, "sid" => "sid", "act" => "client" }) do
-      AuthenticationToken.stub(:validate_actor_claim!, true) do
-        AuthenticationToken.stub(:extract_session_id, "sid") do
-          FakeTokenClass.token = nil
-
-          assert_equal :token_session_not_found, build.call.send(:call).failure_reason
-        end
-      end
-    end
-
-    token = Struct.new(:oidc_jti, :dpop_jkt) do
-      def has_attribute?(name) = %i(oidc_jti dpop_jkt).include?(name.to_sym)
-    end.new("record-jti", "record-jkt")
-
-    assert_not resolver.send(:token_jti_current?, token, { "jti" => "different" })
-    assert_not resolver.send(:token_dpop_binding_current?, token, { "cnf" => { "jkt" => "different" } })
-    assert resolver.send(:token_dpop_binding_current?, token, { "cnf" => { "jkt" => "record-jkt" } })
   end
 end

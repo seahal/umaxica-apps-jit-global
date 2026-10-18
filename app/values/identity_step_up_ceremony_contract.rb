@@ -4,13 +4,37 @@
 require "jwt"
 
 module IdentityStepUpCeremonyContract
-  Error = Class.new(StandardError)
+  # Internal refusal taxonomy for ceremony logs. A code names why a request was refused; it is never
+  # an HTTP status and never part of a response body.
+  REFUSAL_CODES = %w(
+    malformed_request invalid_admission expired_admission admission_replay invalid_evidence
+    transaction_conflict transaction_expired transaction_canceled transaction_revoked
+    transaction_already_completed transaction_unavailable
+    session_expired session_binding_mismatch return_binding_mismatch
+    unsupported_method authorization_denied bootstrap_not_fresh unclassified
+  ).freeze
+
+  class Error < StandardError
+    attr_reader :code
+
+    public
+
+    def initialize(message = nil, code: "unclassified")
+      raise ArgumentError, "unknown refusal code: #{code.inspect}" unless REFUSAL_CODES.include?(code)
+
+      super(message)
+      @code = code
+    end
+  end
+
   module_function
 
   ALGORITHM = "ES384"
   SURFACES = %w(app com org).freeze
   # Telephone OTP is deliberately absent: SMS is not an accepted step-up proof.
   METHODS = %w(passkey totp email_otp secret_credential).freeze
+  # @deprecated AAL values remain only for signed/storage label validation and migration history;
+  # explicit step-up evidence is authoritative and this set must not drive policy.
   AALS = %w(none aal1 aal2).freeze
   LEEWAY = 30
 
@@ -68,7 +92,7 @@ module IdentityStepUpCeremonyContract
 
   def acme_audience(surface) = fetch_surface_value(ACME_AUDIENCES, surface)
 
-  def sign_issuer_id(surface) = "surface:SIGN_#{surface.to_s.upcase}"
+  def sign_issuer_id(surface) = "surface:AUTH_#{surface.to_s.upcase}"
 
   def acme_issuer_id(surface) = "surface:BASE_#{surface.to_s.upcase}"
 
@@ -105,7 +129,10 @@ module IdentityStepUpCeremonyContract
   end
 
   def validate_required!(payload, required)
-    missing = required.reject { |key| payload[key].present? }
+    missing =
+      required.reject do |key|
+        payload.key?(key) && (payload[key] == false || payload[key].present?)
+      end
     raise IdentityStepUpCeremonyContract::Error, "missing required claims: #{missing.join(", ")}" if missing.present?
   end
 
@@ -149,6 +176,8 @@ module IdentityStepUpCeremonyContract
 
   def decode_unverified_payload(token)
     payload, = JWT.decode(token, nil, false)
+    raise IdentityStepUpCeremonyContract::Error, "token payload must be a JSON object" unless payload.is_a?(Hash)
+
     payload
   rescue JWT::DecodeError => e
     raise IdentityStepUpCeremonyContract::Error, "token is invalid: #{e.message}"

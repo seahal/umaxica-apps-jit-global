@@ -28,8 +28,9 @@ class SocialCeremonyTransactionableTest < ActiveSupport::TestCase
         now: @now,
       )
 
-      assert_predicate transaction.transaction_id, :present?
-      assert_predicate transaction.grant_jti, :present?
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
+      assert_not_equal transaction.transaction_id, transaction.grant_jti
       assert_equal "/settings/social", transaction.grant_claims.fetch("return_to")
       assert_equal "provider-subject", transaction.grant_claims.fetch("provider_subject_ref")
       assert_includes ClientSocialCeremonyTransaction.pending, transaction
@@ -56,6 +57,42 @@ class SocialCeremonyTransactionableTest < ActiveSupport::TestCase
         )
       end
     end
+  end
+
+  test "retries a generated social transaction reference collision at the database boundary" do
+    ClientSocialCeremonyTransaction.create_transaction!(
+      transaction_id: "a" * 21, grant_jti: "e" * 21,
+      actor_ref: "existing-actor", session_ref: "existing-session", operation: "link", provider: "google",
+    )
+    generated = ["a" * 21, "g" * 21, "b" * 21, "h" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientSocialCeremonyTransaction.create_transaction!(
+          actor_ref: "new-actor", session_ref: "new-session", operation: "link", provider: "google",
+        )
+      end
+
+    assert_equal "b" * 21, transaction.transaction_id
+    assert_equal "h" * 21, transaction.grant_jti
+  end
+
+  test "retries a generated social grant reference collision at the database boundary" do
+    ClientSocialCeremonyTransaction.create_transaction!(
+      transaction_id: "j" * 21, grant_jti: "i" * 21,
+      actor_ref: "existing-actor", session_ref: "existing-session", operation: "link", provider: "google",
+    )
+    generated = ["k" * 21, "i" * 21, "l" * 21, "m" * 21]
+
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        ClientSocialCeremonyTransaction.create_transaction!(
+          actor_ref: "new-actor", session_ref: "new-session", operation: "link", provider: "google",
+        )
+      end
+
+    assert_equal "l" * 21, transaction.transaction_id
+    assert_equal "m" * 21, transaction.grant_jti
   end
 
   test "social transactions reject invalid surface, incomplete consumption, and expiry" do
@@ -147,19 +184,19 @@ class SocialCeremonyTransactionableTest < ActiveSupport::TestCase
         include SocialCeremonyTransactionable
       end
 
-    assert_equal AppTicketRecord, ClientSocialCeremonyTransaction.connection_owner
+    assert_equal OpBaseAppRecord, ClientSocialCeremonyTransaction.connection_owner
 
     org_transaction_class =
-      Class.new(OrgTicketRecord) do
+      Class.new(OpBaseOrgRecord) do
         include SocialCeremonyTransactionable
       end
     com_transaction_class =
-      Class.new(ComTicketRecord) do
+      Class.new(OpBaseComRecord) do
         include SocialCeremonyTransactionable
       end
 
     assert_equal ActiveRecord::Base, generic_transaction_class.connection_owner
-    assert_equal OrgTicketRecord, org_transaction_class.connection_owner
-    assert_equal ComTicketRecord, com_transaction_class.connection_owner
+    assert_equal OpBaseOrgRecord, org_transaction_class.connection_owner
+    assert_equal OpBaseComRecord, com_transaction_class.connection_owner
   end
 end

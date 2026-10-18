@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: operator_email_ceremony_transactions
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                      :bigint           not null, primary key
 #  actor_ref               :string           not null
@@ -32,8 +32,11 @@
 #  index_operator_email_ceremony_transactions_on_result_jti      (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  index_operator_email_ceremony_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class OperatorEmailCeremonyTransaction < OrgTicketRecord
+class OperatorEmailCeremonyTransaction < OpBaseOrgRecord
   include EmailCeremonyTransactionable
+  include EmailCeremonyOtp
+
+  validate :immutable_email_otp_terminal_facts
 
   ceremony_surface "org"
 end

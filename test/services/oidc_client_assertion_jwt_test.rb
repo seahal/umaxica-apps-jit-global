@@ -10,10 +10,12 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   end
 
   test "issue returns nil when local key refresh still cannot resolve the configured key" do
+    previous_issuers = JitSecurityJwtRegistry.instance_variable_get(:@issuers)
+
     with_env(
-      "OIDC_CLIENT_BASE_APP_ACTIVE_KID" => nil,
-      "OIDC_CLIENT_BASE_APP_PRIVATE_KEY" => nil,
-      "OIDC_CLIENT_BASE_APP_PUBLIC_KEYSET" => nil,
+      "OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID" => nil,
+      "OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY" => nil,
+      "OIDC_CLIENT_CORE_APP_JP_PUBLIC_KEYSET" => nil,
     ) do
       JitSecurityJwtRegistry.reload!
 
@@ -23,10 +25,12 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
                                         raise JitSecurityJwtRegistry::ConfigurationError
                                       },
         ) do
-          assert_nil OidcClientAssertionJwt.issue(client_id: "base-rails-rp", token_url: "https://id.example/token")
+          assert_nil OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: "https://id.example/token")
         end
       end
     end
+  ensure
+    JitSecurityJwtRegistry.instance_variable_set(:@issuers, previous_issuers)
   end
 
   test "issue refreshes local key material once when the registry is missing a client assertion key" do
@@ -36,24 +40,24 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
     installed = false
 
     with_env(
-      "OIDC_CLIENT_BASE_APP_ACTIVE_KID" => nil,
-      "OIDC_CLIENT_BASE_APP_PRIVATE_KEY" => nil,
-      "OIDC_CLIENT_BASE_APP_PUBLIC_KEYSET" => nil,
+      "OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID" => nil,
+      "OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY" => nil,
+      "OIDC_CLIENT_CORE_APP_JP_PUBLIC_KEYSET" => nil,
     ) do
       JitSecurityJwtRegistry.reload!
 
-      assert_nil JitSecurityJwtRegistry.private_key_for("oidc_client:BASE_APP")
+      assert_nil JitSecurityJwtRegistry.private_key_for("oidc_client:CORE_APP_JP")
 
       installer =
         lambda do |**|
           installed = true
-          ENV["OIDC_CLIENT_BASE_APP_ACTIVE_KID"] = "base-app-oidc-recovered"
-          ENV["OIDC_CLIENT_BASE_APP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
+          ENV["OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID"] = "core-app-oidc-recovered"
+          ENV["OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
           true
         end
 
       JitSecurityJwtLocalKeysetInstaller.stub(:install!, installer) do
-        assertion = OidcClientAssertionJwt.issue(client_id: "base-rails-rp", token_url: token_url)
+        assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
         assert installed
         assert_predicate assertion, :present?
@@ -66,11 +70,11 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? rejects an assertion with the wrong audience" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       assert_not OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: "https://log.umaxica.app/oauth/token-alt",
       )
@@ -80,11 +84,11 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? rejects an assertion for another client id" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       assert_not OidcClientAssertionJwt.valid?(
-        client_id: "docs_app",
+        client_id: "core-com-jp",
         assertion: assertion,
         token_url: token_url,
       )
@@ -94,11 +98,11 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? accepts a matching assertion" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       assert OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: token_url,
       )
@@ -108,16 +112,16 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? rejects a replayed assertion jti" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       assert OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: token_url,
       )
       assert_not OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: token_url,
       )
@@ -127,17 +131,17 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "runtime replay protection persists the consumed jti in PostgreSQL" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       assert OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: token_url,
       )
       assert SecurityConsumedJti.exists?(
         purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_client_assertion),
-        issuer: "core-next-rp",
+        issuer: "core-app-jp",
       )
     end
   end
@@ -145,11 +149,11 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? rejects an expired assertion" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url, now: 1.hour.ago)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url, now: 1.hour.ago)
 
       assert_not OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: token_url,
       )
@@ -159,11 +163,11 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? rejects an assertion issued in the future" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url, now: 1.hour.from_now)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url, now: 1.hour.from_now)
 
       assert_not OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: token_url,
       )
@@ -174,15 +178,15 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
     token_url = "https://log.umaxica.app/oauth/token"
     assertion = nil
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
     end
 
     # Registering a fresh key under the same kid means the original signature no
     # longer matches any key registered for the client.
-    with_oidc_client_key("CORE_APP") do
+    with_oidc_client_key("CORE_APP_JP") do
       assert_not OidcClientAssertionJwt.valid?(
-        client_id: "core-next-rp",
+        client_id: "core-app-jp",
         assertion: assertion,
         token_url: token_url,
       )
@@ -192,13 +196,13 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? fails closed when the replay record cannot be written" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
       raising = ->(**) { raise ActiveRecord::StatementInvalid, "replay table unavailable" }
 
       SecurityConsumedJti.stub(:consume!, raising) do
         assert_not OidcClientAssertionJwt.valid?(
-          client_id: "core-next-rp",
+          client_id: "core-app-jp",
           assertion: assertion,
           token_url: token_url,
         )
@@ -209,12 +213,12 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
   test "valid? records the consumed jti in PostgreSQL rather than in Rails.cache" do
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-next-rp", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       assert_difference -> { SecurityConsumedJti.count }, 1 do
         assert OidcClientAssertionJwt.valid?(
-          client_id: "core-next-rp",
+          client_id: "core-app-jp",
           assertion: assertion,
           token_url: token_url,
         )
@@ -223,7 +227,7 @@ class OidcClientAssertionJwtTest < ActiveSupport::TestCase
       record = SecurityConsumedJti.order(:created_at).last
 
       assert_equal "oidc_client_assertion", record.purpose
-      assert_equal "core-next-rp", record.issuer
+      assert_equal "core-app-jp", record.issuer
     end
   end
 

@@ -19,8 +19,18 @@ const requiredEnv = (name: string): string => {
 export const baseSurfaceUrl = (): string => requiredEnv("E2E_BASE_SERVICE_URL");
 export const authSurfaceUrl = (): string => requiredEnv("E2E_AUTH_SERVICE_URL");
 
+// Optional: run against a system browser instead of the Chromium build Playwright downloads, for
+// example the development container's /usr/bin/chromium. Unset means Playwright's own build, which
+// is the only one a Playwright release is tested against; nothing is substituted when it is unset.
+//
+// A system browser runs with Chromium's own sandbox. Playwright launches with `--no-sandbox` unless
+// told otherwise, which is tolerable for its disposable build in CI but not for a browser a
+// developer also drives by hand against real origins.
+const chromiumExecutablePath = process.env["PLAYWRIGHT_CHROMIUM_EXECUTABLE"];
+
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/rails/**",
   // Service worker install and activation are ordered against a single origin's registration, so
   // running these files in parallel against the same browser profile would make them interfere.
   fullyParallel: false,
@@ -37,7 +47,12 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(chromiumExecutablePath === undefined
+          ? {}
+          : { launchOptions: { executablePath: chromiumExecutablePath, chromiumSandbox: true } }),
+      },
     },
   ],
 });

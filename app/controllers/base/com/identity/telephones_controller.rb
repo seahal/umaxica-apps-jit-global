@@ -6,7 +6,6 @@ module Base
     module Identity
       class TelephonesController < ::Base::Com::ApplicationController
         include ::SurfaceInertiaPage
-        include CommonOtp
         include ::SignSettingsAuthorityRedirect
 
         include ::VerificationVisitor
@@ -20,11 +19,12 @@ module Base
           VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP,
         ].freeze
 
-        before_action :authenticate_visitor!
         # Object-level authorization (ActionPolicy): new/create gate the actor type; edit
         # authorize the owned record (find_by! is owner-scoped, so a non-owner gets 404 first).
         # Verification/rate-limit guards remain in place.
         before_action :authorize_telephone_registration!, only: %i(new create)
+
+        public
 
         def index
           authorize!(VisitorTelephone, to: :index?)
@@ -46,7 +46,9 @@ module Base
           visitor = current_visitor
           return head :unauthorized if visitor.blank?
 
-          tel_params = params(user_telephone: [:raw_number, :number])
+          tel_params = params.slice(:user_telephone).permit(user_telephone: [:raw_number, :number]).fetch(
+            :user_telephone, {},
+          )
           number = tel_params[:raw_number] || tel_params[:number]
           if initiate_visitor_telephone_verification(visitor, number, auto_accept_confirmations: true)
             redirect_to(edit_base_com_identity_telephones_registration_path(ri: params[:ri]))
@@ -66,8 +68,10 @@ module Base
             return
           end
 
-          telephone.destroy!
-          create_audit_event!(ClientChronicleEvent::TELEPHONE_REMOVED, subject: telephone)
+          IdentityCredentialRemovalCommitter.call!(
+            actor: current_visitor, credential: telephone, current_session: current_session, request: request,
+            actor_context: current_actor,
+          )
 
           redirect_to(
             base_com_identity_telephones_path(ri: params[:ri]),
@@ -164,38 +168,33 @@ module Base
 
           check_telephone_verification_rate_limit!
 
-          digest = IdentifierBlindIndex.bidx_for_telephone(number)
-          existing_visitor_telephone =
-            digest.present? ? visitor.visitor_telephones.find_by(number_digest: digest) : nil
-
-          @user_telephone = existing_visitor_telephone || visitor.visitor_telephones.build(raw_number: number)
-          @user_telephone.raw_number = number if existing_visitor_telephone
-          @user_telephone.visitor_telephone_status_id = VisitorTelephoneStatus::UNVERIFIED
+          @user_telephone = visitor.visitor_telephones.build(raw_number: number)
           if auto_accept_confirmations
             @user_telephone.confirm_policy = true
             @user_telephone.confirm_using_mfa = true
           end
 
-          if digest.present? && existing_visitor_telephone.blank?
-            VisitorTelephone.where(
-              number_digest: digest,
-              visitor_id: visitor.id,
-              visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED,
-            ).destroy_all
-          end
-
-          otp_number = generate_otp_attributes(@user_telephone)
           return false unless @user_telephone.valid?
 
           @user_telephone.save!
-          send_telephone_verification_sms(@user_telephone, otp_number)
+          issued = TelephoneCredentialRegistrationOtpIssuer.call(
+            actor: visitor, token: current_session_token, telephone: @user_telephone,
+            browser_nonce: ensure_base_admission_browser_nonce!,
+          )
+          return false unless issued.success?
+
+          session[:settings_telephone_registration_id] = @user_telephone.id
+          session[:settings_telephone_registration_transaction_ref] = issued.transaction.transaction_id
+          send_telephone_verification_sms(@user_telephone, issued)
           true
         end
 
-        def send_telephone_verification_sms(visitor_telephone, otp_number)
+        def send_telephone_verification_sms(visitor_telephone, issued)
           OtpAdapter.for(surface: :com, channel: :telephone).deliver(
             record: visitor_telephone,
-            otp_code: otp_number,
+            otp_code: issued.code, purpose: "credential_registration", public_id: visitor_telephone.public_id,
+            contact_ceremony_transaction_ref: issued.transaction.transaction_id,
+            contact_otp_generation: issued.transaction.otp_generation,
             message_style: :localized_verification,
           )
         end

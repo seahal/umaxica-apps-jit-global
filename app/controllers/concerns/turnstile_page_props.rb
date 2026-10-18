@@ -25,13 +25,15 @@ module TurnstilePageProps
   end
 
   # Draws the interactive widget, matching the `render` mode of the visible partial.
-  def turnstile_visible_props(action: nil, cdata: nil)
-    {
+  def turnstile_visible_props(action: nil, cdata: nil, challenge_id: nil)
+    props = {
       site_key: turnstile_site_key(:CLOUDFLARE_TURNSTILE_VISIBLE_SITE_KEY),
       mode: "render",
       action: action,
       cdata: cdata,
     }
+    props[:challenge_id] = challenge_id if challenge_id.present?
+    props
   end
 
   # Missing configuration fails loudly here exactly as it did in the partial, so a page can never

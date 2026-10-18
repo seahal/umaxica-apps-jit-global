@@ -3,7 +3,7 @@
 **Status: PROPOSAL - NOT STARTED.**
 
 This is a proposal for cleaning up `app` sign up after the sign in sequence work. Do not implement
-from this file until it is promoted to `plans/active/` or backed by an accepted ADR.
+from this file until it is promoted to `specs/` or backed by an accepted ADR.
 
 ## Scope
 

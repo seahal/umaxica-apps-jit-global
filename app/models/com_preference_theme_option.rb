@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: com_preference_theme_options
@@ -6,8 +8,6 @@
 #
 #  id :bigint           not null, primary key
 #
-
-# frozen_string_literal: true
 
 class ComPreferenceThemeOption < ComSettingRecord
   # Fixed IDs - do not modify these values
@@ -22,15 +22,15 @@ class ComPreferenceThemeOption < ComSettingRecord
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when LIGHT then "light"
     when DARK then "dark"
     when SYSTEM then "system"
     end
-  end
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

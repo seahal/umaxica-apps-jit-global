@@ -36,7 +36,7 @@ export default function OrgEntraSettingsEdit({
     >
       <Card>
         {connected ? (
-          <div className="flex flex-col gap-1 text-sm">
+          <div className="flex flex-col gap-1 text-base">
             <p className="font-medium text-fg">Connected</p>
             {connectedNotice ? <p className="text-fg-muted">{connectedNotice}</p> : null}
           </div>
@@ -57,7 +57,7 @@ export default function OrgEntraSettingsEdit({
           </form>
         ) : null}
 
-        {unavailableNotice ? <p className="text-sm text-fg-muted">{unavailableNotice}</p> : null}
+        {unavailableNotice ? <p className="text-base text-fg-muted">{unavailableNotice}</p> : null}
       </Card>
     </Page>
   );

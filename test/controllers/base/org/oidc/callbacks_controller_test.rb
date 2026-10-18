@@ -4,15 +4,18 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
-class Base::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
+class BaseOrgOidcCallbackRouteTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
   end
 
-  test "callback route exists" do
+  test "the self-RP callback route is owned by Base" do
     assert_routing(
       { method: :get, path: "http://#{@host}/oidc/callback" },
       { controller: "base/org/oidc/callbacks", action: "show" },
     )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{@host}/oidc/authorization", method: :get)
+    end
   end
 end

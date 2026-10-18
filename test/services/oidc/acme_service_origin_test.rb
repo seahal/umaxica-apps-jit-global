@@ -23,8 +23,8 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     assert_equal "www.umaxica.app", origin.host
     assert_nil origin.port
     assert_equal explicit.origin, origin.origin
-    assert_equal explicit.authorization_endpoint(query: { client_id: "base-rails-rp" }),
-                 origin.authorization_endpoint(query: { client_id: "base-rails-rp" })
+    assert_equal explicit.authorization_endpoint(query: { client_id: "core-app-jp" }),
+                 origin.authorization_endpoint(query: { client_id: "core-app-jp" })
   end
 
   test "normalizes explicit https origins with default ports" do
@@ -81,7 +81,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     authorize_url =
       origin.authorization_endpoint(
         query: {
-          client_id: "base-rails-rp",
+          client_id: "core-app-jp",
           redirect_uri: "https://log.umaxica.app/oidc/callback",
           response_type: "code",
         },
@@ -96,7 +96,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     assert_nil decision.target_port
 
     host_mismatch = origin.decision_for_authorize_url(
-      "https://evil.example/oauth/authorize?client_id=base-rails-rp",
+      "https://evil.example/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
 
@@ -104,7 +104,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     assert_equal "host_mismatch", host_mismatch.reason_code
 
     default_port = origin.decision_for_authorize_url(
-      "https://www.umaxica.app:443/oauth/authorize?client_id=base-rails-rp",
+      "https://www.umaxica.app:443/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
 
@@ -112,7 +112,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     assert_equal "direct_same_site_acme_authorize", default_port.reason_code
 
     path_mismatch = origin.decision_for_authorize_url(
-      "https://www.umaxica.app/oauth/token?client_id=base-rails-rp",
+      "https://www.umaxica.app/oauth/token?client_id=core-app-jp",
       request: request,
     )
 
@@ -130,16 +130,16 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     request = test_request(host: "id.app.localhost", scheme: "http")
 
     assert origin.same_site_authorize_url?(
-      "http://www.app.localhost:3000/oauth/authorize?client_id=base-rails-rp",
+      "http://www.app.localhost:3000/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
     assert_not origin.same_site_authorize_url?(
-      "http://www.app.localhost/oauth/authorize?client_id=base-rails-rp",
+      "http://www.app.localhost/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
     assert_equal "port_mismatch",
                  origin.same_site_rejection_reason(
-                   "http://www.app.localhost/oauth/authorize?client_id=base-rails-rp",
+                   "http://www.app.localhost/oauth/authorize?client_id=core-app-jp",
                    request: request,
                  )
   end
@@ -246,7 +246,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     request = test_request(host: "log.umaxica.app", scheme: "https")
 
     decision = origin.decision_for_authorize_url(
-      "http://www.umaxica.app/oauth/authorize?client_id=base-rails-rp",
+      "http://www.umaxica.app/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
 
@@ -261,7 +261,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     request = test_request(host: "log.umaxica.app", scheme: "https")
 
     decision = origin.decision_for_authorize_url(
-      "https://www.umaxica.app:8443/oauth/authorize?client_id=base-rails-rp",
+      "https://www.umaxica.app:8443/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
 
@@ -276,7 +276,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     request = test_request(host: "log.example.com", scheme: "https")
 
     decision = origin.decision_for_authorize_url(
-      "https://www.umaxica.app/oauth/authorize?client_id=base-rails-rp",
+      "https://www.umaxica.app/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
 
@@ -290,7 +290,7 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
     request = test_request(host: "localhost", scheme: "http")
 
     decision = origin.decision_for_authorize_url(
-      "http://localhost:3000/oauth/authorize?client_id=base-rails-rp",
+      "http://localhost:3000/oauth/authorize?client_id=core-app-jp",
       request: request,
     )
 
@@ -312,26 +312,5 @@ class Oidc::AcmeServiceOriginTest < ActiveSupport::TestCase
       "rack.url_scheme" => scheme,
     }
     ActionDispatch::TestRequest.create(env)
-  end
-end
-
-class Oidc::AcmeServiceOriginTest
-  test "target parsing rejects relative non-path values and nil decisions stay nil-safe" do
-    origin = build_origin("www.umaxica.app", default_scheme: "https")
-
-    assert_nil origin.send(:parse_target_url, "authorize")
-    assert_nil origin.send(:request_site_key, "")
-
-    decision = origin.send(
-      :reject_decision,
-      "invalid_url",
-      request: test_request(host: "log.umaxica.app", scheme: "https"),
-      target: nil,
-    )
-
-    assert_nil decision.target_scheme
-    assert_nil decision.target_host
-    assert_nil decision.target_port
-    assert_nil decision.target_path
   end
 end

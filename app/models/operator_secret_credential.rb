@@ -9,7 +9,7 @@
 #  id                              :bigint           not null, primary key
 #  consumed_at                     :datetime
 #  delivery_method                 :string
-#  discarded_at                    :datetime         default(Infinity), not null
+#  discard_at                    :datetime         default(Infinity), not null
 #  failure_count                   :integer          default(0), not null
 #  issued_at                       :datetime
 #  issued_by_ref                   :string
@@ -23,7 +23,7 @@
 #  name                            :string           not null
 #  not_before_at                   :datetime
 #  password_digest                 :string
-#  purged_at                       :datetime         default(Infinity), not null
+#  purge_eligible_at                       :datetime         default(Infinity), not null
 #  revoked_at                      :datetime
 #  safe_prefix                     :string
 #  scope                           :string
@@ -55,15 +55,15 @@
 
 class OperatorSecretCredential < OrgPrincipalRecord
   include Retainable
-
-  alias_attribute :staff_secret_status_id, :staff_identity_secret_status_id
   include ::PublicId
   include ::SecretCredential
   include OperatorSecretCredentialKinds
 
   MAX_SECRETS_PER_STAFF = 20
-  SIGN_IN_ALLOWED_STATUS_IDS = [OperatorSecretCredentialStatus::ACTIVE].freeze
-  SIGN_IN_ALLOWED_KIND_IDS = OperatorSecretCredentialKind::ALLOWED_FOR_SECRET_SIGN_IN
+  ACTIVE_STATUS_IDS = [OperatorSecretCredentialStatus::ACTIVE].freeze
+
+  alias_attribute :staff_secret_status_id, :staff_identity_secret_status_id
+
   attr_accessor :raw_secret_credential
 
   attribute :staff_identity_secret_status_id, default: OperatorSecretCredentialStatus::ACTIVE
@@ -88,13 +88,6 @@ class OperatorSecretCredential < OrgPrincipalRecord
                  record_name: "secret_credentials",
                  owner_name: "staff"
 
-  scope :allowed_for_secret_credential_sign_in, lambda {
-    where(
-      staff_identity_secret_status_id: SIGN_IN_ALLOWED_STATUS_IDS,
-      staff_secret_kind_id: SIGN_IN_ALLOWED_KIND_IDS,
-    )
-  }
-
   def self.identity_secret_credential_status_class
     OperatorSecretCredentialStatus
   end
@@ -109,51 +102,5 @@ class OperatorSecretCredential < OrgPrincipalRecord
 
   def to_param
     public_id
-  end
-
-  def usable_for_secret_credential_sign_in?(now: Time.current)
-    return false unless sign_in_status_allowed?
-    return false unless sign_in_kind_allowed?
-    return false if expired_for_secret_credential_sign_in?(now)
-
-    true
-  end
-
-  def verify_for_secret_credential_sign_in!(raw_secret_credential, now: Time.current)
-    with_lock do
-      reload
-
-      auth_result = authenticate(raw_secret_credential)
-      return false unless sign_in_status_allowed?
-      return false unless sign_in_kind_allowed?
-      return false if expired_for_secret_credential_sign_in?(now)
-      return false unless auth_result
-
-      self.last_used_at = now
-      save!
-    end
-
-    true
-  end
-
-  private
-
-  def sign_in_status_allowed?
-    SIGN_IN_ALLOWED_STATUS_IDS.include?(staff_secret_status_id)
-  end
-
-  def sign_in_kind_allowed?
-    SIGN_IN_ALLOWED_KIND_IDS.include?(staff_secret_kind_id)
-  end
-
-  def expired_for_secret_credential_sign_in?(now)
-    if respond_to?(:expires_at) && expires_at.present?
-      return now > expires_at
-    end
-
-    return false if discarded_at.nil?
-    return false if discarded_at.respond_to?(:infinite?) && discarded_at.infinite?
-
-    now > discarded_at
   end
 end

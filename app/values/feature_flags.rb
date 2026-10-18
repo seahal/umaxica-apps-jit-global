@@ -26,12 +26,9 @@ module FeatureFlags
   #                 product down.
   #   :availability ON = the ceremony is permitted. Unset = closed (fail-closed).
   #                 A lost flag must not let an authentication ceremony through.
-  #   :rollout      ON = the new implementation runs. Unset = the shipped one.
-  #                 A lost flag must not move live traffic onto new code; the
-  #                 rollout stalls instead. Removed with the old path.
   Flag = Data.define(:name, :polarity, :effect)
 
-  POLARITIES = %i(suspension availability rollout).freeze
+  POLARITIES = %i(suspension availability).freeze
 
   REGISTRY =
     [
@@ -52,11 +49,6 @@ module FeatureFlags
         effect: "Stops APNs/FCM delivery in ApplicationPushNotificationJob.",
       ),
       Flag.new(
-        name: :oidc_backchannel_logout_suspended, polarity: :suspension,
-        effect: "Stops backchannel logout POSTs. Global as a boolean gate, per relying " \
-                "party as an actor gate (OidcClientFlipperActor).",
-      ),
-      Flag.new(
         name: :retention_purge_suspended, polarity: :suspension,
         effect: "Stops the irreversible deletes and anonymization in RetentionPurgeJob.",
       ),
@@ -75,18 +67,6 @@ module FeatureFlags
       Flag.new(
         name: :turnstile_degraded_mode, polarity: :suspension,
         effect: "Accepts requests that failed Turnstile verification while the provider is degraded.",
-      ),
-      Flag.new(
-        name: :otp_email_notifier_app, polarity: :rollout,
-        effect: "Sends app surface OTP email through Notify::App::OtpNotifier instead of OtpEmailAdapter.",
-      ),
-      Flag.new(
-        name: :otp_email_notifier_com, polarity: :rollout,
-        effect: "Sends com surface OTP email through Notify::Com::OtpNotifier instead of OtpEmailAdapter.",
-      ),
-      Flag.new(
-        name: :otp_email_notifier_org, polarity: :rollout,
-        effect: "Sends org surface OTP email through Notify::Org::OtpNotifier instead of OtpEmailAdapter.",
       ),
       Flag.new(
         name: :social_ceremony_app_apple, polarity: :availability,

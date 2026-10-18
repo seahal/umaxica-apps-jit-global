@@ -1,0 +1,15 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "received" as received
+    state "retrying" as retrying
+    state "completed" as completed
+    state "dead_letter" as dead_letter
+    [*] --> received
+    received --> completed: processor success
+    received --> retrying: processor failure below retry caps
+    received --> dead_letter: processor failure at retry cap
+    retrying --> completed: processor success
+    retrying --> retrying: processor failure below retry caps
+    retrying --> dead_letter: processor failure at retry cap
+    completed --> [*]
+    dead_letter --> [*]

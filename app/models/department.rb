@@ -44,7 +44,7 @@ class Department < OrgPrincipalRecord
              primary_key: :id,
              inverse_of: :departments
 
-  belongs_to :workspace, class_name: "Organization", inverse_of: :departments
+  belongs_to :workspace, class_name: "OperatorOrganization", inverse_of: :departments
   has_many :operator_workspace_accounts,
            class_name: "OperatorWorkspaceAccount",
            dependent: :nullify,

@@ -3,7 +3,7 @@
 # ============================================================================
 # Shared build arguments
 # ============================================================================
-ARG RUBY_VERSION=4.0.6
+ARG RUBY_VERSION=4.0.7
 ARG DOCKER_UID=1000
 ARG DOCKER_GID=1000
 ARG DOCKER_USER=global
@@ -20,6 +20,8 @@ ARG REVISION=""
 ARG NODE_VERSION=24.20.0
 # Bun is pinned for reproducible builds across local containers and CI.
 ARG BUN_VERSION=1.4.0
+# actionlint has no Debian package; the binary is copied from the upstream image at a pinned tag.
+ARG ACTIONLINT_VERSION=1.7.7
 
 # ============================================================================
 # Node.js toolchain (binaries copied into the development and asset images)
@@ -29,6 +31,10 @@ FROM node:${NODE_VERSION}-trixie-slim AS node-toolchain
 # Bun toolchain (standalone binary copied into development and asset images)
 # ============================================================================
 FROM docker.io/oven/bun:${BUN_VERSION} AS bun-toolchain
+# ============================================================================
+# actionlint toolchain (standalone binary copied into the development image)
+# ============================================================================
+FROM docker.io/rhysd/actionlint:${ACTIONLINT_VERSION} AS actionlint-toolchain
 # ============================================================================
 # Production base — runtime-only dependencies
 # ============================================================================
@@ -231,10 +237,16 @@ ENV TZ=UTC \
 RUN gem update --system \
     && gem install bundler
 
+# PGDG supplies the client matching the PostgreSQL 18 server: Debian trixie ships only 17, and
+# pg_dump refuses to dump a newer server, which breaks db:schema:dump.
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+      -o /usr/share/keyrings/postgresql-archive-keyring.asc \
+    && echo 'deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main' \
+      > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update -qq \
     && apt-get install --no-install-recommends -y \
     build-essential \
@@ -248,7 +260,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libvips \
     libxml2-dev \
     libyaml-dev \
-    postgresql-client \
+    postgresql-client-18 \
     tzdata \
     unzip \
     zlib1g-dev \
@@ -265,7 +277,12 @@ ARG DOCKER_USER
 ARG DOCKER_GROUP
 ARG GITHUB_ACTIONS
 ARG BUN_VERSION
+# `exec`-created sessions inherit no login shell, so SHELL is unset and every
+# tool that shells out (Dev Containers CLI, git, editors, agents) falls back to
+# /bin/sh -- dash here. The account's shell is already bash; this makes the
+# environment agree with it.
 ENV HOME=/home/${DOCKER_USER} \
+    SHELL=/bin/bash \
     CORE_WORKLOAD_USER=${DOCKER_USER} \
     CORE_WORKLOAD_GROUP=${DOCKER_GROUP}
 WORKDIR ${HOME}/workspace
@@ -274,6 +291,7 @@ COPY --from=node-toolchain /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-toolchain /usr/local/lib/node_modules /usr/local/lib/node_modules
 # Node remains available for runtime compatibility; Bun is the sole JavaScript package manager.
 COPY --from=bun-toolchain /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=actionlint-toolchain /usr/local/bin/actionlint /usr/local/bin/actionlint
 
 # The lib* packages below are Chromium's shared-library closure, for the Vitest
 # `component` project, which runs against a real browser rather than jsdom (see
@@ -281,6 +299,14 @@ COPY --from=bun-toolchain /usr/local/bin/bun /usr/local/bin/bun
 # system dependencies, so without these `chrome-headless-shell` exits 127 on
 # libatk-1.0.so.0 and the whole project fails to start before any test runs.
 # Trixie carries the 64-bit-time_t (`t64`) names.
+#
+# chromium, xvfb, openbox, x11vnc, novnc, websockify and the Noto fonts are the
+# browser desktop (podman/core/desktop.sh). `chromium-sandbox` is left out on
+# purpose: it is a setuid helper, and `core` runs with `no-new-privileges`, so
+# it could never take effect -- Chromium uses its user-namespace sandbox here.
+#
+# Debian ships fd and bat as `fdfind` and `batcat` to avoid name clashes; the
+# symlinks restore the upstream names that documentation and tools expect.
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -293,10 +319,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get update -qq \
     && apt-get install --no-install-recommends -y \
     bat \
+    bsdextrautils \
     bubblewrap \
+    chromium \
     entr \
     fd-find \
     fontconfig \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
     fzf \
     git-secrets \
     gitleaks \
@@ -304,6 +334,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     iproute2 \
     jq \
     lefthook \
+    less \
     libasound2t64 \
     libatk-bridge2.0-0t64 \
     libatk1.0-0t64 \
@@ -321,22 +352,32 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libxkbcommon0 \
     libxrandr2 \
     lsb-release \
+    lsof \
     ncdu \
     netcat-openbsd \
+    novnc \
+    openbox \
     openssh-client \
     openssh-server \
     openssl \
     ripgrep \
+    shellcheck \
     silversearcher-ag \
     socat \
     tailscale=1.102.3 \
     tig \
     tree \
     util-linux \
+    valkey-tools \
     watch \
+    websockify \
     wget \
+    x11vnc \
+    xvfb \
     yq \
     zip \
+    && ln -s /usr/bin/fdfind /usr/local/bin/fd \
+    && ln -s /usr/bin/batcat /usr/local/bin/bat \
     && rm -rf /tmp/* /var/tmp/* "/home/${DOCKER_USER}/"
 
 # Dev Container features run `chown $_REMOTE_USER:$_REMOTE_USER`, which assumes a
@@ -380,11 +421,13 @@ RUN mkdir -p "${HOME}/workspace" \
 
 COPY --chown=0:0 podman/core/entrypoint.sh /usr/local/bin/core-entrypoint
 COPY --chown=0:0 podman/core/dev-supervisor.sh /usr/local/bin/core-dev-supervisor
+COPY --chown=0:0 podman/core/desktop.sh /usr/local/bin/core-desktop
 # Root-owned and read-only: `global` owns the workspace bind, so leaving either of
 # these there would let anything with a development shell rewrite what the next
 # container start executes -- including which keys it accepts.
 #
-# Both are inert unless `compose.remote-access.yaml` replaces `core`'s command.
+# Both are inert unless `compose.override.yaml`'s `remote-access` profile replaces
+# `core`'s command.
 # The names are the shared ones: umaxica-apps-edge and portal bake the same two
 # paths from the same two source files.
 COPY --chown=0:0 .devcontainer/remote-sshd_config /etc/ssh/remote-sshd_config
@@ -398,6 +441,7 @@ COPY --chown=0:0 .devcontainer/tailscale-wrapper.sh /usr/local/bin/tailscale
 RUN chmod 0555 \
     /usr/local/bin/core-entrypoint \
     /usr/local/bin/core-dev-supervisor \
+    /usr/local/bin/core-desktop \
     /usr/local/bin/remote-sshd-entrypoint \
     /usr/local/bin/tailscale \
     && chmod 0444 /etc/ssh/remote-sshd_config

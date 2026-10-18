@@ -35,12 +35,14 @@ class SolidInfrastructureTest < ActiveSupport::TestCase
   end
 
   test "test environment persists neither cache nor rate limit state" do
-    assert_instance_of ActiveSupport::Cache::NullStore, Rails.cache
+    assert_instance_of ActiveSupport::Cache::MemoryStore, Rails.cache
+    assert_not_kind_of ActiveSupport::Cache::RedisCacheStore, Rails.cache
 
     store = Rails.configuration.x.rate_limit.fetch(:store)
 
     assert_instance_of TestSupport::SwappableCacheStore, store
-    assert_instance_of ActiveSupport::Cache::NullStore, store.backend
+    assert_instance_of ActiveSupport::Cache::RedisCacheStore, store.backend
+    assert_equal 4, Umaxica::Valkey::Settings.current.rate_limit.db
   end
 
   test "null cache reads are safe inside reading role" do

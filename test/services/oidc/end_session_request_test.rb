@@ -13,7 +13,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     end
 
   setup do
-    @client = OidcClientRegistry.find!("sign-rp")
+    @client = OidcClientRegistry.find!("core-app-jp")
     @user = clients(:one)
     @sid = SecureRandom.uuid
     @request = Request.new(host: URI.parse("//#{OidcIssuer.host_for_resource_type("client")}").host, method: "POST")
@@ -47,7 +47,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
 
   test "id_token_hint takes precedence over legacy logout_request" do
     install_actor_context!
-    legacy = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    legacy = OidcLogoutRequest.issue(client_id: "core-app-jp", ri: "jp")
 
     result = call(id_token_hint: id_token, logout_request: legacy)
 
@@ -77,7 +77,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
   test "rejects client_id mismatch" do
     install_actor_context!
 
-    result = call(id_token_hint: id_token, client_id: "base-rails-rp")
+    result = call(id_token_hint: id_token, client_id: "core-com-jp")
 
     assert_predicate result, :error?
     assert_equal "client_id mismatch", result.error_description
@@ -109,6 +109,17 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
     assert_predicate result, :requires_confirmation?
   end
 
+  test "requires confirmation when the current actor has no captured IdP session" do
+    install_actor_context!(sid: nil)
+
+    result = call(id_token_hint: id_token)
+
+    assert_predicate result, :success?
+    assert_predicate result, :requires_confirmation?
+    assert_nil result.subject
+    assert_nil result.sid
+  end
+
   test "accepts exact registered post logout redirect uri and state" do
     install_actor_context!
     uri = @client.post_logout_redirect_uris.first
@@ -136,10 +147,13 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
 
   test "rejects post logout redirect uri registered for another realm" do
     install_actor_context!
-    staff_host = Rails.configuration.x.boot_config.fetch(:hosts).sign_staff.host
-    cross_realm_uri = @client.post_logout_redirect_uris.find { |uri| URI.parse(uri).host == staff_host }
+    staff_host = Rails.configuration.x.boot_config.fetch(:hosts).core_staff.host
+    cross_realm_uri =
+      OidcClientRegistry.find!("core-org-jp").post_logout_redirect_uris.find do |uri|
+        URI.parse(uri).host == staff_host
+      end
 
-    assert_not_nil cross_realm_uri, "sign-rp should register an org-realm post_logout uri"
+    assert_not_nil cross_realm_uri, "core-org-jp should register an org-realm post_logout uri"
 
     result = call(id_token_hint: id_token, post_logout_redirect_uri: cross_realm_uri, state: "xyz")
 
@@ -149,7 +163,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
   end
 
   test "legacy logout_request verifies on post and preserves replay protection" do
-    token = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    token = OidcLogoutRequest.issue(client_id: "core-app-jp", ri: "jp")
 
     first = call({ logout_request: token })
     second = call({ logout_request: token })
@@ -161,7 +175,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
   end
 
   test "legacy logout_request is not consumed on get" do
-    token = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    token = OidcLogoutRequest.issue(client_id: "core-app-jp", ri: "jp")
     get_request = Request.new(host: @request.host, method: "GET")
 
     result = OidcEndSessionRequest.call(params: { logout_request: token }, request: get_request)
@@ -173,7 +187,7 @@ class OidcEndSessionRequestTest < ActiveSupport::TestCase
 
   # HEAD shares Rails routing with GET, so it must not consume the single-use logout_request token.
   test "legacy logout_request is not consumed on head" do
-    token = OidcLogoutRequest.issue(client_id: "base-rails-rp", ri: "jp")
+    token = OidcLogoutRequest.issue(client_id: "core-app-jp", ri: "jp")
     head_request = Request.new(host: @request.host, method: "HEAD")
 
     result = OidcEndSessionRequest.call(params: { logout_request: token }, request: head_request)

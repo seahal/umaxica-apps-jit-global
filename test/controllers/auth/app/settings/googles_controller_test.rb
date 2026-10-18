@@ -41,16 +41,23 @@ module Auth::App::Settings
       assert_match %r{/verification}, response.location
     end
 
-    test "verification accepts google edit return target for social link step-up" do
+    # Pins the current state of social credential management, which is outside the Step-Up
+    # migration: the edit page still sends the browser to the Auth verification entry, and that
+    # entry starts a ceremony only from a Base admission. Moving social management behind Base
+    # admission is a separate workstream; this test changes with it.
+    test "google edit redirects to the Auth verification entry, which refuses to start without Base admission" do
       get edit_auth_app_settings_google_url(ri: "jp"), headers: @headers
 
       assert_response :redirect
       verification_location = response.location
 
+      assert_equal "/verification", URI.parse(verification_location).path
+      assert_equal "social_link", Rack::Utils.parse_query(URI.parse(verification_location).query).fetch("scope")
+
       get verification_location, headers: @headers
 
-      assert_response :success
-      assert_equal "/verification", URI.parse(verification_location).path
+      assert_response :bad_request
+      assert_nil response.headers["Location"]
     end
 
     test "edit redirects to verification with recorded social-link step-up" do
@@ -72,6 +79,8 @@ module Auth::App::Settings
         last_step_up_scope: SocialAuth::SOCIAL_LINK_SCOPE,
         last_step_up_aal: "aal2",
         last_step_up_method: "passkey",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
         last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up",
         last_step_up_audience: "step_up:app",
@@ -91,6 +100,8 @@ module Auth::App::Settings
         last_step_up_scope: SocialAuth::SOCIAL_LINK_SCOPE,
         last_step_up_aal: "aal2",
         last_step_up_method: "passkey",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
         last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up",
         last_step_up_audience: "step_up:app",
@@ -125,7 +136,7 @@ module Auth::App::Settings
     # Arriving at the link ceremony from the sign-up page makes it a sign-up entry, which
     # opens the pending sign-up ticket before handing off to the provider. Nothing exercised
     # SignSocialAuthenticationEndpoint#issue_sign_up_flow! before this.
-    test "create started from the sign-up page opens a sign-up ticket before the handoff" do
+    test "a sign-up marker cannot turn an authenticated link route into registration" do
       token = ClientToken.find_by!(public_id: @headers["X-TEST-SESSION-PUBLIC-ID"])
       satisfy_user_verification(token, scope: SocialAuth::SOCIAL_LINK_SCOPE)
       token.update!(
@@ -133,20 +144,21 @@ module Auth::App::Settings
         last_step_up_scope: SocialAuth::SOCIAL_LINK_SCOPE,
         last_step_up_aal: "aal2",
         last_step_up_method: "passkey",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
         last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up",
         last_step_up_audience: "step_up:app",
       )
 
-      assert_difference -> { ClientSignUpFlow.count }, 1 do
+      assert_no_difference -> { ClientSignUpFlow.count } do
         post auth_app_settings_google_url(ri: "jp", entry: "auth_up"), headers: @headers
       end
 
       assert_response :redirect
-      cycle = ClientSignUpFlow.recent_first.first
-
-      assert_equal "google", cycle.social_provider
-      assert_nil cycle.principal_id
+      assert_equal 307, response.status
+      assert_equal "/social/google", URI.parse(response.location).path
+      assert_nil token.reload.root_login_established_at
     end
 
     test "create tolerates a referer that is not a parsable URI" do
@@ -157,6 +169,8 @@ module Auth::App::Settings
         last_step_up_scope: SocialAuth::SOCIAL_LINK_SCOPE,
         last_step_up_aal: "aal2",
         last_step_up_method: "passkey",
+        last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+        last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
         last_step_up_session_public_id: token.public_id,
         last_step_up_purpose: "step_up",
         last_step_up_audience: "step_up:app",
@@ -220,31 +234,11 @@ class Auth::App::Settings::GooglesControllerTest
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -304,10 +298,8 @@ class Auth::App::Settings::GooglesControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -319,10 +311,8 @@ class Auth::App::Settings::GooglesControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -543,87 +533,6 @@ class Auth::App::Settings::GooglesControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -639,10 +548,8 @@ class Auth::App::Settings::GooglesControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -662,12 +569,12 @@ class Auth::App::Settings::GooglesControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

@@ -3,11 +3,18 @@
 require "test_helper"
 
 class PasskeyOptionsAnonymityInvariantTest < ActiveSupport::TestCase
-  test "anonymous credential padding covers every surface passkey limit" do
-    padding_count = PasskeySignInFlow::ANONYMIZED_ALLOW_CREDENTIALS_COUNT
+  test "discoverable authentication options have no credential allow list" do
+    config = Webauthn::RelyingPartyConfig.new(
+      rp_id: "auth.umaxica.app",
+      origin: "https://auth.umaxica.app",
+    )
 
-    assert_operator padding_count, :>=, ClientPasskey::MAX_PASSKEYS_PER_USER
-    assert_operator padding_count, :>=, VisitorPasskey::MAX_PASSKEYS_PER_VISITOR
-    assert_operator padding_count, :>=, OperatorPasskey::MAX_PASSKEYS_PER_STAFF
+    options = Webauthn::AssertionVerifier.options_for(
+      config: config,
+      allow_ids: [],
+      purpose: :direct_sign_in,
+    )
+
+    assert_empty options.allow_credentials
   end
 end

@@ -28,7 +28,11 @@ class SignRiskEnforcer
 
   def self.revoke_token_set(tokens)
     tokens.currently_usable_at.find_each do |token|
-      token.revoke!
+      AuthenticationLogoutCurrentSession.call(
+        resource: token.actor_record,
+        token: token,
+        reason: "sign_risk",
+      )
     end
   end
 

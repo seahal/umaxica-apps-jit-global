@@ -222,6 +222,27 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
     assert_predicate the_case.public_id, :present?
   end
 
+  test "an issued public_id cannot be changed" do
+    client = clients(:one)
+    operator = operators(:one)
+    the_case = AppEnforcementCase.create!(
+      kind: "cooldown",
+      duration_mode: "timed",
+      visibility: "visible",
+      release_mode: "automatic",
+      effective_at: Time.current,
+      expires_at: 1.day.from_now,
+      reason_code: "abuse",
+      principal_public_id: client.public_id,
+      applied_by_operator_public_id: operator.public_id,
+    )
+    original_public_id = the_case.public_id
+    the_case.public_id = "replacement-public-id"
+
+    assert_raises(ActiveRecord::RecordInvalid) { the_case.save! }
+    assert_equal original_public_id, the_case.reload.public_id
+  end
+
   test "apply! transitions a temporary_freeze with an access-blocking Principal Effect to active and locks the " \
        "account" do
     client = clients(:one)
@@ -243,7 +264,10 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       access_blocking: true,
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
     client.reload
 
     assert_equal "active", the_case.state
@@ -275,7 +299,10 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       effect: "unusable",
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
     matching_token.reload
     other_token.reload
 
@@ -298,7 +325,7 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       applied_by_operator_public_id: operator.public_id,
     )
 
-    assert_raises(EnforcementCaseApplicable::ApprovalRequiredError) { EnforcementCaseApplyOperation.call(enforcement_case: the_case) }
+    assert_raises(EnforcementCaseApplicable::ApprovalRequiredError) { EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: the_case.applied_by_operator_public_id) }
     assert_predicate the_case, :new_record?
   end
 
@@ -317,14 +344,18 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       principal_public_id: client.public_id,
       applied_by_operator_public_id: operator.public_id,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
-    assert_raises(EnforcementCaseApplicable::InvalidStateTransitionError) { EnforcementCaseApplyOperation.call(enforcement_case: the_case) }
+    assert_raises(EnforcementCaseApplicable::InvalidStateTransitionError) { EnforcementCaseApplyOperation.call(enforcement_case: the_case, actor_operator_public_id: the_case.applied_by_operator_public_id) }
   end
 
   test "applying a new open method effect closes the prior open row for the same slot" do
-    client = clients(:one)
+    clients(:one)
     operator = operators(:one)
+    principal_public_id = "test-#{SecureRandom.uuid}"
 
     first_case = AppEnforcementCase.new(
       kind: "method_protection",
@@ -333,16 +364,19 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       release_mode: "operator",
       effective_at: Time.current,
       reason_code: "abuse",
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       applied_by_operator_public_id: operator.public_id,
     )
     first_case.authentication_method_effects.build(
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       authentication_method: "email",
       effect: "mutation_locked",
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: first_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: first_case,
+      actor_operator_public_id: first_case.applied_by_operator_public_id,
+    )
     first_effect = first_case.authentication_method_effects.first
 
     second_case = AppEnforcementCase.new(
@@ -352,16 +386,19 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       release_mode: "operator",
       effective_at: Time.current,
       reason_code: "security_incident",
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       applied_by_operator_public_id: operator.public_id,
     )
     second_case.authentication_method_effects.build(
-      principal_public_id: client.public_id,
+      principal_public_id: principal_public_id,
       authentication_method: "email",
       effect: "unusable",
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: second_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: second_case,
+      actor_operator_public_id: second_case.applied_by_operator_public_id,
+    )
 
     first_effect.reload
 
@@ -388,7 +425,10 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       access_blocking: true,
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     EnforcementCaseEndOperation.call(
       enforcement_case: the_case, reason: "revoked",
@@ -443,7 +483,10 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       principal_public_id: client.public_id,
       applied_by_operator_public_id: operator.public_id,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: converged)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: converged,
+      actor_operator_public_id: converged.applied_by_operator_public_id,
+    )
 
     stalled = AppEnforcementCase.create!(
       kind: "cooldown",
@@ -484,7 +527,10 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       withdrawal_purge_blocked: true,
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert AppEnforcementCase.principal_effect_blocking?(client.public_id, :withdrawal_purge_blocked)
     assert_not AppEnforcementCase.principal_effect_blocking?(client.public_id, :recovery_blocked)
@@ -525,7 +571,10 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
       effect: "mutation_locked",
       effective_at: Time.current,
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: the_case)
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: the_case,
+      actor_operator_public_id: the_case.applied_by_operator_public_id,
+    )
 
     assert AppEnforcementCase.authentication_method_effect_blocking?(client.public_id, "passkey")
     assert_not AppEnforcementCase.authentication_method_effect_blocking?(client.public_id, "totp")

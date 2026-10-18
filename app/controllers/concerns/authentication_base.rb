@@ -29,8 +29,10 @@ module AuthenticationBase
   # 8) MFA/session helper decisions ................................. L1873-L1966
   # ==========================================================================
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     after_action :verify_private_action_authorized! if respond_to?(:after_action)
+    after_action :apply_authenticated_page_cache_policy! if respond_to?(:after_action)
   end
 
   # ==========================================================================
@@ -85,6 +87,36 @@ module AuthenticationBase
   ACCESS_COOKIE_KEY = AuthenticationCookieName.access
   REFRESH_COOKIE_KEY = AuthenticationCookieName.refresh
   DBSC_COOKIE_KEY = AuthenticationCookieName.dbsc
+  # adr/invalid-browser-credential-recovery.md. Every reason an auth browser credential can be
+  # refused for, by category. `credential_rejection`: the presented credential itself is unusable
+  # (malformed, unknown, digest or binding mismatch, reuse). `lifecycle`: an ordinary end of a
+  # valid credential's life (expiry, idle timeout, deactivation). Policy states such as
+  # `withdrawal_required` and `administrative_access_locked` are absent on purpose: the credential
+  # is valid, and their gates need it. Database and dependency errors never produce a reason; they
+  # propagate. `fetch` on this map raises for an unlisted reason instead of guessing a category.
+  AUTH_CREDENTIAL_FAILURE_CATEGORIES = {
+    "token_decode_failed" => "credential_rejection",
+    "missing_session_id" => "credential_rejection",
+    "token_session_not_found" => "credential_rejection",
+    "token_jti_mismatch" => "credential_rejection",
+    "dpop_verification_failed" => "credential_rejection",
+    "dpop_binding_mismatch" => "credential_rejection",
+    "actor_mismatch" => "credential_rejection",
+    "resource_not_found" => "credential_rejection",
+    "invalid_format" => "credential_rejection",
+    "token_not_found" => "credential_rejection",
+    "invalid_digest" => "credential_rejection",
+    "refresh_token_reuse_detected" => "credential_rejection",
+    "binding_denied" => "credential_rejection",
+    "idle_timeout" => "lifecycle",
+    "inactive_token" => "lifecycle",
+  }.freeze
+  # Access cookie failures after which the cookie is detached and the request continues anonymous.
+  AUTH_ACCESS_DETACHABLE_FAILURES = AUTH_CREDENTIAL_FAILURE_CATEGORIES.slice(
+    "token_decode_failed", "missing_session_id", "token_session_not_found", "token_jti_mismatch",
+    "dpop_verification_failed", "dpop_binding_mismatch", "actor_mismatch", "resource_not_found",
+    "idle_timeout",
+  ).transform_keys(&:to_sym).freeze
   BULLETIN_SESSION_KEY = :sign_in_checkpoint
   BULLETIN_TIMEOUT = 2.hours
   OIDC_RP_SESSION_KEYS = %i(
@@ -92,18 +124,21 @@ module AuthenticationBase
     oidc_state
     oidc_nonce
     oidc_pt
-    oidc_authorization_login_challenge
+    oidc_pending_flows
   ).freeze
 
   # AuthenticationToken TTLs
   ACCESS_TOKEN_TTL = ::SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL
   REFRESH_TOKEN_TTL = ::SecurityTokenLifetimes::CLIENT_REFRESH_TOKEN_TTL
   DBSC_COOKIE_TTL = 10.minutes
-  RESTRICTED_SESSION_TTL = 15.minutes
-  SESSION_LIMIT_HARD_REJECT_MESSAGE = I18n.t("errors.messages.session_limit_exceeded")
-  LOGIN_COOLDOWN_MESSAGE = I18n.t("errors.messages.login_cooldown")
 
+  # Raised before any write when a new root login falls inside the cooldown
+  # window of the previous established root login.
   class LoginCooldownError < StandardError; end
+
+  # The sign-in flow handed to the final issuance boundary no longer permits a
+  # session: wrong actor or surface, expired, already issued, or not waiting.
+  class SignInFlowIssuanceRejected < StandardError; end
 
   class ConcurrentSessionLimitExceededError < StandardError; end
 
@@ -140,11 +175,16 @@ module AuthenticationBase
   # this 3,000-line module into dedicated files. The constant aliases
   # below preserve every existing reference such as
   # `AuthenticationToken.decode(...)` and
-  # `AuthenticationJwtConfiguration.issuer(...)`. New code
+  # `AuthenticationJwtConfiguration.issuer`. New code
   # should reference `AuthenticationToken` and
   # `AuthenticationJwtConfiguration` directly. See CQ-1.
   AuthenticationJwtConfiguration = AuthenticationJwtConfiguration
   AuthenticationToken = AuthenticationToken
+
+  # Root-authenticated controllers read session state from the root token, never through a
+  # Browser RP session.
+  def browser_rp_controller? = false
+  public :browser_rp_controller?
 
   def logged_in?
     current_resource.present?
@@ -155,58 +195,13 @@ module AuthenticationBase
   # - Reads request format and writes HTTP response
   # ======================================================================
 
-  # Ensures user is not already logged in
-  # Renders bad_request with message if user is logged in
-  # Used for authentication endpoints (login)
-  #
-  # @param message_key [String] Optional translation key for the error message
-  # @return [nil] Returns nil if user is logged in (stops filter chain)
-  def ensure_not_logged_in(message_key: nil)
-    return unless logged_in?
-
-    message = message_key ? t(message_key) : I18n.t("errors.messages.not_authorized")
-    render plain: message, status: :unauthorized
-    nil
-  end
-
-  # Ensures user is not already logged in (registration variant)
-  # AuthenticationRedirects to root with alert message if user is logged in
-  # Used for registration endpoints
-  #
-  # @param redirect_path [String] Path to redirect to (default: "/")
-  # @param message_key [String] Optional translation key for the alert message
-  def ensure_not_logged_in_for_registration(redirect_path: "/", message_key: nil)
-    return unless logged_in?
-
-    message = message_key ? t(message_key) : I18n.t("errors.messages.not_authorized")
-
-    if request.format.json?
-      render plain: message, status: :unauthorized
-    else
-      redirect_to(redirect_path, alert: message)
-    end
-  end
-
-  # Checks if user is logged in and renders error if so (inline variant)
-  # Returns true if user is logged in, false otherwise
-  # Useful for inline checks in actions
-  #
-  # @param message_key [String] Translation key for the error message
-  # @return [Boolean] true if user is logged in, false otherwise
-  def reject_if_logged_in(message_key)
-    if logged_in?
-      render plain: t(message_key), status: :bad_request
-      true
-    else
-      false
-    end
-  end
-
-  # Reject if user/staff is already logged in with 401 Unauthorized
-  def reject_logged_in_session
-    return unless logged_in?
-
-    render plain: I18n.t("errors.messages.already_authenticated"), status: :unauthorized
+  # The one answer to a new Sign started by an authenticated browser, on every RP, Auth, and Base
+  # surface: a plain 403 with no Location, links, or session change
+  # (adr/sign-neutral-entry-and-logout-target-authorization.md).
+  def render_sign_in_unavailable_while_authenticated(_exception = nil)
+    response.set_header("Cache-Control", "no-store")
+    render plain: I18n.t("errors.messages.operation_not_permitted"), status: :forbidden,
+           content_type: "text/plain"
   end
 
   # ======================================================================
@@ -220,70 +215,6 @@ module AuthenticationBase
   # ======================================================================
   # 4) Session auth lifecycle (public API, Cookie/session/request I/O boundary)
   # ======================================================================
-
-  # Loads authentication session data and validates expiry
-  # Returns the found record or handles redirect on expiry
-  #
-  # @param session_key [Symbol, String] The session key to load from
-  # @param model_class [Class] The model class to load
-  # @param redirect_path [String, Symbol] Where to redirect on session expiry
-  # @param redirect_message [String] The translation key for expiry message
-  # @param block [Proc] Optional block for additional validation
-  # @return [ActiveRecord::Base, nil] The loaded record or nil
-  def load_authentication_session(session_key, model_class, redirect_path, redirect_message)
-    record = nil
-
-    if session[session_key].present?
-      record = model_class.find_by(id: session[session_key])
-
-      # If block provided, use it for validation; otherwise just check presence
-      is_valid =
-        if block_given?
-          yield(record)
-        else
-          record.present?
-        end
-
-      return record if is_valid
-
-      # Session expired or invalid
-      handle_session_expiry(redirect_path, redirect_message)
-      nil
-    else
-      # No session data
-      handle_session_expiry(redirect_path, redirect_message)
-      nil
-    end
-  end
-
-  # Stores authentication session data
-  #
-  # @param session_key [Symbol, String] The session key to store to
-  # @param value [Object] The value to store (typically an ID or hash)
-  def store_authentication_session(session_key, value)
-    session[session_key] = value
-  end
-
-  # Clears authentication session data
-  #
-  # @param session_keys [Array<Symbol, String>] The session keys to clear
-  def clear_authentication_session(*session_keys)
-    session_keys.each do |key|
-      session.delete(key)
-    end
-  end
-
-  # Validates session expiry against a timestamp
-  #
-  # @param session_data [Hash] The session data containing expiry information
-  # @param expiry_key [String, Symbol] The key in session_data that contains expiry timestamp
-  # @return [Boolean] true if not expired, false otherwise
-  def validate_session_expiry(session_data, expiry_key = "expires_at")
-    return false if session_data.blank?
-    return true unless session_data[expiry_key]
-
-    epoch_seconds(session_data[expiry_key]) > Time.current.to_i
-  end
 
   # Loads a record from session with additional validation
   #
@@ -304,19 +235,15 @@ module AuthenticationBase
     record = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     return nil if record.blank?
 
-    # Check OTP expiry if requested
-    if validations[:check_otp_expiry] && record.respond_to?(:otp_expired?)
-      return nil if record.otp_expired?
-    end
-
     # Check status_id if provided
-    if validations[:status_id] && record.respond_to?(:user_email_status_id)
-      return nil if record.user_email_status_id != validations[:status_id]
+    if validations[:status_id] && record.respond_to?(:user_email_status_id) &&
+        (record.user_email_status_id != validations[:status_id])
+      return nil
     end
 
     # Run custom validation if provided
-    if validations[:custom]
-      return nil unless validations[:custom].call(record)
+    if (validations[:custom]) && !validations[:custom].call(record)
+      return nil
     end
 
     record
@@ -333,6 +260,32 @@ module AuthenticationBase
     @current_session_public_id ||= current_session_public_id_from_access_token
   end
 
+  public :current_session_public_id
+
+  # Returns only an explicitly issued authentication-event timestamp.  A token
+  # or session's persistence timestamps are not equivalent to the credential
+  # event and must never be promoted into OIDC auth_time.
+  def current_authentication_event_at
+    event_at = defined?(Actor) ? Actor.authn.authentication_event_at : nil
+    return event_at if event_at.present?
+
+    token = respond_to?(:current_session, true) ? current_session : nil
+    return token.authentication_event_at if token&.respond_to?(:authentication_event_at)
+
+    nil
+  end
+
+  def parse_authentication_event_at(raw)
+    return raw if raw.is_a?(Time) || raw.is_a?(ActiveSupport::TimeWithZone)
+    return Time.at(raw).utc if raw.is_a?(Numeric)
+
+    Time.at(Integer(raw, 10)).utc
+  rescue ArgumentError, TypeError
+    nil
+  end
+
+  private :current_authentication_event_at, :parse_authentication_event_at
+
   def current_resource
     actor_resource = actor_current_resource
     return actor_resource if actor_resource.present?
@@ -341,36 +294,89 @@ module AuthenticationBase
     @current_resource = load_current_resource
   end
 
-  def log_in(resource, record_login_audit: true, token_kind_id: "BROWSER_WEB", require_totp_check: true,
-             audit_context: {}, bootstrap_actor: false, skip_login_cooldown: false,
-             established_authentication_method: nil)
+  # How an interactive session issuance relates to the root login
+  # (adr/root-login-establishment-boundary.md). A root login is a new Base
+  # Browser Session for the actor: it re-checks the login cooldown at the final
+  # boundary and records `root_login_established_at`, the cooldown anchor. An RP
+  # session is a relying party's local session minted from an existing root
+  # login; it neither checks nor moves the cooldown anchor. There is no third
+  # value and no bypass: every caller states which one it is.
+  SESSION_ESTABLISHMENTS = %i(root_login rp_session).freeze
+
+  def auth_credential_ceremony?
+    false
+  end
+
+  def local_authentication_ceremony?
+    auth_credential_ceremony? && !oidc_authentication_ceremony?
+  end
+
+  # Issues a session only when every precondition holds at the final boundary.
+  #
+  # The decision (cooldown, session limit, flow binding) and the writes that
+  # make the session real (token, device session, refresh family, flow
+  # completion) run in one transaction on the surface's ticket database while
+  # the actor row is locked. Only after that transaction commits does the
+  # request receive the reset Rails session, the authentication cookies, the
+  # current-resource context, and the success audit. Any refusal returns before
+  # a write, so it leaves the existing browser context untouched.
+  #
+  # Returns `{ status: :success, ... }` only for a committed session. A full
+  # session limit returns `{ status: :session_limit_pending }` with nothing
+  # issued; callers own the pending state (a sign-in flow or a resolution
+  # transaction), never a session-limit placeholder token.
+  def log_in(resource, establishment:, record_login_audit: true, token_kind_id: "BROWSER_WEB",
+             require_totp_check: true, audit_context: {}, established_authentication_method: nil,
+             authentication_context: nil, authentication_event_at: nil, sign_in_flow: nil,
+             oidc_authorization_transaction: nil, session_limit_resolution: nil,
+             session_limit_resolution_challenge: nil, session_limit_resolution_binding: nil)
+    validate_login_establishment!(resource, establishment, established_authentication_method, sign_in_flow)
+    validate_session_limit_resolution_arguments!(
+      session_limit_resolution: session_limit_resolution,
+      challenge: session_limit_resolution_challenge,
+      binding: session_limit_resolution_binding,
+    )
     return { status: :access_locked } if administratively_locked_resource?(resource)
     return { status: :login_forbidden } unless resource.login_allowed?
-
-    check_login_cooldown!(
-      resource,
-      bootstrap_actor: bootstrap_actor,
-      skip_login_cooldown: skip_login_cooldown,
-    )
 
     totp_result = check_totp_requirement_before_session_rotation(require_totp_check, resource)
     return totp_result if totp_result
 
-    oidc_rp_session_state = preserved_oidc_rp_session_state
+    dpop_result = validate_login_dpop_proof
+    return { status: dpop_result[:status], error: dpop_result[:error] } unless dpop_result[:status] == :success
 
-    reset_session
-    restore_oidc_rp_session_state!(oidc_rp_session_state)
-    clear_previous_login_cookies!
+    issuance = commit_login_session_rechecking_limit(
+      resource,
+      establishment: establishment,
+      token_kind_id: token_kind_id,
+      dpop_jkt: dpop_result[:jkt],
+      established_authentication_method: established_authentication_method,
+      authentication_context: authentication_context,
+      authentication_event_at: authentication_event_at,
+      sign_in_flow: sign_in_flow,
+      oidc_authorization_transaction: oidc_authorization_transaction,
+      session_limit_resolution: session_limit_resolution,
+      session_limit_resolution_challenge: session_limit_resolution_challenge,
+      session_limit_resolution_binding: session_limit_resolution_binding,
+    )
+    return { status: :invalid_request, reason: :flow_expired } if issuance.is_a?(FlowTransitionResult)
 
-    with_actor_session_lock(resource) do
-      issue_login_tokens_within_lock(
-        resource, record_login_audit: record_login_audit, token_kind_id: token_kind_id,
-                  audit_context: audit_context, bootstrap_actor: bootstrap_actor,
-                  established_authentication_method: established_authentication_method,
-      )
-    end
+    issue_session_limit_gate_for_pending_login(issuance, resource, sign_in_flow)
+    return issuance unless issuance[:status] == :committed
+
+    result = bind_committed_login!(
+      resource, issuance,
+      token_kind_id: token_kind_id, record_login_audit: record_login_audit, audit_context: audit_context,
+    )
+    session[:inertia_clear_history] = true if establishment == :root_login && result[:status] == :success
+    result
+  rescue SessionLimitResolutionTransactionable::WaitingSlotOccupied
+    session_limit_slot_refusal_result(resource)
   rescue ConcurrentSessionLimitExceededError
-    session_limit_hard_reject_result(resource)
+    session_limit_conflict_result(resource)
+  rescue SignInFlowIssuanceRejected => e
+    log_sign_in_flow_issuance_rejection(resource, sign_in_flow, e)
+    { status: :invalid_request }
   end
 
   # Vocabulary for `established_authentication_method` (adr/unified-enforcement.md,
@@ -382,8 +388,11 @@ module AuthenticationBase
   # state (adr/unified-enforcement.md, Session revocation) rather than a guess.
   ESTABLISHED_AUTHENTICATION_METHOD_MAP = {
     "email" => "email",
+    "email_otp" => "email",
     "telephone" => "telephone",
+    "sms" => "telephone",
     "secret_credential" => "secret",
+    "passcode" => "secret",
     "passkey" => "passkey",
     "totp" => "totp",
     "google" => "google",
@@ -446,20 +455,52 @@ module AuthenticationBase
     end
   end
 
-  def session_limit_hard_reject_result(resource)
-    Rails.logger.info(
+  # The capacity gate counts active sessions; the token model also enforces a total ceiling and
+  # is the last line. When the model refuses what the gate allowed, the actor is at a limit the
+  # gate did not see, so the one retry under the lock goes to the ordinary resolution instead of
+  # issuing. A refusal of that retry is raised to the caller as a temporary failure.
+  def commit_login_session_rechecking_limit(resource, **issuance_attributes)
+    commit_login_session_under_actor_lock(resource, **issuance_attributes)
+  rescue ConcurrentSessionLimitExceededError
+    commit_login_session_under_actor_lock(resource, limit_refused: true, **issuance_attributes)
+  end
+  private :commit_login_session_rechecking_limit
+
+  # Not the ordinary full-limit outcome (that is `:session_limit_pending`). Nothing was issued and
+  # the sign-in flow stays resumable, so the answer is a temporary failure, never a success.
+  def session_limit_conflict_result(resource)
+    Rails.logger.warn(
       JitLogEvent.format(
-        "session.limit.hard_reject",
+        "session.limit.conflict",
         "#{resource_type}_id": resource.id,
         ip_address: request_ip_address,
       ),
     )
     {
-      status: :session_limit_hard_reject,
-      http_status: :forbidden,
-      message: SESSION_LIMIT_HARD_REJECT_MESSAGE,
+      status: :session_limit_conflict,
+      http_status: :service_unavailable,
+      message: I18n.t("errors.rate_limit.backend_unavailable"),
     }
   end
+
+  # A live Waiting lease is an admission decision, not a dependency failure. Keep the
+  # sign-in flow resumable while refusing this additional attempt without disclosing the
+  # other flow or changing its lease, sessions, cooldown, or audit state.
+  def session_limit_slot_refusal_result(resource)
+    Rails.logger.info(
+      JitLogEvent.format(
+        "session.limit.waiting_slot_occupied",
+        "#{resource_type}_id": resource.id,
+        ip_address: request_ip_address,
+      ),
+    )
+    {
+      status: :session_limit_conflict,
+      http_status: :forbidden,
+      message: I18n.t("session_limit.login_limit_exceeded"),
+    }
+  end
+  private :session_limit_slot_refusal_result
 
   def validate_login_dpop_proof
     dpop_proof = request.headers["DPoP"]
@@ -476,84 +517,250 @@ module AuthenticationBase
     { status: :success, jkt: proof_result.jkt }
   end
 
-  def rotate_login_refresh_token!(token_record, restricted_expires_at)
-    token_record_connection_owner(token_record.class).connected_to(role: :writing) do
-      token_record.rotate_refresh_token!(discarded_at: restricted_expires_at)
-    end
-  end
-
-  def issue_login_tokens_within_lock(resource, record_login_audit:, token_kind_id:, audit_context:, bootstrap_actor:,
-                                     established_authentication_method: nil)
-    # Sign-up handoff must always issue an active token. If a rare data
-    # condition (e.g. an orphan social_identity that resolves to a
-    # session-saturated actor) made `session_limit_state_for` return
-    # :issue_restricted or :hard_reject for a freshly minted actor,
-    # the user would land on /sign/in/session immediately after
-    # finishing registration -- a UX break with no upside. Skip the
-    # gate entirely when the caller asserts this is a bootstrap login.
-    session_limit_state = bootstrap_actor ? :within_limit : session_limit_state_for(resource)
-    return session_limit_hard_reject_result(resource) if session_limit_state == :hard_reject
-
-    is_restricted = session_limit_state == :issue_restricted
-    store_pending_login_resource(resource) if is_restricted
-
-    dpop_result = validate_login_dpop_proof
-    return { status: dpop_result[:status], error: dpop_result[:error] } unless dpop_result[:status] == :success
-
-    now = Time.current
-    resolved_token_kind_id = resolve_token_kind_id(token_kind_id)
-    token_status_id = is_restricted ? token_class::STATUS_RESTRICTED : token_class::STATUS_ACTIVE
-    token_record = create_login_token_record(
-      resource,
-      resolved_token_kind_id,
-      token_status_id: token_status_id,
-      dpop_jkt: dpop_result[:jkt],
-      established_authentication_method: established_authentication_method,
-    )
-    device_session = ensure_device_session_for!(resource, token_record, dpop_jkt: dpop_result[:jkt])
-    restricted_expires_at = is_restricted ? restricted_session_expires_at : nil
-    refresh_plain = rotate_login_refresh_token!(token_record, restricted_expires_at)
-    update_device_session_refresh_state!(device_session, token_record)
-    notify_restricted_session_issued(resource, token_record, restricted_expires_at) if is_restricted
-
-    adopt_preference_for!(resource) if respond_to?(:adopt_preference_for!, true)
-
-    access_expires_at = access_token_expires_at_for(token_record, now: now)
-    access_token = encode_login_access_token(
-      resource,
-      token_record,
-      token_kind_id: token_kind_id,
-      dpop_jkt: dpop_result[:jkt],
-      access_expires_at: access_expires_at,
-    )
+  # Hands a committed issuance to this request: the rotated Rails session and
+  # request context now, the browser cookies and success audit after commit.
+  def bind_committed_login!(resource, issuance, token_kind_id:, record_login_audit:, audit_context:)
+    token_record = issuance.fetch(:token_record)
+    # Session-fixation rotation happens now, before the caller writes the
+    # sign-in flow locator into the new Rails session. It grants nothing by
+    # itself: authentication lives in the cookies set after commit.
+    oidc_rp_session_state = preserved_oidc_rp_session_state
+    reset_session
+    restore_oidc_rp_session_state!(oidc_rp_session_state)
 
     @current_resource = resource
     @current_session = token_record
     @current_session_public_id = token_session_public_id(token_record)
-
-    set_login_auth_cookies(token_record, access_token, refresh_plain, access_expires_at)
-    issue_dbsc_registration_header_for(token_record)
     populate_current_attributes!(resource, nil)
     @_current_resource_resolved = true
-    emit_session_issued(resource, token_record, token_kind_id, restricted: is_restricted)
-    record_audit(AUDIT_EVENTS[:logged_in], resource: resource, context: audit_context) if record_login_audit
 
-    login_result(token_record, access_token, refresh_plain, access_expires_at, now, restricted: is_restricted)
-  end
+    # A caller may already hold a ticket-database transaction (Base OIDC
+    # resume and sign-up finalization wrap this call). The browser only
+    # receives the authentication cookies and the success audit once the
+    # outermost transaction commits; a rollback leaves neither.
+    token_record_connection_owner.connected_to(role: :writing) do
+      token_class.current_transaction.after_commit do
+        apply_committed_login!(
+          resource, issuance,
+          token_kind_id: token_kind_id, record_login_audit: record_login_audit, audit_context: audit_context,
+        )
+      end
+    end
 
-  def notify_restricted_session_issued(resource, token_record, restricted_expires_at)
-    Rails.logger.info(
-      JitLogEvent.format(
-        "session.restricted.issued",
-        "#{resource_type}_id": resource.id,
-        user_token_id: token_record.public_id,
-        expires_at: restricted_expires_at&.iso8601,
-        ip_address: request_ip_address,
-      ),
+    login_success_payload(
+      token_record, issuance.fetch(:access_token), issuance.fetch(:refresh_plain),
+      issuance.fetch(:access_expires_at), issuance.fetch(:issued_at),
     )
   end
 
-  def emit_session_issued(resource, token_record, token_kind_id, restricted:)
+  # The final issuance boundary. Runs under the actor row lock and owns one
+  # ticket-database transaction, so the cooldown read, the limit count, and the
+  # writes that establish the session observe and change one consistent state.
+  # A raise (cooldown, invalid flow, database error) rolls every write back.
+  def commit_login_session!(resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
+                            authentication_context:, authentication_event_at:, sign_in_flow:,
+                            oidc_authorization_transaction: nil, limit_refused: false,
+                            session_limit_resolution: nil, session_limit_resolution_challenge: nil,
+                            session_limit_resolution_binding: nil)
+    return commit_login_session_in_ticket_transaction!(
+      resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
+                authentication_context:, authentication_event_at:, sign_in_flow:,
+                oidc_authorization_transaction:, limit_refused:, session_limit_resolution:,
+                session_limit_resolution_challenge:, session_limit_resolution_binding:,
+    ) unless sign_in_flow
+
+    unless sign_in_flow.is_a?(sign_in_flow_class_for(resource))
+      raise SignInFlowIssuanceRejected, "sign-in flow does not belong to the actor surface"
+    end
+
+    sign_in_flow.with_cycle_lock do
+      sign_in_flow.require_active_cycle!
+      commit_login_session_in_ticket_transaction!(
+        resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
+                  authentication_context:, authentication_event_at:, sign_in_flow:,
+                  oidc_authorization_transaction:, limit_refused:, session_limit_resolution:,
+                  session_limit_resolution_challenge:, session_limit_resolution_binding:,
+      )
+    end
+  rescue FlowInvalidTransition => e
+    raise SignInFlowIssuanceRejected, e.message
+  end
+
+  def commit_login_session_in_ticket_transaction!(resource, establishment:, token_kind_id:, dpop_jkt:,
+                                                  established_authentication_method:, authentication_context:,
+                                                  authentication_event_at:, sign_in_flow:,
+                                                  oidc_authorization_transaction: nil, limit_refused: false,
+                                                  session_limit_resolution: nil,
+                                                  session_limit_resolution_challenge: nil,
+                                                  session_limit_resolution_binding: nil)
+    token_record_connection_owner.connected_to(role: :writing) do
+      token_class.transaction(requires_new: true) do
+        check_login_cooldown!(resource) if establishment == :root_login
+        locked_flow = prepare_sign_in_flow_for_issuance(
+          resource, establishment:, established_authentication_method:, authentication_event_at:, sign_in_flow:,
+        )
+
+        # The one ordinary issuance every capacity outcome below may end in.
+        issue_committed_login =
+          lambda do
+            create_committed_login_issuance!(
+              resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
+                        authentication_context:, authentication_event_at:, sign_in_flow: locked_flow,
+            )
+          end
+
+        issue_pending_resolution =
+          lambda do
+            issue_pending_session_limit_resolution!(
+              resource, locked_flow:, established_authentication_method:, oidc_authorization_transaction:,
+            )
+          end
+
+        with_sign_in_flow_issuance_lock(locked_flow) do
+          if limit_refused && session_limit_resolution
+            ensure_session_limit_resolution_open!(session_limit_resolution)
+            issue_pending_resolution.call
+          elsif session_limit_resolution
+            resolution_outcome = finalize_session_limit_resolution_for_issuance!(
+              resource, locked_flow:, resolution: session_limit_resolution,
+                        challenge: session_limit_resolution_challenge, binding: session_limit_resolution_binding,
+                        oidc_authorization_transaction:,
+            )
+            login_result_after_resolution(
+              resolution_outcome, resolution: session_limit_resolution, locked_flow:,
+                                  challenge: session_limit_resolution_challenge,
+                                  binding: session_limit_resolution_binding, issue: issue_committed_login,
+            )
+          else
+            capacity_state = session_limit_state_within_bounds!(resource)
+
+            if limit_refused || capacity_state == :at_limit
+              issue_pending_resolution.call
+            else
+              issue_committed_login.call
+            end
+          end
+        end
+      end
+    end
+  end
+
+  def with_sign_in_flow_issuance_lock(flow)
+    return yield unless flow
+
+    flow.with_cycle_lock do
+      flow.require_active_cycle!
+      yield
+    end
+  end
+
+  def write_secret_sign_in_receipt!(resource, flow, token, committed_at)
+    claim = ClientSecretCredential.find_by!(claim_sign_in_flow_ref: flow.public_id, client_id: resource.id)
+    ClientSecretSignInReceipt.create!(
+      operation_id: claim.claim_operation_id, credential_ref: claim.public_id, client_ref: resource.public_id,
+      sign_in_flow: flow, root_token_ref: token.public_id, committed_at: committed_at,
+    )
+  end
+
+  # Re-read the flow under the issuance lock even when an earlier caller checked it.
+  # The unique token index additionally prevents a second issuance for that flow.
+  def lock_sign_in_flow_for_issuance!(sign_in_flow, resource)
+    unless sign_in_flow.is_a?(sign_in_flow_class_for(resource))
+      raise SignInFlowIssuanceRejected, "sign-in flow does not belong to the actor surface"
+    end
+
+    flow = sign_in_flow
+    flow.lock!
+    raise SignInFlowIssuanceRejected, "sign-in flow is not bound to the actor" unless flow.principal_id == resource.id
+    raise SignInFlowIssuanceRejected, "sign-in flow already issued a session" if flow.token_id.present?
+
+    flow.require_active_cycle!
+
+    advance_sign_in_flow_to_issuance!(flow, resource) unless flow.sign_in_session_issuance_pending?
+    flow.reload
+    raise SignInFlowIssuanceRejected, "sign-in flow is not waiting for session issuance" unless
+      flow.sign_in_session_issuance_pending?
+
+    flow
+  end
+
+  # A verified primary factor may reach the final session boundary while the cycle is still in an
+  # earlier ordinary phase. Walk only the named graph operations that are clear without another
+  # browser prompt; a blocking guardrail or an ambiguous selector remains a refusal and never
+  # becomes an implicit state jump.
+  def advance_sign_in_flow_to_issuance!(flow, resource)
+    flow.advance_sign_in_to_guardrail! if flow.sign_in_primary_pending? || flow.sign_in_mfa_pending?
+
+    if flow.sign_in_guardrail_pending?
+      result = SignInGuardrailParticipant.new(cycle: flow, actor: resource).advance_if_clear!
+      raise SignInFlowIssuanceRejected, "sign-in guardrail is blocking" if result.blocking?
+    end
+
+    if flow.sign_in_checkpoint_pending?
+      result = SignInCheckpointParticipant.new(cycle: flow, actor: resource).advance_if_clear!
+      raise SignInFlowIssuanceRejected, "sign-in checkpoint is blocking" if result.blocking?
+    end
+
+    if flow.sign_in_selector_pending?
+      SignInSelectorParticipant.new(
+        cycle: flow,
+        actor: resource,
+        authn_public_id: Actor.authn.login_public_id,
+      ).auto_commit_single!
+    end
+  rescue SignInSelectorParticipant::Error => e
+    raise SignInFlowIssuanceRejected, e.message
+  end
+
+  # OIDC Auth evidence reaches Base without the Auth browser's local flow
+  # locator. Create the parent at the issuance boundary so a capacity refusal
+  # still has a durable, actor-bound parent for its resolution child.
+  def create_oidc_issuance_flow!(resource, authentication_method:, authentication_event_at:)
+    flow_class = sign_in_flow_class_for(resource)
+    now = flow_class.database_now
+    method = authentication_method.to_s.presence || "passkey"
+    unless AuthCeremonySession::AUTHENTICATION_METHODS.include?(method)
+      raise SignInFlowIssuanceRejected, "OIDC authentication method is unsupported"
+    end
+
+    flow_class.create!(
+      principal_id: resource.id,
+      state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: flow_class.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + flow_class.default_ttl,
+      authentication_method: method,
+      authentication_event_at: authentication_event_at || now,
+      authentication_context: AuthenticationContextValue::NORMAL_KEY,
+    )
+  end
+
+  def complete_sign_in_flow_issuance!(flow, token_record, now:)
+    changes = { token: token_record }
+    changes[:session_issued_at] = now if flow.has_attribute?(:session_issued_at)
+    flow.update!(changes)
+    flow.complete_sign_in!
+  end
+
+  # Browser-side effects of a committed session. Nothing here decides whether
+  # the session exists; it only hands the committed session to this browser.
+  def apply_committed_login!(resource, issuance, token_kind_id:, record_login_audit:, audit_context:)
+    token_record = issuance.fetch(:token_record)
+
+    clear_previous_login_cookies!
+
+    adopt_preference_for!(resource) if respond_to?(:adopt_preference_for!, true)
+
+    set_login_auth_cookies(
+      token_record, issuance.fetch(:access_token), issuance.fetch(:refresh_plain),
+      issuance.fetch(:access_expires_at),
+    )
+    issue_dbsc_registration_header_for(token_record)
+    emit_session_issued(resource, token_record, token_kind_id)
+    record_audit(AUDIT_EVENTS[:logged_in], resource: resource, context: audit_context) if record_login_audit
+  end
+
+  def emit_session_issued(resource, token_record, token_kind_id)
     SignRiskEmitter.emit(
       "session_issued",
       **risk_actor_payload(resource.id),
@@ -561,19 +768,8 @@ module AuthenticationBase
       ip: request&.remote_ip,
       user_agent: request&.user_agent,
       request_id: request&.request_id,
-      meta: { auth_method: token_kind_id, restricted: restricted },
+      meta: { auth_method: token_kind_id },
     )
-  end
-
-  def login_result(token_record, access_token, refresh_plain, access_expires_at, now, restricted:)
-    result = login_success_payload(token_record, access_token, refresh_plain, access_expires_at, now)
-    return result unless restricted
-
-    issue_session_limit_gate!(
-      pt: session_limit_gate_pt,
-      flow: session_limit_gate_flow,
-    )
-    result.merge(restricted: true, session_management_required: true)
   end
 
   def login_success_payload(token_record, access_token, refresh_plain, access_expires_at, now)
@@ -592,8 +788,6 @@ module AuthenticationBase
 
     refresh_public_id, = token_class.parse_refresh_token(refresh_plain.to_s)
     token_record = find_refresh_token_record(refresh_public_id)
-    return handle_restricted_refresh_rejected(token_record, refresh_public_id) if token_record&.restricted?
-
     return handle_refresh_idle_timeout(token_record, refresh_public_id) unless refresh_idle_allowed?(token_record)
 
     return handle_refresh_binding_denied(
@@ -616,7 +810,7 @@ module AuthenticationBase
 
     # Load resource from token record
     # Use the same code path for all environments.
-    resource = token_record.public_send(token_resource_prefix)
+    resource = resource_class.find(token_record_attribute(token_record, resource_foreign_key))
 
     if administratively_locked_resource?(resource)
       return handle_administrative_access_locked_refresh(resource, refresh_public_id, token_record)
@@ -630,16 +824,6 @@ module AuthenticationBase
       resource, token_record, new_refresh_plain,
       previous_token_record: previous_token_record,
     )
-  rescue StandardError => e
-    Rails.logger.error(
-      JitLogEvent.format(
-        "auth.token.refresh.error",
-        error_class: e.class.name,
-        message: e.message,
-        exception: e,
-      ),
-    )
-    handle_refresh_error(e, refresh_public_id, resource)
   end
 
   def refresh_failure_status
@@ -686,6 +870,8 @@ module AuthenticationBase
 
     if request.format.json?
       render json: { error: "Unauthorized" }, status: :unauthorized
+    elsif !authentication_redirect_allowed?
+      head :unauthorized
     else
       SignRiskEmitter.emit(
         "auth_required",
@@ -728,7 +914,7 @@ module AuthenticationBase
   # application -- they go to the OIDC authorization endpoint or the jump gateway, neither of which
   # renders an Inertia response -- so the conversion applies to every branch above.
   def convert_redirect_to_inertia_location!
-    return unless request.respond_to?(:inertia?) && request.inertia?
+    return unless request.inertia?
     return unless response.redirect?
 
     location = response.location
@@ -896,9 +1082,180 @@ module AuthenticationBase
 
       super
     end
+
+    private :authentication_mode_rules, :authentication_modes
   end
 
   private
+
+  def validate_login_establishment!(resource, establishment, authentication_method, sign_in_flow)
+    raise SignInFlowIssuanceRejected, "Auth cannot establish a browser session" if auth_credential_ceremony?
+    if resource.is_a?(Client) && establishment == :root_login && authentication_method == "secret" &&
+        !sign_in_flow.is_a?(ClientSignInFlow)
+      raise SignInFlowIssuanceRejected, "Secret root login requires its claimed sign-in flow"
+    end
+    return if SESSION_ESTABLISHMENTS.include?(establishment)
+
+    raise ArgumentError, "unsupported session establishment: #{establishment.inspect}"
+  end
+
+  def commit_login_session_under_actor_lock(resource, **issuance_attributes)
+    with_actor_session_lock(resource) do
+      commit_login_session!(resource, **issuance_attributes)
+    end
+  end
+
+  def issue_session_limit_gate_for_pending_login(issuance, resource, sign_in_flow)
+    return unless issuance[:status] == :session_limit_pending && issuance[:resolution_challenge].present?
+
+    issue_session_limit_gate!(
+      pt: sign_in_flow&.return_to || session_limit_gate_pt,
+      flow: sign_in_flow&.public_id || issuance[:sign_in_flow_public_id],
+      resolution_challenge: issuance[:resolution_challenge],
+      resolution_binding: issuance[:resolution_binding],
+      actor_type: resource.class.name,
+    )
+  end
+
+  def log_sign_in_flow_issuance_rejection(resource, sign_in_flow, error)
+    Rails.logger.warn(
+      JitLogEvent.format(
+        "session.issuance.flow_rejected",
+        "#{resource_type}_id": resource.id,
+        sign_in_flow_public_id: sign_in_flow&.public_id,
+        reason: error.message,
+        request_id: request&.request_id,
+      ),
+    )
+  end
+
+  def prepare_sign_in_flow_for_issuance(resource, establishment:, established_authentication_method:,
+                                        authentication_event_at:, sign_in_flow:)
+    locked_flow = lock_sign_in_flow_for_issuance!(sign_in_flow, resource) if sign_in_flow
+    return locked_flow if locked_flow
+    return unless establishment == :root_login && authentication_event_at.present?
+
+    create_oidc_issuance_flow!(
+      resource,
+      authentication_method: established_authentication_method,
+      authentication_event_at: authentication_event_at,
+    )
+  end
+
+  def issue_pending_session_limit_resolution!(resource, locked_flow:, established_authentication_method:,
+                                              oidc_authorization_transaction:)
+    raise SignInFlowIssuanceRejected, "session-limit resolution requires a sign-in flow" unless locked_flow
+
+    raw_binding = SecureRandom.urlsafe_base64(32)
+    resolution_model = SessionLimitResolutionTransactionable.model_for(resource)
+    resolution = resolution_model.issue!(
+      sign_in_flow: locked_flow,
+      actor: resource,
+      browser_binding_digest: resolution_model.digest_challenge(raw_binding),
+      oidc_authorization_transaction: oidc_authorization_transaction,
+      audit_context: { auth_method: established_authentication_method }.compact,
+    )
+    {
+      status: :session_limit_pending,
+      resolution_challenge: resolution.challenge,
+      resolution_binding: raw_binding,
+      resolution_transaction: resolution.transaction,
+      sign_in_flow_public_id: locked_flow.public_id,
+    }
+  end
+
+  def validate_session_limit_resolution_arguments!(session_limit_resolution:, challenge:, binding:)
+    present = [session_limit_resolution, challenge, binding].count(&:present?)
+    return if present.zero? || present == 3
+
+    raise ArgumentError, "session-limit resolution context is incomplete"
+  end
+
+  def finalize_session_limit_resolution_for_issuance!(resource, locked_flow:, resolution:, challenge:, binding:,
+                                                      oidc_authorization_transaction:)
+    resolution_model = SessionLimitResolutionTransactionable.model_for(resource)
+    unless resolution.is_a?(resolution_model)
+      raise SignInFlowIssuanceRejected, "session-limit resolution belongs to another realm"
+    end
+
+    resolution.finalize_for_session_issuance!(
+      actor: resource,
+      parent: locked_flow,
+      challenge: challenge,
+      browser_binding_digest: resolution_model.digest_challenge(binding),
+      authorization_transaction: oidc_authorization_transaction,
+    ) do |writer_now|
+      session_limit_state_for(resource, now: writer_now)
+    end
+  rescue FlowInvalidTransition => e
+    raise SignInFlowIssuanceRejected, e.message
+  end
+
+  def pending_session_limit_resolution_result(resolution:, locked_flow:, challenge:, binding:)
+    {
+      status: :session_limit_pending,
+      resolution_challenge: challenge,
+      resolution_binding: binding,
+      resolution_transaction: resolution,
+      sign_in_flow_public_id: locked_flow.public_id,
+    }
+  end
+
+  def create_committed_login_issuance!(resource, establishment:, token_kind_id:, dpop_jkt:,
+                                       established_authentication_method:, authentication_context:,
+                                       authentication_event_at:, sign_in_flow:)
+    now = Time.current
+    token_record = create_login_token_record(
+      resource,
+      resolve_token_kind_id(token_kind_id),
+      token_status_id: token_class::STATUS_ACTIVE,
+      dpop_jkt: dpop_jkt,
+      established_authentication_method: established_authentication_method,
+      authentication_context: authentication_context,
+      authentication_event_at: authentication_event_at || now,
+      root_login_established_at: (now if establishment == :root_login),
+    )
+    refresh_plain = commit_login_token_lifecycle!(
+      resource, token_record, sign_in_flow, establishment,
+      established_authentication_method, now, dpop_jkt,
+    )
+    build_committed_login_issuance(
+      resource, token_record, token_kind_id, dpop_jkt, authentication_event_at, now, refresh_plain,
+    )
+  end
+
+  def commit_login_token_lifecycle!(resource, token_record, sign_in_flow, establishment,
+                                    established_authentication_method, now, dpop_jkt)
+    device_session = ensure_device_session_for!(resource, token_record, dpop_jkt: dpop_jkt)
+    refresh_plain = token_record.rotate_refresh_token!(discard_at: nil)
+    update_device_session_refresh_state!(device_session, token_record)
+    complete_sign_in_flow_issuance!(sign_in_flow, token_record, now: now) if sign_in_flow
+    if resource.is_a?(Client) && establishment == :root_login && established_authentication_method == "secret"
+      write_secret_sign_in_receipt!(resource, sign_in_flow, token_record, now)
+    end
+    refresh_plain
+  end
+
+  def build_committed_login_issuance(resource, token_record, token_kind_id, dpop_jkt, authentication_event_at, now,
+                                     refresh_plain)
+    access_expires_at = access_token_expires_at_for(token_record, now: now)
+    access_token = encode_login_access_token(
+      resource,
+      token_record,
+      token_kind_id: token_kind_id,
+      dpop_jkt: dpop_jkt,
+      access_expires_at: access_expires_at,
+      authentication_event_at: authentication_event_at || now,
+    )
+    {
+      status: :committed,
+      token_record: token_record,
+      access_token: access_token,
+      refresh_plain: refresh_plain,
+      access_expires_at: access_expires_at,
+      issued_at: now,
+    }
+  end
 
   # ----------------------------------------------------------------------
   # 3-2) Bulletin private helpers
@@ -914,7 +1271,7 @@ module AuthenticationBase
   # AuthenticationBase via the `include AuthenticationWithdrawalGate` at the top.
 
   # ----------------------------------------------------------------------
-  # 6-3) Audit/occurrence writing (side-effect boundary)
+  # 6-3) Audit/occurrence writing (effect boundary)
   # ----------------------------------------------------------------------
   def record_audit(event_id, resource:, actor: resource, context: {})
     return unless resource && event_id
@@ -1021,6 +1378,7 @@ module AuthenticationBase
   # hard-revoked.
   def handle_refresh_idle_timeout(_token_record, refresh_public_id)
     set_refresh_failure!(:unauthorized, "invalid_refresh_token")
+    log_auth_credential_rejection("refresh_cookie", "idle_timeout")
     destroy_refresh_token_from_cookie
     clear_auth_cookies!
 
@@ -1107,9 +1465,9 @@ module AuthenticationBase
         now if expiry_column == :expired_at && token_record.class.column_names.include?("revoked_at")
       if family_id.present?
         scope = token_record.class.where(refresh_token_family_id: family_id)
-        if token_record.class.column_names.include?("discarded_at")
-          discarded_at = token_record.class.arel_table[:discarded_at]
-          scope = scope.where(discarded_at.eq(nil).or(discarded_at.gt(now)))
+        if token_record.class.column_names.include?("discard_at")
+          discard_at = token_record.class.arel_table[:discard_at]
+          scope = scope.where(discard_at.eq(nil).or(discard_at.gt(now)))
         end
         # rubocop:disable Rails/SkipsModelValidations
         scope.update_all(expiry_attrs)
@@ -1229,7 +1587,7 @@ module AuthenticationBase
 
   def access_token_response_type(token_record)
     dpop_jkt = token_record_attribute(token_record, :dpop_jkt).presence ||
-      token_record&.try(:device_session)&.dpop_jkt.presence
+      token_device_session(token_record)&.dpop_jkt.presence
     dpop_jkt.present? ? "DPoP" : "Bearer"
   end
 
@@ -1243,6 +1601,7 @@ module AuthenticationBase
 
   def handle_invalid_refresh_token_reason(reason, refresh_public_id, token_record = nil, log_reason: reason)
     set_refresh_failure!(:unauthorized, "invalid_refresh_token")
+    log_auth_credential_rejection("refresh_cookie", log_reason)
 
     if reason == "refresh_token_reuse_detected"
       write_refresh_occurrence(
@@ -1251,7 +1610,21 @@ module AuthenticationBase
         reason: "reuse",
         device_source: refresh_binding_source(token_record),
       )
+      Rails.logger.warn(
+        # This is an internal diagnostic, not user-facing copy.
+        # rubocop:disable I18n/RailsI18n/DecorateString
+        "Refresh token reuse detected; clearing access and refresh cookies so the user can sign in again.",
+        # rubocop:enable I18n/RailsI18n/DecorateString
+      )
+      begin
+        destroy_refresh_token_from_cookie
+      ensure
+        clear_auth_cookies!
+        reset_session_and_clear_inertia_history!
+      end
     end
+
+    clear_auth_cookies! unless reason == "refresh_token_reuse_detected"
 
     Rails.logger.info(
       JitLogEvent.format(
@@ -1293,72 +1666,19 @@ module AuthenticationBase
 
     revoke_refresh_session_after_dbsc_failure!(token_record) if @refresh_dbsc_reason.present?
     set_refresh_failure!(:unauthorized, "invalid_refresh_token")
+    log_auth_credential_rejection(
+      token_record&.binding_method_dbsc? ? "dbsc_cookie" : "refresh_cookie",
+      "binding_denied",
+    )
     destroy_refresh_token_from_cookie
     clear_auth_cookies!
-    reset_session if @refresh_dbsc_reason.present? && respond_to?(:reset_session)
+    reset_session_and_clear_inertia_history! if @refresh_dbsc_reason.present?
 
     Rails.logger.info(
       JitLogEvent.format(
         "#{resource_type}.token.refresh.failed",
         refresh_token_id: refresh_public_id,
         reason: binding_failure_reason(reason, token_record),
-        ip_address: request_ip_address,
-      ),
-    )
-
-    nil
-  end
-
-  def handle_refresh_error(exception, refresh_public_id, resource)
-    set_refresh_failure!(:unauthorized, "invalid_refresh_token")
-
-    Rails.logger.info(
-      JitLogEvent.format(
-        "#{resource_type}.token.refresh.error",
-        "#{resource_type}_id": resource&.id,
-        refresh_token_id: refresh_public_id,
-        error_message: exception.message,
-        ip_address: request_ip_address,
-      ),
-    )
-
-    SignRiskEmitter.emit(
-      "refresh_failed",
-      **risk_actor_payload(resource&.id),
-      user_token_id: refresh_public_id,
-      ip: request&.remote_ip,
-      user_agent: request&.user_agent,
-      request_id: request&.request_id,
-      meta: { error_class: exception.class.name },
-    )
-
-    nil
-  end
-
-  def handle_restricted_refresh_rejected(token_record, refresh_public_id)
-    restricted_expires_at = token_record.discarded_at if token_record.respond_to?(:discarded_at)
-    expired = restricted_expires_at.present? && restricted_expires_at <= Time.current
-
-    if expired && !token_record.revoked?
-      token_record_connection_owner(token_record.class).connected_to(role: :writing) do
-        token_record.revoke!
-      end
-      Rails.logger.info(
-        JitLogEvent.format(
-          "session.restricted.expired",
-          user_token_id: token_record.public_id,
-          "#{resource_type}_id": token_record.public_send("#{token_resource_prefix}_id"),
-        ),
-      )
-    end
-
-    set_refresh_failure!(:forbidden, "restricted_session")
-
-    Rails.logger.info(
-      JitLogEvent.format(
-        "#{resource_type}.token.refresh.failed",
-        refresh_token_id: refresh_public_id,
-        reason: expired ? "restricted_expired" : "restricted_session",
         ip_address: request_ip_address,
       ),
     )
@@ -1404,8 +1724,10 @@ module AuthenticationBase
   end
 
   def refresh_dpop_allowed?(token_record)
-    expected_jkt = token_record_attribute(token_record, :dpop_jkt).presence ||
-      token_record&.try(:device_session)&.dpop_jkt.presence
+    return true if token_record.blank?
+
+    device_session_jkt = device_session_for_token(token_record)&.dpop_jkt
+    expected_jkt = token_record_attribute(token_record, :dpop_jkt).presence || device_session_jkt.presence
     return true if expected_jkt.blank?
 
     proof = request.headers["DPoP"]
@@ -1434,8 +1756,9 @@ module AuthenticationBase
   end
 
   def refresh_binding_allowed?(token_record)
-    return false if token_record&.respond_to?(:device_session) && token_record.device_session&.revoked?
-    return false unless device_session_refresh_allowed?(token_record)
+    device_session = device_session_for_token(token_record)
+    return false if device_session&.revoked?
+    return false unless device_session_refresh_allowed?(token_record, device_session)
     return refresh_dbsc_allowed?(token_record) if token_record&.binding_method_dbsc?
 
     # Any token reaching here is not DBSC-bound. DPoP (if present) is enforced
@@ -1505,8 +1828,7 @@ module AuthenticationBase
     end
   end
 
-  def device_session_refresh_allowed?(token_record)
-    device_session = token_record&.try(:device_session)
+  def device_session_refresh_allowed?(token_record, device_session = device_session_for_token(token_record))
     return true if device_session.blank?
     return false if device_session.revoked?
     return true if @refresh_dbsc_verified && device_session.dbsc_bound?
@@ -1543,6 +1865,12 @@ module AuthenticationBase
     true
   end
 
+  def device_session_for_token(token_record)
+    return if token_record.blank?
+
+    token_record.device_session_record
+  end
+
   def refresh_dbsc_allowed?(token_record)
     return true if token_record.blank?
     return false unless token_record.dbsc_status_active?
@@ -1564,24 +1892,12 @@ module AuthenticationBase
   def revoke_refresh_session_after_dbsc_failure!(token_record)
     return if token_record.blank?
 
-    token_record.class.transaction do
-      if token_record.respond_to?(:device_session) && token_record.device_session.present?
-        token_record.device_session.revoke!(reason: "dbsc_refresh_failed")
-        token_record.class.where(device_session_id: token_record.device_session_id).find_each do |session_token|
-          session_token.revoke! if session_token.respond_to?(:revoke!) && !session_token.revoked?
-        end
-      elsif token_record.respond_to?(:revoke!) && !token_record.revoked?
-        token_record.revoke!
-      end
-    end
-  rescue ActiveRecord::ActiveRecordError => e
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.refresh.dbsc_logout_failed",
-        token_id: token_record&.try(:public_id),
-        error_class: e.class.name,
-        error_message: e.message,
-      ),
+    AuthenticationLogoutCurrentSession.call(
+      resource: defined?(@current_resource) ? @current_resource : nil,
+      token: token_record,
+      token_class: token_record.class,
+      session_public_id: token_record.try(:public_id),
+      reason: "dbsc_refresh_failed",
     )
   end
 
@@ -1641,6 +1957,21 @@ module AuthenticationBase
     @current_resource
   end
 
+  protected
+
+  # Non-document endpoints opt out of interactive Sign while retaining both gates.
+  def authentication_redirect_allowed?
+    true
+  end
+
+  # Subclasses can opt out for authenticated GET-only informational pages whose contract
+  # requires the request to leave session state unchanged.
+  def track_authenticated_session_activity?
+    !(request.get? || request.head?)
+  end
+
+  private
+
   def load_from_token
     access_token = extract_access_token(ACCESS_COOKIE_KEY)
     request_host = request&.host
@@ -1660,11 +1991,13 @@ module AuthenticationBase
       request_method: request.request_method,
       request_uri: request.original_url,
       jwt_issuer_id: auth_jwt_issuer_id,
+      track_session_activity: track_authenticated_session_activity?,
     ).call
 
-    if result.resource.blank? && (authorization_scheme.to_s.casecmp?("DPoP") || dpop_proof.present?)
+    if result.resource.blank? && (authorization_scheme.to_s.casecmp?("DPoP") || dpop_proof.present?) &&
+        defined?(DpopNonceService)
       response.headers["DPoP-Nonce"] =
-        DpopNonceService.generate(resource_type: resource_type) if defined?(DpopNonceService)
+        DpopNonceService.generate(resource_type: resource_type)
     end
 
     remember_authentication_resolution!(
@@ -1672,12 +2005,23 @@ module AuthenticationBase
               access_token: access_token,
     )
     emit_actor_mismatch_event(result.payload) if result.failure_reason == :actor_mismatch
-    @current_session_public_id = result.session_public_id if result.session_public_id.present?
-    @current_token_public_id = result.token_public_id if result.token_public_id.present?
+    remember_authenticated_public_ids!(result)
 
-    populate_current_attributes!(result.resource, result.payload) if result.resource.present?
+    if result.resource.present?
+      # ActorSupport#set_current_actor rebuilds Actor.authz later in the request and reads
+      # the verified claims back from here; ApplicationPolicy's Emergency pre-check depends on it.
+      @current_access_token_payload = result.payload
+      populate_current_attributes!(result.resource, result.payload)
+    end
 
     result.resource
+  end
+
+  def remember_authenticated_public_ids!(result)
+    return if result.resource.blank?
+
+    @current_session_public_id = result.session_public_id if result.session_public_id.present?
+    @current_token_public_id = result.token_public_id if result.token_public_id.present?
   end
 
   def remember_authentication_resolution!(result, authorization_scheme:, access_token:)
@@ -1687,6 +2031,42 @@ module AuthenticationBase
       authorization_scheme.present? ||
       result.failure_reason != :blank_access_token ||
       result.payload.present?
+
+    return unless authentication_credentials_invalid?
+    # JSON keeps its existing authentication failure response; only HTML continues anonymous.
+    return if request.format.json?
+    return if AuthAuthorizationHeader.access_token(request).present?
+    return if BrowserCredentialCookie.read(cookies, ACCESS_COOKIE_KEY).blank?
+    return unless AUTH_ACCESS_DETACHABLE_FAILURES.key?(result.failure_reason)
+
+    log_auth_credential_rejection("access_cookie", result.failure_reason)
+    register_refused_credential_deletions!
+    clear_auth_cookies!
+    @current_authentication_credentials_present = false
+  end
+
+  # A later boundary check may still raise (Home/Dashboard 404). Registering the confirmed deletion
+  # lets CredentialDeletionFinalizer complete it on the exception response; like the cookie jar, it
+  # covers only cookies the request carried.
+  def register_refused_credential_deletions!
+    [ACCESS_COOKIE_KEY, REFRESH_COOKIE_KEY, DBSC_COOKIE_KEY].each do |name|
+      next unless request.cookies.key?(name)
+
+      CredentialDeletionFinalizer.register(request.env, name, cookie_deletion_options)
+    end
+  end
+
+  def log_auth_credential_rejection(kind, reason)
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.credential_rejected",
+        surface: CoreSurface.current(request),
+        credential_kind: kind,
+        reason: reason,
+        category: AUTH_CREDENTIAL_FAILURE_CATEGORIES.fetch(reason.to_s),
+        request_id: request.request_id,
+      ),
+    )
   end
 
   def authentication_credentials_invalid?
@@ -1710,7 +2090,6 @@ module AuthenticationBase
       amr: payload&.dig("amr"),
       actor_type: actor_type,
       actor_id: resource.id,
-      restricted: current_session_restricted_for_authn,
     )
     surface = CoreSurface.current(request) if respond_to?(:request, true) && request.present?
     attributes = {
@@ -1729,14 +2108,14 @@ module AuthenticationBase
   end
 
   def emit_actor_mismatch_event(payload)
-    act = AuthenticationToken.extract_act(payload)
+    actual_resource_type = AuthenticationToken.extract_resource_type(payload)
     sub = AuthenticationToken.extract_subject(payload)
 
     Rails.logger.info(
       JitLogEvent.format(
         "authentication.actor_mismatch",
         expected: resource_type,
-        actual: act,
+        actual: actual_resource_type,
         subject: sub,
         ip_address: request_ip_address,
       ),
@@ -1748,7 +2127,7 @@ module AuthenticationBase
       ip: request&.remote_ip,
       user_agent: request&.user_agent,
       request_id: request&.request_id,
-      meta: { expected: resource_type, actual: act },
+      meta: { expected: resource_type, actual: actual_resource_type },
     )
   end
 
@@ -1802,18 +2181,6 @@ module AuthenticationBase
     )
   end
 
-  # Handles session expiry by redirecting with appropriate message
-  #
-  # @param redirect_path [String, Symbol] Where to redirect
-  # @param message_key [String] Translation key for the expiry message
-  def handle_session_expiry(redirect_path, message_key)
-    redirect_params = { notice: t(message_key) }
-    # Preserve redirect parameter if present
-    default_pt_key = DEFAULT_PT_SESSION_KEY
-    redirect_params[AuthIoKeys::Params::PT] = session[default_pt_key] if session[default_pt_key].present?
-    redirect_to(redirect_path, redirect_params)
-  end
-
   # ======================================================================
   # 7) Policy/domain decisions
   # ======================================================================
@@ -1823,6 +2190,31 @@ module AuthenticationBase
     return unless self.class.authentication_mode_for(action_name) == :private
 
     verify_authorized
+  end
+
+  # An authenticated page must not outlive its session in the browser. Rails' default
+  # `max-age=0, private, must-revalidate` still lets the HTTP cache and the back/forward cache keep
+  # the page after sign-out, so authenticated HTML and Inertia responses are `no-store`. A page is
+  # authenticated when its action requires a session, or when an :open action answered a
+  # signed-in request (it may then render signed-in content, as the Base root does). JSON and
+  # other non-page responses, bare token-authenticated endpoints, and pages served anonymously
+  # are left to the controller's own policy: on Global and Publishing policy roots that is already
+  # `no-store` from `DefaultNoStore`; on Core and Warp it is the framework default.
+  def apply_authenticated_page_cache_policy!
+    return unless authenticated_page_response?
+    return if response.headers["Cache-Control"].to_s.split(",").map(&:strip).include?("no-store")
+
+    no_store
+  end
+
+  def authenticated_page_response?
+    return false unless response.media_type == "text/html" || response.headers["X-Inertia"] == "true"
+
+    mode = self.class.authentication_mode_for(action_name)
+    return true if mode == :private
+    return false if mode == :bare
+
+    logged_in?
   end
 
   def enforce_access_policy!
@@ -1933,6 +2325,7 @@ module AuthenticationBase
 
   def enforce_authentication_open!(_options = {})
     return true unless authentication_credentials_invalid?
+    return true if detach_stale_open_session_credentials!
 
     Rails.logger.info(
       JitLogEvent.format(
@@ -1944,6 +2337,31 @@ module AuthenticationBase
     )
     render plain: I18n.t("auth.session_expired"), status: :unauthorized
     false
+  end
+
+  # Leftover access/refresh cookies after family revoke (refresh reuse) or expiry still look like
+  # "invalid credentials" on :open HTML endpoints such as /oauth/authorize. Detach them so the
+  # request continues as anonymous and the user can sign in again, instead of a 401 that cannot
+  # start the ceremony. JSON and binding failures stay on the failure path.
+  def detach_stale_open_session_credentials!
+    return false unless request.format.html?
+    return false unless %i(token_session_not_found token_decode_failed).include?(
+      @current_authentication_failure_reason,
+    )
+
+    Rails.logger.warn(
+      "Stale session credentials presented after refresh token reuse or expiry; " \
+      "clearing auth cookies so sign-in can proceed.",
+    )
+    begin
+      destroy_refresh_token_from_cookie if respond_to?(:destroy_refresh_token_from_cookie, true)
+    ensure
+      clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
+      reset_session_and_clear_inertia_history!
+      @current_authentication_credentials_present = false
+      @current_authentication_failure_reason = nil
+    end
+    true
   end
 
   def enforce_authentication_deny_all!(_options = {})
@@ -1962,6 +2380,8 @@ module AuthenticationBase
     # Branch HTML vs API (or delegate to your responder).
     if request.format.json? || options[:request_format] == :json
       handle_auth_required_json(options)
+    elsif !authentication_redirect_allowed?
+      head :unauthorized
     else
       handle_auth_required_html(options)
     end
@@ -1983,10 +2403,54 @@ module AuthenticationBase
     end
   end
 
+  def session_limit_state_within_bounds!(resource)
+    state = session_limit_state_for(resource)
+    raise SignInFlowIssuanceRejected, "active session count exceeds the configured limit" if state == :over_limit
+
+    state
+  end
+
+  def ensure_session_limit_resolution_open!(resolution)
+    resolution.reload
+    raise SignInFlowIssuanceRejected, "session-limit resolution is not open" unless resolution.open?
+  end
+
+  # The login outcome once a session-limit resolution has been finalized under the flow lock.
+  def login_result_after_resolution(outcome, resolution:, locked_flow:, challenge:, binding:, issue:)
+    case outcome.fetch(:status)
+    when :pending
+      pending_session_limit_resolution_result(resolution:, locked_flow:, challenge:, binding:)
+    when :expired, :invalid
+      { status: :invalid_request, reason: :session_limit_resolution_expired }
+    when :already_resolved, :resolved
+      raise SignInFlowIssuanceRejected, "resolved session-limit resolution has no capacity" if
+        outcome.fetch(:status) == :already_resolved && outcome.fetch(:capacity_state) != :within_limit
+
+      issue.call
+    else
+      raise FlowConfigurationError, "unsupported session-limit finalization status: #{outcome.fetch(:status).inspect}"
+    end
+  end
+
+  # The authentication context is the durable authority for Restricted Mode (Org Standby).
+  # It is written once, at session issue, and never updated afterwards: there is no supported
+  # transition between Normal and Standby inside a session (docs/security/org-emergency-access.md).
+  def token_authentication_context(authentication_context)
+    unless token_class.column_names.include?("authentication_context")
+      raise ArgumentError,
+            "#{token_class.name} cannot record an authentication context; " \
+            "Standby (Emergency Access) is available on surfaces with the column only"
+    end
+
+    AuthenticationContextValue.for(authentication_context).to_s
+  end
+
   def create_login_token_record(resource, token_kind_id, token_status_id: nil, dpop_jkt: nil,
-                                established_authentication_method: nil)
+                                established_authentication_method: nil, authentication_context: nil,
+                                authentication_event_at: nil, root_login_established_at: nil)
     token_record_connection_owner.connected_to(role: :writing) do
       token_attributes = { resource_foreign_key => resource.id }
+      token_attributes[:root_login_established_at] = root_login_established_at if root_login_established_at
       token_attributes[:dpop_jkt] = dpop_jkt if dpop_jkt.present?
       # Determine kind column based on resource type (user_token_kind_id or staff_token_kind_id)
       kind_column = "#{token_resource_prefix}_token_kind_id"
@@ -2001,6 +2465,21 @@ module AuthenticationBase
           token_class.column_names.include?("established_authentication_method")
         token_attributes[:established_authentication_method] = established_authentication_method
       end
+
+      if authentication_event_at.present? && token_class.column_names.include?("authentication_event_at")
+        token_attributes[:authentication_event_at] = authentication_event_at
+      end
+
+      token_attributes[:authentication_context] = token_authentication_context(authentication_context) if
+        authentication_context.present?
+
+      # R5-WU06: a root records the actor authentication epoch and OP contract epoch it was issued
+      # under, so a later identity stop cuts off exactly this and older authority.
+      token_attributes[:authentication_epoch] = resource.authentication_epoch
+      token_attributes[:contract_epoch] =
+        { ClientToken => OpAppProtocolEpoch,
+          VisitorToken => OpComProtocolEpoch,
+          OperatorToken => OpOrgProtocolEpoch, }.fetch(token_class).current_contract_epoch
 
       token_attributes.merge!(default_status_token_attributes(token_status_id))
       token_attributes.merge!(default_dbsc_token_attributes(token_kind_id))
@@ -2083,24 +2562,6 @@ module AuthenticationBase
     kind_column = "#{token_resource_prefix}_token_kind_id"
     return raw_kind_id unless token_class.columns_hash[kind_column]&.type == :integer
 
-    kind_model = token_kind_model
-    if kind_model.column_names.include?("code")
-      begin
-        return kind_model.find_by!(code: raw_kind_id).id
-      rescue ActiveRecord::RecordNotFound
-        Rails.logger.error(
-          JitLogEvent.format(
-            "auth.token.kind_missing",
-            kind_model: kind_model.name,
-            code: raw_kind_id,
-            resource_type: resource_type,
-          ),
-        )
-        raise ActiveRecord::RecordNotFound,
-              "Missing #{kind_model.name} code=#{raw_kind_id} for #{resource_type} login"
-      end
-    end
-
     resolved =
       case [resource_type, raw_kind_id]
       when ["operator", "BROWSER_WEB"] then OperatorTokenKind::BROWSER_WEB
@@ -2116,7 +2577,7 @@ module AuthenticationBase
 
     return resolved if resolved
 
-    raise ActiveRecord::RecordNotFound, "Missing #{kind_model.name} for code=#{raw_kind_id}"
+    raise ActiveRecord::RecordNotFound, "Missing #{token_kind_model.name} for code=#{raw_kind_id}"
   end
 
   def ensure_token_kind_exists!(token_kind_id)
@@ -2159,10 +2620,10 @@ module AuthenticationBase
   end
 
   def token_reference_connection_model(model)
-    return AppTicketRecord if model <= AppTicketRecord
-    return ComTicketRecord if model <= ComTicketRecord
+    return OpBaseAppRecord if model <= OpBaseAppRecord
+    return OpBaseComRecord if model <= OpBaseComRecord
 
-    OrgTicketRecord
+    OpBaseOrgRecord
   end
 
   def login_token_reference_models
@@ -2225,7 +2686,7 @@ module AuthenticationBase
     issued_at = Time.current.to_i
     expires_at = pending_mfa_ttl.from_now.to_i
     session[:pending_mfa] = {
-      "public_id" => SecureRandom.hex(16),
+      "public_id" => PublicId.generate,
       "user_id" => resource.id,
       "resource_type" => resource_type,
       "primary" => primary.to_s,
@@ -2269,6 +2730,12 @@ module AuthenticationBase
       return false if Time.zone.at(issued_at) < pending_mfa_ttl.ago
     end
 
+    if local_authentication_ceremony?
+      cycle = auth_ceremony_local_sign_in_flow
+      return false unless cycle&.sign_in_mfa_pending? &&
+        cycle.principal_id == data[:user_id]
+    end
+
     true
   end
 
@@ -2285,6 +2752,17 @@ module AuthenticationBase
   def clear_pending_mfa!
     session.delete(:pending_mfa)
     session.delete(:mfa_user_id)
+  end
+
+  # Cancelling MFA must not issue Root credentials or discard the outer OIDC admission.
+  def cancel_pending_mfa!
+    actor = pending_mfa_user
+    if actor
+      cycle = pending_mfa_sign_in_flow_for(actor)
+      cycle.halt_sign_in! if cycle&.sign_in_mfa_pending?
+      sign_in_flow_locator_for(actor: actor).clear!
+    end
+    clear_pending_mfa!
   end
 
   # adr/unified-enforcement.md, JWT AMR: derives `amr` from
@@ -2336,12 +2814,11 @@ module AuthenticationBase
 
     result = pending_sign_in_result_after_primary!(
       user,
+      cycle: cycle,
       pt: pt,
       record_login_audit: true,
       token_kind_id: "BROWSER_WEB",
       audit_context: { auth_method: pending_mfa_auth_method.presence || "mfa" },
-      bootstrap_actor: false,
-      skip_login_cooldown: true,
       # The primary factor that gated MFA, not the step-up factor itself --
       # step-up attribution lives on last_step_up_method (adr/unified-enforcement.md,
       # Session revocation, rule 3). Captured before clear_pending_mfa! deletes
@@ -2350,26 +2827,13 @@ module AuthenticationBase
     )
     advance_pending_sign_in_flow_after_primary!(cycle, user, result) if cycle
 
-    if result[:status] == :session_limit_hard_reject
-      { status: :session_limit_hard_reject, message: result[:message], http_status: result[:http_status] }
-    elsif result[:session_management_required]
-      { status: :restricted, redirect_path: session_management_path }
-    elsif result[:status] == :success
-      { status: :success, redirect_path: sign_in_sequence_redirect_path(pt: pt) }
+    case result[:status]
+    when :session_limit_conflict
+      { status: :session_limit_conflict, message: result[:message], http_status: result[:http_status] }
+    when :success, :authentication_evidence_recorded
+      result.merge(redirect_path: sign_in_sequence_redirect_path(pt: pt))
     else
       result
-    end
-  end
-
-  def session_management_path
-    if respond_to?(:sign_app_sign_in_session_path, true)
-      sign_app_sign_in_session_path
-    elsif respond_to?(:sign_org_sign_in_session_path, true)
-      sign_org_sign_in_session_path
-    elsif respond_to?(:sign_com_sign_in_session_path, true)
-      sign_com_sign_in_session_path
-    else
-      "/sign/in/session"
     end
   end
 
@@ -2401,15 +2865,18 @@ module AuthenticationBase
     "auth.#{resource_type}.session"
   end
 
-  # Canonical entry point for establishing a signed-in session. Every
-  # interactive sign-in, sign-up completion, and social callback must call
-  # this (not log_in directly): it orchestrates the MFA decision and then
-  # delegates to log_in, which performs the session-fixation reset_session.
-  # Paired vocabulary with logout_current_session! for the privilege
+  # Canonical entry point for completing an interactive authentication. Normal
+  # sign-in, sign-up, and social callbacks delegate to log_in, which performs
+  # the session-fixation reset_session. An OIDC-started ceremony is the one
+  # exception: it records Auth evidence and leaves Browser Session issuance to
+  # Base. Paired vocabulary with logout_current_session! for the privilege
   # transition points.
   def establish_signed_in_session!(resource, pt:, ri:, auth_method:, token_kind_id: "BROWSER_WEB",
-                                   record_login_audit: true, audit_context: {}, bootstrap_actor: false,
-                                   established_authentication_method: nil)
+                                   record_login_audit: true, audit_context: {},
+                                   established_authentication_method: nil, authentication_context: nil,
+                                   authentication_event_at: nil)
+    raise AlreadyAuthenticatedError if logged_in?
+
     auth_method = auth_method.to_s
     # `auth_method:` alone is sometimes ambiguous (e.g. "social" cannot express
     # google vs apple) -- callers with better information pass the resolved
@@ -2417,25 +2884,32 @@ module AuthenticationBase
     # mappings only. See ESTABLISHED_AUTHENTICATION_METHOD_MAP above.
     resolved_established_authentication_method =
       established_authentication_method.presence || established_authentication_method_for(auth_method)
-    cycle = start_sign_in_flow_for!(resource, pt: pt)
+    cycle = start_sign_in_flow_for!(resource, pt: pt, authentication_method: resolved_established_authentication_method)
     login_audit_context = { auth_method: auth_method }.merge(audit_context)
     if mfa_bypassed_for_auth_method?(auth_method) || !mfa_required_for?(resource)
       result = pending_sign_in_result_after_primary!(
         resource,
+        cycle: cycle,
         pt: pt,
         record_login_audit: record_login_audit,
         token_kind_id: token_kind_id,
         audit_context: login_audit_context,
-        bootstrap_actor: bootstrap_actor,
         established_authentication_method: resolved_established_authentication_method,
+        authentication_context: authentication_context,
+        authentication_event_at: authentication_event_at,
       )
-      advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
+      result = advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
+      if local_authentication_ceremony? && result[:status] == :authentication_evidence_recorded
+        result[:redirect_path] = sign_in_sequence_redirect_path(pt: pt)
+      end
       return result
     end
 
     resolved_pt = resolve_mfa_pt(pt)
-    cycle.advance_sign_in_to_mfa!
-    sign_in_flow_locator_for(actor: resource).issue!(cycle)
+    outcome = cycle.with_cycle_lock { cycle.advance_sign_in_to_mfa! }
+    return { status: :invalid_request, reason: :flow_expired } if outcome.is_a?(FlowTransitionResult)
+
+    sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
     set_pending_mfa!(
       resource: resource, primary: auth_method, pt: resolved_pt, ri: ri,
       auth_method: auth_method,
@@ -2449,94 +2923,181 @@ module AuthenticationBase
     }
   end
 
-  def pending_sign_in_result_after_primary!(resource, pt:, record_login_audit:, token_kind_id:,
-                                            audit_context:, bootstrap_actor:, skip_login_cooldown: false,
-                                            established_authentication_method: nil)
+  # Result statuses after a verified primary credential (and MFA, when
+  # required). Only `:success` means a session was committed:
+  #
+  # - `:success` -- a root login was committed by log_in.
+  # - `:session_limit_pending` -- nothing was issued; the sign-in flow is the
+  #   pending state and the browser goes to session-limit resolution.
+  # - `:authentication_evidence_recorded` -- an OIDC-started ceremony recorded
+  #   Auth evidence; Base issues the session later at authorization resume.
+  # - anything else -- a refusal; nothing was issued.
+  def pending_sign_in_result_after_primary!(resource, cycle:, pt:, record_login_audit:, token_kind_id:,
+                                            audit_context:, established_authentication_method: nil,
+                                            authentication_context: nil, authentication_event_at: nil)
     return { status: :login_forbidden } unless resource.login_allowed?
 
-    session_limit_state = bootstrap_actor ? :within_limit : session_limit_state_for(resource)
-    return session_limit_hard_reject_result(resource) if session_limit_state == :hard_reject
-
-    if session_limit_state == :issue_restricted
-      # This branch returns before log_in, so log_in's reset_session never runs -
-      # yet store_pending_login_resource below writes the authenticated principal's
-      # id into the session, and the session-management page treats that id as
-      # authoritative (it lists and revokes the actor's sessions). That is a
-      # privilege transition from anonymous to identified, so the session id must be
-      # rotated here for the same reason log_in rotates it. OIDC RP state is
-      # preserved across the reset exactly as log_in does at :359-362.
-      oidc_rp_session_state = preserved_oidc_rp_session_state
-      reset_session
-      restore_oidc_rp_session_state!(oidc_rp_session_state)
-
-      store_pending_login_resource(resource)
-      issue_session_limit_gate!(
-        pt: session_limit_gate_pt,
-        flow: session_limit_gate_flow,
+    if oidc_authentication_ceremony?
+      return establish_oidc_authentication_evidence!(
+        resource,
+        cycle: cycle,
+        pt: pt,
+        established_authentication_method: established_authentication_method,
+        authentication_context: authentication_context,
       )
-      return { status: :success, session_management_required: true, redirect_path: session_management_path }
     end
 
-    check_login_cooldown!(
-      resource,
-      bootstrap_actor: bootstrap_actor,
-      skip_login_cooldown: skip_login_cooldown,
-    )
+    if local_authentication_ceremony?
+      return record_local_ceremony_evidence!(
+        resource, cycle: cycle, method: established_authentication_method,
+                  authentication_event_at: authentication_event_at, authentication_context: authentication_context,
+      )
+    end
 
     result = log_in(
       resource,
+      establishment: :root_login,
       record_login_audit: record_login_audit,
       token_kind_id: token_kind_id,
       require_totp_check: false,
       audit_context: audit_context,
-      bootstrap_actor: bootstrap_actor,
-      skip_login_cooldown: skip_login_cooldown,
       established_authentication_method: established_authentication_method,
+      authentication_context: authentication_context,
+      authentication_event_at: authentication_event_at,
+      sign_in_flow: cycle,
     )
     return result unless result[:status] == :success
 
     result.merge(redirect_path: sign_in_sequence_redirect_path(pt: pt))
   end
 
-  def check_login_cooldown!(resource, bootstrap_actor: false, skip_login_cooldown: false)
+  def record_local_ceremony_evidence!(resource, cycle:, method:, authentication_event_at:, authentication_context:)
+    ceremony = admitted_auth_ceremony_session
+    return { status: :invalid_request } unless cycle && ceremony
+
+    resource.class.connection_class_for_self.connected_to(role: :writing) do
+      resource.with_lock do
+        return { status: :login_forbidden } unless resource.login_allowed?
+
+        cycle.class.connection_class_for_self.connected_to(role: :writing) do
+          cycle.with_lock do
+            ceremony.lock!
+            now = cycle.class.database_now
+            valid_phase = cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
+            unless valid_phase && cycle.principal_id == resource.id && !cycle.expired?(now) &&
+                ceremony.local_sign_in_flow_ref == cycle.public_id && ceremony.active?(now: now) &&
+                ceremony.admitted? && !cycle.authentication_event_at && !ceremony.authentication_evidence_recorded?
+              return { status: :invalid_request }
+            end
+
+            cycle.record_local_authentication_evidence!(
+              method: method, authenticated_at: authentication_event_at,
+              authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
+            )
+            ceremony.record_authentication_evidence!(method: method)
+          end
+        end
+      end
+    end
+    { status: :authentication_evidence_recorded }
+  end
+
+  # Auth verifies the credential, but Base owns the Browser Session and every
+  # downstream session. For an OIDC-started ceremony, persist only the
+  # one-time evidence that the Auth -> Base handoff will carry; never call
+  # log_in, rotate the Rails session, issue a root token, or write the
+  # successful-login audit here. Base writes that audit when it commits the
+  # root login at authorization resume.
+  def establish_oidc_authentication_evidence!(resource, cycle:, pt:, established_authentication_method:,
+                                              authentication_context: nil)
+    return { status: :access_locked } if administratively_locked_resource?(resource)
+
+    # An early, non-authoritative answer so the user is not sent through the
+    # rest of the ceremony only to be refused; Base re-checks at commit.
+    token_record_connection_owner.connected_to(role: :writing) { check_login_cooldown!(resource) }
+
+    method = established_authentication_method.to_s
+    unless AuthenticationBase::ESTABLISHED_AUTHENTICATION_METHOD_AMR_MAP.key?(method)
+      raise AuthCeremonySession::InvalidTransition, "OIDC authentication method is missing or unsupported"
+    end
+
+    ceremony = respond_to?(:current_auth_ceremony_session, true) ? current_auth_ceremony_session : nil
+    unless ceremony
+      raise AuthCeremonySession::InvalidTransition, "OIDC Auth ceremony session is missing"
+    end
+
+    if resource.is_a?(Client) && method == "secret"
+      with_claimed_oidc_secret_flow(resource) do |flow, admitted|
+        flow.record_local_authentication_evidence!(method: method)
+        admitted.record_authentication_evidence!(method: method)
+      end
+    else
+      flow = cycle
+      raise AuthCeremonySession::InvalidTransition, "OIDC sign-in flow is missing" unless flow
+
+      flow.record_local_authentication_evidence!(
+        method: method,
+        authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
+      )
+      ceremony.record_authentication_evidence!(method: method)
+    end
+
+    {
+      status: :authentication_evidence_recorded,
+      redirect_path: sign_in_sequence_redirect_path(pt: pt),
+    }
+  end
+
+  def oidc_authentication_ceremony?
+    return false unless respond_to?(:oidc_authorization_login_challenge, true)
+
+    oidc_authorization_login_challenge.present?
+  end
+
+  # Rapid re-login guard (config/initializers/login_cooldown.rb). The anchor is
+  # the newest `root_login_established_at` for this actor on this surface: the
+  # instant a previous root login was committed. Token creation, refresh
+  # rotation, RP sessions, step-up, and pending or refused attempts never write
+  # it, and signing out does not clear it. Read on the writer inside the
+  # issuance transaction so replica lag cannot hide a just-committed login.
+  def check_login_cooldown!(resource)
     cooldown = AuthenticationBase.login_cooldown
     return unless cooldown.positive?
-    # Bootstrap handoffs (sign-up completion, OIDC authorization resume) issue a
-    # token within seconds of the one minted moments earlier in the same flow.
-    # That fresh token is not a rapid re-login attempt, so skip the cooldown gate
-    # for the same reason the session-limit gate is skipped for bootstrap logins.
-    # Without this, the sign-up -> OIDC resume handoff fails with 429.
-    return if bootstrap_actor || skip_login_cooldown
 
-    fk =
-      if resource.is_a?(::Client)
-        :user_id
-      elsif resource.is_a?(::Visitor)
-        :visitor_id
-      else
-        :staff_id
-      end
     latest_at =
-      token_record_connection_owner.connected_to(role: :reading) {
-        token_class.where(fk => resource.id).order(created_at: :desc).pick(:created_at)
-      }
+      token_record_connection_owner.connected_to(role: :writing) do
+        token_class.where(resource_foreign_key => resource.id)
+          .where.not(root_login_established_at: nil)
+          .maximum(:root_login_established_at)
+      end
+    return if latest_at.nil?
 
-    raise LoginCooldownError if latest_at && latest_at > cooldown.ago
+    raise LoginCooldownError if latest_at + cooldown > token_class.database_now
   end
 
+  # A cooldown refusal is not a dead end: it says where a new sign-in starts.
+  # It must not disclose that the account exists or when it last signed in, so
+  # the message is generic and Retry-After is always the full window, never
+  # the time remaining since the previous login. The used callback or ceremony
+  # result is not a retry path; the restart begins a new admission and ceremony.
   def render_login_cooldown
-    render plain: LOGIN_COOLDOWN_MESSAGE, status: :too_many_requests
+    response.set_header("Retry-After", AuthenticationBase.login_cooldown.to_i.to_s)
+    response.set_header("Cache-Control", "no-store")
+    message = I18n.t("errors.messages.login_cooldown_retry", restart_url: login_cooldown_restart_url)
+    render plain: message, status: :too_many_requests
   end
 
-  # Determine concurrent-session handling state for the resource.
-  def session_limit_state_for(resource)
-    max_sessions = max_sessions_for_resource(resource)
-    active_count = count_active_sessions(resource)
+  # Concurrent-session state for the actor. A full limit is never answered with
+  # a session-limit placeholder: the attempt stays pending in its sign-in flow or
+  # resolution transaction until the limit is resolved and the final issuance
+  # boundary re-counts under the actor lock.
+  def session_limit_state_for(resource, now: nil)
+    count = count_active_sessions(resource, now: now)
+    max = max_sessions_for_resource(resource)
+    return :within_limit if count < max
+    return :over_limit if count > max
 
-    return :within_limit if active_count < max_sessions
-    return :hard_reject if restricted_session_exists?(resource)
-
-    :issue_restricted
+    :at_limit
   end
 
   # Returns the maximum allowed concurrent sessions for a resource
@@ -2552,63 +3113,40 @@ module AuthenticationBase
     end
   end
 
-  # Count active (non-revoked, non-restricted) sessions for a resource
-  def count_active_sessions(resource)
+  # Count active sessions for a resource; historical status 103 rows are not active.
+  def count_active_sessions(resource, now: nil)
+    decision_time = now || token_class_for_resource(resource).database_now
     token_record_connection_owner(token_class_for_resource(resource)).connected_to(role: :writing) do
       if resource.is_a?(::Client)
-        ::ClientToken.active_status.where(user_id: resource.id).count
+        ::ClientToken.active_status(decision_time).joins(:device_session)
+          .where(user_id: resource.id, client_device_sessions: { status_id: ClientDeviceSession::STATUS_ACTIVE,
+                                                                 revoked_at: nil, },)
+          .count
       elsif resource.is_a?(::Operator)
-        ::OperatorToken.active_status.where(staff_id: resource.id).count
+        ::OperatorToken.active_status(decision_time).joins(:device_session)
+          .where(staff_id: resource.id, operator_device_sessions: { status_id: OperatorDeviceSession::STATUS_ACTIVE,
+                                                                    revoked_at: nil, },)
+          .count
       elsif resource.is_a?(::Visitor)
-        ::VisitorToken.active_status.where(visitor_id: resource.id).count
+        ::VisitorToken.active_status(decision_time).joins(:device_session)
+          .where(visitor_id: resource.id, visitor_device_sessions: { status_id: VisitorDeviceSession::STATUS_ACTIVE,
+                                                                     revoked_at: nil, },)
+          .count
       else
         0
       end
     end
   end
 
-  def restricted_session_exists?(resource)
-    token_record_connection_owner(token_class_for_resource(resource)).connected_to(role: :writing) do
-      scope = find_restricted_sessions_scope(resource)
-      scope.present? && scope.exists?
-    end
-  end
-
-  def find_restricted_sessions_scope(resource)
-    if resource.is_a?(::Client)
-      ::ClientToken.restricted_status.where(user_id: resource.id)
-    elsif resource.is_a?(::Operator)
-      ::OperatorToken.restricted_status.where(staff_id: resource.id)
-    elsif resource.is_a?(::Visitor)
-      ::VisitorToken.restricted_status.where(visitor_id: resource.id)
-    end
-  end
-
-  def restricted_session_expires_at
-    ttl = token_class.const_defined?(:RESTRICTED_TTL) ? token_class::RESTRICTED_TTL : RESTRICTED_SESSION_TTL
-    Time.current + ttl
-  end
-
   def scheduled_login_token_attributes(now: Time.current)
     return {} unless %w(operator visitor).include?(resource_type)
 
     ttl_class = (resource_type == "visitor") ? VisitorToken : OperatorToken
-    discarded_at = now + ttl_class::LOGIN_SESSION_TTL
+    discard_at = now + ttl_class::LOGIN_SESSION_TTL
     {
-      discarded_at: discarded_at,
-      purged_at: discarded_at + ttl_class::DELETION_GRACE_PERIOD,
+      discard_at: discard_at,
+      purge_eligible_at: discard_at + ttl_class::DELETION_GRACE_PERIOD,
     }
-  end
-
-  # Store the pending login resource ID for session management
-  def store_pending_login_resource(resource)
-    if resource.is_a?(::Client)
-      session[:pending_login_user_id] = resource.id
-    elsif resource.is_a?(::Operator)
-      session[:pending_login_staff_id] = resource.id
-    elsif resource.is_a?(::Visitor)
-      session[:pending_login_visitor_id] = resource.id
-    end
   end
 
   def concurrent_session_limit_validation_error?(exception)
@@ -2632,6 +3170,88 @@ module AuthenticationBase
     @current_session = token_record_connection_owner.connected_to(role: :writing, &find_logic)
   end
 
+  # A cross-store OIDC retry may already have committed the Base Browser
+  # Session before the authorization-code response was delivered. Reissue the
+  # credentials from that same root token instead of calling log_in again and
+  # creating a second Browser Session. The token row remains the credential
+  # authority; no raw refresh token is reconstructed from persistence.
+  def reissue_login_credentials_for_existing_session(resource:, token_record:, token_kind_id: "BROWSER_WEB",
+                                                     authentication_event_at: nil)
+    return { status: :login_forbidden } unless resource&.active?
+
+    token_model = token_class_for_resource(resource)
+    issuance = rotate_existing_session_credentials(
+      resource: resource,
+      token_record: token_record,
+      token_model: token_model,
+      token_kind_id: token_kind_id,
+      authentication_event_at: authentication_event_at,
+    )
+    return { status: :login_failed } unless issuance
+
+    install_reissued_login_credentials(resource, issuance)
+  end
+
+  def rotate_existing_session_credentials(
+    resource:, token_record:, token_model:, token_kind_id:, authentication_event_at:
+  )
+    token_record_connection_owner(token_model).connected_to(role: :writing) do
+      token_model.transaction do
+        lookup = { public_id: token_record.public_id }
+        lookup[resource_foreign_key] = resource.id
+        locked = token_model.lock.find_by(lookup)
+        next nil unless locked&.active_status?
+
+        now = token_model.database_now
+        refresh_plain = locked.rotate_refresh_token!(now: now)
+        access_expires_at = access_token_expires_at_for(locked, now: now)
+        access_token = encode_login_access_token(
+          resource,
+          locked,
+          token_kind_id: token_kind_id,
+          dpop_jkt: token_record_attribute(locked, :dpop_jkt),
+          access_expires_at: access_expires_at,
+          authentication_event_at: authentication_event_at,
+        )
+        {
+          token: locked,
+          access_token: access_token,
+          refresh_token: refresh_plain,
+          access_expires_at: access_expires_at,
+          now: now,
+        }
+      end
+    end
+  end
+
+  def install_reissued_login_credentials(resource, issuance)
+    oidc_rp_session_state = preserved_oidc_rp_session_state
+    reset_session
+    restore_oidc_rp_session_state!(oidc_rp_session_state)
+    clear_previous_login_cookies!
+
+    @current_resource = resource
+    @current_session = issuance.fetch(:token)
+    @current_session_public_id = token_session_public_id(@current_session)
+    set_login_auth_cookies(
+      @current_session,
+      issuance.fetch(:access_token),
+      issuance.fetch(:refresh_token),
+      issuance.fetch(:access_expires_at),
+    )
+    issue_dbsc_registration_header_for(@current_session)
+    populate_current_attributes!(resource, nil)
+    @_current_resource_resolved = true
+
+    login_success_payload(
+      @current_session,
+      issuance.fetch(:access_token),
+      issuance.fetch(:refresh_token),
+      issuance.fetch(:access_expires_at),
+      issuance.fetch(:now),
+    )
+  end
+
   def token_class_for_resource(resource)
     if resource.is_a?(::Client)
       ::ClientToken
@@ -2641,6 +3261,15 @@ module AuthenticationBase
       ::VisitorToken
     else
       token_class
+    end
+  end
+
+  def find_browser_session_for_oidc(resource, public_id)
+    token_model = token_class_for_resource(resource)
+    token_record_connection_owner(token_model).connected_to(role: :writing) do
+      lookup = { public_id: public_id }
+      lookup[resource_foreign_key] = resource.id
+      token_model.active_status.find_by(lookup)
     end
   end
 
@@ -2655,26 +3284,11 @@ module AuthenticationBase
     device_bound_token = find_token_record_by_device_session_identifier(session_identifier)
     return device_bound_token if device_bound_token
 
-    scope = token_class.includes(:device_session).where(public_id: session_identifier)
+    scope = token_class.active_status.includes(:device_session).where(public_id: session_identifier)
     if token_record_column?("oidc_sid") && uuid_identifier?(session_identifier)
-      scope = scope.or(token_class.includes(:device_session).where(oidc_sid: session_identifier))
+      scope = scope.or(token_class.active_status.includes(:device_session).where(oidc_sid: session_identifier))
     end
     scope.first
-  end
-
-  # Check if the current session is restricted
-  def current_session_restricted?
-    actor_authn = Actor.authn if defined?(Actor)
-    return actor_authn.restricted? if actor_authn&.signed_in?
-
-    current_session&.restricted?
-  end
-
-  def current_session_restricted_for_authn
-    return @current_session.restricted? if defined?(@current_session) && @current_session.present?
-    return false if @current_session_public_id.blank?
-
-    find_token_record_by_session_identifier(@current_session_public_id)&.restricted?
   end
 
   def actor_current_resource
@@ -2714,7 +3328,7 @@ module AuthenticationBase
   def dbsc_cookie_expires_at_for(token_record, now: Time.current)
     return unless token_record&.binding_method_dbsc?
 
-    [now + DBSC_COOKIE_TTL, token_record.discarded_at].compact.min
+    [now + DBSC_COOKIE_TTL, token_record.discard_at].compact.min
   end
 
   def issue_dbsc_registration_header_for(token_record)
@@ -2748,10 +3362,9 @@ module AuthenticationBase
   end
 
   def transparent_refresh_allowed?
-    return false unless respond_to?(:request, true) && request.present?
-    return false unless request.get? || request.head?
-
-    request.format.html?
+    # GET and HEAD navigation must not rotate an authentication credential or update a session.
+    # Refresh remains available only through its explicit POST protocol endpoint.
+    false
   end
 
   def best_effort_refresh_side_effect
@@ -2832,7 +3445,7 @@ module AuthenticationBase
 
   def token_expiry_column(klass)
     return :expired_at if klass.column_names.include?("expired_at")
-    return :discarded_at if klass.column_names.include?("discarded_at")
+    return :discard_at if klass.column_names.include?("discard_at")
     return :revoked_at if klass.column_names.include?("revoked_at")
 
     raise ArgumentError, "#{klass.name} does not have expired_at/revoked_at column"
@@ -2847,14 +3460,14 @@ module AuthenticationBase
   end
 
   def refresh_cookie_expires_at_for(token_record)
-    [token_record_expiry_at(token_record), token_record&.discarded_at].compact.min
+    [token_record_expiry_at(token_record), token_record&.discard_at].compact.min
   end
 
   def token_record_expiry_at(token_record)
     return unless token_record
     return token_record.revoked_at if token_record.respond_to?(:revoked_at)
 
-    token_record.discarded_at if token_record.respond_to?(:discarded_at)
+    token_record.discard_at if token_record.respond_to?(:discard_at)
   end
 
   def expires_in_for(expires_at, now: Time.current)
@@ -2904,10 +3517,6 @@ module AuthenticationBase
     safe_internal_path(candidate)
   end
 
-  def resolve_mfa_return_to(raw_value)
-    resolve_mfa_pt(raw_value)
-  end
-
   def decode_base64_urlsafe(value)
     Base64.urlsafe_decode64(value.to_s)
   rescue ArgumentError
@@ -2915,15 +3524,24 @@ module AuthenticationBase
   end
 
   def mfa_entry_path(ri: nil)
+    attrs = { ri: ri, **sign_in_mfa_binding_params }
     if respond_to?(:sign_app_sign_in_challenge_path, true)
-      sign_app_sign_in_challenge_path(ri: ri)
+      sign_app_sign_in_challenge_path(**attrs)
     elsif respond_to?(:sign_org_sign_in_challenge_path, true)
-      sign_org_sign_in_challenge_path(ri: ri)
+      sign_org_sign_in_challenge_path(**attrs)
+    elsif respond_to?(:auth_com_sign_in_challenge_path, true)
+      auth_com_sign_in_challenge_path(**attrs)
     else
-      "/sign/in/challenge"
+      query = attrs.compact.to_query
+      query.present? ? "/sign/in/challenge?#{query}" : "/sign/in/challenge"
     end
-  rescue StandardError
-    "/sign/in/challenge"
+  end
+
+  def sign_in_mfa_binding_params
+    cycle = current_db_sign_in_flow_for_sequence
+    return {} unless cycle
+
+    sign_in_flow_binding_params(cycle, phase: "MFA_PENDING")
   end
 
   def handle_auth_required_json(options)
@@ -2940,19 +3558,30 @@ module AuthenticationBase
       return redirect_to(withdrawal_required_session_entry_path, allow_other_host: false)
     end
 
-    path =
-      if respond_to?(:sign_in_url_with_pt, true)
-        store_authentication_return_target!(request.fullpath) unless respond_to?(
-          :redirect_to_oidc_authorization_url,
-          true,
-        )
-        pt = encoded_pt(request.fullpath) if respond_to?(:encoded_pt, true)
-        sign_in_url_with_pt(pt)
-      elsif main_app.respond_to?(:sign_in_path)
-        main_app.sign_in_path
-      else
-        "/sign/in"
-      end
+    # Presence flags only: they separate an access credential the browser stopped sending from a
+    # refused one, without recording either credential.
+    Rails.logger.info(
+      JitLogEvent.format(
+        "auth.session.authentication_required",
+        occurred_at: Time.current.utc.iso8601(3),
+        request_id: request.request_id,
+        controller: self.class.name,
+        action: action_name,
+        failure_reason: @current_authentication_failure_reason,
+        access_credential_presented: request.cookies.key?(ACCESS_COOKIE_KEY),
+        refresh_credential_presented: request.cookies.key?(REFRESH_COOKIE_KEY),
+        # Strict credentials are withheld on a cross-site navigation; this tells that case apart.
+        fetch_site: request.headers["Sec-Fetch-Site"].presence_in(%w(same-origin same-site cross-site none)),
+      ),
+    )
+    # sign_in_url_with_pt is part of this concern's contract (declared abstract above), so every
+    # including controller answers it.
+    store_authentication_return_target!(request.fullpath) unless respond_to?(
+      :redirect_to_oidc_authorization_url,
+      true,
+    )
+    pt = encoded_pt(request.fullpath) if respond_to?(:encoded_pt, true)
+    path = sign_in_url_with_pt(pt)
     message = options[:message] || I18n.t("errors.messages.login_required")
     if path.match?(%r{\Ahttps?://}i) && respond_to?(:redirect_to_oidc_authorization_url, true)
       redirect_to_oidc_authorization_url(path, alert: message)
@@ -3002,19 +3631,20 @@ module AuthenticationBase
   end
 
   def handle_guest_only_html(options)
-    path =
-      if respond_to?(:after_login_path, true)
-        after_login_path
-      elsif main_app.respond_to?(:after_login_path)
-        main_app.after_login_path
-      else
-        "/"
-      end
+    path = after_login_path
     message = options[:message] || I18n.t("errors.messages.already_authenticated")
-    redirect_to(path, allow_other_host: after_login_allows_other_host?, alert: message)
+    redirect_to_surface_url(path, alert: message)
   end
 
   def after_login_allows_other_host?
     false
   end
+
+  private :check_totp_requirement_before_session_rotation, :resource_connection_owner,
+          :preserved_oidc_rp_session_state, :restore_oidc_rp_session_state!, :store_authentication_return_target!,
+          :commit_login_session!, :commit_login_session_in_ticket_transaction!, :with_sign_in_flow_issuance_lock,
+          :write_secret_sign_in_receipt!,
+          :lock_sign_in_flow_for_issuance!, :advance_sign_in_flow_to_issuance!, :complete_sign_in_flow_issuance!,
+          :bind_committed_login!, :apply_committed_login!
 end
+# rubocop:enable Rails/SkipsModelValidations

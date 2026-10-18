@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preferences
@@ -8,10 +10,10 @@
 #  dbsc_challenge           :text
 #  dbsc_challenge_issued_at :datetime
 #  dbsc_public_key          :jsonb
-#  discarded_at             :datetime         default(Infinity), not null
+#  discard_at             :datetime         default(Infinity), not null
 #  explicit_fields          :jsonb            not null
 #  jti                      :string
-#  purged_at                :datetime         default(Infinity), not null
+#  purge_eligible_at                :datetime         default(Infinity), not null
 #  token_digest             :binary
 #  used_at                  :datetime
 #  created_at               :datetime         not null
@@ -30,7 +32,7 @@
 #  index_org_preferences_on_dbsc_status_id     (dbsc_status_id)
 #  index_org_preferences_on_jti                (jti) UNIQUE
 #  index_org_preferences_on_public_id          (public_id) UNIQUE
-#  index_org_preferences_on_purged_at          (purged_at)
+#  index_org_preferences_on_purge_eligible_at          (purge_eligible_at)
 #  index_org_preferences_on_replaced_by_id     (replaced_by_id)
 #  index_org_preferences_on_status_id          (status_id)
 #  index_org_preferences_on_token_digest       (token_digest)
@@ -44,11 +46,15 @@
 #  fk_rails_...                             (replaced_by_id => org_preferences.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
-
 require "test_helper"
 
 class OrgPreferenceTest < ActiveSupport::TestCase
+  PREFERENCE_CHILD_ASSOCIATIONS = %i(org_preference_cookie org_preference_region org_preference_timezone
+                                     org_preference_language org_preference_theme org_preference_currency
+                                     org_preference_date_format org_preference_time_format org_preference_motion
+                                     org_preference_density org_preference_page_size org_preference_adult_content_gate
+                                     org_preference_chronicles replacements).freeze
+
   setup do
     OrgPreferenceStatus.find_or_create_by!(id: OrgPreferenceStatus::NOTHING)
   end
@@ -61,7 +67,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
   end
 
   test "validates public_id maximum length" do
-    preference = OrgPreference.new(public_id: "a" * 22)
+    preference = OrgPreference.new(public_id: "a" * 26)
 
     assert_not preference.valid?
     assert preference.errors.of_kind?(:public_id, :too_long)
@@ -76,15 +82,20 @@ class OrgPreferenceTest < ActiveSupport::TestCase
 
   test "has one org_preference_cookie" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_cookie).find(preference.id)
     cookie = preference.create_org_preference_cookie!
 
-    assert_equal cookie, preference.org_preference_cookie
+    loaded_preference = OrgPreference.includes(:org_preference_cookie).find(preference.id)
+
+    assert_equal cookie, loaded_preference.org_preference_cookie
   end
 
   test "destroys org_preference_cookie when destroyed" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_cookie).find(preference.id)
     cookie = preference.create_org_preference_cookie!
     cookie_id = cookie.id
+    preference = OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil OrgPreferenceCookie.find_by(id: cookie_id)
@@ -92,15 +103,20 @@ class OrgPreferenceTest < ActiveSupport::TestCase
 
   test "has one org_preference_region" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_region).find(preference.id)
     region = preference.create_org_preference_region!
 
-    assert_equal region, preference.org_preference_region
+    loaded_preference = OrgPreference.includes(:org_preference_region).find(preference.id)
+
+    assert_equal region, loaded_preference.org_preference_region
   end
 
   test "destroys org_preference_region when destroyed" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_region).find(preference.id)
     region = preference.create_org_preference_region!
     region_id = region.id
+    preference = OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil OrgPreferenceRegion.find_by(id: region_id)
@@ -108,15 +124,20 @@ class OrgPreferenceTest < ActiveSupport::TestCase
 
   test "has one org_preference_timezone" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_timezone).find(preference.id)
     timezone = preference.create_org_preference_timezone!
 
-    assert_equal timezone, preference.org_preference_timezone
+    loaded_preference = OrgPreference.includes(:org_preference_timezone).find(preference.id)
+
+    assert_equal timezone, loaded_preference.org_preference_timezone
   end
 
   test "destroys org_preference_timezone when destroyed" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_timezone).find(preference.id)
     timezone = preference.create_org_preference_timezone!
     timezone_id = timezone.id
+    preference = OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil OrgPreferenceTimezone.find_by(id: timezone_id)
@@ -124,15 +145,20 @@ class OrgPreferenceTest < ActiveSupport::TestCase
 
   test "has one org_preference_language" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_language).find(preference.id)
     language = preference.create_org_preference_language!
 
-    assert_equal language, preference.org_preference_language
+    loaded_preference = OrgPreference.includes(:org_preference_language).find(preference.id)
+
+    assert_equal language, loaded_preference.org_preference_language
   end
 
   test "destroys org_preference_language when destroyed" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_language).find(preference.id)
     language = preference.create_org_preference_language!
     language_id = language.id
+    preference = OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil OrgPreferenceLanguage.find_by(id: language_id)
@@ -140,15 +166,20 @@ class OrgPreferenceTest < ActiveSupport::TestCase
 
   test "has one org_preference_theme" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_theme).find(preference.id)
     theme = preference.create_org_preference_theme!
 
-    assert_equal theme, preference.org_preference_theme
+    loaded_preference = OrgPreference.includes(:org_preference_theme).find(preference.id)
+
+    assert_equal theme, loaded_preference.org_preference_theme
   end
 
   test "destroys org_preference_theme when destroyed" do
     preference = OrgPreference.create!
+    preference = OrgPreference.includes(:org_preference_theme).find(preference.id)
     theme = preference.create_org_preference_theme!
     theme_id = theme.id
+    preference = OrgPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil OrgPreferenceTheme.find_by(id: theme_id)
@@ -158,7 +189,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     digest = OrgPreference.digest_refresh_token("org-consume-once")
     preference = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -175,18 +206,18 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     revoked = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
       token_digest: OrgPreference.digest_refresh_token("org-revoked"),
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     compromised = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
       token_digest: OrgPreference.digest_refresh_token("org-compromised"),
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     expired = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
-      discarded_at: 1.minute.ago,
+      discard_at: 1.minute.ago,
       token_digest: OrgPreference.digest_refresh_token("org-expired"),
       jti: SecureRandom.uuid,
     )
@@ -200,7 +231,7 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     digest = OrgPreference.digest_refresh_token("org-rotate")
     original = OrgPreference.create!(
       status_id: OrgPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )

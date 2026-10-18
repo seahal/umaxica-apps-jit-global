@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: visitor_sign_out_flow_statuses
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id :bigint           not null, primary key
 #
-class VisitorSignOutFlowStatus < ComTicketRecord
+class VisitorSignOutFlowStatus < OpBaseComRecord
   include ReferenceRecord
 
   NOTHING = 0
@@ -18,6 +18,9 @@ class VisitorSignOutFlowStatus < ComTicketRecord
   AWAITING_EXPIRY = 40
   COMPLETED = 100
   FAILED = 900
+  EXPIRED = 910
+  CANCELLED = 920
+  HALTED = 930
   DEFAULTS = [
     NOTHING,
     REQUESTED,
@@ -26,6 +29,9 @@ class VisitorSignOutFlowStatus < ComTicketRecord
     AWAITING_EXPIRY,
     COMPLETED,
     FAILED,
+    EXPIRED,
+    CANCELLED,
+    HALTED,
   ].freeze
 
   has_many :visitor_sign_out_flows,

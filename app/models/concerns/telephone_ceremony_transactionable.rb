@@ -8,7 +8,9 @@ module TelephoneCeremonyTransactionable
   STATUS_CONSUMED = "consumed"
   STATUSES = [STATUS_PENDING, STATUS_CONSUMED].freeze
   RETENTION_PERIOD = 7.days
+  OPERATIONS = %w(registration replacement sign_up sign_in recovery withdrawal credential_registration).freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     # rubocop:disable ThreadSafety/ClassAndModuleAttributes
     class_attribute :ceremony_surface_name, instance_accessor: false
@@ -32,7 +34,7 @@ module TelephoneCeremonyTransactionable
     validates :grant_jti, uniqueness: true
     validates :result_jti, uniqueness: true, allow_nil: true
     validates :surface, inclusion: { in: IdentityTelephoneCeremonyContract::SURFACES }
-    validates :operation, inclusion: { in: IdentityTelephoneCeremonyContract::OPERATIONS }
+    validates :operation, inclusion: { in: OPERATIONS }
     validates :status, inclusion: { in: STATUSES }
     validate :surface_matches_transaction_class
     validate :consumed_transaction_has_result
@@ -47,35 +49,86 @@ module TelephoneCeremonyTransactionable
     def create_transaction!(surface: ceremony_surface, actor_ref:, session_ref:, operation:, transaction_id: nil,
                             grant_jti: nil, telephone_candidate_ref: nil, normalized_number_digest: nil,
                             expires_at: nil, now: Time.current)
+      transaction_id = transaction_id.presence
+      grant_jti = grant_jti.presence
+      generated_attributes = []
+      generated_attributes << :transaction_id if transaction_id.nil?
+      generated_attributes << :grant_jti if grant_jti.nil?
+      retries = 0
+
       connection_owner.connected_to(role: :writing) do
-        create!(
-          transaction_id: transaction_id.presence || SecureRandom.uuid,
-          surface: surface.to_s,
-          actor_ref: actor_ref,
-          session_ref: session_ref,
-          operation: operation,
-          grant_jti: grant_jti.presence || SecureRandom.uuid,
-          telephone_candidate_ref: telephone_candidate_ref,
-          normalized_number_digest: normalized_number_digest,
-          expires_at: expires_at || (now + IdentityTelephoneCeremonyTransaction::DEFAULT_TTL),
-          created_at: now,
-          updated_at: now,
-        )
+        loop do
+          generated_transaction_id = transaction_id || PublicId.generate
+          generated_grant_jti = grant_jti || PublicId.generate
+          attributes = telephone_transaction_attributes(
+            transaction_id: generated_transaction_id, surface: surface, actor_ref: actor_ref,
+            session_ref: session_ref, operation: operation, grant_jti: generated_grant_jti,
+            telephone_candidate_ref: telephone_candidate_ref,
+            normalized_number_digest: normalized_number_digest, expires_at: expires_at, now: now,
+          )
+
+          begin
+            return transaction(requires_new: true) { create!(attributes) }
+          rescue ActiveRecord::RecordInvalid => e
+            raise unless generated_reference_collision_validation?(e, generated_attributes)
+          rescue ActiveRecord::RecordNotUnique => e
+            raise unless generated_reference_collision?(e, generated_attributes)
+          end
+
+          retries += 1
+          raise if retries > PublicId::MAX_COLLISION_RETRIES
+        end
       end
     end
 
     def connection_owner
-      if self <= AppTicketRecord
-        AppTicketRecord
-      elsif self <= OrgTicketRecord
-        OrgTicketRecord
-      elsif self <= ComTicketRecord
-        ComTicketRecord
+      if self <= OpBaseAppRecord
+        OpBaseAppRecord
+      elsif self <= OpBaseOrgRecord
+        OpBaseOrgRecord
+      elsif self <= OpBaseComRecord
+        OpBaseComRecord
       else
         ActiveRecord::Base
       end
     end
+
+    private
+
+    def telephone_transaction_attributes(transaction_id:, surface:, actor_ref:, session_ref:, operation:, grant_jti:,
+                                         telephone_candidate_ref:, normalized_number_digest:, expires_at:, now:)
+      {
+        transaction_id: transaction_id,
+        surface: surface.to_s,
+        actor_ref: actor_ref,
+        session_ref: session_ref,
+        operation: operation,
+        grant_jti: grant_jti,
+        telephone_candidate_ref: telephone_candidate_ref,
+        normalized_number_digest: normalized_number_digest,
+        expires_at: expires_at || (now + IdentityTelephoneCeremonyTransaction::DEFAULT_TTL),
+        created_at: now,
+        updated_at: now,
+      }
+    end
+
+    def generated_reference_collision_validation?(error, generated_attributes)
+      generated_attributes.any? { |attribute| error.record.errors.of_kind?(attribute, :taken) }
+    end
+
+    def generated_reference_collision?(error, generated_attributes)
+      result = error.cause&.result
+      return false unless result
+
+      constraint = result.error_field(PG::Result::PG_DIAG_CONSTRAINT_NAME)
+      lease_connection.schema_cache.indexes(table_name).any? do |index|
+        index.name == constraint && index.unique && index.where.nil? && index.columns.one? &&
+          generated_attributes.include?(index.columns.first.to_sym)
+      end
+    end
   end
+
+  public
 
   def grant_claims(now: Time.current)
     {
@@ -97,6 +150,20 @@ module TelephoneCeremonyTransactionable
   end
 
   def consumed? = status == STATUS_CONSUMED
+
+  def consume_registration_result!
+    self.class.connection_owner.connected_to(role: :writing) do
+      with_lock do
+        now = self.class.database_now
+        unless operation == "registration" && status == STATUS_PENDING && !consumed_at && expires_at > now
+          raise IdentityTelephoneCeremony::Error, "registration receipt is unavailable"
+        end
+
+        update!(result_jti: SecureRandom.uuid, consumed_at: now, status: STATUS_CONSUMED)
+        self
+      end
+    end
+  end
 
   def consume_result!(result_jti:, consumed_at: Time.current)
     self.class.connection_owner.connected_to(role: :writing) do

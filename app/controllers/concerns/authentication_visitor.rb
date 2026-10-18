@@ -44,6 +44,15 @@ module AuthenticationVisitor
     ::Visitor
   end
 
+  # Where a new sign-in starts after a login cooldown refusal: the surface's
+  # Base neutral /sign entry, which issues a fresh admission and ceremony.
+  def login_cooldown_restart_url
+    base_com_sign_show_url(
+      host: Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host,
+      protocol: "https",
+    )
+  end
+
   def token_class
     VisitorToken
   end

@@ -4,21 +4,15 @@
 module Base
   module App
     module Oidc
-      class LogoutsController < Base::App::ApplicationController
+      class LogoutsController < Base::App::AuthorityController
         include CommonRedirect
         include ::AuthenticationLogoutable
         include SignOutNotice
         include SignOidcLogout
+        include ::OidcRpLogoutAuthority
         include ::SurfaceInertiaPage
 
         AUTHENTICATION_MODE = :open
-        COORDINATED_LOGOUT_TRUSTED_ORIGINS = JitHostOriginEnv.trusted_origins(
-          ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-          ENV.fetch("PUBLIC_CORE_SERVICE_URL"),
-          ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-          ENV.fetch("PUBLIC_PALM_SERVICE_URL"),
-        ).freeze
-
         # `reject_oidc_logout_challenge!` still renders the shared `auth/shared/sign_outs/unavailable`
         # ERB template, which needs the surface ERB layout; the Inertia shell renders only an Inertia
         # response body.
@@ -26,19 +20,19 @@ module Base
 
         declare_authentication_mode! :open
 
-        protect_from_forgery using: :header_only,
-                             trusted_origins: COORDINATED_LOGOUT_TRUSTED_ORIGINS,
-                             with: :exception,
-                             only: :create,
-                             if: -> { params[:logout_challenge].present? }
-        skip_before_action :transparent_refresh_access_token, raise: false
-        before_action only: :create do
-          verify_coordinated_sign_out_post!(trusted_origins: COORDINATED_LOGOUT_TRUSTED_ORIGINS)
+        def show
+          return show_browser_rp_logout_authority! if browser_rp_logout_challenge?
+
+          handle_oidc_end_session_request
         end
 
         def create
-          show
+          return create_browser_rp_logout_authority! if browser_rp_logout_challenge?
+
+          handle_oidc_end_session_request
         end
+
+        public :create
 
         private
 
@@ -48,7 +42,7 @@ module Base
         end
 
         def oidc_logout_completed_path(ri:, _sot: nil)
-          base_app_sign_out_completion_path(ri: ri)
+          base_app_sign_out_path(ri: ri)
         end
 
         # The ERB template this action rendered was a two-line wrapper around the shared sign-out
@@ -81,9 +75,10 @@ module Base
 
         def sign_out_confirmation_form
           {
-            action: sign_out_post_path,
+            action: request.path,
             submit: t("sign.shared.sign_out.button"),
             logout_challenge: params[:logout_challenge].presence,
+            ri: params[:ri].presence,
             confirm_description: t("sign.shared.sign_out.confirm_description"),
           }
         end

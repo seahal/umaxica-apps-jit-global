@@ -56,7 +56,6 @@ class ActorContextTest < ActiveSupport::TestCase
     assert_predicate Actor.authn, :null?
     assert_nil Actor.authn.login_public_id
     assert_equal [], Actor.authn.amr
-    assert_not Actor.authn.restricted?
     assert_not Actor.authn.verified?
   end
 

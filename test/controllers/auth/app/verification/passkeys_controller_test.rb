@@ -2,360 +2,175 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
-require "base64"
+require "webauthn/fake_client"
 
 class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::IntegrationTest
   fixtures :clients
 
   setup do
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     @user = clients(:one)
-    ClientEmail.create!(
-      user: @user,
-      address: "app-passkey-stepup-#{SecureRandom.hex(4)}@example.com",
-      user_email_status_id: ClientEmailStatus::VERIFIED,
+    @token = ClientToken.create!(user: @user)
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    @fake = WebAuthn::FakeClient.new("https://#{@host}", encoding: :base64url)
+    registration = @fake.create(challenge: SecureRandom.urlsafe_base64(32), user_verified: true)
+    relying_party = WebAuthn::RelyingParty.new(
+      id: @host, allowed_origins: [@fake.origin], encoding: :base64url,
     )
-    @headers = as_user_headers(@user, host: @host)
-    @token = ClientToken.find_by!(public_id: @headers["X-TEST-SESSION-PUBLIC-ID"])
-    @user.client_passkeys.create!(
-      description: "Test passkey",
-      webauthn_id: "test",
-      public_key: "public_key",
-      sign_count: 0,
-      status_id: ClientPasskeyStatus::ACTIVE,
+    credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
+    @passkey = @user.client_passkeys.create!(
+      webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0,
     )
-    @step_up_return_to = "/settings/emails?ri=jp"
-    @step_up_pt = ActiveSupport::MessageVerifier.new(
-      Rails.application.key_generator.generate_key("path_target_token", 32),
-      digest: "SHA256", serializer: JSON, url_safe: true,
-    ).generate(
-      {
-        "flow" => "step_up.bootstrap",
-        "surface" => "app",
-        "session_nonce" => @token.public_id.to_s,
-        "pt" => @step_up_return_to,
-      },
-      purpose: :path_target,
-      expires_in: 15.minutes,
+    requirement = StepUpRequirement.new(
+      step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
+      phishing_resistant_required: false, user_verification_required: false,
+      full_reauthentication_required: false, ttl: 15.minutes,
+      session_binding: @token.public_id, token_binding: @token.public_id,
+      purpose: "step_up", audience: "step_up:app", require_session_binding: true,
+      actor_ref: @user.public_id, resource_ref: nil, tenant_ref: nil,
     )
+    @issuance = BaseStepUpAdmissionIssuer.call!(
+      actor: @user, token: @token, requirement: requirement, return_to: "/identity/birthdate?ri=jp",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: @token,
+    )
+    @ticket = ClientStepUpSession.find_by!(step_up_ceremony_transaction_ref: @issuance.transaction.transaction_id)
+    https!
+    host! @host
+    get auth_app_verification_path(ri: "jp", entry_ref: @issuance.reference)
+    @csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_ceremony_bindings_path(ri: "jp"), params: {
+      entry_ref: @issuance.reference, authenticity_token: @csrf,
+    }
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: @issuance.reference)
+    binding.confirm_base!(
+      base_token: @token,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: @issuance.reference, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      ),
+    )
+    post auth_app_verification_path(ri: "jp"), params: {
+      entry_ref: @issuance.reference, authenticity_token: @csrf,
+    }
+    TurnstileVerifierStub.enabled = true
+    TurnstileVerifierStub.response = { "success" => true }
   end
 
-  test "creates verification on success" do
-    return_to = Base64.urlsafe_encode64("/settings/emails?ri=jp")
-
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      WebAuthn::Credential.stub(:options_for_get, OpenStruct.new(id: "test")) do
-        verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
-        Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-          get auth_app_verification_url(scope: "settings_email", return_to: return_to, ri: "jp"),
-              headers: @headers
-
-          assert_response :success
-
-          get new_auth_app_verification_passkey_url(
-            ri: "jp",
-            scope: "settings_email",
-            return_to: return_to,
-          ), headers: @headers
-
-          assert_response :redirect
-          assert_redirected_to auth_app_settings_url(ri: "jp")
-        end
-      end
-    end
+  teardown do
+    TurnstileVerifierStub.enabled = false
+    TurnstileVerifierStub.response = nil
   end
 
-  test "new renders the passkey step-up page with a bound challenge" do
-    grant = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "app",
-      actor_ref: @user.public_id,
-      session_ref: @token.public_id,
-      required_scope: "settings_email",
-      required_aal: "aal2",
-      allowed_methods: %i(passkey),
-      return_to: @step_up_return_to,
-      expires_at: 15.minutes.from_now,
-    ).grant
-
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      WebAuthn::Credential.stub(:options_for_get, OpenStruct.new(id: "test")) do
-        get auth_app_verification_url(
-          scope: "settings_email", pt: @step_up_pt, ri: "jp", step_up_ceremony_grant: grant,
-        ), headers: @headers
-
-        assert_response :success
-
-        get new_auth_app_verification_passkey_url(
-          ri: "jp", scope: "settings_email", pt: @step_up_pt,
-        ), headers: @headers
-      end
-    end
+  test "a real assertion records admitted evidence without granting Base freshness or Auth root cookies" do
+    post auth_app_verification_passkey_options_path(ri: "jp"),
+         params: { "cf-turnstile-response" => "test-only" }, headers: { "X-CSRF-Token" => @csrf }, as: :json
 
     assert_response :success
-    assert_equal "auth/app/verification/passkeys/new", inertia_component
-    assert_predicate inertia_props.fetch("form").fetch("challenge_id"), :present?
+    options = response.parsed_body
+    assertion = @fake.get(challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 1)
+    post auth_app_verification_passkey_path(ri: "jp"),
+         params: { credential: assertion, challenge_id: options.fetch("challenge_id") },
+         headers: { "X-CSRF-Token" => @csrf }, as: :json
+
+    assert_response :success
+    assert_equal "ok", response.parsed_body.fetch("status")
+    assert_equal "verified", @issuance.transaction.reload.status
+    assert_equal @passkey.public_id, @issuance.transaction.verified_credential_ref
+    assert_equal "settings_birthdate", @issuance.transaction.required_scope
+    assert_nil @token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
   end
 
-  test "a rejected assertion re-renders the passkey step-up page without granting freshness" do
-    grant = IdentityStepUpCeremonyGrantIssuer.issue!(
-      surface: "app",
-      actor_ref: @user.public_id,
-      session_ref: @token.public_id,
-      required_scope: "settings_email",
-      required_aal: "aal2",
-      allowed_methods: %i(passkey),
-      return_to: @step_up_return_to,
-      expires_at: 15.minutes.from_now,
-    ).grant
+  test "cancel issues an exact cancellation handoff to the fixed Base receiver" do
+    post auth_app_verification_cancellation_path(ri: "jp"),
+         params: { return_to: "/sign/in/challenge", pt: "/identity/birthdate" },
+         headers: { "X-CSRF-Token" => @csrf }
 
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      WebAuthn::Credential.stub(:options_for_get, OpenStruct.new(id: "test")) do
-        get auth_app_verification_url(
-          scope: "settings_email", pt: @step_up_pt, ri: "jp", step_up_ceremony_grant: grant,
-        ), headers: @headers
-        get new_auth_app_verification_passkey_url(
-          ri: "jp", scope: "settings_email", pt: @step_up_pt,
-        ), headers: @headers
-        challenge_id = inertia_props.fetch("form").fetch("challenge_id")
+    assert_response :see_other
+    gateway = URI.parse(response.location)
+    params = Rack::Utils.parse_nested_query(gateway.query)
 
-        Webauthn::AssertionVerifier.stub(
-          :verify!, ->(**_kwargs) { raise Webauthn::AssertionVerifier::VerificationError, "rejected" },
-        ) do
-          post auth_app_verification_passkey_url(ri: "jp", scope: "settings_email", pt: @step_up_pt), params: {
-            challenge_id: challenge_id,
-            credential: {
-              id: "test",
-              rawId: "test",
-              type: "public-key",
-              response: { clientDataJSON: "e30=", authenticatorData: "e30=", signature: "sig" },
-            },
-          }, headers: @headers
-        end
-      end
+    assert_equal base_app_verification_cancellation_path, gateway.path
+    assert_equal @issuance.transaction.transaction_id, params.fetch("transaction_ref")
+    assert_not params.key?("cancellation_handoff")
+    assert_predicate params.fetch("cancellation_ref"), :present?
+    assert_equal "pending", @issuance.transaction.reload.status
+    assert_nil @token.reload.last_step_up_at
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+  end
+
+  test "GET renders the existing panel without issuing a challenge or extending the transaction" do
+    deadline = @issuance.transaction.expires_at
+    attempts = @ticket.attempt_count
+    2.times do
+      get new_auth_app_verification_passkey_path(ri: "jp")
+
+      assert_response :success
+      props = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text).fetch("props")
+
+      assert_equal auth_app_verification_passkey_options_path(ri: "jp"), props.fetch("panel").fetch("options_url")
+      assert_equal auth_app_verification_passkey_path(ri: "jp"), props.fetch("panel").fetch("verification_url")
+      assert_equal auth_app_verification_path(ri: "jp"), props.fetch("back").fetch("href")
+      assert_equal "post", props.fetch("cancel").fetch("method")
+      assert_nil @ticket.reload.passkey_challenge_ref
+      assert_equal attempts, @ticket.attempt_count
+      assert_equal deadline, @issuance.transaction.reload.expires_at
     end
+  end
 
-    assert_response :unprocessable_content
+  test "invalid assertion consumes the challenge and cannot create freshness on replay" do
+    post auth_app_verification_passkey_options_path(ri: "jp"),
+         params: { "cf-turnstile-response" => "test-only" }, headers: { "X-CSRF-Token" => @csrf }, as: :json
+    options = response.parsed_body
+    assertion = @fake.get(challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 1)
+    assertion.fetch("response")["signature"] = Base64.urlsafe_encode64("invalid-signature", padding: false)
+    2.times do
+      post auth_app_verification_passkey_path(ri: "jp"),
+           params: { credential: assertion, challenge_id: options.fetch("challenge_id") },
+           headers: { "X-CSRF-Token" => @csrf }, as: :json
+
+      assert_response :unprocessable_content
+      assert_equal "pending", @issuance.transaction.reload.status
+      assert_not_nil @ticket.reload.passkey_challenge_consumed_at
+      assert_nil @token.reload.last_step_up_at
+    end
+  end
+
+  test "query scope and return target cannot replace the admitted transaction" do
+    get new_auth_app_verification_passkey_path(
+      ri: "jp", scope: "settings_email", return_to: "/identity/emails", pt: "/settings/passkeys/new",
+    )
+
+    assert_response :success
+    assert_equal "settings_birthdate", @issuance.transaction.reload.required_scope
+    assert_equal "/identity/birthdate?ri=jp", @issuance.transaction.return_to
+    assert_nil @ticket.reload.passkey_challenge_ref
     assert_nil @token.reload.last_step_up_at
   end
 
-  test "new keeps scope and return_to in form hidden fields" do
-    return_to = Base64.urlsafe_encode64("/settings/emails?ri=jp")
-
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      WebAuthn::Credential.stub(:options_for_get, OpenStruct.new(id: "test")) do
-        get auth_app_verification_url(scope: "settings_email", return_to: return_to, ri: "jp"),
-            headers: @headers
-
-        assert_response :success
-
-        get new_auth_app_verification_passkey_url(
-          ri: "jp",
-          scope: "settings_email",
-          return_to: return_to,
-        ), headers: @headers
-
-        assert_response :redirect
-        assert_redirected_to auth_app_settings_url(ri: "jp")
-      end
-    end
-  end
-
-  test "new keeps scope and pt in form hidden fields" do
-    return_to = Base64.urlsafe_encode64(new_auth_app_settings_passkey_path(ri: "jp"))
-
-    StepUpAvailableMethods.stub(:call, [:passkey]) do
-      WebAuthn::Credential.stub(:options_for_get, OpenStruct.new(id: "test")) do
-        get auth_app_verification_url(scope: "settings_passkey", return_to: return_to, ri: "jp"),
-            headers: @headers
-
-        assert_response :success
-        assert_equal "auth/app/verifications/show", inertia_component
-        assert(
-          inertia_props.fetch("methods").any? do |method|
-            method.fetch("href").start_with?(new_auth_app_verification_passkey_path(ri: "jp"))
-          end,
-        )
-
-        get new_auth_app_verification_passkey_url(
-          ri: "jp",
-          scope: "settings_passkey",
-          pt: return_to,
-        ), headers: @headers
-
-        assert_response :redirect
-        assert_redirected_to auth_app_settings_url(ri: "jp")
-      end
-    end
-  end
-
-  private
-
-  def passkey_credential_stub(id)
-    Struct.new(:id, :sign_count) do
-      define_method(:verify) do |*|
-        true
-      end
-    end.new(id, 1)
-  end
-  private
-
-  def host_headers(host = nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || ENV["DEFAULT_URL_HOST"]
-    headers = {
-      "Client-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    }
-    headers["Host"] = host_value if host_value.present?
-    headers
-  end
-
-  def browser_headers
-    csrf_token = "test_csrf_token"
-    headers = {
-      "Client-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
-                        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      "X-CSRF-Token" => csrf_token,
-    }
-
-    if respond_to?(:cookies, true)
-      cookies["csrf_token"] = csrf_token
-    else
-      headers["Cookie"] = "csrf_token=#{csrf_token}"
-    end
-
-    headers
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-
-    if user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-      token =
-        if session_public_id.present?
-          ClientToken.find_by(public_id: session_public_id)
-        else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-        end
-      token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
+  test "an unrelated Auth browser cannot start a ceremony using scope or old grant parameters" do
+    other_browser = open_session
+    other_browser.https!
+    other_browser.host!(@host)
+    assert_no_difference ["ClientStepUpCeremonyTransaction.count", "ClientStepUpSession.count"] do
+      other_browser.get(
+        auth_app_verification_path(ri: "jp"),
+        params: { scope: "settings_email", return_to: "/identity/emails", step_up_ceremony_grant: "obsolete-grant" },
       )
-    else
-      base
-    end
-  end
 
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-
-    if staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-      token =
-        if session_public_id.present?
-          OperatorToken.find_by(public_id: session_public_id)
-        else
-          OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
+      assert_equal 400, other_browser.response.status
+      other_browser.get(
+        new_auth_app_verification_passkey_path(
+          ri: "jp", scope: "settings_passkey",
+          pt: "/identity/passkeys",
+        ),
       )
-    else
-      base
-    end
-  end
 
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    VisitorTokenBindingMethod.ensure_defaults! if defined?(VisitorTokenBindingMethod)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB) if defined?(VisitorTokenKind)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-
-    if visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-      token =
-        if session_public_id.present?
-          VisitorToken.find_by(public_id: session_public_id)
-        else
-          VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= VisitorToken.create!(visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
+      assert_equal 400, other_browser.response.status
     end
 
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def bearer_headers(token, host: nil, headers: {})
-    host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
-  end
-end
-
-# DAMP auth header helpers for this test class.
-class Auth::App::Verification::PasskeysControllerTest
-  private
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
-  def jwt_issuer_id_for_test_host(host, resource_type)
-    normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
-    surface =
-      if service == "SIGN"
-        case resource_type
-        when "operator" then "ORG"
-        when "visitor" then "COM"
-        else "APP"
-        end
-      elsif normalized.include?(".org") || normalized.include?("org.")
-        "ORG"
-      elsif normalized.include?(".com") || normalized.include?("com.")
-        "COM"
-      else
-        "APP"
-      end
-    "surface:#{service}_#{surface}"
+    assert_equal "pending", @issuance.transaction.reload.status
+    assert_nil @ticket.reload.passkey_challenge_ref
+    assert_nil @token.reload.last_step_up_at
   end
 end

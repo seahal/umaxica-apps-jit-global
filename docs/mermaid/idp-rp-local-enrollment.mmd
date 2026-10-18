@@ -1,0 +1,20 @@
+stateDiagram-v2
+    [*] --> Unseen
+    Unseen --> Enrolled: callback / writer sid anchor then identity and session
+    Unseen --> Tombstoned: logout / writer sid anchor and replay receipt
+    Enrolled --> Expired: fresh writer clock reaches local absolute expiry
+    Enrolled --> Tombstoned: logout / revoke anchor and sessions with receipt
+    Expired --> Enrolled: verified callback / live incoming expiry and enabled principal
+    Expired --> Tombstoned: logout / preserve absorbing anchor
+    Tombstoned --> Tombstoned: duplicate logout / existing committed receipt
+    note right of Unseen
+        Derived timestamps and row existence, not a persisted status enum.
+        Callback refuses expired incoming authority and disabled principals.
+        Missing anchors are inserted then locked on the cell writer.
+        Callback and logout serialize in either commit order.
+    end note
+    note right of Tombstoned
+        Callback refuses this sid permanently.
+        Refresh cannot dispatch or install under this binding.
+        An absent sid is tombstoned before a late callback can enroll it.
+    end note

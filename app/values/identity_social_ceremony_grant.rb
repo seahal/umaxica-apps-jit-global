@@ -21,7 +21,7 @@ class IdentitySocialCeremonyGrant
 
   def self.issue(attributes, issuer_id:, now: Time.current)
     grant = new(attributes.merge(default_claims(attributes, now: now)), now: now)
-    JitSecurityJwtKeyring.encode(grant.payload, issuer_id: issuer_id)
+    JitSecurityJwtKeyring.encode(grant.payload, typ: TOKEN_TYPE, issuer_id: issuer_id)
   end
 
   def self.decode(token, issuer_id:, now: Time.current)
@@ -41,7 +41,15 @@ class IdentitySocialCeremonyGrant
     new(payload, kid: header["kid"], now: now)
   end
 
+  public_class_method :issue, :decode
+
+  public
+
   def [](key) = payload[key.to_s]
+
+  def fetch(key, *, &) = payload.fetch(key.to_s, *, &)
+
+  def expires_at = Time.zone.at(payload.fetch("exp").to_i)
 
   def validate!(now: Time.current)
     IdentitySocialCeremonyContract.validate_common_payload!(
@@ -65,4 +73,6 @@ class IdentitySocialCeremonyGrant
       "iat" => now.to_i,
     }
   end
+
+  public_class_method :default_claims
 end

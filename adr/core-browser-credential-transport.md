@@ -1,5 +1,9 @@
 # Core Browser Credential Transport For jp.umaxica.app
 
+Current naming note (2026-09-25): references to the Rails `Side` surface in this superseded ADR are
+historical; its current internal namespace is `Warp`. External host and protocol identifiers remain
+unchanged.
+
 ## Status
 
 Superseded by `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md` on
@@ -127,4 +131,12 @@ Rejected. Next.js must not hold important credentials.
 
 - `adr/acme-sign-core-base-port-boundary.md`
 - `docs/architecture/acme-sign-core-base-port.md`
-- `plans/active/acme-sign-core-base-port-implementation.md`
+- GH issue #829
+
+## Delivered reconciliation (2026-10-06)
+
+The zero-cookie Core edge decision remains an external deployment prerequisite. Rails Core app/com/org
+requests use the shared Browser RP contract, host-only credentials and the explicit CSRF, Origin and
+Fetch Metadata boundary before unsafe refresh. The edge must strip browser cookies before the
+Next.js/TanStack UI and preserve only the allowlisted Rails response behavior; local Rails tests do
+not claim Cloudflare or real-edge verification.

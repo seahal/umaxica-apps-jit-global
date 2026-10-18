@@ -44,18 +44,6 @@ module Security
       assert_equal :deny_all, UndeclaredController.authentication_mode_for(:index)
     end
 
-    test "runtime access policy enforcement uses authentication mode instead of inherited rules" do
-      controller = UndeclaredController.new
-      controller.define_singleton_method(:action_name) { "index" }
-
-      error =
-        assert_raises(AuthenticationBase::MissingPolicyError) do
-          controller.send(:enforce_access_policy!)
-        end
-
-      assert_match "Denied by default authentication mode", error.message
-    end
-
     test "legacy access policy DSL temporarily maps to authentication mode metadata" do
       assert_equal :private, PrivateController.authentication_mode_for(:show)
     end
@@ -70,6 +58,13 @@ module Security
       assert_equal :deny_all, MixedController.authentication_mode_for(:show)
     end
 
+    test "Base com token refresh is fail-closed by default while create remains explicitly open" do
+      controller = Base::Com::Edge::V0::Token::RefreshesController
+
+      assert_equal :deny_all, controller.authentication_mode_for(:show)
+      assert_equal :open, controller.authentication_mode_for(:create)
+    end
+
     test "surface application controllers default to deny_all" do
       [
         Auth::App::ApplicationController,
@@ -81,9 +76,9 @@ module Security
         Core::App::ApplicationController,
         Core::Com::ApplicationController,
         Core::Org::ApplicationController,
-        Side::App::ApplicationController,
-        Side::Com::ApplicationController,
-        Side::Org::ApplicationController,
+        Warp::App::ApplicationController,
+        Warp::Com::ApplicationController,
+        Warp::Org::ApplicationController,
       ].each do |controller_class|
         assert_equal :deny_all, controller_class.authentication_mode_for(:index), controller_class.name
       end
@@ -147,7 +142,7 @@ module Security
     private
 
     def application_controller_class?(controller_class)
-      controller_class.name.start_with?("Auth::", "Base::", "Core::", "Jump::", "Side::", "Inertia")
+      controller_class.name.start_with?("Auth::", "Base::", "Core::", "Jump::", "Warp::", "Inertia")
     end
   end
 end

@@ -18,6 +18,18 @@ Do not use:
 - `html_safe`, `raw(...)` — never mark untrusted markup as safe.
 - `VERIFY_NONE` — never disable TLS verification.
 
+## No dynamic dispatch in authorization or business code
+
+New business code resolves classes and operations statically: a named class, a fixed constant, or a
+finite `case` whose `else` rejects. Do not add `constantize`, `safe_constantize`, `const_get`,
+`send`/`public_send` to choose an operation, `respond_to?` to guess a capability or a collaborator,
+`method_missing`, `define_method`, `class_eval`, `eval`, or a home-grown DSL, and never derive a
+permission, target class, or method from a class name, controller name, association, or capability
+string. An unknown target or operation is refused, never mapped to a default. Framework internals
+(Rails, Action Policy, `ActiveSupport::Concern`) and existing fixed constants such as
+`TARGET_ACCOUNT_CLASS` are out of scope. Prefer a little duplication to sharing that cannot be
+traced statically.
+
 ## No global or per-request shared state
 
 Do not store request state in:

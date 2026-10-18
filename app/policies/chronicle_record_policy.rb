@@ -29,6 +29,10 @@ class ChronicleRecordPolicy
     "auth.session.revoked" => "compliance",
     "iam.role.assigned" => "compliance",
     "iam.role.revoked" => "compliance",
+    "iam.capability.granted" => "compliance",
+    "iam.capability.revoked" => "compliance",
+    "iam.capability.bootstrapped" => "compliance",
+    "support.session.revoked" => "compliance",
     "account.suspended" => "compliance",
     "account.terminated" => "compliance",
     "chronicle.audit_incomplete" => "compliance",
@@ -48,17 +52,19 @@ class ChronicleRecordPolicy
   ].freeze
 
   class << self
-    def sanitize(value)
+    def sanitize(value, key: nil)
       case value
       when Hash
-        value.each_with_object({}) do |(key, entry), sanitized|
-          next if forbidden_key?(key)
+        value.each_with_object({}) do |(child_key, entry), sanitized|
+          next if forbidden_key?(child_key)
 
-          sanitized[key.to_s] = sanitize(entry)
+          sanitized[child_key.to_s] = sanitize(entry, key: child_key)
         end
       when Array
-        value.map { |entry| sanitize(entry) }
+        value.map { |entry| sanitize(entry, key: key) }
       when String
+        return value if safe_categorical_value?(value, key: key)
+
         sanitize_string(value)
       else
         value
@@ -119,6 +125,10 @@ class ChronicleRecordPolicy
     end
 
     private
+
+    def safe_categorical_value?(value, key:)
+      key.to_s == "reason_code" && value.match?(/\A[a-z][a-z0-9_.-]{0,63}\z/)
+    end
 
     def forbidden_key?(key)
       normalized = key.to_s.downcase

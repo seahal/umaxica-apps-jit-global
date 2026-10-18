@@ -12,136 +12,176 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      MONIKER_MAXLENGTH = 120
       HANDLE_MAXLENGTH = 80
 
-      before_action :authenticate_client!
-
+      # R5-WU14: every Avatar read and write goes to the Avatar owner over HTTPS; this Base Self-RP
+      # page renders the owner's allowlisted answer and makes no Avatar decision itself.
       def index
-        authorize!(Avatar, to: :index?)
-        avatars = switcher.available_avatars
+        result = avatar_result!(avatar_authority.avatars)
+        return unless result
 
         render inertia: true, props: {
           title: "Avatars",
           body: "avatars",
           empty: "None available",
-          entries: avatars.map { |avatar| serialize_avatar_entry(avatar) },
+          entries: result.data.fetch("avatars").map { |avatar| serialize_avatar_entry(avatar) },
+          create_action: create_avatar_action(result.data.fetch("can_create")),
+          up_link: dashboard_up_link,
         }
       end
 
       def show
-        avatar = find_avatar!
-        authorize!(avatar)
+        result = avatar_result!(avatar_authority.avatar(params[:id]))
+        return unless result
 
+        avatar = result.data.fetch("avatar")
         render inertia: true, props: {
           title: "Avatar",
-          moniker: avatar.moniker,
-          handle: avatar.active_handle&.handle,
-          edit: { label: "Edit", href: edit_base_app_avatar_path(avatar.public_id, ri: params[:ri]) },
+          moniker: avatar.fetch("moniker"),
+          up_link: { label: t("actions.up"), href: base_app_avatars_path(ri: params[:ri]) },
+          handle: avatar["handle"],
+          edit: { label: "Edit", href: edit_base_app_avatar_path(avatar.fetch("public_id"), ri: params[:ri]) },
         }
       end
 
       def new
-        authorize!(Avatar, to: :create?)
+        return unless avatar_result!(avatar_authority.avatars)
 
-        render inertia: true, props: new_avatar_props(Avatar.new)
+        render inertia: true, props: new_avatar_props(moniker_value: avatar_params[:moniker])
       end
 
       def edit
-        avatar = find_avatar!
-        authorize!(avatar)
+        result = avatar_result!(avatar_authority.avatar(params[:id]))
+        return unless result
 
-        render inertia: true, props: edit_avatar_props(avatar)
+        avatar = result.data.fetch("avatar")
+        render inertia: true,
+               props: edit_avatar_props(
+                 avatar.fetch("public_id"),
+                 moniker_value: avatar.fetch("moniker"),
+               )
       end
 
       def create
-        authorize!(Avatar, to: :create?)
+        result = avatar_result!(avatar_authority.create_avatar(avatar_params.to_h))
+        return unless result
 
-        result = AvatarProvisioning::Create.call(
-          actor: current_client,
-          subject_type: :persona,
-          subject: current_persona,
-          avatar_params: avatar_params.except(:handle),
-          handle_params: avatar_params.slice(:handle),
-          organization_public_id: current_session&.selected_collective_public_id,
-        )
-        avatar = result.avatar || Avatar.new(avatar_params.except(:handle))
-
-        if result.success?
-          redirect_to(base_app_avatar_path(avatar.public_id, ri: params[:ri]), status: :see_other)
+        if result.ok?
+          redirect_to(base_app_avatar_path(result.data.dig("avatar", "public_id"), ri: params[:ri]), status: :see_other)
         else
           render inertia: "base/app/avatars/new",
-                 props: new_avatar_props(avatar).merge(errors: serialize_errors(avatar)),
+                 props: new_avatar_props(moniker_value: avatar_params[:moniker]).merge(errors: result.errors),
                  status: :unprocessable_content
         end
       end
 
       def update
-        avatar = find_avatar!
-        authorize!(avatar)
-        if avatar.update(avatar_params.except(:handle))
-          redirect_to(base_app_avatar_path(avatar.public_id, ri: params[:ri]), status: :see_other)
+        result = avatar_result!(avatar_authority.update_avatar(params[:id], avatar_params.slice(:moniker).to_h))
+        return unless result
+
+        if result.ok?
+          redirect_to(base_app_avatar_path(params[:id], ri: params[:ri]), status: :see_other)
         else
           render inertia: "base/app/avatars/edit",
-                 props: edit_avatar_props(avatar).merge(errors: serialize_errors(avatar)),
+                 props: edit_avatar_props(
+                   params[:id],
+                   moniker_value: avatar_params[:moniker],
+                 ).merge(errors: result.errors),
                  status: :unprocessable_content
         end
       end
 
       private
 
+      def avatar_authority
+        @avatar_authority ||= AvatarAuthorityClient.new(
+          surface: "app",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
+        )
+      end
+
+      # Records the owner's decision for verify_authorized; 404 stays 404 and an unreachable owner is
+      # a dependency failure, never a permission.
+      def avatar_result!(result)
+        if result.status == :forbidden && result.data.to_h["error"] == "owner_denied"
+          authorize!(result, to: :relay?, with: AvatarRemoteResultPolicy)
+          head :forbidden
+          return
+        end
+
+        authorize!(result, to: :show?, with: AvatarRemoteResultPolicy)
+        raise ActiveRecord::RecordNotFound, "avatar not found" if result.status == :not_found
+
+        if result.status == :dependency
+          head :service_unavailable
+          return
+        end
+
+        result
+      end
+
+      # Creation is offered only while the selected persona has no active Avatar binding (the owner
+      # answers this as can_create).
+      def create_avatar_action(can_create)
+        return nil unless can_create
+
+        { label: "Create Avatar", href: new_base_app_avatar_path(ri: params[:ri]) }
+      end
+
       def serialize_avatar_entry(avatar)
         {
-          public_id: avatar.public_id,
-          label: avatar.moniker.presence || avatar.public_id,
-          href: base_app_avatar_path(avatar.public_id, ri: params[:ri]),
+          public_id: avatar.fetch("public_id"),
+          label: avatar.fetch("moniker"),
+          href: base_app_avatar_path(avatar.fetch("public_id"), ri: params[:ri]),
         }
       end
 
-      def new_avatar_props(avatar)
+      def new_avatar_props(moniker_value: nil)
         {
           title: "New Avatar",
           heading: "New Avatar",
+          up_link: { label: t("actions.up"), href: base_app_avatars_path(ri: params[:ri]) },
           action: base_app_avatars_path(ri: params[:ri]),
           method: "post",
           submit_label: "Create Avatar",
-          moniker: { label: "Name", value: avatar.moniker.to_s, maxlength: MONIKER_MAXLENGTH },
+          moniker: moniker_field_props(moniker_value),
           handle: { label: "Handle", value: avatar_params[:handle].to_s, maxlength: HANDLE_MAXLENGTH },
         }
       end
 
-      def edit_avatar_props(avatar)
+      def edit_avatar_props(public_id, moniker_value:)
         {
           title: "Avatar",
           heading: "Avatar",
-          action: base_app_avatar_path(avatar.public_id, ri: params[:ri]),
+          up_link: { label: t("actions.up"), href: base_app_avatar_path(public_id, ri: params[:ri]) },
+          action: base_app_avatar_path(public_id, ri: params[:ri]),
           method: "patch",
           submit_label: "Update Avatar",
-          moniker: { label: "Name", value: avatar.moniker.to_s, maxlength: MONIKER_MAXLENGTH },
+          moniker: moniker_field_props(moniker_value),
           handle: nil,
         }
       end
 
-      # Inertia reads validation errors from the `errors` page prop, keyed by the form field path.
-      def serialize_errors(avatar)
-        avatar.errors.to_hash.transform_keys { |attribute| "avatar.#{attribute}" }
-          .transform_values { |messages| messages.first }
-      end
+      def moniker_field_props(value)
+        max_bytes = AvatarMonikerValidator::MAX_BYTES
+        max_grapheme_clusters = AvatarMonikerValidator::MAX_GRAPHEME_CLUSTERS
 
-      # Scoped to the principal's assigned avatars: a foreign or non-existent id raises
-      # RecordNotFound (404), the authoritative ownership gate for show/edit/update.
-      def find_avatar!
-        switcher.find_avatar(params[:id]) || raise(ActiveRecord::RecordNotFound)
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :app, principal: current_client, session: current_session,
-        )
-      end
-
-      def current_persona
-        Persona.find_by!(public_id: Actor.selection.account_public_id)
+        {
+          label: "Name",
+          value: value.to_s,
+          max_bytes: max_bytes,
+          max_grapheme_clusters: max_grapheme_clusters,
+          client_validation: {
+            blank: t("base.app.avatars.moniker_validation.blank"),
+            invalid: t("base.app.avatars.moniker_validation.invalid"),
+            max_bytes: t("base.app.avatars.moniker_validation.max_bytes", count: max_bytes),
+            max_graphemes: t(
+              "base.app.avatars.moniker_validation.max_graphemes",
+              count: max_grapheme_clusters,
+            ),
+          },
+        }
       end
 
       def avatar_params

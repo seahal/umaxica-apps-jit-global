@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_assignments
@@ -23,9 +25,8 @@
 #  fk_rails_...  (avatar_id => avatars.id) ON DELETE => cascade
 #
 
-# frozen_string_literal: true
-
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarAssignmentTest < ActiveSupport::TestCase
   setup do
@@ -217,8 +218,8 @@ class AvatarAssignmentTest < ActiveSupport::TestCase
       is_system: false,
     )
 
-    Avatar.create!(
-      moniker: "Assignment Test Avatar",
+    AvatarTestFactory.create!(
+      moniker: "Assign Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
     )
@@ -240,6 +241,6 @@ class AvatarAssignmentTest < ActiveSupport::TestCase
       source_record_id: SecureRandom.random_number(1_000_000) + 5000,
       status_id: ClientIdentityState::ACTIVE,
     )
-    Persona.create!(client_identity: identity, moniker: "Assignment Persona", title: "Persona01")
+    ClientPersona.create!(client_identity: identity, moniker: "Assignment ClientPersona", title: "Persona01")
   end
 end

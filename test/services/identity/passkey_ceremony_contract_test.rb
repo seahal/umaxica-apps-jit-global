@@ -122,6 +122,20 @@ class IdentityPasskeyCeremonyContractTest < ActiveSupport::TestCase
     end
   end
 
+  test "decode_unverified_payload rejects a token whose payload is not a JSON object" do
+    header = Base64.urlsafe_encode64(%q({"alg":"none"}), padding: false)
+
+    ["[1]", "5", %q("surface")].each do |body|
+      token = "#{header}.#{Base64.urlsafe_encode64(body, padding: false)}."
+
+      error =
+        assert_raises(IdentityPasskeyCeremonyContract::Error) do
+          IdentityPasskeyCeremonyContract.decode_unverified_payload(token)
+        end
+      assert_includes error.message, "must be a JSON object", "payload #{body}"
+    end
+  end
+
   private
 
   def acme_issuer_id = IdentityPasskeyCeremonyContract.acme_issuer_id("app")

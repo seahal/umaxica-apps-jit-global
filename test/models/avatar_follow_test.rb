@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: avatar_follows
@@ -21,9 +23,8 @@
 #  fk_rails_...  (follower_avatar_id => avatars.id)
 #
 
-# frozen_string_literal: true
-
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarFollowTest < ActiveSupport::TestCase
   setup do
@@ -83,7 +84,7 @@ class AvatarFollowTest < ActiveSupport::TestCase
   private
 
   def create_avatar(moniker)
-    Avatar.create!(
+    AvatarTestFactory.create!(
       capability: @capability,
       active_handle: @handle,
       moniker: moniker,

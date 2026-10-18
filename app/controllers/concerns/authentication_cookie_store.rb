@@ -62,7 +62,7 @@ module AuthenticationCookieStore
   def extract_access_token(cookie_key)
     return nil unless respond_to?(:request, true) && request
 
-    AuthAuthorizationHeader.access_token(request) || cookies[cookie_key]
+    AuthAuthorizationHeader.access_token(request) || BrowserCredentialCookie.read(cookies, cookie_key)
   end
 
   def set_refresh_auth_cookies(token_record, access_token, refresh_plain, access_expires_at)

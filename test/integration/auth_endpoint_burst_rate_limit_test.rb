@@ -41,9 +41,57 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "burst_app@example.com" }, as: :json
     end
 
@@ -54,9 +102,57 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -66,9 +162,57 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "com"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "burst_com@example.com" }, as: :json
     end
 
@@ -78,9 +222,57 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "com"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -90,6 +282,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey options answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "org"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (BURST_ALLOWANCE + 1).times do
       post auth_org_sign_in_passkey_options_url(ri: "jp", host: host),
@@ -102,6 +339,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey verification answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "org"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (BURST_ALLOWANCE + 1).times do
       post auth_org_sign_in_passkey_verification_url(ri: "jp", host: host),
@@ -114,6 +396,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (BURST_ALLOWANCE + 1).times do
       post auth_app_sign_in_challenge_passkey_url(ri: "jp", host: host),
@@ -126,6 +453,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "com"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (BURST_ALLOWANCE + 1).times do
       post auth_com_sign_in_challenge_passkey_url(ri: "jp", host: host),
@@ -135,21 +507,54 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     assert_response :too_many_requests
   end
 
-  test "org MFA passkey challenge answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_org_sign_in_challenge_passkey_url(ri: "jp", host: host),
-           params: { challenge_id: "missing" }, as: :json
-    end
-
-    assert_response :too_many_requests
-  end
-
   test "app MFA TOTP challenge answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (BURST_ALLOWANCE + 1).times do
       post auth_app_sign_in_challenge_totp_url(ri: "jp", host: host),
@@ -159,48 +564,60 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     assert_response :too_many_requests
   end
 
-  test "app secret credential sign-in answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_secret_url(ri: "jp", host: host),
-           params: { client_secret_credential: { identifier: "burst@example.com", secret_credential_value: "x" } }
-    end
-
-    assert_response :too_many_requests
-  end
-
-  test "com secret credential sign-in answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_secret_url(ri: "jp", host: host),
-           params: { visitor_secret_credential: { identifier: "burst@example.com", secret_credential_value: "x" } }
-    end
-
-    assert_response :too_many_requests
-  end
-
-  test "org secret credential sign-in answers 429 once the per-IP burst allowance is spent" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-
-    (BURST_ALLOWANCE + 1).times do
-      post auth_org_sign_in_secret_url(ri: "jp", host: host),
-           params: { staff_secret_credential: { identifier: "0123456789ABCDEF", secret_credential_value: "x" } }
-    end
-
-    assert_response :too_many_requests
-  end
-
   test "app email sign-in answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_app_sign_in_email_url(ri: "jp", host: host),
+      post auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
            params: { user_email: { address: "burst_signin@example.com" } }
     end
 
@@ -210,27 +627,66 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com email sign-in answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "com"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (BURST_ALLOWANCE + 1).times do
-      post auth_com_sign_in_email_url(ri: "jp", host: host),
+      post auth_com_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
            params: { visitor_email: { address: "burst_signin_com@example.com" } }
     end
 
     assert_response :too_many_requests
   end
 
-  # The secret-credential and email sign-in endpoints declare a sustained limiter
-  # alongside the burst one, with a longer retry hint. Only the burst arm was
-  # exercised, so a sustained limiter that stopped firing would have gone unnoticed.
+  # Email sign-in declares a sustained limiter alongside the burst one, with a
+  # longer retry hint. A sustained limiter that stopped firing would go unnoticed.
   {
-    "app secret credential sign-in" => [
-      :auth_app_sign_in_secret_url, "PUBLIC_AUTH_SERVICE_URL",
-      { client_secret_credential: { identifier: "sustained@example.com", secret_credential_value: "x" } },
-    ],
-    "com secret credential sign-in" => [
-      :auth_com_sign_in_secret_url, "PUBLIC_AUTH_CORPORATE_URL",
-      { visitor_secret_credential: { identifier: "sustained@example.com", secret_credential_value: "x" } },
-    ],
     "app email sign-in" => [
       :auth_app_sign_in_email_url, "PUBLIC_AUTH_SERVICE_URL",
       { client_email: { address: "sustained@example.com" } },
@@ -243,15 +699,65 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     test "#{label} answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
       host = ENV.fetch(host_env)
       host! host
+      begin
+        admission_browser = self
+        admission_surface = label.split.first
+        admission_intent = "sign_in"
+        admission_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_surface)
+        admission_browser.host!(admission_host)
+        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: admission_surface, intent: admission_intent,
+          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+        )
+        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_surface, reference: admission_issuance.reference,
+        )
+        admission_binding.reload.confirm_base!(
+          base_token: nil,
+          browser_digest: admission_binding.base_browser_digest,
+        )
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+        phase_binding = SignInFlowBindingCodec.encode(
+          flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+        )
+      end
 
       (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
         travel((burst * 61).seconds) do
-          BURST_ALLOWANCE.times { post public_send(helper, ri: "jp", host: host), params: request_params }
+          BURST_ALLOWANCE.times {
+            post public_send(helper, ri: "jp", host: host, fb: phase_binding), params: request_params
+          }
         end
       end
 
       travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-        post public_send(helper, ri: "jp", host: host), params: request_params
+        post public_send(helper, ri: "jp", host: host, fb: phase_binding), params: request_params
       end
 
       assert_response :too_many_requests
@@ -262,13 +768,61 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     # Four bursts of five, each after the one-minute burst window has rolled
     # over, spend the sustained allowance without ever tripping the burst rule.
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
+          post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
                params: { identifier: "sustained_app@example.com" }, as: :json
 
           assert_response :success
@@ -277,7 +831,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "sustained_app@example.com" }, as: :json
     end
 
@@ -288,18 +842,66 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "com"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_com_sign_in_passkey_options_url(ri: "jp", host: host),
+          post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
                params: { identifier: "sustained_com@example.com" }, as: :json
         end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_options_url(ri: "jp", host: host, fb: phase_binding),
            params: { identifier: "sustained_com@example.com" }, as: :json
     end
 
@@ -310,6 +912,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey options answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "org"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -332,18 +979,66 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
+          post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
                params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
         end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_app_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -354,18 +1049,66 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "com passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "com"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
         BURST_ALLOWANCE.times do
-          post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host),
+          post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
                params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
         end
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host),
+      post auth_com_sign_in_passkey_verification_url(ri: "jp", host: host, fb: phase_binding),
            params: { challenge_id: "missing", credential: { id: "x" } }, as: :json
     end
 
@@ -376,6 +1119,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "org passkey verification answers 429 with the sustained retry hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "org"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -401,11 +1189,55 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   {
     "app" => [:auth_app_sign_in_challenge_passkey_url, "PUBLIC_AUTH_SERVICE_URL"],
     "com" => [:auth_com_sign_in_challenge_passkey_url, "PUBLIC_AUTH_CORPORATE_URL"],
-    "org" => [:auth_org_sign_in_challenge_passkey_url, "PUBLIC_AUTH_STAFF_URL"],
   }.each do |surface, (helper, host_env)|
     test "#{surface} MFA passkey challenge answers 429 with the sustained hint once the 15-minute allowance is spent" do
       host = ENV.fetch(host_env)
       host! host
+      begin
+        admission_browser = self
+        admission_surface = surface
+        admission_intent = "sign_in"
+        admission_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_surface)
+        admission_browser.host!(admission_host)
+        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: admission_surface, intent: admission_intent,
+          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+        )
+        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_surface, reference: admission_issuance.reference,
+        )
+        admission_binding.reload.confirm_base!(
+          base_token: nil,
+          browser_digest: admission_binding.base_browser_digest,
+        )
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+      end
 
       (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
         travel((burst * 61).seconds) do
@@ -432,6 +1264,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app MFA TOTP challenge answers 429 once the per-account allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+    end
 
     (ACCOUNT_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
@@ -451,62 +1328,63 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     assert_equal "900", response.headers["Retry-After"]
   end
 
-  test "org secret credential sign-in answers 429 once one identifier has spent its allowance" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-    params = { secret_credential_login_form: { identifier: "0123456789ABCDEF", secret_credential_value: "x" } }
-
-    (ACCOUNT_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-      travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times { post auth_org_sign_in_secret_url(ri: "jp", host: host), params: params }
-      end
-    end
-
-    travel((ACCOUNT_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      post auth_org_sign_in_secret_url(ri: "jp", host: host), params: params
-    end
-
-    assert_response :too_many_requests
-    assert_equal "900", response.headers["Retry-After"]
-  end
-
-  test "org secret credential sign-in answers 429 once one source has spent its allowance across identifiers" do
-    host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    host! host
-    attempt = 0
-    spend =
-      lambda do
-        attempt += 1
-        post(
-          auth_org_sign_in_secret_url(ri: "jp", host: host),
-          params: {
-            secret_credential_login_form: {
-              identifier: format("%016d", attempt),
-              secret_credential_value: "x",
-            },
-          },
-        )
-      end
-
-    # A different identifier each time, so only the per-source rules accumulate.
-    (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
-      travel((burst * 61).seconds) { BURST_ALLOWANCE.times { spend.call } }
-    end
-
-    travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) { spend.call }
-
-    assert_response :too_many_requests
-    assert_equal "900", response.headers["Retry-After"]
-  end
-
   # Submitting the sign-in code is a separate action from requesting it, and
   # carries its own limiter pair; only the request side was exercised.
   test "app email sign-in code submission answers 429 once the per-IP burst allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
 
     (BURST_ALLOWANCE + 1).times do
-      patch auth_app_sign_in_email_url(ri: "jp", host: host), params: { client_email: { pass_code: "000000" } }
+      patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding),
+            params: { client_email: { pass_code: "000000" } }
     end
 
     assert_response :too_many_requests
@@ -516,16 +1394,66 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
   test "app email sign-in code submission answers 429 with the sustained hint once the 15-minute allowance is spent" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      phase_binding = SignInFlowBindingCodec.encode(
+        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
+      )
+    end
     params = { client_email: { pass_code: "000000" } }
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
       travel((burst * 61).seconds) do
-        BURST_ALLOWANCE.times { patch auth_app_sign_in_email_url(ri: "jp", host: host), params: params }
+        BURST_ALLOWANCE.times {
+          patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding), params: params
+        }
       end
     end
 
     travel((SUSTAINED_ALLOWANCE / BURST_ALLOWANCE * 61).seconds) do
-      patch auth_app_sign_in_email_url(ri: "jp", host: host), params: params
+      patch auth_app_sign_in_email_url(ri: "jp", host: host, fb: phase_binding), params: params
     end
 
     assert_response :too_many_requests
@@ -547,6 +1475,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       TurnstileVerifierStub.challenge_response = { "success" => false }
       host = ENV.fetch(host_env)
       host! host
+      begin
+        admission_browser = self
+        admission_surface = surface
+        admission_intent = "sign_up"
+        admission_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_surface)
+        admission_browser.host!(admission_host)
+        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: admission_surface, intent: admission_intent,
+          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+        )
+        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_surface, reference: admission_issuance.reference,
+        )
+        admission_binding.reload.confirm_base!(
+          base_token: nil,
+          browser_digest: admission_binding.base_browser_digest,
+        )
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+      end
       quota = RateLimitProfiles.interactive_post_ip.to
 
       quota.times do
@@ -566,6 +1539,51 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
     test "#{surface} sign-up email answers 429 once one address has spent its allowance" do
       host = ENV.fetch(host_env)
       host! host
+      begin
+        admission_browser = self
+        admission_surface = surface
+        admission_intent = "sign_up"
+        admission_host = {
+          "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+          "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+          "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+        }.fetch(admission_surface)
+        admission_browser.host!(admission_host)
+        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          surface: admission_surface, intent: admission_intent,
+          base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+        )
+        admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          "/ceremony_bindings",
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+          surface: admission_surface, reference: admission_issuance.reference,
+        )
+        admission_binding.reload.confirm_base!(
+          base_token: nil,
+          browser_digest: admission_binding.base_browser_digest,
+        )
+        admission_browser.get(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, ri: "jp" },
+        )
+        admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+        admission_browser.post(
+          admission_path,
+          params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+        )
+
+        assert_equal 303, admission_browser.response.status
+      end
       quota = RateLimitProfiles.email_address_submit.to
       params = { param_key => { address: "signup_addr_#{surface}@example.com", confirm_policy: "1" } }
 

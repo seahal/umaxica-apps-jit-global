@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: operator_telephone_ceremony_transactions
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                       :bigint           not null, primary key
 #  actor_ref                :string           not null
@@ -32,8 +32,11 @@
 #  index_operator_telephone_ceremony_transactions_on_grant_jti   (grant_jti) UNIQUE
 #  index_operator_telephone_ceremony_transactions_on_result_jti  (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #
-class OperatorTelephoneCeremonyTransaction < OrgTicketRecord
+class OperatorTelephoneCeremonyTransaction < OpBaseOrgRecord
   include TelephoneCeremonyTransactionable
+  include TelephoneCeremonyOtp
+
+  validate :immutable_telephone_otp_terminal_facts
 
   ceremony_surface "org"
 end

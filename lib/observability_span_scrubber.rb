@@ -44,8 +44,10 @@ module ObservabilitySpanScrubber
 
   def sensitive_attribute_key?(key)
     normalized = key.to_s.tr("-", "_").downcase
-    SENSITIVE_ATTRIBUTE_KEYS.include?(normalized) ||
-      normalized.include?("authorization") ||
-      normalized.include?("cookie")
+    return true if SENSITIVE_ATTRIBUTE_KEYS.include?(normalized)
+    return true if normalized.start_with?("email.") && normalized != "email.x_mailer"
+    return true if normalized == "args" || normalized.end_with?(".args")
+
+    normalized.include?("authorization") || normalized.include?("cookie")
   end
 end

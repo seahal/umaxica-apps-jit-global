@@ -1,0 +1,30 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "issued (derived: admitted_at null)" as issued
+    state "admitted (derived)" as admitted
+    state "authentication evidence recorded (derived)" as evidence
+    state "revoked_at present" as revoked
+    state "completed_at present" as completed
+    state "cancelled_at present" as cancelled
+    [*] --> issued
+    [*] --> admitted
+    issued --> admitted: admit!
+    admitted --> evidence: record_authentication_evidence!
+    issued --> revoked: revoke! / rotate_and_admit! previous row
+    issued --> issued: rotate! same row
+    admitted --> revoked: revoke! / rotate_and_admit! previous row
+    admitted --> admitted: rotate! same row
+    evidence --> revoked: revoke! / rotate_and_admit! previous row
+    evidence --> evidence: rotate! same row
+    admitted --> completed: complete!
+    admitted --> cancelled: cancel!
+    evidence --> completed: complete!
+    evidence --> cancelled: cancel!
+    revoked --> [*]
+    completed --> [*]
+    cancelled --> [*]
+    note right of issued
+        Labels are derived, not stored state strings.
+        TTL expiry makes active? false without a state write.
+        rotate_and_admit! starts a replacement row admitted.
+    end note

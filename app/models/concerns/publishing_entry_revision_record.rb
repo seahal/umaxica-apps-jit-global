@@ -3,6 +3,7 @@
 module PublishingEntryRevisionRecord
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include PublicId
     include PublishingEncryptedContent
@@ -31,7 +32,13 @@ module PublishingEntryRevisionRecord
   end
 
   def taxonomy_assignments
-    single_taxonomy_assignments.includes(:vocabulary, :taxonomy_term).to_a +
-      multiple_taxonomy_assignments.includes(:vocabulary, :taxonomy_term).to_a
+    association_scope(:single_taxonomy_assignments).includes(:vocabulary, :taxonomy_term).to_a +
+      association_scope(:multiple_taxonomy_assignments).includes(:vocabulary, :taxonomy_term).to_a
+  end
+
+  private
+
+  def association_scope(name)
+    association(name).scope
   end
 end

@@ -11,9 +11,8 @@ class BasePalmSurfaceSmokeTest < ActionDispatch::IntegrationTest
 
     get "/?ri=jp", headers: { "Host" => host }
 
-    # The gateway root canonicalizes to the regional root instead of serving a page.
-    assert_response :moved_permanently
-    assert_equal "https://jp.umaxica.app/", response.location
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
 
     get "/health", headers: { "Host" => host }
 
@@ -34,22 +33,22 @@ class BasePalmSurfaceSmokeTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "base public host family canonicalizes to its regional roots" do
+  test "base public host family renders the control-plane home" do
     [
-      [ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), "https://jp.umaxica.app/"],
-      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"), "https://jp.umaxica.com/"],
-      [ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"), "https://jp.umaxica.org/"],
-    ].each do |host, expected_location|
+      [ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"), "base/app/roots/index"],
+      [ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"), "base/com/roots/index"],
+      [ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"), "base/org/roots/index"],
+    ].each do |host, component|
       host! host
 
       get "/?ri=jp", headers: { "Host" => host }
 
-      assert_response :moved_permanently
-      assert_equal expected_location, response.location
+      assert_response :success
+      assert_equal component, inertia_component
     end
   end
 
-  test "palm app public endpoints and bearer profile api respond on the native surface" do
+  test "palm app landing and machine endpoints remain available after browser RP migration" do
     host = ENV.fetch("PUBLIC_PALM_SERVICE_URL")
     host! host
 
@@ -61,15 +60,23 @@ class BasePalmSurfaceSmokeTest < ActionDispatch::IntegrationTest
       heading: "Palm App",
       message: I18n.t("palm.app.roots.message"),
     )
+    assert_equal palm_app_sign_show_path(ri: "jp"), inertia_props.fetch("sign_in").fetch("href")
 
     get "/health", headers: { "Host" => host }
 
     assert_response :success
 
-    get "/api/v0/profile", headers: json_headers
+    get "/api/v0/health.json", headers: json_headers
 
-    assert_response :unauthorized
-    assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
+    assert_response :success
+
+    get "/api/v0/revision.json", headers: json_headers
+
+    assert_response :success
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("https://#{host}/api/v0/profile", method: :get)
+    end
   end
 
   private

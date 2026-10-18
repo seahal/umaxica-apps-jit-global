@@ -13,6 +13,9 @@ class OidcRefreshTokenIssuerResultTest < ActiveSupport::TestCase
       refresh_token: "replacement-refresh-token",
       previous_token: previous_token,
       reason: nil,
+      token_response: nil,
+      access_expires_at: nil,
+      refresh_expires_at: nil,
     )
 
     assert_predicate result, :success?
@@ -27,6 +30,9 @@ class OidcRefreshTokenIssuerResultTest < ActiveSupport::TestCase
       refresh_token: nil,
       previous_token: nil,
       reason: :invalid_format,
+      token_response: nil,
+      access_expires_at: nil,
+      refresh_expires_at: nil,
     )
 
     error = assert_raises(KeyError) { result.fetch(:refresh_token) }

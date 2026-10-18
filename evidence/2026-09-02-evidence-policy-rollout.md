@@ -3,8 +3,8 @@
 ## What was being verified
 
 That the newly added `evidence/` layout check works in this repository - that it passes on the
-current tree, that it actually fails when the layout is wrong, and that adding it does not break
-any check this repository already runs.
+current tree, that it actually fails when the layout is wrong, and that adding it does not break any
+check this repository already runs.
 
 ## Why
 
@@ -24,7 +24,9 @@ the check has to accept this file's own name.
 ## What was added
 
 - `test/tooling/evidence_layout_test.rb`
-- Wired in via: no wiring needed - `bin/rails test` collects it, gated by the `test-rails` job in `.github/workflows/ci.yml`. A `evidence/` entry and its rules were also added to `docs/index.md`, which is where this repository defines what each documentation directory is for.
+- Wired in via: no wiring needed - `bin/rails test` collects it, gated by the `test-rails` job in
+  `.github/workflows/ci.yml`. A `evidence/` entry and its rules were also added to `docs/index.md`,
+  which is where this repository defines what each documentation directory is for.
 - An `Evidence` section in `AGENTS.md`, plus an `evidence/` entry in `docs/index.md`.
 
 ## Rules enforced
@@ -39,10 +41,10 @@ directory exists.
 
 ## Commands run and what was observed
 
-| Command | Observed |
-| --- | --- |
-| `bin/rails test test/tooling/evidence_layout_test.rb` | 3 runs, 6 assertions, 0 failures, 0 errors, 0 skips |
-| `bundle exec rubocop --force-exclusion test/tooling/evidence_layout_test.rb` | 1 file inspected, no offenses detected |
+| Command                                                                                     | Observed                                                                                                                             |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `bin/rails test test/tooling/evidence_layout_test.rb`                                       | 3 runs, 6 assertions, 0 failures, 0 errors, 0 skips                                                                                  |
+| `bundle exec rubocop --force-exclusion test/tooling/evidence_layout_test.rb`                | 1 file inspected, no offenses detected                                                                                               |
 | `bin/rails test test/tooling/evidence_layout_test.rb` (with a deliberate violation fixture) | 3 runs, 6 assertions, 3 failures - reported ["subdir"], ["raw.log"] and ["2026-13-01-bad.md"] separately; fixture removed afterwards |
 
 ## Shared-logic verification
@@ -57,8 +59,8 @@ Rust form pins the same accept/reject set in `record_name_rules_are_what_they_cl
 
 ## Assessment
 
-PASS. The check passes on the current tree and every pre-existing check that could be run in
-this environment still passes. No pre-existing behaviour was changed.
+PASS. The check passes on the current tree and every pre-existing check that could be run in this
+environment still passes. No pre-existing behaviour was changed.
 
 ## Limitations
 

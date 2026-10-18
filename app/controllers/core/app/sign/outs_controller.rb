@@ -8,16 +8,23 @@ module Core
         include ::AuthenticationLogoutable
         include ::SignOutNotice
         include ::OidcRpLogoutLauncher
+        include ::SignOutClearSiteData
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
-        skip_before_action :transparent_refresh_access_token, raise: false
 
-        before_action :authenticate!, only: :create
+        before_action :authenticate_oidc_rp_session!, only: :create,
+                                                      unless: -> { params[:logout_challenge].present? }
         helper_method :sign_out_completed_description
         helper_method :sign_out_confirmation_form_path
 
-        after_action :sign_out_notice_cache_headers!, only: %i(edit complete)
+        after_action :sign_out_notice_cache_headers!, only: %i(show edit)
+
+        def show
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
+          complete_oidc_rp_logout!
+        end
 
         def new
           redirect_to(sign_out_edit_path, status: :see_other)
@@ -28,15 +35,14 @@ module Core
         end
 
         def create
+          return continue_browser_rp_logout! if params[:logout_challenge].present?
+
           launch_oidc_rp_logout!(
-            client_id: "core-next-rp",
+            client_id: RpDeploymentBindingValue.client_id("core-app"),
             issuer_resource_type: "client",
             token_issuer: "client",
+            session_authority: :rp_session,
           )
-        end
-
-        def complete
-          complete_oidc_rp_logout!
         end
 
         private

@@ -17,7 +17,8 @@ module Base
 
         AUTHENTICATION_MODE = :private
 
-        before_action :authenticate_operator!
+        step_up only: %i(new create), bootstrap: true
+        step_up only: %i(edit update destroy)
         before_action :set_no_store_for_secret_credential_pages
         before_action :set_secret_credential, only: %i(show edit update destroy)
         before_action :verify_secret_credential_turnstile!, only: :create
@@ -65,12 +66,11 @@ module Base
           )
           reset_secret_credential_ceremony_session!
 
-          redirect_to(
+          redirect_to_surface_url(
             base_org_identity_secrets_url(
               ri: params[:ri],
               host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
             ),
-            allow_other_host: cross_host_redirect_allowed?,
           )
         rescue ActiveRecord::RecordInvalid => e
           @secret_credential = e.record
@@ -85,9 +85,8 @@ module Base
         def update
           authorize!(@secret_credential)
 
-          if disabling_secret_credential? && AuthMethodGuard.last_method?(
-            current_operator,
-            excluding: @secret_credential,
+          if disabling_secret_credential? && !AuthMethodGuard.can_remove_secret_credential?(
+            current_operator, @secret_credential,
           )
             redirect_to(
               base_org_identity_secret_path(@secret_credential.public_id, ri: params[:ri]),

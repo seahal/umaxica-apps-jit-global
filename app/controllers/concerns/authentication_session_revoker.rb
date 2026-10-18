@@ -4,7 +4,13 @@
 class AuthenticationSessionRevoker
   def self.revoke_all_for(resource)
     tokens = tokens_for(resource)
-    tokens.find_each(&:revoke!)
+    tokens.find_each do |token|
+      AuthenticationLogoutCurrentSession.call(
+        resource: resource,
+        token: token,
+        reason: "session_revoke_all",
+      )
+    end
   end
 
   def self.tokens_for(resource)

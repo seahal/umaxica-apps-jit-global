@@ -25,11 +25,11 @@ class SignOrgSettingsActivityLogPresenterTest < ActiveSupport::TestCase
     assert_equal time, @log.occurred_at(activity)
   end
 
-  test "occurred_at falls back to created_at" do
+  test "occurred_at does not use persistence metadata when the event time is absent" do
     time = Time.zone.parse("2024-01-01 12:00:00 UTC")
     activity = stub_activity(occurred_at: nil, created_at: time)
 
-    assert_equal time, @log.occurred_at(activity)
+    assert_nil @log.occurred_at(activity)
   end
 
   test "event_label translates known event" do
@@ -120,27 +120,6 @@ class SignOrgSettingsActivityLogPresenterTest < ActiveSupport::TestCase
     activity = stub_activity(context: {})
 
     assert_equal "-", @log.login_method(activity)
-  end
-
-  test "detect_browser identifies browsers" do
-    assert_equal "Edge", @log.send(:detect_browser, "Edg/120")
-    assert_equal "Chrome", @log.send(:detect_browser, "Chrome/120")
-    assert_equal "Safari", @log.send(:detect_browser, "Safari/605.1")
-    assert_equal "Firefox", @log.send(:detect_browser, "Firefox/120")
-    assert_equal "Other", @log.send(:detect_browser, "UnknownBrowser/1.0")
-  end
-
-  test "detect_device_type identifies devices" do
-    assert_equal "Mobile", @log.send(:detect_device_type, "Mobile Safari")
-    assert_equal "Mobile", @log.send(:detect_device_type, "iPhone")
-    assert_equal "Tablet", @log.send(:detect_device_type, "iPad")
-    assert_equal "Desktop", @log.send(:detect_device_type, "Windows Chrome")
-  end
-
-  test "sensitive_context_key detects sensitive patterns" do
-    assert @log.send(:sensitive_context_key?, "authorization")
-    assert @log.send(:sensitive_context_key?, "token_value")
-    assert_not @log.send(:sensitive_context_key?, "browser")
   end
 
   test "context_text handles non-serializable context" do

@@ -5,6 +5,11 @@
 > outside Acme, and it must not be treated as the default entry point for new Core, Base, or Palm
 > flows.
 
+> **Participation update (2026-10-13):** Palm is now a browser RP and its former native bearer API
+> is retired. Its Browser RP credentials use host-only cookies and the common session contract; this
+> does not add DPoP to the browser flow. Native-client DPoP policy remains subject to a separate
+> reviewed decision.
+
 ## Specification
 
 The DPoP implementation in this application is based on the following specifications:
@@ -41,14 +46,14 @@ of the private key by signing a DPoP proof JWT on each request.
 
 ## Implementation
 
-Server-side DPoP support lives in `app/services/dpop/`:
+Server-side DPoP support lives in flat `dpop_*.rb` files under `app/lib/` and `app/services/`:
 
 | File                                            | Purpose                                               |
 | ----------------------------------------------- | ----------------------------------------------------- |
-| `app/services/dpop/proof_validator.rb`          | Core DPoP proof JWT validation (RFC 9449 Section 4.3) |
-| `app/services/dpop/request_verifier.rb`         | Per-request DPoP verification orchestrator            |
-| `app/services/dpop/jti_replay_guard.rb`         | RDB-backed JTI deduplication (stateful paths only)    |
-| `lib/jit/security/jwt/thumbprint_calculator.rb` | RFC 7638 JWK Thumbprint and `ath` computation         |
+| `app/lib/dpop_proof_verifier.rb`                | Core DPoP proof JWT validation (RFC 9449 Section 4.3) |
+| `app/services/dpop_request_verifier.rb`         | Per-request DPoP verification orchestrator            |
+| `app/services/dpop_jti_replay_guard.rb`         | RDB-backed JTI deduplication (stateful paths only)    |
+| `lib/jit_security_jwt_thumbprint_calculator.rb` | RFC 7638 JWK Thumbprint and `ath` computation         |
 
 Token issuance controllers (`Sign::App::TokensController`, `Sign::Org::TokensController`,
 `Sign::Com::TokensController`) forward the `DPoP` proof header, request URI, and request method to
@@ -89,7 +94,7 @@ JTI replay rows and issued nonces are short-lived. Each row carries `expires_at`
 (`DpopProofStateable::TTL_SECONDS`, 300s). `DpopProofStatePurgeJob` deletes expired rows from
 `client_dpop_proof_states`, `operator_dpop_proof_states`, and `visitor_dpop_proof_states` in
 batches. It is scheduled from `config/recurring.yml` (`dpop_proof_state_purge`). These tables are
-**not** covered by `RetentionPurgeJob`, which is keyed on `purged_at`, not `expires_at`.
+**not** covered by `RetentionPurgeJob`, which is keyed on `purge_eligible_at`, not `expires_at`.
 
 ## Current Adoption Posture
 
@@ -113,9 +118,8 @@ flows:
 | DPoP      | API access via Authorization header | Access token bound to client key   |
 
 DBSC is the active browser-session binding mechanism. DPoP remains available for
-Authorization-header token binding where an explicitly reviewed flow chooses it. Palm does not use
-DPoP today; it is bearer-only, and Palm access tokens carrying `cnf.jkt` must not be accepted as
-plain Bearer tokens.
+Authorization-header token binding where an explicitly reviewed native or API flow chooses it. The
+retired Palm bearer API is not a current DPoP consumer.
 
 ## VisitorAccount Token Strategy
 
@@ -152,19 +156,17 @@ are not substitutes for rotation.
 ### Native App DPoP Readiness
 
 Native apps (iOS / Android) do not require DPoP at this time. However, the server-side
-infrastructure is designed to accept DPoP proofs from any client outside the Palm bearer-only
-boundary:
+infrastructure is designed to accept DPoP proofs from native clients that receive Authorization-
+header access tokens:
 
 - Token tables (`user_tokens`, `staff_tokens`, `customer_tokens`) already store `dpop_jkt`.
 - `DPoP::ProofValidator` and `DPoP::RequestVerifier` are client-agnostic.
 - The `cnf.jkt` claim in JWT access tokens works regardless of client type.
 
-The current policy is **maintained optional DPoP** for native clients outside Palm:
+The current policy is **maintained optional DPoP** for native clients:
 
 - If a native client sends a DPoP proof header, the server validates it and enforces binding.
 - If no DPoP proof is present, the server accepts the token as a standard Bearer token.
-- Palm is excluded from this optional policy. Palm remains bearer-only until a separate ADR or plan
-  changes that boundary.
 
 Before native apps adopt DPoP, review the current DPoP implementation and threat model. If adopted,
 the private key should be stored in platform secure hardware (iOS Secure Enclave / Android

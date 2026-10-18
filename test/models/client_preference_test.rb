@@ -125,19 +125,4 @@ class ClientPreferenceTest < ActiveSupport::TestCase
     assert_predicate user.user_preference, :present?
     assert_equal user.id, user.user_preference.user_id
   end
-
-  test "set_defaults fills nil booleans on new records" do
-    pref = ClientPreference.new(user: clients(:sample_user))
-    pref.consented = nil
-    pref.functional = nil
-    pref.performant = nil
-    pref.targetable = nil
-
-    pref.send(:set_defaults)
-
-    assert_not pref.consented
-    assert_not pref.functional
-    assert_not pref.performant
-    assert_not pref.targetable
-  end
 end

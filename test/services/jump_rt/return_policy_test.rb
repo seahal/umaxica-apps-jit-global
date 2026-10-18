@@ -5,6 +5,10 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class JumpRtReturnPolicyTest < ActiveSupport::TestCase
+  PINNED_CANDIDATE_GRAPH = JSON.parse(
+    Rails.root.join("test/fixtures/files/jump_production_graph_0_4_0.json").read,
+  ).freeze
+
   self.fixture_table_names = []
 
   test "normalize_origin returns nil for invalid URI" do
@@ -62,7 +66,7 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
   test "allowed_source returns true for valid source matching destination" do
     assert JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://www.umaxica.app",
-      source: "https://log.umaxica.app",
+      source: "https://auth.umaxica.app",
     )
   end
 
@@ -76,7 +80,7 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
   test "allowed_source returns false when destination origin is unknown" do
     assert_not JumpRtReturnPolicy.allowed_source?(
       destination_origin: "https://unknown.example.com",
-      source: "https://log.umaxica.app",
+      source: "https://auth.umaxica.app",
     )
   end
 
@@ -88,33 +92,135 @@ class JumpRtReturnPolicyTest < ActiveSupport::TestCase
     assert_equal 80, JumpRtReturnPolicy.default_port_for("http")
   end
 
-  test "allowed_sources includes hardcoded production origins" do
-    sources = JumpRtReturnPolicy.allowed_sources
+  test "only the approved same TLD directed graph is allowed across all 169 ordered canonical pairs" do
+    namespaces = {
+      "auth-app-ww" => "AUTH_APP",
+      "auth-com-ww" => "AUTH_COM",
+      "auth-org-ww" => "AUTH_ORG",
+      "base-app-ww" => "BASE_APP",
+      "base-com-ww" => "BASE_COM",
+      "base-org-ww" => "BASE_ORG",
+      "core-app-jp" => "CORE_APP",
+      "core-com-jp" => "CORE_COM",
+      "core-org-jp" => "CORE_ORG",
+      "palm-app-jp" => "PALM_APP",
+      "warp-app-jp" => "WARP_APP",
+      "warp-com-jp" => "WARP_COM",
+      "warp-org-jp" => "WARP_ORG",
+    }
+    origins = {
+      "auth-app-ww" => "https://auth.umaxica.app",
+      "auth-com-ww" => "https://auth.umaxica.com",
+      "auth-org-ww" => "https://auth.umaxica.org",
+      "base-app-ww" => "https://www.umaxica.app",
+      "base-com-ww" => "https://www.umaxica.com",
+      "base-org-ww" => "https://www.umaxica.org",
+      "core-app-jp" => "https://jp.umaxica.app",
+      "core-com-jp" => "https://jp.umaxica.com",
+      "core-org-jp" => "https://jp.umaxica.org",
+      "palm-app-jp" => "https://palm-jp.umaxica.app",
+      "warp-app-jp" => "https://www-jp.umaxica.app",
+      "warp-com-jp" => "https://www-jp.umaxica.com",
+      "warp-org-jp" => "https://www-jp.umaxica.org",
+    }
+    edges = [
+      ["auth-app-ww", "base-app-ww"],
+      ["auth-com-ww", "base-com-ww"],
+      ["auth-org-ww", "base-org-ww"],
+      ["base-app-ww", "auth-app-ww"],
+      ["base-app-ww", "core-app-jp"],
+      ["base-app-ww", "palm-app-jp"],
+      ["base-app-ww", "warp-app-jp"],
+      ["base-com-ww", "auth-com-ww"],
+      ["base-com-ww", "core-com-jp"],
+      ["base-com-ww", "warp-com-jp"],
+      ["base-org-ww", "auth-org-ww"],
+      ["base-org-ww", "core-org-jp"],
+      ["base-org-ww", "warp-org-jp"],
+      ["core-app-jp", "base-app-ww"],
+      ["core-com-jp", "base-com-ww"],
+      ["core-org-jp", "base-org-ww"],
+      ["palm-app-jp", "base-app-ww"],
+      ["warp-app-jp", "base-app-ww"],
+      ["warp-com-jp", "base-com-ww"],
+      ["warp-org-jp", "base-org-ww"],
+    ]
 
-    assert_includes sources.keys, "https://www.umaxica.app"
-    assert_includes sources["https://www.umaxica.app"], "https://log.umaxica.app"
+    assert_equal 20, edges.size
+    assert_equal edges.map { |source, destination| [namespaces.fetch(source), namespaces.fetch(destination)] }.sort,
+                 JumpRtReturnPolicy::ALLOWED_EDGES.sort
+    pairs = origins.keys.product(origins.keys)
+
+    assert_equal 169, pairs.size
+    pairs.each do |source, destination|
+      assert_equal edges.include?([source, destination]),
+                   JumpRtReturnPolicy.allowed_source?(
+                     destination_origin: origins.fetch(destination),
+                     source: origins.fetch(source),
+                   ),
+                   "#{source} -> #{destination}"
+    end
   end
 
-  test "core destinations allow matching idp sources" do
-    assert JumpRtReturnPolicy.allowed_source?(
-      destination_origin: "https://www.jp.umaxica.app",
-      source: "https://log.umaxica.app",
-    )
-    assert JumpRtReturnPolicy.allowed_source?(
-      destination_origin: "https://www.jp.umaxica.com",
-      source: "https://log.umaxica.com",
-    )
-    assert JumpRtReturnPolicy.allowed_source?(
-      destination_origin: "https://www.jp.umaxica.org",
-      source: "https://log.umaxica.org",
-    )
+  test "0.4.0 candidate graph fixture matches the Rails graph across all 169 ordered pairs" do
+    namespace_by_node = {
+      "auth-app-ww" => "AUTH_APP",
+      "auth-com-ww" => "AUTH_COM",
+      "auth-org-ww" => "AUTH_ORG",
+      "base-app-ww" => "BASE_APP",
+      "base-com-ww" => "BASE_COM",
+      "base-org-ww" => "BASE_ORG",
+      "core-app-jp" => "CORE_APP",
+      "core-com-jp" => "CORE_COM",
+      "core-org-jp" => "CORE_ORG",
+      "warp-app-jp" => "WARP_APP",
+      "warp-com-jp" => "WARP_COM",
+      "warp-org-jp" => "WARP_ORG",
+      "palm-app-jp" => "PALM_APP",
+    }
+    origins = PINNED_CANDIDATE_GRAPH.fetch("nodes")
+    edges = PINNED_CANDIDATE_GRAPH.fetch("edges")
+    namespaces = origins.keys.index_with { |node| namespace_by_node.fetch(node) }
+    expected_edges = edges.map { |source, destination| [namespaces.fetch(source), namespaces.fetch(destination)] }
+
+    assert_equal 13, origins.size
+    assert_equal 20, edges.size
+    assert_equal expected_edges.sort, JumpRtReturnPolicy::ALLOWED_EDGES.sort
+
+    pairs = origins.to_a.product(origins.to_a)
+
+    assert_equal 169, pairs.size
+    pairs.each do |(source, source_origin), (destination, destination_origin)|
+      assert_equal edges.include?([source, destination]),
+                   JumpRtReturnPolicy.allowed_source?(
+                     destination_origin: destination_origin,
+                     source: source_origin,
+                   ),
+                   "#{source} -> #{destination}"
+    end
   end
 
-  test "core destinations reject cross surface idp sources" do
-    assert_not JumpRtReturnPolicy.allowed_source?(
-      destination_origin: "https://www.jp.umaxica.app",
-      source: "https://log.umaxica.org",
-    )
+  test "unregistered stale private and sentinel origins are denied in either direction" do
+    [nil, "", "https://zzzz.umaxica.app", "https://www.umaxica.zzz",
+     "https://www-zz.umaxica.app", "https://www.jp.umaxica.app", "https://jpx.umaxica.app",
+     "https://palm.jp.umaxica.app", "https://edit.umaxica.org", "http://base.app.localhost",
+     "https://base.app.localhost", "https://127.0.0.1",].each do |origin|
+      assert_not JumpRtReturnPolicy.allowed_source?(destination_origin: "https://www.umaxica.app", source: origin)
+      assert_not JumpRtReturnPolicy.allowed_source?(destination_origin: origin, source: "https://www.umaxica.app")
+    end
+  end
+
+  test "retired logical ceremony issuer is not a jump return source" do
+    %w(app com org).each do |tld|
+      assert_not JumpRtReturnPolicy.allowed_source?(
+        destination_origin: "https://www.umaxica.#{tld}",
+        source: "https://log.umaxica.#{tld}",
+      ), tld
+      assert_not JumpRtReturnPolicy.allowed_source?(
+        destination_origin: "https://www.jp.umaxica.#{tld}",
+        source: "https://log.umaxica.#{tld}",
+      ), tld
+    end
   end
 
   def with_env(values)

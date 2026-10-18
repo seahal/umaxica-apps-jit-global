@@ -4,35 +4,6 @@
 require "test_helper"
 
 class TargetedModelLineCoverageTest < ActiveSupport::TestCase
-  class AbstractOidcUsage < AppTicketRecord
-    self.abstract_class = true
-    include OidcTokenUsage
-  end
-
-  class ConcreteOidcUsage < AbstractOidcUsage
-    self.table_name = "client_token_usages"
-  end
-
-  class AbstractSignUpFlow
-    include ActiveModel::Validations
-
-    class << self
-      def before_validation(*) = nil
-
-      def validates(*) = nil
-
-      def validate(*) = nil
-    end
-
-    attr_accessor :completed_requirements
-
-    include SignUpFlowTicket
-
-    def has_attribute?(*) = false
-
-    def transition_sign_up_to!(*) = nil
-  end
-
   class AbstractOidcAuthorization < ApplicationRecord
     self.abstract_class = true
     include OidcAuthorizationTransactionable
@@ -41,11 +12,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
   class AbstractStepUpCeremony < ApplicationRecord
     self.abstract_class = true
     include StepUpCeremonyTransactionable
-  end
-
-  class AbstractSocialIdentity < ApplicationRecord
-    self.abstract_class = true
-    include SocialIdentifiable
   end
 
   test "withdrawal occurrence helpers reject unsupported types and digest optional values" do
@@ -60,70 +26,74 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "session limit transaction predicates and write helpers cover every state" do
-    transaction = ClientSessionLimitResolutionTransaction.new(status: "pending", expires_at: 1.minute.from_now)
+    states = {
+      ClientSessionLimitResolutionTransaction::PENDING => :pending?,
+      ClientSessionLimitResolutionTransaction::SESSION_SELECTED => :session_selected?,
+      ClientSessionLimitResolutionTransaction::RESOLVED => :resolved?,
+      ClientSessionLimitResolutionTransaction::EXPIRED => :expired?,
+      ClientSessionLimitResolutionTransaction::CANCELLED => :cancelled?,
+    }
 
-    assert_predicate transaction, :pending?
-    transaction.status = "session_selected"
-
-    assert_predicate transaction, :session_selected?
-    transaction.status = "expired"
-
-    assert_predicate transaction, :expired?
-
-    updates = []
-    transaction.stub(:update!, ->(attributes) { updates << attributes }) do
-      now = Time.current
-      transaction.mark_resolved!(now: now)
-
-      assert_equal({ resolved_at: now, status: "resolved" }, updates.last)
+    states.each do |state, predicate|
+      assert_predicate ClientSessionLimitResolutionTransaction.new(state_id: state), predicate
     end
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    token = ClientToken.create!(user: actor)
+    digest = ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32))
+    issuance = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow,
+      actor: actor,
+      browser_binding_digest: digest,
+    )
+    record = issuance.transaction
+    record.select_session!(
+      actor: actor,
+      challenge: issuance.challenge,
+      session_ref: token.public_id,
+      browser_binding_digest: digest,
+    )
+
+    assert_predicate record.reload, :session_selected?
+    record.resolve!(actor: actor, challenge: issuance.challenge, browser_binding_digest: digest)
+
+    assert_predicate record.reload, :resolved?
+    assert_equal record.resolved_at, record.finalized_at
+    assert_not_nil record.resolved_at
+    assert_not_predicate token.reload, :currently_usable?
   end
 
   test "session limit issuance refreshes an existing active transaction" do
-    existing = Struct.new(:audit_context) do
-      attr_reader :updates
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    digest = ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32))
+    first = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow, actor: actor, browser_binding_digest: digest, audit_context: { "existing" => true },
+    )
+    second = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow, actor: actor, browser_binding_digest: digest, audit_context: { "new" => true },
+    )
 
-      def update!(attributes)
-        @updates = attributes
-      end
-    end.new({ "existing" => true })
-    relation = Object.new
-    relation.define_singleton_method(:active_at) { |_now| self }
-    relation.define_singleton_method(:find_by) { |**_attributes| existing }
-    actor = Client.new(public_id: "client-public-id")
-    oidc_transaction = Struct.new(:id).new(123)
-
-    ClientSessionLimitResolutionTransaction.stub(:open_status, relation) do
-      issuance = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-        actor: actor,
-        oidc_transaction: oidc_transaction,
-        audit_context: { "new" => true },
-      )
-
-      assert_same existing, issuance.transaction
-      assert_equal({ "existing" => true, "new" => true }, existing.updates.fetch(:audit_context))
-    end
-  end
-
-  test "oidc usage exposes revoke logout expiry and abstract association behavior" do
-    usage = ClientTokenUsage.new(revoked_at: Time.current)
-
-    assert_predicate usage, :revoked?
-
-    updates = []
-    usage.stub(:update!, ->(attributes) { updates << attributes }) do
-      now = Time.current
-      usage.revoke!(status: "failed", now: now)
-
-      assert_equal now, updates.last.fetch(:revoked_at)
-      usage.mark_logout_status!(status: "success", now: now)
-
-      assert_equal now, updates.last.fetch(:logged_out_at)
-      assert_equal now, updates.last.fetch(:revoked_at)
-    end
-
-    assert_operator usage.send(:default_refresh_token_expires_at), :>, Time.current
-    assert_raises(NotImplementedError) { ConcreteOidcUsage.new.send(:parent_association_name) }
+    assert_equal first.transaction.id, second.transaction.id
+    assert_equal({ "existing" => true, "new" => true }, second.transaction.audit_context)
+    assert_nil ClientSessionLimitResolutionTransaction.find_active_by_challenge(first.challenge)
+    assert_equal second.transaction.id,
+                 ClientSessionLimitResolutionTransaction.find_active_by_challenge(second.challenge).id
+    assert_not_equal first.challenge, second.challenge
   end
 
   test "processor notification status helpers and pending scope are executable" do
@@ -136,33 +106,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
 
     assert_predicate notification, :pending?
     assert_kind_of ActiveRecord::Relation, ClientProcessorErasureNotification.pending_for_processing
-  end
-
-  test "sign up flow base and fallback helpers fail closed" do
-    assert_nil AbstractSignUpFlow.cleanup_status_class
-    assert_raises(NotImplementedError) { AbstractSignUpFlow.cleanup_status_id_for(:idle) }
-
-    flow = AbstractSignUpFlow.new
-
-    assert_equal 0, flow.checkpoint_version
-    assert_equal ["inner"],
-                 flow.send(
-                   :flatten_requirement_keys, { "outer" => [{ "inner" => true }] },
-                   include_current_level: false,
-                 )
-    assert_not flow.send(:safe_internal_return_to?, "http://[")
-
-    calls = []
-    flow.stub(:transition_sign_up_to!, ->(*arguments, **options) { calls << [arguments, options] }) do
-      flow.advance_sign_up_to_checkpoint!
-    end
-
-    assert_equal "CHECKPOINT_PENDING", calls.first.first.first
-
-    concrete_flow = ClientSignUpFlow.new(cleanup_status_id: nil)
-    concrete_flow.send(:default_cleanup_status)
-
-    assert_equal ClientSignUpFlowCleanupStatus::IDLE, concrete_flow.cleanup_status_id
   end
 
   test "retention and privacy state helpers expose status names and predicates" do
@@ -202,19 +145,13 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
 
   test "flow sign in and sign out delegate their remaining public transitions" do
     sign_in = ClientSignInFlow.new
-    sign_in_calls = []
-    sign_in.stub(:complete_sign_in!, ->(**options) { sign_in_calls << options }) do
-      now = Time.current
-      sign_in.advance_sign_in_to_dashboard!(now: now)
-
-      assert_equal({ step: "dashboard", now: now }, sign_in_calls.last)
-    end
+    assert_raises(FlowInvalidTransition) { sign_in.advance_sign_in_to_selector! }
     discard_calls = []
     sign_in.stub(:discard_cycle!, ->(**options) { discard_calls << options }) do
       sign_in.discard_sign_in!(now: Time.current)
     end
 
-    assert_equal sign_in.purged_at, discard_calls.last.fetch(:purged_at)
+    assert_equal sign_in.purge_eligible_at, discard_calls.last.fetch(:purge_eligible_at)
 
     sign_out = ClientSignOutFlow.new(status_id: ClientSignOutFlow.status_id_for("NOTHING"))
 
@@ -265,21 +202,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     )
 
     assert_not transaction.valid?
-    assert_includes transaction.errors[:expected_step], "is not valid for the origin surface"
-  end
-
-  test "single use token switches to the writing role" do
-    connection_owner = Object.new
-    connection_owner.define_singleton_method(:current_role) { :reading }
-    connection_owner.define_singleton_method(:connected_to) do |role:, &block|
-      raise RuntimeError, "unexpected role" unless role == :writing
-
-      block.call
-    end
-
-    AppPreference.stub(:connection_class_for_self, connection_owner) do
-      assert_equal :written, AppPreference.send(:with_writing_role) { :written }
-    end
+    assert_includes transaction.errors[:expected_step], "is not valid for the logout workflow"
   end
 
   test "unsupported email verification outcome is reported" do
@@ -297,7 +220,6 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     credential = VisitorSecretCredential.new(
       secret_kind: "unsupported",
       usage_policy: "unsupported",
-      lookup_digest: "digest",
       safe_prefix: "prefix",
     )
 

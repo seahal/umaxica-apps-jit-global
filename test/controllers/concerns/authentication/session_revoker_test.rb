@@ -74,6 +74,8 @@ class AuthenticationSessionRevokerTest < ActiveSupport::TestCase
       user_id: client.id,
       established_authentication_method: "passkey",
       last_step_up_method: "totp",
+      last_step_up_phishing_resistant: false, last_step_up_user_verified: false,
+      last_step_up_credential_ref: "test-step-up-credential", last_step_up_full_reauthentication: false,
     )
     passkey_without_step_up = ClientToken.create!(user_id: client.id, established_authentication_method: "passkey")
 

@@ -38,7 +38,15 @@
 #  fk_rails_...  (staff_id => operators.id)
 #
 class OperatorPreference < OrgPrincipalRecord
+  include ::PublicId
   include ::PreferenceExplicitFields
+
+  DESTROY_DEPENDENT_ASSOCIATIONS = %i(
+    staff_preference_language staff_preference_timezone staff_preference_region staff_preference_theme
+    operator_preference_currency operator_preference_date_format operator_preference_time_format
+    operator_preference_motion operator_preference_density operator_preference_page_size
+    operator_preference_adult_content_gate
+  ).freeze
 
   belongs_to :staff, inverse_of: :staff_preference, class_name: "Operator"
 
@@ -88,10 +96,8 @@ class OperatorPreference < OrgPrincipalRecord
   validates :functional, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
-  validates :public_id, length: { maximum: 21 }, uniqueness: true, allow_blank: true
-
   after_initialize :set_defaults
-  before_validation :generate_public_id, on: :create
+  before_destroy :preload_dependent_associations, prepend: true
 
   def adult_content_gate
     operator_preference_adult_content_gate&.option&.name || "nothing"
@@ -99,8 +105,10 @@ class OperatorPreference < OrgPrincipalRecord
 
   private
 
-  def generate_public_id
-    self.public_id = Nanoid.generate(size: 21) if public_id.blank?
+  def preload_dependent_associations
+    ActiveRecord::Associations::Preloader.new(
+      records: [self], associations: DESTROY_DEPENDENT_ASSOCIATIONS,
+    ).call
   end
 
   # New records get explicit non-consent defaults so a nil never reaches a

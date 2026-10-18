@@ -6,6 +6,7 @@ module DpopProofStateable
 
   TTL_SECONDS = 300
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     scope :active_at, ->(time) { where(arel_table[:expires_at].gt(time)) }
     validates :expires_at, presence: true

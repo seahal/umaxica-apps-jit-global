@@ -1,0 +1,38 @@
+stateDiagram-v2
+    %% D-82 derived lifecycle. The same contract is stored in app, com and org Ticket DBs.
+    state "issued / unbound" as issued
+    state "attached" as attached
+    state "Base confirmed" as confirmed
+    state "redeemed / admitted" as redeemed
+    state "retired" as retired
+
+    [*] --> issued: parent + binding transaction
+    issued --> attached: Auth attach! / active sid + confirmation_ref
+    issued --> retired: retire! / expiry or restart
+    attached --> confirmed: confirm_base! / nonce digest + base token
+    attached --> retired: retire! / expiry or restart
+    confirmed --> redeemed: redeem! / rotated admitted sid
+    confirmed --> retired: retire! / expiry or restart
+    redeemed --> [*]: retained terminal fact
+    retired --> [*]: retained terminal fact
+
+    note right of issued
+      Exactly one parent:
+      sign-in flow, OIDC transaction,
+      or step-up transaction.
+      Entry and confirmation refs are
+      lookup identifiers, not proof.
+      Distinct pending parents may share
+      one active Auth sid, including previously admitted continuity.
+      Attachment does not admit the new purpose.
+      GET validates ownership without mutation.
+      Transition clocks come from the Ticket DB.
+    end note
+
+    note right of redeemed
+      Result acceptance rechecks the original Base nonce
+      and exact root context against this retained fact.
+      Admission expiry does not erase result correlation.
+      Root issuance rotates the Rails session, retaining
+      only the proven nonce for exact finalized-result retry.
+    end note

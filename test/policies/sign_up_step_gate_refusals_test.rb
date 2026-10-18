@@ -3,78 +3,44 @@
 
 require "test_helper"
 
-# The step gate decides whether a sign-up step may be shown or a challenge issued
-# for it. Every refusal is a step reached out of order or by a route that does not
-# exist for the surface and family being asked about; letting one through would
-# let a checkpoint be skipped or a challenge be issued for a step that never
-# issues one.
 class SignUpStepGateRefusalsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  class ControllerDouble
-    attr_accessor :session, :params, :ticket
+  ControllerBoundary = Struct.new(:session, :params, :current_sign_up_flow_ticket)
 
-    def initialize
-      @session = {}
-      @params = ActionController::Parameters.new(ri: "jp", pt: "/settings")
+  test "a surface family and step combination with no route is refused" do
+    controller = ControllerBoundary.new({}, {}, nil)
+    [[:org, "email", :otp], [:app, "line", :otp], [:app, "email", :not_a_step]].each do |surface, family, step|
+      context = SignUpStepGate.for_show(controller: controller, surface: surface, family: family, step: step)
+
+      assert_equal ["unsupported sign-up route"], context.errors
+      assert_equal :invalid, context.status
     end
-
-    def current_sign_up_flow_ticket = ticket
   end
 
-  def gate(surface: :app, family: "email", step: :otp, mode: :show, controller: ControllerDouble.new)
-    SignUpStepGate.new(controller: controller, surface: surface, family: family, step: step, mode: mode)
+  test "a request with no ticket is refused before any registry is built" do
+    controller = ControllerBoundary.new({}, {}, nil)
+
+    context = SignUpStepGate.for_show(controller: controller, surface: :app, family: "email", step: :otp)
+
+    assert_equal :refused, context.status
+    assert_equal :no_active_flow, context.refusal
+    assert_equal ["request contradicts the authoritative sign-up flow"], context.errors
   end
 
-  test "a surface, family and step combination with no route is refused" do
-    assert_equal ["unsupported sign-up route"], gate(surface: :org).call.errors
-    assert_equal ["unsupported sign-up route"], gate(family: "line").call.errors
-    assert_equal ["unsupported sign-up route"], gate(step: :not_a_step).call.errors
-  end
-
-  test "a request with no ticket at all is refused before any registry is built" do
-    assert_equal ["ticket is required"], gate.call.errors
-  end
-
-  # Only the steps that actually have a challenge may have one issued. Asking for
-  # one on, say, the birthdate step means the client is following a flow that does
-  # not exist.
-  test "issuing a challenge for a step that has none is refused" do
-    controller = ControllerDouble.new
-    ClientSignUpFlowStatus.ensure_defaults!
-    controller.ticket = ClientSignUpFlow.new(
-      step: "checkpoint",
-      entry_method: "email",
+  test "issuing a challenge for the current birthdate step is refused" do
+    cycle = ClientSignUpFlow.new(
+      public_id: "birthdate-challenge-flow", step: "checkpoint", entry_method: "email",
       status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
-      issued_at: Time.current,
-      expires_at: 1.hour.from_now,
+      completed_requirements: { "otp" => { "cleared" => true } }, expires_at: 15.minutes.from_now,
+    )
+    controller = ControllerBoundary.new(
+      {}, { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: cycle, surface: :app) }, cycle,
     )
 
-    context = gate(step: :birthdate, mode: :create, controller: controller).call
+    context = SignUpStepGate.for_create(controller: controller, surface: :app, family: "email", step: :birthdate)
 
     assert_equal :invalid, context.status
     assert_includes context.errors, "challenge issuance is not allowed for this step"
-  end
-
-  test "a surface with no sign-up cycle class is refused rather than raised out of the gate" do
-    controller = ControllerDouble.new
-    controller.define_singleton_method(:current_sign_up_flow_ticket) { nil }
-    subject = gate(surface: :app, controller: controller)
-    subject.instance_variable_set(:@surface, :org)
-
-    assert_raises(ArgumentError) { subject.send(:cycle_class) }
-  end
-
-  # A controller that signs its return targets is asked for the signed value; one
-  # that does not falls back to the raw parameter.
-  test "the return target is taken from the signing helper when the controller has one" do
-    plain = ControllerDouble.new
-
-    assert_equal "/settings", gate(controller: plain).send(:signed_pt)
-
-    signing = ControllerDouble.new
-    signing.define_singleton_method(:signed_pt_param) { "signed.token" }
-
-    assert_equal "signed.token", gate(controller: signing).send(:signed_pt)
   end
 end

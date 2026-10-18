@@ -65,6 +65,43 @@ class ClientBulletinTest < ActiveSupport::TestCase
     assert_equal 21, bulletin.public_id.length
   end
 
+  test "retries only a collision on the public_id unique index" do
+    existing = ClientBulletin.create!(user: @user, title: "Existing")
+    generated = [existing.public_id, "freshpublicid12345678"]
+
+    Nanoid.stub(:generate, ->(**_args) { generated.shift }) do
+      bulletin = ClientBulletin.new(user: @user, title: "Retried")
+      bulletin.save!(validate: false)
+
+      assert_equal "freshpublicid12345678", bulletin.public_id
+    end
+  end
+
+  test "stops after the bounded public_id collision retry limit" do
+    existing = ClientBulletin.create!(user: @user, title: "Existing")
+    generated = Array.new(PublicId::MAX_COLLISION_RETRIES + 1, existing.public_id)
+
+    Nanoid.stub(:generate, ->(**_args) { generated.shift }) do
+      bulletin = ClientBulletin.new(user: @user, title: "Retry limit")
+
+      assert_raises(ActiveRecord::RecordNotUnique) { bulletin.save!(validate: false) }
+      assert_empty generated
+    end
+  end
+
+  test "does not regenerate a caller-supplied public_id after a collision" do
+    existing = ClientBulletin.create!(user: @user, title: "Existing").public_id
+    generated = ["should-not-be-used"]
+
+    Nanoid.stub(:generate, ->(**_args) { generated.shift }) do
+      bulletin = ClientBulletin.new(user: @user, title: "Supplied", public_id: existing)
+
+      assert_raises(ActiveRecord::RecordNotUnique) { bulletin.save!(validate: false) }
+      assert_equal existing, bulletin.public_id
+      assert_equal ["should-not-be-used"], generated
+    end
+  end
+
   test "public_id is unique" do
     bulletin1 = ClientBulletin.create!(
       user: @user,

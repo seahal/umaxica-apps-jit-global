@@ -12,9 +12,66 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
 
   include ActiveSupport::Testing::TimeHelpers
 
+  teardown do
+    TurnstileVerifierStub.reset!
+  end
+
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    begin
+      admission_browser = self
+      admission_surface = "app"
+      admission_intent = "sign_in"
+      admission_host = {
+        "app" => ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+        "com" => ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+        "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+      }.fetch(admission_surface)
+      admission_browser.host!(admission_host)
+      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: admission_surface, intent: admission_intent,
+        base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      admission_path = "/sign/#{(admission_intent == "sign_up") ? "up" : "in"}"
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        "/ceremony_bindings",
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface: admission_surface, reference: admission_issuance.reference,
+      )
+      admission_binding.reload.confirm_base!(
+        base_token: nil,
+        browser_digest: admission_binding.base_browser_digest,
+      )
+      admission_browser.get(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, ri: "jp" },
+      )
+      admission_csrf = admission_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      admission_browser.post(
+        admission_path,
+        params: { entry_ref: admission_issuance.reference, authenticity_token: admission_csrf, ri: "jp" },
+      )
+
+      assert_equal 303, admission_browser.response.status
+      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+        flow: ClientSignInFlow.find_by!(
+          public_id: ClientAuthCeremonySession.find(
+            admission_binding.reload.admitted_auth_ceremony_session_id,
+          ).local_sign_in_flow_ref,
+        ),
+        surface: "app", phase: "PRIMARY_PENDING",
+      )
+    end
     ActionMailer::Base.deliveries.clear
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
@@ -27,7 +84,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   test "post create with Turnstile failure" do
     TurnstileVerifierStub.challenge_response = { "success" => false }
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: {
            user_email: { address: "test@example.com" },
            "cf-turnstile-response": "fail",
@@ -46,9 +103,9 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
       end
 
     TurnstileVerifierStub.challenge_enabled = false
-    JitSecurityTurnstileVerifier.stub(:verify, verifier) do
+    TurnstileVerifierStub.stub(:verify, verifier) do
       post(
-        auth_app_sign_in_email_url,
+        auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
         params: {
           user_email: { address: "turnstile-signin-#{SecureRandom.hex(4)}@example.com" },
           "cf-turnstile-response": "signin-token",
@@ -66,13 +123,13 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   test "post create with email cooldown active" do
     address = "cooldown@example.com"
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
     assert_response :redirect
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
@@ -84,25 +141,29 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     email = ClientEmail.create!(
       user: user,
       address: "app-json-success@example.com",
-      user_email_status_id: 1,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url,
-         params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
-         headers: { "Host" => @host }
+    perform_enqueued_jobs do
+      post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
+           params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
+           headers: { "Host" => @host }
+    end
+    otp_code = ActionMailer::Base.deliveries
+      .last.text_part.body.decoded.match(/Pass Code:\s*([0-9]{6})/).captures.fetch(0)
 
-    email.reload
-    otp_code = ROTP::HOTP.new(email.otp_private_key).at(email.otp_counter.to_i)
-
-    patch auth_app_sign_in_email_url(format: :json),
+    patch auth_app_sign_in_email_url(format: :json, fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: otp_code } },
           headers: { "Host" => @host }
 
     assert_response :ok
     json = response.parsed_body
 
-    assert json.key?("access_token") || json.key?("tokens")
+    assert_equal "authentication_evidence_recorded", json.fetch("status")
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(json.fetch("redirect_url")).path
+    assert_not json.key?("access_token")
+    assert_not json.key?("tokens")
   end
 
   test "patch update failure with JSON" do
@@ -110,15 +171,15 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
     email = ClientEmail.create!(
       user: user,
       address: "app-json-fail@example.com",
-      user_email_status_id: 1,
+      user_email_status_id: ClientEmailStatus::VERIFIED,
       confirm_policy: "1",
-    )
+    ).tap(&:finalize_binding!)
 
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: email.address }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
-    patch auth_app_sign_in_email_url(format: :json),
+    patch auth_app_sign_in_email_url(format: :json, fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: "000000" } },
           headers: { "Host" => @host }
 
@@ -130,21 +191,19 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
 
   test "patch update with dummy OTP" do
     # Unknown email
-    post auth_app_sign_in_email_url,
+    post auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
          params: { user_email: { address: "unknown@example.com" }, "cf-turnstile-response": "test" },
          headers: { "Host" => @host }
 
-    # We need to make the dummy ClientEmail valid.
-    # But ClientEmail requires a user.
-    # The controller does ClientEmail.new(address: ...) which is invalid.
-    # So it will render :edit with errors.
-
-    patch auth_app_sign_in_email_url,
-          params: { user_email: { pass_code: "123456" } },
-          headers: { "Host" => @host }
+    assert_no_difference ["Client.count", "ClientEmail.count", "ClientToken.count"] do
+      patch auth_app_sign_in_email_url(fb: @primary_sign_in_binding),
+            params: { user_email: { pass_code: "123456" } },
+            headers: { "Host" => @host }
+    end
 
     assert_response :unprocessable_content
-    assert_includes inertia_props.fetch("form_errors"), "Userを入力してください"
+    assert_not_empty inertia_props.fetch("form_errors")
+    assert_not_includes inertia_props.fetch("form_errors"), "Userを入力してください"
   end
 end
 
@@ -157,31 +216,11 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
 
   private
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -241,10 +280,8 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -256,10 +293,8 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -480,87 +515,6 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -580,10 +534,8 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -603,12 +555,12 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

@@ -11,7 +11,7 @@ class OccurrenceTest < ActiveSupport::TestCase
   end
 
   test "accessible? and purgeable? reflect retainable state" do
-    record = ClientOccurrence.new(discarded_at: 1.hour.from_now, purged_at: 1.hour.ago)
+    record = ClientOccurrence.new(discard_at: 1.hour.from_now, purge_eligible_at: 1.hour.ago)
 
     assert_predicate record, :accessible?
     assert_predicate record, :purgeable?
@@ -39,7 +39,7 @@ class OccurrenceTest < ActiveSupport::TestCase
   end
 
   def assert_occurrence_lifecycle_defaults(record)
-    assert_equal Float::INFINITY, record.discarded_at
-    assert_equal Float::INFINITY, record.purged_at
+    assert_equal Float::INFINITY, record.discard_at
+    assert_equal Float::INFINITY, record.purge_eligible_at
   end
 end

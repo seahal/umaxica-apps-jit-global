@@ -12,10 +12,7 @@
 #  locked_at                      :datetime
 #  notifiable                     :boolean          default(TRUE), not null
 #  otp_attempts_count             :integer          default(0), not null
-#  otp_counter                    :text             not null
-#  otp_expires_at                 :datetime
 #  otp_last_sent_at               :datetime
-#  otp_private_key                :string           not null
 #  promotional                    :boolean          default(TRUE), not null
 #  subscribable                   :boolean          default(TRUE), not null
 #  undeletable                    :boolean          default(FALSE), not null
@@ -104,7 +101,7 @@ class OperatorEmailTest < ActiveSupport::TestCase
       staff: @staff,
     )
 
-    expected = IdentifierBlindIndex.bidx_for_email("staff-bidx@example.com")
+    expected = IdentifierBlindIndex.bidx_for_email("staff-bidx@example.com", realm: :org)
 
     assert_equal expected, staff_email.address_digest
   end
@@ -117,8 +114,10 @@ class OperatorEmailTest < ActiveSupport::TestCase
     )
 
     assert_equal staff_email,
-                 OperatorEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("STAFF-FIND@example.com"))
-    assert_nil OperatorEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("not-an-email"))
+                 OperatorEmail.find_by(
+                   address_digest: IdentifierBlindIndex.bidx_for_email("STAFF-FIND@example.com", realm: :org),
+                 )
+    assert_nil OperatorEmail.find_by(address_digest: IdentifierBlindIndex.bidx_for_email("not-an-email", realm: :org))
   end
 
   test "should downcase email address before saving" do

@@ -19,6 +19,7 @@ module SignUpFlowTicket
     /challenge/i,
   ].freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :normalize_completed_requirements
     before_validation :default_cleanup_status
@@ -84,25 +85,8 @@ module SignUpFlowTicket
     has_attribute?(:cleanup_status_id) && cleanup_status_id == cleanup_status_id_for(:failed)
   end
 
-  def advance_sign_up_to_checkpoint!(now: Time.current)
-    transition_sign_up_to!(
-      "CHECKPOINT_PENDING",
-      step: "checkpoint",
-      allowed_from: %w(CONTACT_VERIFIED GUARDRAIL_PENDING),
-      now: now,
-    )
-  end
-
-  def complete_sign_up!(step: "completed", now: Time.current)
-    changes = { step: step, state: "COMPLETED" }
-    changes[:completed_at] = now if has_attribute?(:completed_at)
-
-    transition_cycle_to!(
-      status_id_for("COMPLETED"),
-      allowed_from: status_ids_for("SIGN_IN_HANDOFF_PENDING"),
-      changes: changes,
-      now: now,
-    )
+  def complete_sign_up!
+    transition_sign_up_to!("COMPLETED")
   end
 
   private
@@ -114,7 +98,6 @@ module SignUpFlowTicket
   def default_cleanup_status
     return unless has_attribute?(:cleanup_status_id)
 
-    self.class.cleanup_status_class&.ensure_defaults!
     return if cleanup_status_id.present?
 
     self.cleanup_status_id = cleanup_status_id_for(:idle)

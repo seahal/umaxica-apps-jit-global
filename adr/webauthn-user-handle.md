@@ -19,8 +19,8 @@ this implementation has not been deployed.
   `SecureRandom.urlsafe_base64(32)` through the `WebauthnUserHandleOwner` concern and enforce NOT
   NULL and UNIQUE constraints.
 - Use this handle as `user.id` in registration options built by `PasskeyCeremonyContext`.
-- Keep the handle immutable after generation. Rotation would orphan existing credentials because
-  the value is stored by the authenticator.
+- Keep the handle immutable after generation. Rotation would orphan existing credentials because the
+  value is stored by the authenticator.
 - Prohibit PII such as email addresses and internal primary keys as user handles, as documented in
   `docs/security/webauthn-security-invariants.md`.
 
@@ -28,6 +28,16 @@ this implementation has not been deployed.
 
 - The handle satisfies WebAuthn's opaque byte-sequence requirement and removes exposure and
   enumeration of internal IDs. Each surface has an independent handle namespace.
-- A future discoverable-credential or usernameless flow will not require another handle redesign.
+- The current discoverable-credential and usernameless flow uses this handle only as authenticator
+  registration metadata; direct app/com verification selects the stored credential by assertion
+  credential ID and does not trust the browser-supplied handle as account authority.
 - Verification: `test/models/webauthn_duplicate_registration_test.rb` covers opacity, uniqueness,
   and inequality with the primary key.
+
+## Delivered reconciliation (2026-10-06)
+
+The shared assertion path now checks returned `userHandle` bytes against the immutable registered
+handle for discoverable and actor-known authentication, in addition to credential ownership,
+challenge, RP ID, Origin, UV, UP, purpose, browser and slot concurrency. A caller cannot use a
+legacy actor identifier or a handle from another Identity. The security invariant test and passkey
+registration/assertion suites are the current verification boundary.

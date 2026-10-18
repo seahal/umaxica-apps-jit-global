@@ -60,10 +60,9 @@ module AuthorizationAudit
       login_public_id: defined?(Actor) ? Actor.authn.login_public_id : nil,
       action: action_name,
       controller: controller_name,
-      policy: exception.policy.class.name,
+      # ActionPolicy::Unauthorized carries the policy class and rule, not the authorized record.
+      policy: exception.policy.name,
       query: exception.rule,
-      record_type: exception.policy.record&.class&.name,
-      record_id: audit_identifier(exception.policy.record),
       ip_address: request.remote_ip,
       user_agent: request.user_agent,
       request_id: request.respond_to?(:request_id) ? request.request_id : nil,
@@ -73,14 +72,17 @@ module AuthorizationAudit
     }.compact
   end
 
+  # Denials usually happen on GET requests, which run on the reading role, so the chronicle
+  # write needs the writing role explicitly.
   def create_audit_record(actor, log_data)
-    # Create audit record if actor is User or Operator
-    if actor.is_a?(Client)
-      create_user_authorization_audit(actor, log_data)
-    elsif actor.is_a?(Operator)
-      create_staff_authorization_audit(actor, log_data)
-    elsif defined?(Visitor) && actor.is_a?(Visitor)
-      create_visitor_authorization_audit(actor, log_data)
+    ChronicleRecord.connected_to(role: :writing) do
+      if actor.is_a?(Client)
+        create_user_authorization_audit(actor, log_data)
+      elsif actor.is_a?(Operator)
+        create_staff_authorization_audit(actor, log_data)
+      elsif defined?(Visitor) && actor.is_a?(Visitor)
+        create_visitor_authorization_audit(actor, log_data)
+      end
     end
   end
 

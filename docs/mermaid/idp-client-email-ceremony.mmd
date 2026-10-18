@@ -1,0 +1,16 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "consumed" as consumed
+    [*] --> pending
+    pending --> consumed: consume_result!
+    pending --> consumed: consume_registration_result! after verified Source binding and audit commit
+    consumed --> [*]
+    note right of pending
+        Auth signed result crosses to Base credential commit.
+        TTL/refusal has no stored expired, failed or canceled status.
+        Ticket consumption and principal commit need not be one DB transaction.
+        Original settings proof stays bounded and immutable in Source.
+        Source binding failure preserves the pending Ticket; receipt failure
+        reconciles only its original Source binding and audit operation.
+    end note

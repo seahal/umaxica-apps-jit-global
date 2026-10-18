@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/avatar_test_factory"
 
 class AvatarAgentBindingTest < ActiveSupport::TestCase
   setup do
@@ -30,7 +31,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       moniker: "Default Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
@@ -45,7 +46,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
     assert_not_predicate binding, :revoked?
   end
 
-  test "validates public id presence and uniqueness" do
+  test "rejects public id mutation and duplicate creation" do
     first_identity = OperatorIdentity.create!(
       issuer: "https://id.example.test",
       subject: "avatar-agent-public-id-#{SecureRandom.hex(4)}",
@@ -74,12 +75,12 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    first_avatar = Avatar.create!(
+    first_avatar = AvatarTestFactory.create!(
       moniker: "Agent Avatar One",
       active_handle: first_handle,
       capability_id: AvatarCapability::NORMAL,
     )
-    second_avatar = Avatar.create!(
+    second_avatar = AvatarTestFactory.create!(
       moniker: "Agent Avatar Two",
       active_handle: second_handle,
       capability_id: AvatarCapability::NORMAL,
@@ -90,7 +91,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
     binding.public_id = nil
 
     assert_not binding.valid?
-    assert_equal :blank, binding.errors.details.fetch(:public_id).first.fetch(:error)
+    assert_equal "cannot be changed after creation", binding.errors[:public_id].first
 
     duplicate = AvatarAgentBinding.new(avatar: second_avatar, agent: second_agent, public_id: original_public_id)
 
@@ -113,7 +114,7 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    avatar = Avatar.create!(
+    avatar = AvatarTestFactory.create!(
       moniker: "Ordering Avatar",
       active_handle: handle,
       capability_id: AvatarCapability::NORMAL,
@@ -161,12 +162,12 @@ class AvatarAgentBindingTest < ActiveSupport::TestCase
       cooldown_until: Time.current,
       is_system: false,
     )
-    first_avatar = Avatar.create!(
+    first_avatar = AvatarTestFactory.create!(
       moniker: "DB Avatar One",
       active_handle: first_handle,
       capability_id: AvatarCapability::NORMAL,
     )
-    second_avatar = Avatar.create!(
+    second_avatar = AvatarTestFactory.create!(
       moniker: "DB Avatar Two",
       active_handle: second_handle,
       capability_id: AvatarCapability::NORMAL,

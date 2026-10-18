@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preferences
@@ -8,10 +10,10 @@
 #  dbsc_challenge           :text
 #  dbsc_challenge_issued_at :datetime
 #  dbsc_public_key          :jsonb
-#  discarded_at             :datetime         default(Infinity), not null
+#  discard_at             :datetime         default(Infinity), not null
 #  explicit_fields          :jsonb            not null
 #  jti                      :string
-#  purged_at                :datetime         default(Infinity), not null
+#  purge_eligible_at                :datetime         default(Infinity), not null
 #  token_digest             :binary
 #  used_at                  :datetime
 #  created_at               :datetime         not null
@@ -30,7 +32,7 @@
 #  index_app_preferences_on_dbsc_status_id     (dbsc_status_id)
 #  index_app_preferences_on_jti                (jti) UNIQUE
 #  index_app_preferences_on_public_id          (public_id) UNIQUE
-#  index_app_preferences_on_purged_at          (purged_at)
+#  index_app_preferences_on_purge_eligible_at          (purge_eligible_at)
 #  index_app_preferences_on_replaced_by_id     (replaced_by_id)
 #  index_app_preferences_on_status_id          (status_id)
 #  index_app_preferences_on_token_digest       (token_digest)
@@ -44,11 +46,15 @@
 #  fk_rails_...                             (replaced_by_id => app_preferences.id) ON DELETE => nullify
 #
 
-# frozen_string_literal: true
-
 require "test_helper"
 
 class AppPreferenceTest < ActiveSupport::TestCase
+  PREFERENCE_CHILD_ASSOCIATIONS = %i(app_preference_cookie app_preference_region app_preference_timezone
+                                     app_preference_language app_preference_theme app_preference_currency
+                                     app_preference_date_format app_preference_time_format app_preference_motion
+                                     app_preference_density app_preference_page_size app_preference_adult_content_gate
+                                     app_preference_chronicles replacements).freeze
+
   setup do
     AppPreferenceStatus.ensure_defaults!
   end
@@ -61,7 +67,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
   end
 
   test "validates public_id maximum length" do
-    preference = AppPreference.new(public_id: "a" * 22)
+    preference = AppPreference.new(public_id: "a" * 26)
 
     assert_not preference.valid?
     assert preference.errors.of_kind?(:public_id, :too_long)
@@ -76,15 +82,20 @@ class AppPreferenceTest < ActiveSupport::TestCase
 
   test "has one app_preference_cookie" do
     preference = AppPreference.create!
+    preference = AppPreference.includes(:app_preference_cookie).find(preference.id)
     cookie = preference.create_app_preference_cookie!
 
-    assert_equal cookie, preference.app_preference_cookie
+    loaded_preference = AppPreference.includes(:app_preference_cookie).find(preference.id)
+
+    assert_equal cookie, loaded_preference.app_preference_cookie
   end
 
   test "destroys app_preference_cookie when destroyed" do
     preference = AppPreference.create!
+    preference = AppPreference.includes(:app_preference_cookie).find(preference.id)
     cookie = preference.create_app_preference_cookie!
     cookie_id = cookie.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceCookie.find_by(id: cookie_id)
@@ -93,16 +104,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_region" do
     preference = AppPreference.create!
     option = app_preference_region_options(:jp)
+    preference = AppPreference.includes(:app_preference_region).find(preference.id)
     region = preference.create_app_preference_region!(option: option)
 
-    assert_equal region, preference.app_preference_region
+    loaded_preference = AppPreference.includes(:app_preference_region).find(preference.id)
+
+    assert_equal region, loaded_preference.app_preference_region
   end
 
   test "destroys app_preference_region when destroyed" do
     preference = AppPreference.create!
     option = app_preference_region_options(:jp)
+    preference = AppPreference.includes(:app_preference_region).find(preference.id)
     region = preference.create_app_preference_region!(option: option)
     region_id = region.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceRegion.find_by(id: region_id)
@@ -111,16 +127,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_timezone" do
     preference = AppPreference.create!
     option = app_preference_timezone_options(:asia_tokyo)
+    preference = AppPreference.includes(:app_preference_timezone).find(preference.id)
     timezone = preference.create_app_preference_timezone!(option: option)
 
-    assert_equal timezone, preference.app_preference_timezone
+    loaded_preference = AppPreference.includes(:app_preference_timezone).find(preference.id)
+
+    assert_equal timezone, loaded_preference.app_preference_timezone
   end
 
   test "destroys app_preference_timezone when destroyed" do
     preference = AppPreference.create!
     option = app_preference_timezone_options(:asia_tokyo)
+    preference = AppPreference.includes(:app_preference_timezone).find(preference.id)
     timezone = preference.create_app_preference_timezone!(option: option)
     timezone_id = timezone.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceTimezone.find_by(id: timezone_id)
@@ -129,16 +150,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_language" do
     preference = AppPreference.create!
     option = app_preference_language_options(:ja)
+    preference = AppPreference.includes(:app_preference_language).find(preference.id)
     language = preference.create_app_preference_language!(option: option)
 
-    assert_equal language, preference.app_preference_language
+    loaded_preference = AppPreference.includes(:app_preference_language).find(preference.id)
+
+    assert_equal language, loaded_preference.app_preference_language
   end
 
   test "destroys app_preference_language when destroyed" do
     preference = AppPreference.create!
     option = app_preference_language_options(:ja)
+    preference = AppPreference.includes(:app_preference_language).find(preference.id)
     language = preference.create_app_preference_language!(option: option)
     language_id = language.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceLanguage.find_by(id: language_id)
@@ -147,16 +173,21 @@ class AppPreferenceTest < ActiveSupport::TestCase
   test "has one app_preference_theme" do
     preference = AppPreference.create!
     option = app_preference_theme_options(:light)
+    preference = AppPreference.includes(:app_preference_theme).find(preference.id)
     theme = preference.create_app_preference_theme!(option: option)
 
-    assert_equal theme, preference.app_preference_theme
+    loaded_preference = AppPreference.includes(:app_preference_theme).find(preference.id)
+
+    assert_equal theme, loaded_preference.app_preference_theme
   end
 
   test "destroys app_preference_theme when destroyed" do
     preference = AppPreference.create!
     option = app_preference_theme_options(:light)
+    preference = AppPreference.includes(:app_preference_theme).find(preference.id)
     theme = preference.create_app_preference_theme!(option: option)
     theme_id = theme.id
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
     preference.destroy!
 
     assert_nil AppPreferenceTheme.find_by(id: theme_id)
@@ -166,7 +197,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("app-consume-once")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -190,18 +221,18 @@ class AppPreferenceTest < ActiveSupport::TestCase
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
       token_digest: revoked_digest,
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
       token_digest: compromised_digest,
-      discarded_at: Time.current,
+      discard_at: Time.current,
       jti: SecureRandom.uuid,
     )
     AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.minute.ago,
+      discard_at: 1.minute.ago,
       token_digest: expired_digest,
       jti: SecureRandom.uuid,
     )
@@ -216,68 +247,16 @@ class AppPreferenceTest < ActiveSupport::TestCase
 
     assert_not preference.revoked?
 
-    preference.discarded_at = Time.current
+    preference.discard_at = Time.current
 
     assert_predicate preference, :revoked?
   end
 
-  test "rotated_within_grace? is true for a just-consumed token with a replacement" do
-    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discarded_at: 1.day.from_now)
-    preference = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      used_at: Time.current,
-      replaced_by_id: replacement.id,
-    )
-
-    assert_predicate preference, :rotated_within_grace?
-  end
-
-  test "rotated_within_grace? honors the window boundary" do
-    now = Time.current
-    replacement = AppPreference.create!(status_id: AppPreferenceStatus::NOTHING, discarded_at: 1.day.from_now)
-    window = SingleUseToken::PREFERENCE_REFRESH_GRACE_WINDOW
-    preference = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      replaced_by_id: replacement.id,
-    )
-
-    # Just inside the window it is a benign concurrent sibling.
-    preference.update!(used_at: now - window + 1.second)
-
-    assert preference.rotated_within_grace?(window: window, now: now)
-
-    # Just past the window it is a genuine replay, not grace.
-    preference.update!(used_at: now - window - 1.second)
-
-    assert_not preference.rotated_within_grace?(window: window, now: now)
-  end
-
-  test "rotated_within_grace? is false for self-replacement or without consumption" do
-    # Self-replacement (the create-time default) is not a real rotation even if
-    # the row is somehow marked consumed.
-    self_replaced = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      used_at: Time.current,
-    )
-    not_consumed = AppPreference.create!(
-      status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
-      replaced_by_id: self_replaced.id,
-    )
-
-    assert_equal self_replaced.id, self_replaced.replaced_by_id, "default replaced_by points at self"
-    assert_not self_replaced.rotated_within_grace?
-    assert_not not_consumed.rotated_within_grace?
-  end
-
-  test "rotate! produces a parent that qualifies for the concurrency grace window" do
+  test "rotate! consumes the presented refresh token exactly once" do
     digest = AppPreference.digest_refresh_token("rotate-grace")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -286,16 +265,17 @@ class AppPreferenceTest < ActiveSupport::TestCase
     preference.reload
 
     assert_predicate preference, :replay?
-    assert_predicate preference, :rotated_within_grace?
     assert_equal rotated.id, preference.replaced_by_id
     assert_not_predicate rotated, :replay?, "replacement must remain unconsumed for sibling requests"
+    assert_nil AppPreference.rotate!(presented_digest: digest),
+               "a consumed refresh token cannot produce another replacement"
   end
 
   test "rotate! creates replacement and links replaced_by_id" do
     digest = AppPreference.digest_refresh_token("rotate-me")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -328,10 +308,11 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("rotate-with-children")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
+    preference = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(preference.id)
 
     child_records =
       {
@@ -352,10 +333,11 @@ class AppPreferenceTest < ActiveSupport::TestCase
       }
 
     rotated = AppPreference.rotate!(presented_digest: digest, now: Time.current)
+    rotated = AppPreference.includes(PREFERENCE_CHILD_ASSOCIATIONS).find(rotated.id)
 
     child_records.each do |association_name, child|
       assert_equal rotated.id, child.reload.preference_id, "#{association_name} should move to replacement"
-      assert_equal child.id, rotated.reload.public_send(association_name).id
+      assert_equal child.id, rotated.public_send(association_name).id
     end
     assert_equal rotated.id, preference.reload.replaced_by_id
   end
@@ -364,7 +346,7 @@ class AppPreferenceTest < ActiveSupport::TestCase
     digest = AppPreference.digest_refresh_token("rotate-wrong-device")
     preference = AppPreference.create!(
       status_id: AppPreferenceStatus::NOTHING,
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
       token_digest: digest,
       jti: SecureRandom.uuid,
     )
@@ -376,23 +358,5 @@ class AppPreferenceTest < ActiveSupport::TestCase
 
     assert_predicate preference.used_at, :present?
     assert_equal rotated.id, preference.replaced_by_id
-  end
-
-  test "migrate_preference_children! moves child preference reference" do
-    child = Struct.new(:preference_id) do
-      define_method(:update!) do |attributes|
-        self.preference_id = attributes.fetch(:preference_id)
-      end
-    end.new(1)
-    from = Struct.new(:app_preference_cookie) do
-      define_singleton_method(:model_name) do
-        ActiveModel::Name.new(AppPreference)
-      end
-    end.new(child)
-    to = Struct.new(:id).new(2)
-
-    AppPreference.send(:migrate_preference_children!, from: from, to: to)
-
-    assert_equal 2, child.preference_id
   end
 end

@@ -6,6 +6,7 @@ module SignOidcLogout
 
   OIDC_LOGOUT_REQUEST_SESSION_KEY = :oidc_logout_request
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     after_action :sign_out_notice_cache_headers!, only: %i(show create)
   end
@@ -25,6 +26,15 @@ module SignOidcLogout
 
     @oidc_end_session_request = OidcEndSessionRequest.call(params: params, request: request)
     return render_oidc_end_session_error(@oidc_end_session_request) if @oidc_end_session_request.error?
+
+    # A verified hint without the captured IdP session identifies an RP's requested target, but it
+    # does not authorize this browser to mutate anything. Stop before storing a pending request or
+    # redirecting to an origin: the IdP-session-absent contract is a plain error with no state
+    # change (REQ-009 / DEC-074).
+    if @oidc_end_session_request.source == OidcEndSessionRequest::SOURCE_ID_TOKEN_HINT &&
+        @oidc_end_session_request.requires_confirmation?
+      return render_oidc_end_session_session_missing_error
+    end
 
     if oidc_logout_pending_request_present?
       if request.post?
@@ -52,23 +62,21 @@ module SignOidcLogout
     return reject_oidc_logout_challenge!("not_found") if @logout_transaction.blank?
     return reject_oidc_logout_challenge!("expired") if @logout_transaction.expired?
 
-    unless request.post?
-      warn_sign_out_event(
-        "auth.sign_out.legacy_handoff.used",
-        transaction: @logout_transaction,
-        auto_handoff: true,
-        user_confirmation_required: false,
-        cleanup_performed: false,
-        result: "rejected",
-        reason: "get_handoff_retired",
-      )
-      return reject_oidc_logout_challenge!("get_handoff_retired")
-    end
+    return render_oidc_end_session_confirmation unless request.post?
 
     return if finalize_oidc_logout_and_redirect!
 
     transaction = cleanup_and_advance_oidc_logout!
     handle_oidc_logout_completion_redirect!(transaction)
+  rescue AuthenticationLogoutCurrentSession::CommitOutcomeUnknown => e
+    warn_sign_out_event(
+      "auth.sign_out.commit_outcome_indeterminate",
+      transaction: @logout_transaction,
+      cleanup_performed: false,
+      result: "indeterminate",
+      error_class: e.class.name,
+    )
+    render_sign_out_indeterminate!
   rescue ActiveRecord::RecordNotFound, ArgumentError
     reject_oidc_logout_challenge!("not_found")
   end
@@ -182,7 +190,6 @@ module SignOidcLogout
     prepare_sign_out_completion_notice!
     logout_oidc_current_session!(result)
     issue_sign_out_notice!
-    notify_oidc_rps_of_logout(result)
 
     if result.post_logout_redirect_uri.present?
       redirect_to_jump_url(post_logout_redirect_uri_with_state(result), status: :see_other)
@@ -225,8 +232,32 @@ module SignOidcLogout
     if request.format.json?
       render json: { error: result.error_code, error_description: result.error_description },
              status: :bad_request
+    elsif result.error_description.to_s.start_with?("id_token_hint ") &&
+        result.error_description.to_s.end_with?("does not match current session")
+      render_oidc_end_session_session_error
     else
       render_oidc_logout_completion
+    end
+  end
+
+  def render_oidc_end_session_session_missing_error
+    render_oidc_end_session_session_error(
+      error_code: "login_required",
+      error_description: I18n.t("sign.shared.sign_out.idp_session_error"),
+    )
+  end
+
+  def render_oidc_end_session_session_error(error_code: "invalid_request", error_description: nil)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Referrer-Policy"] = SignOutNotice::SIGN_OUT_REFERRER_POLICY
+    description = error_description.presence || I18n.t("sign.shared.sign_out.idp_session_error")
+
+    if request.format.json?
+      render json: { error: error_code, error_description: description }, status: :bad_request
+    else
+      render plain: description, status: :bad_request
     end
   end
 
@@ -284,10 +315,6 @@ module SignOidcLogout
     nil
   end
 
-  def sign_out_confirmation_request?
-    current_resource.present? || current_session_public_id.present?
-  end
-
   def logout_oidc_current_session!(result)
     begin
       resource = current_resource if respond_to?(:current_resource, true)
@@ -301,12 +328,11 @@ module SignOidcLogout
         session_public_id: session_public_id,
         reason: "oidc_rp_initiated_logout",
       )
-      revoke_oidc_current_session_token!(token_record)
       record_logout_audit(resource) if respond_to?(:record_logout_audit, true)
     ensure
       clear_auth_cookies! if respond_to?(:clear_auth_cookies!, true)
       Actor.clear if defined?(Actor)
-      reset_session
+      reset_session_and_clear_inertia_history!
     end
   end
 
@@ -334,13 +360,6 @@ module SignOidcLogout
     token_class.includes(:device_session).find_by(oidc_sid: session_public_id)
   end
 
-  def revoke_oidc_current_session_token!(token_record)
-    return if token_record.blank?
-
-    token_record.reload
-    token_record.revoke! if token_record.respond_to?(:revoke!) && !token_record.revoked?
-  end
-
   def sign_out_confirmation_form_path
     return public_send(
       "base_#{sign_surface_name}_oidc_logout_path",
@@ -359,30 +378,6 @@ module SignOidcLogout
     query["state"] = result.state
     uri.query = query.to_query
     uri.to_s
-  end
-
-  def notify_oidc_rps_of_logout(result)
-    OidcBackchannelLogoutNotifier.call(
-      resource_type: oidc_logout_resource_type,
-      subject: result.subject,
-      sid: result.sid,
-      initiating_client_id: result.client_id,
-    )
-  end
-
-  def oidc_logout_resource_type
-    host = request.host.to_s
-    return "operator" if oidc_logout_host_matches?(host, OidcIssuer.host_for_resource_type("operator"))
-    return "visitor" if oidc_logout_host_matches?(host, OidcIssuer.host_for_resource_type("visitor"))
-
-    "client"
-  end
-
-  def oidc_logout_host_matches?(request_host, configured_host)
-    configured = URI.parse("//#{configured_host}").host.to_s
-    request_host == configured
-  rescue URI::InvalidURIError
-    request_host == configured_host.to_s
   end
 
   def sign_surface_name

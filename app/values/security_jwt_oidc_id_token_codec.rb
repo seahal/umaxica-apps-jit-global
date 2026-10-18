@@ -8,7 +8,7 @@ class SecurityJwtOidcIdTokenCodec
 
   class << self
     def encode(payload, issuer_id:)
-      JitSecurityJwtKeyring.encode(payload, issuer_id: issuer_id)
+      JitSecurityJwtKeyring.encode(payload, typ: TOKEN_TYPE, issuer_id: issuer_id)
     end
 
     def decode(id_token:, client_id:, resource_type:, jwt_issuer_id:, issuer:)

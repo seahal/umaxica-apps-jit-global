@@ -5,10 +5,10 @@
 # == Schema Information
 #
 # Table name: visitor_step_up_ceremony_transactions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id              :bigint           not null, primary key
-#  aal             :string
+#  aal             :string           # @deprecated evidence label; remove after explicit-evidence consumers migrate
 #  actor_ref       :string           not null
 #  allowed_methods :text             not null
 #  consumed_at     :datetime
@@ -16,8 +16,15 @@
 #  grant_jti       :string           not null
 #  lock_version    :bigint           default(0), not null
 #  method          :string
-#  required_aal    :string           not null
+#  required_aal    :string           not null        # @deprecated label; remove after AAL ledger retirement
 #  required_scope  :string           not null
+#  step_up_required :boolean         not null
+#  user_verification_required :boolean not null
+#  full_reauthentication_required :boolean not null
+#  audience        :string
+#  token_binding   :string
+#  require_session_binding :boolean  not null
+#  tenant_ref      :string
 #  resource_ref    :string
 #  result_jti      :string
 #  return_to       :string
@@ -25,6 +32,7 @@
 #  status          :string           default("pending"), not null
 #  surface         :string           not null
 #  verified_at     :datetime
+#  user_verified   :boolean
 #  created_at      :datetime         not null
 #  updated_at      :datetime         not null
 #  transaction_id  :string           not null
@@ -38,8 +46,12 @@
 #  index_visitor_step_up_ceremony_transactions_on_result_jti      (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  index_visitor_step_up_ceremony_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class VisitorStepUpCeremonyTransaction < ComTicketRecord
+class VisitorStepUpCeremonyTransaction < OpBaseComRecord
   include StepUpCeremonyTransactionable
 
   ceremony_surface "com"
+
+  private
+
+  def permitted_ceremony_methods = %w(passkey email_otp)
 end

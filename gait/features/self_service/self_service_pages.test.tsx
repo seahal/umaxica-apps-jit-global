@@ -1,0 +1,683 @@
+import { getByRole, queryByRole } from "@testing-library/dom";
+import { act, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { present } from "../../support/present";
+
+// The base/app self-service pages moved out of ERB, so the markup and the form handlers are now
+// covered here. Inertia is mocked because these specs exercise the components, not the transport.
+const post = vi.fn();
+const patch = vi.fn();
+const deleteRequest = vi.fn();
+let formErrors: Record<string, string> = {};
+
+vi.mock("@inertiajs/react", () => ({
+  Link: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+  router: { delete: deleteRequest },
+  usePage: () => ({ props: {} }),
+  useForm: (initial: Record<string, unknown>) => {
+    const [data, setDataState] = useState(initial);
+
+    return {
+      data,
+      setData: (key: string, value: unknown) =>
+        setDataState((current) => ({ ...current, [key]: value })),
+      errors: formErrors,
+      processing: false,
+      post,
+      patch,
+    };
+  },
+}));
+
+const { default: SelfServiceShell } = await import("@/features/self_service/Shell");
+const { default: EntityList } = await import("@/features/self_service/EntityList");
+const { default: AvatarForm } = await import("@/features/self_service/AvatarForm");
+const { default: BillingsIndex } = await import("@/pages/base/app/billings/index");
+const { default: OrganizationShow } = await import("@/pages/base/app/organizations/show");
+const { default: AvatarShow } = await import("@/pages/base/app/avatars/show");
+const { default: SwitcherShow } = await import("@/pages/base/app/switchers/show");
+const { default: SignInLimitationShow } = await import("@/pages/base/app/sign/in/limitations/show");
+
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+
+const mount = (element: React.ReactElement) => {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() => {
+    root?.render(element);
+  });
+
+  return container;
+};
+
+beforeEach(() => {
+  formErrors = {};
+});
+
+afterEach(() => {
+  if (root) {
+    act(() => {
+      root?.unmount();
+    });
+  }
+  container?.remove();
+  container = null;
+  root = null;
+  post.mockClear();
+  patch.mockClear();
+  deleteRequest.mockClear();
+});
+
+describe("SelfServiceShell", () => {
+  it("renders the title and the body the server resolved", () => {
+    const html = renderToStaticMarkup(
+      <SelfServiceShell
+        title="Account"
+        body="account"
+      />,
+    );
+
+    expect(html).toMatch(/<h1[^>]*>Account<\/h1>/u);
+    expect(html).toContain("account");
+    expect(html).toContain("Signed in");
+    expect(html).not.toContain('href="/dashboard?ri=jp"');
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <SelfServiceShell
+        title="Account"
+        body="account"
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Account<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
+  });
+
+  it("renders the action link the server resolved beside the title", () => {
+    const html = renderToStaticMarkup(
+      <SelfServiceShell
+        title="Account"
+        body="account"
+        action_link={{ label: "Edit", href: "/account/edit?ri=jp" }}
+      />,
+    );
+
+    expect(html).toContain('href="/account/edit?ri=jp"');
+    expect(html).toContain("Edit");
+  });
+});
+
+describe("EntityList", () => {
+  const entries = [
+    { public_id: "acc_1", label: "acc_1", href: "/accounts/acc_1?ri=jp" },
+    { public_id: "acc_2", label: "acc_2", href: "/accounts/acc_2?ri=jp" },
+  ];
+
+  it("lists every entry with the href the server generated", () => {
+    const html = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={entries}
+      />,
+    );
+
+    expect(html).toMatch(/<h1[^>]*>Accounts<\/h1>/u);
+    expect(html).toContain('href="/accounts/acc_1?ri=jp"');
+    expect(html).toContain("acc_2");
+    expect(html).not.toContain("None available");
+  });
+
+  it("renders the empty message when nothing is available", () => {
+    const html = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+      />,
+    );
+
+    expect(html).toContain("None available");
+    expect(html).not.toContain("<ul>");
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Accounts<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
+  });
+
+  it("renders the server-provided create action as a disabled button without a destination", () => {
+    const actionContainer = document.createElement("div");
+    actionContainer.innerHTML = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+        create_action={{ label: "Create Account" }}
+      />,
+    );
+
+    const button = getByRole(actionContainer, "button", { name: "Create Account" });
+
+    expect(button.tagName).toBe("BUTTON");
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(button.hasAttribute("href")).toBe(false);
+  });
+
+  it("links to the app Avatar new page even when the collection is empty", () => {
+    const html = renderToStaticMarkup(
+      <EntityList
+        title="Avatars"
+        body="avatars"
+        empty="None available"
+        entries={[]}
+        create_action={{ label: "Create Avatar", href: "/avatars/new?ri=jp" }}
+      />,
+    );
+
+    const actionContainer = document.createElement("div");
+    actionContainer.innerHTML = html;
+    expect(getByRole(actionContainer, "link", { name: "Create Avatar" }).getAttribute("href")).toBe(
+      "/avatars/new?ri=jp",
+    );
+    expect(queryByRole(actionContainer, "button", { name: "Create Avatar" })).toBeNull();
+  });
+
+  it("does not render a create button when the server withheld the action", () => {
+    const emptyContainer = document.createElement("div");
+    emptyContainer.innerHTML = renderToStaticMarkup(
+      <EntityList
+        title="Accounts"
+        body="account"
+        empty="None available"
+        entries={[]}
+        create_action={null}
+      />,
+    );
+
+    expect(queryByRole(emptyContainer, "button", { name: "Create Account" })).toBeNull();
+  });
+});
+
+describe("BillingsIndex", () => {
+  it("renders the heading and the translated description", () => {
+    const html = renderToStaticMarkup(
+      <BillingsIndex
+        title="Billings"
+        description="Sign in required."
+      />,
+    );
+
+    // Matched as a heading rather than as exact markup: the class list is styling, and a
+    // refresh of it is not a change to what this page says.
+    expect(html).toMatch(/<h1[^>]*>Billings<\/h1>/u);
+    expect(html).toContain("Sign in required.");
+  });
+});
+
+describe("AvatarShow", () => {
+  it("renders the moniker, the handle and the edit link", () => {
+    const html = renderToStaticMarkup(
+      <AvatarShow
+        title="Avatar"
+        moniker="First Avatar"
+        handle="first"
+        edit={{ label: "Edit", href: "/avatars/av_1/edit?ri=jp" }}
+      />,
+    );
+
+    expect(html).toMatch(/<h1[^>]*>First Avatar<\/h1>/u);
+    expect(html).toContain("first");
+    expect(html).toContain('href="/avatars/av_1/edit?ri=jp"');
+  });
+
+  it("omits the handle and the edit link the server withheld", () => {
+    const html = renderToStaticMarkup(
+      <AvatarShow
+        title="Avatar"
+        moniker="First Avatar"
+        handle={null}
+        edit={null}
+      />,
+    );
+
+    expect(html).not.toContain("<a");
+    expect(html).toContain("First Avatar");
+  });
+});
+
+describe("SwitcherShow", () => {
+  const candidates = [
+    { account_public_id: "acc_1", organization_public_id: "org_1", avatar_public_id: "av_1" },
+  ];
+
+  it("renders the current context, the candidates and a rejection", () => {
+    const html = renderToStaticMarkup(
+      <SwitcherShow
+        title="Switcher"
+        current={{
+          account_public_id: "acc_1",
+          organization_public_id: "org_1",
+          organization_unit_public_id: "unit_1",
+          avatar_public_id: "av_1",
+        }}
+        candidates={candidates}
+        error="invalid switch"
+      />,
+    );
+
+    expect(html).toMatch(/<h1[^>]*>Switcher<\/h1>/u);
+    expect(html).toContain("unit_1");
+    expect(html).toContain("invalid switch");
+    // This rejection arrives with the initial document, rather than an asynchronous update.
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it("reports an absent context without an error region", () => {
+    const html = renderToStaticMarkup(
+      <SwitcherShow
+        title="Switcher"
+        current={null}
+        candidates={[]}
+        error={null}
+      />,
+    );
+
+    expect(html).toContain("No current context.");
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it("renders the dashboard up link above the title when the server sent one", () => {
+    const html = renderToStaticMarkup(
+      <SwitcherShow
+        title="Switcher"
+        current={null}
+        candidates={[]}
+        error={null}
+        up_link={{ label: "上へ", href: "/dashboard?ri=jp" }}
+      />,
+    );
+    const upIndex = html.indexOf('href="/dashboard?ri=jp"');
+    const titleIndex = html.search(/<h1[^>]*>Switcher<\/h1>/u);
+
+    expect(html).toContain("上へ");
+    expect(upIndex).toBeGreaterThan(-1);
+    expect(upIndex).toBeLessThan(titleIndex);
+  });
+});
+
+describe("AvatarForm", () => {
+  const createProps = {
+    title: "New Avatar",
+    heading: "New Avatar",
+    action: "/avatars?ri=jp",
+    method: "post" as const,
+    submit_label: "Create Avatar",
+    moniker: {
+      label: "Name",
+      value: "",
+      max_bytes: 128,
+      max_grapheme_clusters: 16,
+      client_validation: {
+        blank: "Name is required.",
+        invalid: "Name contains unsupported characters.",
+        max_bytes: "Name is too long in UTF-8 bytes.",
+        max_graphemes: "Name has too many visible characters.",
+      },
+    },
+    handle: { label: "Handle", value: "", maxlength: 80 },
+  };
+  const editProps = {
+    ...createProps,
+    title: "Avatar",
+    heading: "Avatar",
+    action: "/avatars/av_1?ri=jp",
+    method: "patch" as const,
+    submit_label: "Update Avatar",
+    moniker: { ...createProps.moniker, value: "First Avatar" },
+    handle: null,
+  };
+
+  it("describes the name limits using the existing translated validation conditions before typing", () => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const input = element.querySelector<HTMLInputElement>("#avatar_moniker")!;
+    const descriptions = input
+      .getAttribute("aria-describedby")!
+      .split(" ")
+      .map((id) => document.querySelector(`[id="${id}"]`)?.textContent)
+      .join(" ");
+    expect(descriptions).toContain(createProps.moniker.client_validation.max_graphemes);
+    expect(descriptions).toContain(createProps.moniker.client_validation.max_bytes);
+    expect(input.maxLength).toBe(-1);
+    expect(element.querySelector<HTMLInputElement>("#avatar_handle")?.maxLength).toBe(80);
+  });
+
+  it("renders the handle field only when the server sent one", () => {
+    expect(renderToStaticMarkup(<AvatarForm {...createProps} />)).toContain("avatar_handle");
+    expect(renderToStaticMarkup(<AvatarForm {...editProps} />)).not.toContain("avatar_handle");
+  });
+
+  it("renders the validation errors the server returned", () => {
+    formErrors = { "avatar.moniker": "can't be blank", "avatar.handle": "is taken" };
+
+    const html = renderToStaticMarkup(<AvatarForm {...createProps} />);
+
+    expect(html).toContain("can&#x27;t be blank");
+    expect(html).toContain("is taken");
+  });
+
+  it("edits both fields and posts to the create action", () => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const moniker = present(
+      element.querySelector<HTMLInputElement>("#avatar_moniker"),
+      "the moniker field",
+    );
+    const handle = present(
+      element.querySelector<HTMLInputElement>("#avatar_handle"),
+      "the handle field",
+    );
+    const descriptor = present(
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set,
+      "the input value setter",
+    );
+
+    act(() => {
+      descriptor.call(moniker, "Ada");
+      moniker.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      descriptor.call(handle, "ada");
+      handle.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(post).toHaveBeenCalledWith("/avatars?ri=jp");
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("patches the update action", () => {
+    const element = mount(<AvatarForm {...editProps} />);
+
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(patch).toHaveBeenCalledWith("/avatars/av_1?ri=jp");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("accepts 127 and 128 UTF-8 bytes and rejects the 129-byte boundary without native maxlength", () => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const moniker = present(
+      element.querySelector<HTMLInputElement>("#avatar_moniker"),
+      "the moniker field",
+    );
+    const descriptor = present(
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set,
+      "the input value setter",
+    );
+
+    expect(moniker.getAttribute("maxlength")).toBeNull();
+
+    for (const value of [
+      "あ\u0300\uFE0F".repeat(15) + "a\uFE0F\uFE0F",
+      "あ\u0300\uFE0F".repeat(16),
+    ]) {
+      act(() => {
+        descriptor.call(moniker, value);
+        moniker.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      act(() => {
+        element
+          .querySelector("form")
+          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+    }
+
+    expect(post).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      descriptor.call(moniker, "あ\u0300\uFE0F".repeat(15) + "あ\u0300\u0301\u0302");
+      moniker.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(element.textContent).toContain("Name is too long in UTF-8 bytes.");
+  });
+
+  it("accepts 15 and 16 grapheme clusters and rejects the 17-cluster boundary", () => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const moniker = present(
+      element.querySelector<HTMLInputElement>("#avatar_moniker"),
+      "the moniker field",
+    );
+    const descriptor = present(
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set,
+      "the input value setter",
+    );
+
+    for (const value of ["あ".repeat(15), "あ".repeat(16)]) {
+      act(() => {
+        descriptor.call(moniker, value);
+        moniker.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      act(() => {
+        element
+          .querySelector("form")
+          ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+    }
+
+    expect(post).toHaveBeenCalledTimes(2);
+
+    act(() => {
+      descriptor.call(moniker, "あ".repeat(17));
+      moniker.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(element.textContent).toContain("Name has too many visible characters.");
+  });
+
+  it.each([
+    ["an empty value", "", "Name is required."],
+    ["a whitespace-only value", " 　 ", "Name is required."],
+    ["a leading space", " Ada", "Name contains unsupported characters."],
+    ["a trailing space", "Ada ", "Name contains unsupported characters."],
+    ["a lone surrogate", "Ada\uD800", "Name contains unsupported characters."],
+    ["a control character", "A\u0007da", "Name contains unsupported characters."],
+    ["a bidirectional override", "A‮da", "Name contains unsupported characters."],
+  ])("rejects %s before submitting", (_label, value, message) => {
+    const element = mount(<AvatarForm {...createProps} />);
+    const moniker = present(
+      element.querySelector<HTMLInputElement>("#avatar_moniker"),
+      "the moniker field",
+    );
+    const descriptor = present(
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set,
+      "the input value setter",
+    );
+
+    act(() => {
+      descriptor.call(moniker, value);
+      moniker.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(post).not.toHaveBeenCalled();
+    expect(element.textContent).toContain(message);
+  });
+});
+
+describe("SignInLimitationShow", () => {
+  const props = {
+    title: "Session limit",
+    heading: "Session limit",
+    description: "Revoke one existing session to continue signing in.",
+    session_label: "Session",
+    error: null as string | null,
+    notice: null as string | null,
+    action: "/sign/in/limitation",
+    cancel_action: "/sign/in/limitation?resolution_challenge=ch_1",
+    submit_label: "Revoke and continue",
+    cancel_label: "Cancel sign-in",
+    continue_action: "/sign/in/limitation",
+    continue_label: "Continue sign-in",
+    can_continue: false,
+    resolution: { field: "resolution_challenge", value: "ch_1" },
+    sessions: [
+      {
+        session_ref: "ref_1",
+        restriction_label: "Restricted",
+        created_label: "Created 01/02",
+        last_used_label: "Last used 01/03",
+        revoke_label: "Revoke this session",
+      },
+      {
+        session_ref: "ref_2",
+        restriction_label: "Normal",
+        created_label: "Created 01/04",
+        last_used_label: null,
+        revoke_label: "Revoke this session",
+      },
+    ],
+  };
+
+  it("renders every session, with the never-used one lacking a last-used line", () => {
+    const html = renderToStaticMarkup(<SignInLimitationShow {...props} />);
+
+    expect(html).toContain("Restricted");
+    expect(html).toContain("Normal");
+    expect(html).toContain("Last used 01/03");
+    expect(html).toContain('value="ref_2"');
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it("renders the error, the notice and the field error", () => {
+    formErrors = { session_ref: "select a session" };
+
+    const html = renderToStaticMarkup(
+      <SignInLimitationShow
+        {...props}
+        error="revoke failed"
+        notice="still full"
+      />,
+    );
+
+    expect(html).toContain("revoke failed");
+    expect(html).toContain("still full");
+    expect(html).toContain("select a session");
+  });
+
+  it("selects a session, submits the patch and cancels with a delete", () => {
+    const element = mount(<SignInLimitationShow {...props} />);
+    const radio = element.querySelector<HTMLInputElement>('input[value="ref_1"]');
+
+    act(() => {
+      radio?.click();
+    });
+
+    expect(element.querySelector<HTMLInputElement>('input[value="ref_1"]')?.checked).toBe(true);
+
+    act(() => {
+      element
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(patch).toHaveBeenCalledWith("/sign/in/limitation");
+
+    act(() => {
+      element.querySelector<HTMLButtonElement>('button[type="button"]')?.click();
+    });
+
+    expect(deleteRequest).toHaveBeenCalledWith("/sign/in/limitation?resolution_challenge=ch_1");
+  });
+
+  it("continues the bound sign-in flow with the explicit POST action", () => {
+    const element = mount(
+      <SignInLimitationShow
+        {...props}
+        can_continue
+      />,
+    );
+
+    act(() => {
+      getByRole(element, "button", { name: "Continue sign-in" }).click();
+    });
+
+    expect(post).toHaveBeenCalledWith("/sign/in/limitation");
+  });
+});
+
+describe("app organization navigation", () => {
+  it("renders the authorized membership destinations and parent list", () => {
+    const html = renderToStaticMarkup(
+      <OrganizationShow
+        title="Organization"
+        body="organization"
+        up_link={{ label: "Back", href: "/organizations?ri=jp" }}
+        links={[
+          { label: "Memberships", href: "/organizations/org-1/memberships?ri=jp" },
+          { label: "New Membership", href: "/organizations/org-1/memberships/new?ri=jp" },
+          { label: "Membership 1", href: "/organizations/org-1/memberships/1?ri=jp" },
+          { label: "Edit Membership 1", href: "/organizations/org-1/memberships/1/edit?ri=jp" },
+        ]}
+      />,
+    );
+    expect(html).toContain('href="/organizations?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships/new?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships/1?ri=jp"');
+    expect(html).toContain('href="/organizations/org-1/memberships/1/edit?ri=jp"');
+  });
+});

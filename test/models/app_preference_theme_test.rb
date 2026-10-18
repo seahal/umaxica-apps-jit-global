@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preference_themes
@@ -20,8 +22,6 @@
 #  fk_app_preference_themes_on_option_id  (option_id => app_preference_theme_options.id)
 #  fk_rails_...                           (preference_id => app_preferences.id)
 #
-
-# frozen_string_literal: true
 
 require "test_helper"
 

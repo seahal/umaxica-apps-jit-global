@@ -9,30 +9,29 @@ class SocialAuthLinkHandler
     new(...).call
   end
 
-  def initialize(principal:, credential_candidate:, current_client:, repository:, provider:, uid:)
+  def initialize(principal:, credential_candidate:, current_client:, repository:, provider:, uid:,
+                 ceremony_started_at:)
     @principal = principal
     @credential_candidate = credential_candidate
     @current_client = current_client
     @repository = repository
     @provider = provider
     @uid = uid
+    @ceremony_started_at = ceremony_started_at
   end
 
   def call
     raise UnauthorizedError.new("errors.social_auth.not_logged_in") unless current_client
 
-    Rails.logger.debug { "[SocialAuth] handle_link - current_client_present: #{current_client.present?}" }
-
-    existing_for_user = identity_for_current_user
-    return handle_existing_for_current_user(existing_for_user) if existing_for_user
-
-    identity = repository.find_by_subject(uid, lock: true)
-    Rails.logger.debug do
-      "[SocialAuth] Identity with uid exists: #{identity.present?}, " \
-        "belongs_to_current_user: #{identity&.user_id == current_client_id}"
+    AppPrincipalRecord.transaction do
+      current_client.lock!
+      ClientExternalIdentity.with_subject_lock(
+        provider: provider, issuer: principal.issuer, subject: uid,
+      ) do
+        refuse_released_history!
+        link_under_lock
+      end
     end
-
-    identity ? handle_existing_uid_identity(identity) : link_new_identity
   rescue ActiveRecord::RecordNotUnique => e
     Rails.logger.info(
       JitLogEvent.format(
@@ -48,7 +47,32 @@ class SocialAuthLinkHandler
 
   private
 
-  attr_reader :principal, :credential_candidate, :current_client, :repository, :provider, :uid
+  attr_reader :principal, :credential_candidate, :current_client, :repository, :provider, :uid,
+              :ceremony_started_at
+
+  def refuse_released_history!
+    return unless ClientExternalIdentity.released_since_ceremony?(
+      provider: provider, issuer: principal.issuer, subject: uid,
+      ceremony_started_at: ceremony_started_at,
+    )
+
+    raise SocialAuth::ConflictError.new("errors.social_auth.identity_conflict")
+  end
+
+  def link_under_lock
+    Rails.logger.debug { "[SocialAuth] handle_link - current_client_present: #{current_client.present?}" }
+
+    existing_for_user = identity_for_current_user
+    return handle_existing_for_current_user(existing_for_user) if existing_for_user
+
+    identity = repository.find_by_subject_for_link(uid, lock: true)
+    Rails.logger.debug do
+      "[SocialAuth] Identity with uid exists: #{identity.present?}, " \
+        "belongs_to_current_user: #{identity&.user_id == current_client_id}"
+    end
+
+    identity ? handle_existing_uid_identity(identity) : link_new_identity
+  end
 
   def current_client_id
     current_client.id
@@ -96,6 +120,7 @@ class SocialAuthLinkHandler
       principal: principal,
       credential_candidate: credential_candidate,
     )
+    repository.activate!(identity) unless was_active
     create_social_link_audit(identity) unless was_active
     build_result(identity)
   end
@@ -130,7 +155,7 @@ class SocialAuthLinkHandler
   end
 
   def identity_for_current_user
-    repository.find_for_user(current_client)
+    repository.find_for_user_for_link(current_client)
   end
 
   def same_social_identity?(identity)
@@ -147,25 +172,7 @@ class SocialAuthLinkHandler
   end
 
   def create_social_link_audit(identity)
-    ChronicleRecord.connected_to(role: :writing) do
-      ClientChronicleEvent.find_or_create_by!(id: ClientChronicleEvent::SOCIAL_LINKED)
-      ClientChronicleLevel.find_or_create_by!(id: ClientChronicleLevel::NOTHING)
-    end
-
-    ClientChronicle.create!(
-      actor_type: "Client",
-      actor_id: current_client_id,
-      event_id: ClientChronicleEvent::SOCIAL_LINKED,
-      level_id: ClientChronicleLevel::NOTHING,
-      subject_id: current_client_id.to_s,
-      subject_type: "Client",
-      occurred_at: Time.current,
-      context: {
-        auth_method: "social",
-        provider: SocialIdentifiable.normalize_provider(provider),
-        social_identity_type: identity.class.name,
-      },
-    )
+    ClientSocialAuditOutbox.record!(identity: identity, owner: current_client, event_name: "linked")
   end
 
   def build_result(identity)

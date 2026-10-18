@@ -43,17 +43,18 @@ class CredentialSecurityTransition
 
   def call
     validate!
+    actor.class.connection_class_for_self.connected_to(role: :writing) do
+      actor.with_lock { apply_transition }
+    end
+  end
 
+  private
+
+  def apply_transition
+    revoke_authentication_admissions!
     revoked_sessions = 0
     revoked_step_up = 0
     tokens = token_relation.to_a
-
-    tokens.each do |token|
-      next if keep_current_session?(token)
-
-      token.revoke! if revoke_session?(token)
-      revoked_sessions += 1
-    end
 
     if revoke_step_up
       tokens.each do |token|
@@ -61,8 +62,79 @@ class CredentialSecurityTransition
       end
     end
 
+    tokens.each do |token|
+      next unless revoke_session?(token)
+
+      AuthenticationLogoutCurrentSession.call(
+        resource: actor,
+        token: token,
+        reason: "credential_#{reason}",
+      )
+      revoked_sessions += 1
+    end
+
     record_audit!(revoked_sessions: revoked_sessions, revoked_step_up: revoked_step_up)
     Result.new(revoked_session_count: revoked_sessions, revoked_step_up_count: revoked_step_up)
+  end
+
+  def revoke_authentication_admissions!
+    flow_model, ceremony_model, authorization_model =
+      case actor
+      when Client then [ClientSignInFlow, ClientAuthCeremonySession, ClientOidcAuthorizationTransaction]
+      when Visitor then [VisitorSignInFlow, VisitorAuthCeremonySession, VisitorOidcAuthorizationTransaction]
+      when Operator then [OperatorSignInFlow, OperatorAuthCeremonySession, OperatorOidcAuthorizationTransaction]
+      else raise ArgumentError, "unsupported credential transition actor"
+      end
+    flow_model.connection_class_for_self.connected_to(role: :writing) do
+      flow_model.transaction do
+        references = ceremony_model.where(admission_purpose: %w(local_sign_in local_sign_up))
+          .where.not(local_sign_in_flow_ref: nil).select(:local_sign_in_flow_ref)
+        flows = flow_model.where(principal_id: actor.id, public_id: references, base_finalized_at: nil)
+          .where.not(state_id: flow_model.state_ids_for("COMPLETED", "FAILED", "HALTED"))
+        flows.lock.find_each do |flow|
+          now = flow_model.database_now
+          unless flow.sign_in_expired? || flow.sign_in_cancelled?
+            if flow.expired?(now)
+              flow.expire_sign_in!
+            else
+              flow.halt_sign_in!
+            end
+          end
+          # Expiry is also a refusal: dependent authority must still be revoked.
+          if flow.result_digest
+            flow.update!(result_expires_at: [flow.result_expires_at, now].min)
+          end
+          ceremony_model.where(local_sign_in_flow_ref: flow.public_id).lock.find_each do |ceremony|
+            ceremony.revoke!(now: ceremony_model.database_now) unless ceremony.terminal?
+          end
+        end
+        expire_oidc_authentication!(authorization_model, ceremony_model)
+      end
+    end
+  end
+
+  def expire_oidc_authentication!(authorization_model, ceremony_model)
+    authorization_model.where(actor_ref: actor.public_id, base_finalized_at: nil)
+      .where.not(status: OidcAuthorizationTransactionable::STATUS_CONSUMED).lock.find_each do |transaction|
+        now = authorization_model.database_now
+        attributes = {
+          expires_at: [transaction.expires_at, now].min,
+          login_challenge_expires_at: [transaction.login_challenge_expires_at, now].min,
+        }
+        if transaction.result_expires_at
+          attributes[:result_expires_at] = [transaction.result_expires_at, now].min
+        end
+        transaction.update!(attributes)
+        if transaction.is_a?(ClientOidcAuthorizationTransaction)
+          ClientSessionLimitResolutionTransaction.open
+            .where(oidc_authorization_transaction_id: transaction.id).lock.find_each do |resolution|
+              resolution.expire!
+            end
+        end
+        ceremony_model.where(authorization_transaction_ref: transaction.transaction_id).lock.find_each do |ceremony|
+          ceremony.revoke!(now: ceremony_model.database_now) unless ceremony.terminal?
+        end
+      end
   end
 
   private
@@ -74,41 +146,38 @@ class CredentialSecurityTransition
     raise ArgumentError, "unsupported credential transition reason: #{reason.inspect}" unless REASONS.include?(reason)
     raise ArgumentError, "actor is required" if actor.blank?
     raise ArgumentError, "affected_surface is required" if affected_surface.blank?
+    return if current_session.nil? || current_session_matches_actor?
+
+    raise ArgumentError, "current session does not belong to the actor and surface"
+  end
+
+  def current_session_matches_actor?
+    case [actor, current_session]
+    in [Client, ClientToken] then current_session.user_id == actor.id
+    in [Visitor, VisitorToken] then current_session.visitor_id == actor.id
+    in [Operator, OperatorToken] then current_session.staff_id == actor.id
+    else false
+    end
   end
 
   def token_relation
     AuthenticationSessionRevoker.tokens_for(actor).not_revoked
   end
 
-  def keep_current_session?(token)
-    !revoke_current && same_token?(token, current_session)
-  end
-
   def revoke_session?(token)
-    revoke_current || revoke_other_sessions || !same_token?(token, current_session)
+    same_token?(token, current_session) ? revoke_current : revoke_other_sessions
   end
 
   def same_token?(left, right)
-    return false if left.blank? || right.blank?
-    return left.id == right.id if left.respond_to?(:id) && right.respond_to?(:id)
+    return false if left.nil? || right.nil?
 
-    false
+    left.class == right.class && left.id == right.id
   end
 
   def revoke_step_up_for(token)
     had_freshness = token.respond_to?(:last_step_up_at) && token.last_step_up_at.present?
-    IdentityStepUpCeremonyFreshnessRevoker.call!(token) if had_freshness
-    revoke_step_up_session_record!(token)
+    IdentityStepUpCeremonyFreshnessRevoker.call!(token)
     had_freshness ? 1 : 0
-  end
-
-  def revoke_step_up_session_record!(token)
-    return unless token.respond_to?(:step_up_session)
-
-    session = token.step_up_session
-    return if session.blank? || session.expired?
-
-    session.update!(discarded_at: Time.current)
   end
 
   def record_audit!(revoked_sessions:, revoked_step_up:)

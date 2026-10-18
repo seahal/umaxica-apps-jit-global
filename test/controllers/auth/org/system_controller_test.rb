@@ -13,9 +13,13 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url(ri: "jp"), headers: host_headers(@host)
 
     assert_response :see_other
-    uri = URI.parse(response.location)
+    gateway = URI.parse(response.location)
 
-    assert_equal ENV.fetch("PRIVATE_BASE_STAFF_URL"), uri.host
+    assert_equal "jump.umaxica.net", gateway.host
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
+
+    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), uri.host
     assert_equal "/system", uri.path
   end
 
@@ -27,7 +31,8 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url, headers: host_headers(@host)
 
     assert_response :see_other
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_equal "jp", query["ri"]
   end
@@ -36,7 +41,8 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url(ri: "us"), headers: host_headers(@host)
 
     assert_response :see_other
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_equal "us", query["ri"]
   end
@@ -45,7 +51,8 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     get auth_org_system_index_url(ri: "xx"), headers: host_headers(@host)
 
     assert_response :see_other
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(URI.parse(response.location).query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_equal "jp", query["ri"]
   end
@@ -80,65 +87,6 @@ class Auth::Org::SystemControllerTest < ActionDispatch::IntegrationTest
     end
 
     headers
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-
-    if user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-      token =
-        if session_public_id.present?
-          ClientToken.find_by(public_id: session_public_id)
-        else
-          ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-        end
-      token ||= ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-
-    if staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-      token =
-        if session_public_id.present?
-          OperatorToken.find_by(public_id: session_public_id)
-        else
-          OperatorToken.where(staff_id: staff.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    VisitorTokenBindingMethod.ensure_defaults! if defined?(VisitorTokenBindingMethod)
-    VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB) if defined?(VisitorTokenKind)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-
-    if visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-      token =
-        if session_public_id.present?
-          VisitorToken.find_by(public_id: session_public_id)
-        else
-          VisitorToken.where(visitor_id: visitor.id).where(
-            "discarded_at > ?",
-            Time.current,
-          ).order(created_at: :desc).first
-        end
-      token ||= VisitorToken.create!(visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-      base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    end
-
-    base
   end
 
   def bearer_headers(token, host: nil, headers: {})

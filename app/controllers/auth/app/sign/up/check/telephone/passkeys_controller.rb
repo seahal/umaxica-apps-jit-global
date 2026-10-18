@@ -17,7 +17,6 @@ module Auth
 
               AUTHENTICATION_MODE = :guest
 
-              before_action :hide_sign_up_auth_navigation
               before_action :load_sign_up_ticket
               before_action :load_sign_up_actor
               before_action :validate_sign_up_checkpoint_contact!
@@ -25,6 +24,15 @@ module Auth
 
               def show
                 return unless load_gate_context!(gate_for_show)
+                if @sign_up_ticket.pending_passkey_registration_id
+                  return redirect_to(
+                    auth_app_sign_up_check_telephone_secret_path(
+                      **sign_up_flow_binding_params,
+                      ri: params[:ri],
+                      pt: signed_pt_param,
+                    ), status: :see_other,
+                  )
+                end
 
                 @sign_up_actor = sign_up_pending_actor
                 @success_redirect_url = success_redirect_url
@@ -33,6 +41,7 @@ module Auth
 
               def create
                 return unless load_gate_context!(gate_for_create)
+                return head :conflict if @sign_up_ticket.pending_passkey_registration_id
 
                 @sign_up_actor = sign_up_pending_actor
                 render_passkey_registration_options
@@ -43,17 +52,26 @@ module Auth
 
                 @sign_up_actor = sign_up_pending_actor
                 return unless validate_sign_up_checkpoint_version!(json: true)
+                if @sign_up_ticket.pending_passkey_registration_id
+                  return render json: {
+                    status: "ok",
+                    redirect_url: auth_app_sign_up_check_telephone_secret_path(
+                      **sign_up_flow_binding_params,
+                      ri: params[:ri],
+                      pt: signed_pt_param,
+                    ),
+                  }, status: :created
+                end
                 return unless verify_and_create_passkey_registration!
 
-                result = perform_sign_up_event(
-                  :clear_requirement,
-                  payload: { requirement: :passkey, checkpoint_version: sign_up_checkpoint_version_param },
-                )
-                return finalize_sign_up_from_checkpoint!(json: true) if
-                  result.success? && result.next_event == :finalize
-                return render_sign_up_failure_result(result, json: true) unless result.success?
-
-                render json: { status: "ok", redirect_url: success_redirect_url }, status: :created
+                render json: {
+                  status: "ok",
+                  redirect_url: auth_app_sign_up_check_telephone_secret_path(
+                    **sign_up_flow_binding_params,
+                    ri: params[:ri],
+                    pt: signed_pt_param,
+                  ),
+                }, status: :created
               end
 
               def destroy
@@ -65,7 +83,10 @@ module Auth
               # The same two endpoints the Stimulus registration controller used, and the same
               # checkpoint version the server re-validates before it clears the requirement.
               def render_sign_up_passkey_page
-                path = auth_app_sign_up_check_telephone_passkey_path(ri: params[:ri], pt: signed_pt_param)
+                path = auth_app_sign_up_check_telephone_passkey_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
 
                 render inertia: "auth/app/sign/up/checkpoint/passkeys/new",
                        props: {
@@ -83,7 +104,10 @@ module Auth
               end
 
               def success_redirect_url
-                auth_app_sign_up_check_telephone_passcode_path(ri: params[:ri], pt: signed_pt_param)
+                auth_app_sign_up_check_telephone_secret_path(
+                  **sign_up_flow_binding_params, ri: params[:ri],
+                                                 pt: signed_pt_param,
+                )
               end
 
               def load_sign_up_actor
@@ -96,12 +120,17 @@ module Auth
 
               def passkey_registration_actor = @sign_up_actor
 
-              def passkey_registration_passkeys = @sign_up_actor.client_passkeys
+              def passkey_registration_passkeys = ClientPasskey.where(user_id: @sign_up_actor.id)
 
               def save_passkey_registration!(passkey)
-                passkey.save!
-                @sign_up_ticket.update!(pending_passkey_registration_id: passkey.id) if
-                  @sign_up_ticket.has_attribute?(:pending_passkey_registration_id)
+                @sign_up_actor.with_lock do
+                  passkey.save!
+                  @sign_up_ticket.update!(pending_passkey_registration_id: passkey.id)
+                  ClientSecretPasskeyReservationIssuer.call_for_sign_up!(
+                    flow: @sign_up_ticket, nonce: sign_up_session_state.cycle_payload.stringify_keys.fetch("nonce"),
+                    passkey: passkey, expires_after: ClientSecretLifetimesValue.issuance_ttl,
+                  )
+                end
               end
 
               def sign_up_requirement_context

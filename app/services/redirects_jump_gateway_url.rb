@@ -3,6 +3,7 @@
 
 class RedirectsJumpGatewayUrl
   MIN_TOKEN_LENGTH = 64
+  MAX_TOKEN_LENGTH = JumpRtIssuer::MAX_TOKEN_LENGTH
   TOKEN_PATTERN = /\A[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\z/
 
   def self.call(token, source: :jump_rt)
@@ -18,11 +19,12 @@ class RedirectsJumpGatewayUrl
     return failure(:blank_token) if token.blank?
     return failure(:control_char) if token.match?(/[\x00-\x1F\x7F]/)
     return failure(:token_too_short) if token.bytesize < MIN_TOKEN_LENGTH
+    return failure(:token_too_large) if token.bytesize > MAX_TOKEN_LENGTH
     return failure(:malformed_token) unless token.match?(TOKEN_PATTERN)
 
     uri = URI.parse(gateway_origin)
     return failure(:invalid_origin) if uri.scheme.blank? || uri.host.blank?
-    return failure(:https_required) unless uri.scheme == "https" || local_origin_allowed?(uri)
+    return failure(:https_required) unless uri.scheme == "https"
 
     uri.path = "/"
     uri.query = URI.encode_www_form("rt" => token)
@@ -39,17 +41,9 @@ class RedirectsJumpGatewayUrl
 
   attr_reader :token, :source
 
+  # The boot-validated PUBLIC_JUMP_GATEWAY_URL origin; never re-read from ENV here.
   def gateway_origin
-    # Resolve through JumpGatewayValues so the origin is normalized (scheme added, validated) with
-    # the same PUBLIC_JUMP_GATEWAY_URL/JUMP_GATEWAY_URL precedence. Reading the raw ENV directly is
-    # unsafe: a scheme-less PUBLIC_JUMP_GATEWAY_URL (e.g. "jump.umaxica.net") would fail origin
-    # validation here and break every jump-gateway redirect.
-    ConfigValues::JumpGatewayValues.build(env: ENV, production: Rails.env.production?).origin.to_s
-  end
-
-  def local_origin_allowed?(uri)
-    Rails.env.local? && uri.scheme == "http" &&
-      (uri.host == "localhost" || uri.host.end_with?(".localhost"))
+    Rails.configuration.x.boot_config.fetch(:jump).origin
   end
 
   def failure(reason)

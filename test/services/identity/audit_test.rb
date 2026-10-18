@@ -23,7 +23,7 @@ class IdentityAuditTest < ActiveSupport::TestCase
 
     chronicle = ClientChronicle.order(:created_at).last
 
-    assert_equal actor, chronicle.actor
+    assert_equal actor.id, chronicle.actor_id
     assert_equal "Client", chronicle.subject_type
     assert_equal actor.id.to_s, chronicle.subject_id.to_s
     assert_equal ClientChronicleEvent::PASSKEY_REGISTERED, chronicle.event_id

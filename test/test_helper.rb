@@ -41,25 +41,47 @@ require_relative "../config/environment"
 # digest of the watched files against `tmp/cache/vite/last-build-test.json` and skips the Vite
 # call when nothing changed, so a repeat run pays only for the digest.
 unless ViteRuby.commands.build
-  # rubocop:disable I18n/RailsI18n/DecorateString
   abort <<~MESSAGE
     Vite test-mode build failed, so public/vite-test has no usable manifest and every test that
     renders a layout would fail on a missing entrypoint. See the Vite output above; the same build
     runs standalone as `bunx vite build --mode test`.
   MESSAGE
-  # rubocop:enable I18n/RailsI18n/DecorateString
 end
 
 require "rails/test_help"
+# `Minitest.load(:test_prof)` only requires the Minitest reporter shims
+# (`lib/minitest/test_prof_plugin.rb`); it does not load the TestProf recipe classes
+# (`TestProf::EventProf`, `TestProf::StackProf`, `TestProf::MinitestSample`, ...), which live
+# behind the gem's top-level `require "test_prof"` entrypoint. Loading them here only defines
+# classes and registers `TestProf.activate` hooks that stay inert unless their env var
+# (`EVENT_PROF`, `TEST_STACK_PROF`, `SAMPLE`, ...) is set, so this carries no cost for an
+# ordinary `bin/rails test` run.
+require "test_prof"
+Minitest.load(:test_prof)
+# `MinitestSample` (backs `SAMPLE`/`SAMPLE_GROUPS`) is a recipe, not part of the top-level
+# `test_prof` require above, and must be loaded explicitly like any other TestProf recipe.
+require "test_prof/recipes/minitest/sample"
 require_relative "support/parallel_test_database_cloner"
 require_relative "support/external_identity_test_helper"
 require_relative "support/publishing_content_helper"
 require_relative "support/form_action_policy_helper"
 require_relative "support/fetch_metadata_defaults"
 require_relative "support/turnstile_verifier_stub"
+require_relative "support/outbound_http_guard"
 require_relative "support/outbound_http_stub"
+require_relative "support/in_process_op_transport"
+require_relative "support/service_stubs"
+require_relative "support/valkey_test_isolation"
+require_relative "support/set_cookie_assertions"
+require_relative "support/withheld_assertions"
+require_relative "support/cookie_jar_helper"
 require_relative "support/login_cooldown_helper"
 require_relative "support/inertia_page_object"
+require_relative "support/org_entra_first_stage_helper"
+require_relative "support/oidc_authorization_response_helper"
+require_relative "support/auth_ceremony_entry_helper"
+require_relative "support/auth_email_mfa_helper"
+require_relative "support/strict_loading_association_preloader"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
@@ -113,6 +135,34 @@ module AuthenticationHarness
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
+  # A protected Base page is not a Sign entry: it points the browser at Base's own passive GET /sign
+  # on the same host and issues no admission (specs/sign-fqdn-integrated-plan/plan.md section 5).
+  def assert_base_sign_entry_redirect(location, surface:)
+    uri = URI.parse(location)
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    base_host_key = { app: :base_service, com: :base_corporate, org: :base_staff }.fetch(surface)
+
+    assert_includes [nil, Rails.configuration.x.boot_config.fetch(:hosts).public_send(base_host_key).host], uri.host
+    assert_equal public_send(:"base_#{surface}_sign_show_path"), uri.path
+    assert_nil query["entry_ref"]
+    assert_nil query["client_id"]
+    assert_nil query["screen_hint"]
+  end
+
+  # A protected Auth page hands the browser to its surface's Base passive GET /sign, never to the
+  # Auth origin's own /sign/in: the Jump gateway refuses a same-origin internal rt.
+  def assert_base_sign_handoff_redirect(location, surface:)
+    target = jump_rt_url_from_location_for_test(location)
+    uri = URI.parse(target)
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    base_host_key = { app: :base_service, com: :base_corporate, org: :base_staff }.fetch(surface)
+
+    assert_equal Rails.configuration.x.boot_config.fetch(:hosts).public_send(base_host_key).host, uri.host
+    assert_equal public_send(:"base_#{surface}_sign_show_path"), uri.path
+    assert_nil query["client_id"]
+    assert_nil query["screen_hint"]
+  end
+
   def submit_step_up_completion_if_present!(host: nil, headers: {})
     return unless respond_to?(:response) && response.media_type == "text/html"
     return unless response.body.include?("step-up-completion-form")
@@ -134,6 +184,87 @@ module AuthenticationHarness
 
   private
 
+  def auth_ceremony_session_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding
+      ClientAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
+    when VisitorAuthAdmissionBinding
+      VisitorAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
+    when OperatorAuthAdmissionBinding
+      OperatorAuthCeremonySession.find_by(id: binding.auth_ceremony_session_id)
+    else
+      raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def admitted_auth_ceremony_session_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding
+      ClientAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+    when VisitorAuthAdmissionBinding
+      VisitorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+    when OperatorAuthAdmissionBinding
+      OperatorAuthCeremonySession.find_by(id: binding.admitted_auth_ceremony_session_id)
+    else
+      raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def authorization_transaction_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding
+      ClientOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
+    when VisitorAuthAdmissionBinding
+      VisitorOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
+    when OperatorAuthAdmissionBinding
+      OperatorOidcAuthorizationTransaction.find_by(id: binding.authorization_transaction_id)
+    else
+      raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def sign_in_flow_for_test(binding)
+    case binding
+    when ClientAuthAdmissionBinding then ClientSignInFlow.find_by(id: binding.sign_in_flow_id)
+    when VisitorAuthAdmissionBinding then VisitorSignInFlow.find_by(id: binding.sign_in_flow_id)
+    when OperatorAuthAdmissionBinding then OperatorSignInFlow.find_by(id: binding.sign_in_flow_id)
+    else raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
+    end
+  end
+
+  def contact_owner_for_test(contact)
+    case contact
+    when ClientEmail, ClientTelephone then Client.find(contact.user_id)
+    when VisitorEmail, VisitorTelephone then Visitor.find(contact.visitor_id)
+    else raise ArgumentError, "unsupported Contact class: #{contact.class.name}"
+    end
+  end
+
+  def jump_rt_url_from_location_for_test(location)
+    uri = URI.parse(location.to_s)
+    return location unless uri.host == "jump.umaxica.net"
+
+    token = Rack::Utils.parse_nested_query(uri.query.to_s)["rt"]
+    return location if token.blank?
+
+    payload, = JWT.decode(token, nil, false)
+    payload["url"].presence || location
+  rescue JWT::DecodeError, URI::InvalidURIError
+    location
+  end
+
+  def auth_host_for_test_surface(surface, local: false)
+    env_key =
+      case surface.to_sym
+      when :app then "PUBLIC_AUTH_SERVICE_URL"
+      when :com then local ? "PRIVATE_AUTH_CORPORATE_URL" : "PUBLIC_AUTH_CORPORATE_URL"
+      when :org then local ? "PRIVATE_AUTH_STAFF_URL" : "PUBLIC_AUTH_STAFF_URL"
+      else raise ArgumentError, "unknown Auth surface: #{surface}"
+      end
+
+    CommonRedirect.normalize_host(ENV.fetch(env_key))
+  end
+
   def authenticated_resource_headers(resource, host:, headers:, session_public_id:, resource_type:, session_header:)
     token_record = authentication_harness_session_token(resource, session_public_id: session_public_id)
     host_value = host || (respond_to?(:request, true) ? request&.host : nil)
@@ -142,6 +273,11 @@ module AuthenticationHarness
       host: host_value,
       session_public_id: token_record.public_id,
       resource_type: resource_type,
+      # Mirrors production: the session row is the authority for the
+      # authentication context and the access token re-derives it on every
+      # issue. A test that marks a token as an Emergency session therefore gets
+      # an Emergency access token without asserting the claim by hand.
+      authentication_context: token_record.authentication_context_value.to_s,
     )
 
     host_headers(host)
@@ -161,10 +297,12 @@ module AuthenticationHarness
     token || authentication_harness_latest_token(resource) || authentication_harness_create_token(resource)
   end
 
+  # Only an ACTIVE session authenticates (AuthenticationCurrentResourceResolver), so the harness
+  # reuses only one of those and otherwise creates one.
   def authentication_harness_latest_token(resource)
     authentication_harness_token_model(resource)
+      .active_status
       .where(authentication_harness_token_owner_column(resource) => resource.id)
-      .where("discarded_at > ?", Time.current)
       .order(created_at: :desc)
       .first
   end
@@ -221,7 +359,7 @@ module AuthenticationHarness
   end
 
   def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
+                           dpop_jkt: nil, authentication_context: nil)
     host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
     resource_type ||=
       case resource
@@ -238,12 +376,13 @@ module AuthenticationHarness
       resource_type: resource_type,
       dpop_jkt: dpop_jkt,
       jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
+      authentication_context: authentication_context,
     )
   end
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "SIGN"
+    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "AUTH"
     surface =
       if resource_type == "operator" || normalized.include?(".org") || normalized.include?("org.")
         "ORG"
@@ -254,19 +393,33 @@ module AuthenticationHarness
       end
     "surface:#{service}_#{surface}"
   end
+
+  def destroy_test_client_after_cross_database_cleanup!(client)
+    dependent_associations =
+      Client.reflect_on_all_associations.filter_map do |association|
+        association.name if association.options[:dependent]
+      end
+    Client.preload(*dependent_associations).find(client.id).destroy!
+  end
 end
 
 module ActiveSupport
   class TestCase
     include AuthenticationHarness
+    include WithheldAssertions
+    include CookieJarHelper
     include ExternalIdentityTestHelper
     include PublishingContentHelper
     include FormActionPolicyHelper
     include LoginCooldownHelper
     include OutboundHttpStub
+    include AuthCeremonyEntryHelper
 
-    # Physical cores, not logical: measured on a 16C/32T host -- 32 workers lost more in fork +
-    # per-worker DB-clone overhead than they gained.
+    # Physical cores, not logical processors (SMT/vCPUs): measured on a 16-core/32-thread host --
+    # `PARALLEL_WORKERS=32` (one per logical thread) took 37s on a 3000-test subset versus 22-24s
+    # at 8 or 16 workers, because that many forked Rails processes plus Postgres itself oversubscribe
+    # the physical cores and thrash instead of parallelizing further. See
+    # docs/guides/test-profiling.md.
     #
     # A coverage run uses the same workers as any other run. `.simplecov` sets
     # `merge_subprocesses true`, so SimpleCov hooks `Process._fork` and each worker records and
@@ -275,24 +428,23 @@ module ActiveSupport
     parallel_workers = Integer(ENV.fetch("PARALLEL_WORKERS") { Concurrent.physical_processor_count.to_s }, 10)
     raise ArgumentError, "PARALLEL_WORKERS must be positive" unless parallel_workers.positive?
 
+    # The concrete legacy organization model was renamed to OperatorOrganization while the
+    # physical table and fixture filename remain `organizations`. Without this explicit mapping,
+    # Rails infers the removed Organization constant and loads the fixture on the wrong connection.
+    set_fixture_class organizations: OperatorOrganization
     fixtures :all
+    ValkeyTestIsolation.install!
     ParallelTestDatabaseCloner.install!(workers: parallel_workers)
     parallelize(workers: parallel_workers, parallelize_databases: false)
 
-    # The rate-limit store is a NullStore by default in test, so ordinary
-    # controller and request tests accumulate no counters and never receive a
-    # surprise 429 from an unrelated test's traffic. Tests whose subject is rate
-    # limiting call `with_rate_limit_counters` to swap in a deterministic
-    # MemoryStore for the duration of the test.
-    #
-    # The swap goes through TestSupport::SwappableCacheStore rather than reassigning
-    # config.x.rate_limit[:store], because `rate_limit ..., store:
-    # rate_limit_store` in a controller class body captures the object once at
-    # class-load time; only mutating that captured object reaches it.
-    #
-    # Reset (not just clear) before each test: a test that raised before its
-    # ensure ran must not leave a MemoryStore installed for the next one.
-    setup { Rails.configuration.x.rate_limit.fetch(:store).reset! }
+    # Rate-limit uses KVS Valkey namespaced by run and worker. Reset any
+    # with_rate_limit_counters swap, then delete this worker's keys so counters
+    # do not leak into the next case. Application cache is MemoryStore.
+    setup do
+      Rails.configuration.x.rate_limit.fetch(:store).reset!
+      Rails.cache.clear
+      ValkeyTestIsolation.cleanup_worker_keys!
+    end
 
     # Social ceremony availability is a Flipper kill switch that fails closed, so the suite's
     # baseline is every provider enabled; tests that exercise a disabled provider turn it off
@@ -317,6 +469,13 @@ module ActiveSupport
     # every test so locale never leaks across the shared process.
     teardown { I18n.locale = I18n.default_locale } # rubocop:disable Rails/I18nLocaleAssignment
 
+    # ENV is process-global and shared by every test a worker runs. Many integration helpers
+    # (load_jump_rt_env!) write JWT_<NAMESPACE>_* without restoring them, and the local keyset
+    # installer rejects such values, so a later test failed depending on seed order. Snapshot
+    # ENV before each test and restore it afterwards so no assignment outlives its test.
+    setup { @env_snapshot_before_test = ENV.to_h }
+    teardown { ENV.replace(@env_snapshot_before_test) if @env_snapshot_before_test }
+
     # Class-level form of `with_rate_limit_counters`: a test case whose whole
     # subject is rate limiting declares this once and every test in it runs
     # against a deterministic MemoryStore. The per-test `setup` in the base
@@ -329,10 +488,9 @@ module ActiveSupport
       end
     end
 
-    # Opt a rate-limit-focused test into real, retained counters. The default
-    # store is a NullStore (see config/environments/test.rb), which increments
-    # to nothing; a test that asserts thresholds, 429s, independent buckets or
-    # window expiry must wrap its exercise in this.
+    # Opt a rate-limit-focused test into a deterministic in-process MemoryStore.
+    # The default test store is namespaced Valkey; MemoryStore is still used when
+    # a case needs time-travelled windows without talking to KVS.
     #
     # MemoryStore honors expires_in against Time.current, so window resets are
     # asserted by travelling time rather than sleeping.
@@ -340,9 +498,8 @@ module ActiveSupport
       Rails.configuration.x.rate_limit.fetch(:store).with(store, &)
     end
 
-    # Same idea for Rails.cache, which is a NullStore in test. Cache-behavior
-    # tests opt into a deterministic MemoryStore and get the previous store back
-    # even if the block raises, so cache state never leaks between tests.
+    # Rails.cache is already MemoryStore in test. This helper still swaps a
+    # fresh store for cache-behavior tests that need an empty isolated instance.
     def with_application_cache(store = ActiveSupport::Cache::MemoryStore.new)
       previous = Rails.cache
       Rails.cache = store

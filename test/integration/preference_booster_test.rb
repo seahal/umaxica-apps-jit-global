@@ -112,12 +112,14 @@ class PreferenceBoosterTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  test "sets preference cookie on request" do
+  test "GET request does not create preference state or cookies" do
+    preference_count = AppPreference.count
     get "/test_preference", env: { "HTTP_HOST" => "localhost" }
 
     assert_response :success
-    assert_not_nil cookies[PreferenceCookieName.access(surface: :app)]
-    assert_not_nil cookies[PreferenceCookieName.refresh(surface: :app)]
+    assert_equal preference_count, AppPreference.count
+    assert_nil cookies[PreferenceCookieName.access(surface: :app)]
+    assert_nil cookies[PreferenceCookieName.refresh(surface: :app)]
   end
 
   test "edits and updates region" do
@@ -169,20 +171,6 @@ class PreferenceBoosterTest < ActionDispatch::IntegrationTest
     post "/test_cookie_update",
          params: { preference_cookie: { consented: true, functional: true, performant: true, targetable: true } },
          env: { "HTTP_HOST" => "localhost" }
-
-    assert_response :success
-  end
-
-  test "deletes preference cookie" do
-    get "/test_preference", env: { "HTTP_HOST" => "localhost" } # generate tokens
-    delete "/test_cookie_delete", env: { "HTTP_HOST" => "localhost" }
-
-    assert_response :success
-  end
-
-  test "resets preferences to defaults" do
-    get "/test_preference", env: { "HTTP_HOST" => "localhost" } # generate tokens
-    post "/test_reset_defaults", env: { "HTTP_HOST" => "localhost" }
 
     assert_response :success
   end

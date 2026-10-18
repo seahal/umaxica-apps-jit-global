@@ -20,7 +20,13 @@ class IdentityTotpCeremonyFinalCommitterTest < ActiveSupport::TestCase
 
     with_stubs do
       @actor.stub(:client_totp_credentials, credentials_assoc) do
-        ClientTotpCredential.stub(:transaction, ->(&block) { block.call }) do
+        ClientTotpCredential.stub(
+          :create_for_user!, ->(user:, **attrs) {
+                               assert_same @actor, user
+                               credentials_assoc.created_attrs = attrs
+                               totp_record
+                             },
+        ) do
           IdentityTotpCeremonyCandidateStore.stub(:delete, ->(ref) { deleted_ref = ref }) do
             IdentityAudit.stub(:record!, ->(**kwargs) { audit = kwargs }) do
               commit = IdentityTotpCeremonyFinalCommitter.call!(
@@ -186,7 +192,7 @@ class IdentityTotpCeremonyFinalCommitterTest < ActiveSupport::TestCase
 
   test "raises when the totp credential limit is reached" do
     with_stubs do
-      full_assoc = FakeAssociation.new(Array.new(ClientTotpCredential::MAX_TOTPS_PER_USER) { FakeTotpRecord.new })
+      full_assoc = FakeAssociation.new(Array.new(ClientTotpCredential::MAX_TOTP_SLOTS) { FakeTotpRecord.new })
       @actor.stub(:client_totp_credentials, full_assoc) do
         IdentityTotpCeremonyCandidateStore.stub(:delete, ->(_ref) { }) do
           assert_totp_error("TOTP credential limit is reached") do
@@ -337,10 +343,11 @@ class IdentityTotpCeremonyFinalCommitterTest < ActiveSupport::TestCase
       @created_attrs = attrs
       @create_result
     end
+
+    def created_attrs=(attrs)
+      @created_attrs = attrs
+    end
   end
 
-  # rubocop:disable Lint/EmptyClass
-  class FakeTotpRecord
-  end
-  # rubocop:enable Lint/EmptyClass
+  FakeTotpRecord = Class.new
 end

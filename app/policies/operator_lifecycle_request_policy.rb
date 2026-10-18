@@ -1,45 +1,21 @@
 # typed: false
 # frozen_string_literal: true
 
+# adr/operator-capability-authorization.md, Not provided: operator lifecycle requests (join,
+# withdraw, suspend, terminate, restore) have services but no route, and no capability for
+# operator-to-operator administration is defined. Being an Operator is not enough to request,
+# approve, reject, or execute a change to another Operator, so every rule denies until the
+# capability, approval, and last-administrator rules are specified.
 class OperatorLifecycleRequestPolicy < ApplicationPolicy
-  def index?
-    lifecycle_actor?
-  end
+  def index? = false
 
-  def show?
-    lifecycle_actor?
-  end
+  def show? = false
 
-  def create?
-    lifecycle_actor?
-  end
+  def create? = false
 
-  def approve?
-    lifecycle_actor? && pending_request? && different_operator?
-  end
+  def approve? = false
 
-  def reject?
-    approve?
-  end
+  def reject? = false
 
-  def execute?
-    lifecycle_actor? && record.approved? && different_operator?
-  end
-
-  private
-
-  # Overrides ApplicationPolicy#operator? which calls has_role? -- a method that does not exist
-  # on Operator (no Rolify, no org membership table). Type-check only; org ownership for JOIN
-  # requests is enforced by OrgOperatorLifecycleRequestCreate at the service layer.
-  def lifecycle_actor?
-    user.is_a?(Operator)
-  end
-
-  def pending_request?
-    record.respond_to?(:pending?) && record.pending?
-  end
-
-  def different_operator?
-    record.requested_by_operator_id != user.id
-  end
+  def execute? = false
 end

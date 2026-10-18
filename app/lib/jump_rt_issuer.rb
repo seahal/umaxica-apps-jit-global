@@ -2,17 +2,18 @@
 # frozen_string_literal: true
 
 require "jwt"
+require "ipaddr"
 
 class JumpRtIssuer
   ALGORITHM = SecurityJwtJumpRtTokenCodec::ALGORITHM
-  AUDIENCE_ENV = "PUBLIC_JUMP_GATEWAY_URL"
-  TTL_ENV = "JUMP_RT_TTL_SECONDS"
-  DEFAULT_AUDIENCE = "https://jump.umaxica.net"
   DEFAULT_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
   MAX_TTL = SecurityTokenLifetimes::JUMP_RT_TTL
+  MAX_TOKEN_LENGTH = 4_096
+  MAX_URL_LENGTH = 2_048
+  MAX_JTI_LENGTH = 128
+  JTI_PATTERN = /\A[\x21-\x7E]{1,#{MAX_JTI_LENGTH}}\z/o
   TOKEN_SUBJECT = SecurityJwtJumpRtTokenCodec::TOKEN_SUBJECT
-  VALID_DESTINATIONS = %w(internal external).freeze
-  VALID_REPLAY_POLICIES = %w(reuse once).freeze
+  VALID_DESTINATIONS = %w(internal).freeze
   # Defense in depth: strip redirect-target query keys from the signed URL so
   # the gateway cannot return a request that re-enters a `pt`/`nt`/`xt`/`rt`
   # processing path. Same list as RedirectsExternalTargetResolver.
@@ -22,44 +23,50 @@ class JumpRtIssuer
     new(...).call
   end
 
-  def initialize(namespace:, url:, dst: "internal", replay_policy: "reuse", preserve_query_keys: [], ttl: nil,
-                 now: Time.current, jti: SecureRandom.uuid)
+  def initialize(namespace:, url:, dst:, preserve_query_keys: [], ttl: nil, now: Time.current,
+                 jti: SecureRandom.uuid)
     @namespace = JumpRtSurface.normalize_namespace(namespace)
     @url = url
-    @dst = dst.to_s
-    @replay_policy = replay_policy.to_s
+    @dst = dst
     @preserve_query_keys = Array(preserve_query_keys).map(&:to_s)
-    @ttl = ttl || default_ttl
+    @ttl = ttl.nil? ? default_ttl : ttl
     @now = now
     @jti = jti
   end
 
   def call
     return nil unless valid_destination?
-    return nil unless valid_replay_policy?
     return nil unless valid_ttl?
+    return nil unless valid_jti?
 
     normalized_url = normalize_url(url)
     return nil if normalized_url.blank?
+    return nil if utf16_code_units(normalized_url) > MAX_URL_LENGTH
 
+    issuer = JumpRtSurface.issuer_origin(namespace)
     kid = JumpRtKeyring.active_kid(namespace)
     private_key = JumpRtKeyring.private_key(namespace)
-    return nil if kid.blank? || private_key.blank?
+    if kid.blank? || private_key.blank?
+      raise JumpRtConfigurationError, "Jump RT signing key configuration is incomplete for #{namespace}"
+    end
 
-    SecurityJwtJumpRtTokenCodec.encode(payload(normalized_url), private_key: private_key, kid: kid)
+    token = SecurityJwtJumpRtTokenCodec.encode(payload(issuer, normalized_url), private_key: private_key, kid: kid)
+    return nil unless token.ascii_only?
+    return nil if token.bytesize > MAX_TOKEN_LENGTH
+
+    token
   end
 
   private
 
-  attr_reader :namespace, :url, :dst, :replay_policy, :preserve_query_keys, :ttl, :now, :jti
+  attr_reader :namespace, :url, :dst, :preserve_query_keys, :ttl, :now, :jti
 
-  def payload(normalized_url)
+  def payload(issuer, normalized_url)
     issued_at = now.to_i
     SecurityJwtJumpRtTokenCodec.build_issue_payload(
-      namespace: namespace,
+      issuer: issuer,
       normalized_url: normalized_url,
       dst: dst,
-      replay_policy: replay_policy,
       ttl: ttl,
       now: Time.zone.at(issued_at),
       jti: jti,
@@ -70,12 +77,18 @@ class JumpRtIssuer
   def normalize_url(value)
     raw = value.to_s
     return nil if raw.blank?
+    return nil unless raw.valid_encoding?
     return nil if raw.match?(/[\x00-\x1F\x7F]/)
 
-    uri = URI.parse(raw)
+    # URL APIs percent-encode Unicode path and query bytes during serialization. URI.parse accepts
+    # ASCII only, so encode non-ASCII UTF-8 bytes first while rejecting a percent-escaped host.
+    ascii_url = raw.b.gsub(/[^\x00-\x7F]/n) { |byte| format("%%%02X", byte.ord) }
+    uri = URI.parse(ascii_url)
     return nil unless uri.is_a?(URI::HTTP)
-    return nil unless uri.scheme == "https" || local_http_allowed?(uri)
+    return nil unless uri.scheme == "https"
     return nil if uri.host.blank?
+    return nil if uri.host.include?("%")
+    return nil if private_destination?(uri)
     return nil if uri.userinfo.present?
     return nil if uri.fragment.present?
 
@@ -88,25 +101,35 @@ class JumpRtIssuer
     nil
   end
 
+  # Keeps the remaining pairs in order, repeats included, because the signed url binds them. A key
+  # is blocked in its bare and bracketed forms (rt, rt[], rt[x]) after percent-decoding.
   def strip_dangerous_query(raw_query)
     return nil if raw_query.blank?
 
     blocked_keys = DANGEROUS_QUERY_KEYS - preserve_query_keys
-    pairs =
-      Rack::Utils.parse_nested_query(raw_query).except(*blocked_keys)
-    pairs.present? ? Rack::Utils.build_nested_query(pairs) : nil
+    params =
+      UrlSearchParamsValue.parse(raw_query).reject_keys do |key|
+        blocked_keys.any? { |blocked| key == blocked || key.start_with?("#{blocked}[") }
+      end
+    params.empty? ? nil : params.to_s
   end
 
   def valid_destination?
-    VALID_DESTINATIONS.include?(dst)
-  end
-
-  def valid_replay_policy?
-    VALID_REPLAY_POLICIES.include?(replay_policy)
+    dst.is_a?(String) && VALID_DESTINATIONS.include?(dst)
   end
 
   def valid_ttl?
-    ttl.to_i.positive? && ttl.to_i <= MAX_TTL.to_i
+    ttl.is_a?(Integer) && ttl.positive? && ttl <= MAX_TTL.to_i
+  end
+
+  def valid_jti?
+    jti.is_a?(String) && jti.match?(JTI_PATTERN)
+  end
+
+  def utf16_code_units(value)
+    value.encode(Encoding::UTF_16LE).bytesize / 2
+  rescue EncodingError
+    Float::INFINITY
   end
 
   def default_ttl
@@ -117,16 +140,18 @@ class JumpRtIssuer
     boot_jump_config.audience
   end
 
-  def local_http_allowed?(uri)
-    return false unless Rails.env.local?
+  def private_destination?(uri)
+    host = uri.hostname.downcase.delete_suffix(".")
+    return true unless host.include?(".") || host.include?(":")
+    return true if host.end_with?(".localhost", ".local", ".internal")
 
-    uri.scheme == "http" && (uri.host == "localhost" || uri.host.end_with?(".localhost"))
+    address = IPAddr.new(host).native
+    address.private? || address.loopback? || address.link_local? || address.to_i.zero?
+  rescue IPAddr::InvalidAddressError
+    false
   end
 
   def boot_jump_config
-    config = Rails.configuration.x.boot_config
-    return config.fetch(:jump) if config.respond_to?(:fetch)
-
-    config.jump
+    Rails.configuration.x.boot_config.fetch(:jump)
   end
 end

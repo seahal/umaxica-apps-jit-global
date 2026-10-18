@@ -13,7 +13,12 @@ class IdentityTelephoneCeremonyResultIssuerTest < ActiveSupport::TestCase
   test "issues a result token with claims bound to the candidate and transaction" do
     captured = nil
 
-    with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
+    with_ceremony(
+      issue: ->(claims, **) {
+        captured = claims
+        "issued-token"
+      },
+    ) do
       result = issuer.issue!
 
       assert_equal "issued-token", result
@@ -37,7 +42,12 @@ class IdentityTelephoneCeremonyResultIssuerTest < ActiveSupport::TestCase
   test "falls back to the candidate id when public id is absent" do
     captured = nil
 
-    with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
+    with_ceremony(
+      issue: ->(claims, **) {
+        captured = claims
+        "issued-token"
+      },
+    ) do
       issuer(candidate: valid_candidate(public_id: nil, id: 77)).issue!
     end
 
@@ -48,7 +58,12 @@ class IdentityTelephoneCeremonyResultIssuerTest < ActiveSupport::TestCase
   test "uses the supplied challenge id when present" do
     captured = nil
 
-    with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
+    with_ceremony(
+      issue: ->(claims, **) {
+        captured = claims
+        "issued-token"
+      },
+    ) do
       issuer(challenge_id: "explicit-challenge").issue!
     end
 

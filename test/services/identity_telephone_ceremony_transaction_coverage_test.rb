@@ -34,6 +34,8 @@ class IdentityTelephoneCeremonyTransactionCoverageTest < ActiveSupport::TestCase
       assert_equal "actor-1", transaction.grant_claims["actor_ref"]
       assert_equal "candidate-1", transaction.grant_claims["telephone_candidate_ref"]
       assert_equal "digest-1", transaction.grant_claims["normalized_number_digest"]
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.transaction_id)
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, transaction.grant_jti)
 
       consumed = transaction.consume(result_jti: "result-1", consumed_at: created_at + 1.minute)
 
@@ -88,6 +90,38 @@ class IdentityTelephoneCeremonyTransactionCoverageTest < ActiveSupport::TestCase
         session_ref: "session-1",
         operation: "registration",
         status: IdentityTelephoneCeremonyTransaction::STATUS_CONSUMED,
+      )
+    end
+  end
+
+  test "rejects blank ids, blank grant jti, and an unknown status" do
+    assert_raises(IdentityTelephoneCeremony::Error) do
+      IdentityTelephoneCeremonyTransaction.new(
+        surface: "app",
+        actor_ref: "actor-1",
+        session_ref: "session-1",
+        operation: "registration",
+        transaction_id: "",
+      )
+    end
+
+    assert_raises(IdentityTelephoneCeremony::Error) do
+      IdentityTelephoneCeremonyTransaction.new(
+        surface: "app",
+        actor_ref: "actor-1",
+        session_ref: "session-1",
+        operation: "registration",
+        grant_jti: "",
+      )
+    end
+
+    assert_raises(IdentityTelephoneCeremony::Error) do
+      IdentityTelephoneCeremonyTransaction.new(
+        surface: "app",
+        actor_ref: "actor-1",
+        session_ref: "session-1",
+        operation: "registration",
+        status: "bogus",
       )
     end
   end

@@ -92,7 +92,7 @@ class ParallelTestDatabaseClonerTest < ActiveSupport::TestCase
     ) do
       ParallelTestDatabaseCloner.stub(
         :rebuild_clone,
-        lambda do |_connection, source:, clone:, sha:, clone_exists:| # rubocop:disable Lint/UnusedBlockArgument
+        lambda do |_connection, source:, clone:, sha:, clone_exists:|
           mutex.synchronize do
             active_by_source[source] += 1
             overlap ||= active_by_source[source] > 1

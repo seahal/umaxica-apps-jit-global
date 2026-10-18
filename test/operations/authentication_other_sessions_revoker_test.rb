@@ -122,7 +122,7 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       public_id: "others_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
   end
 
@@ -132,7 +132,7 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       public_id: "others_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
   end
 
@@ -155,7 +155,7 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
       visitor_token_status_id: VisitorTokenStatus::NOTHING,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       public_id: "others_#{SecureRandom.hex(4)}",
-      discarded_at: 1.day.from_now,
+      discard_at: 1.day.from_now,
     )
   end
 end

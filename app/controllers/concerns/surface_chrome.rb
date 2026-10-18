@@ -23,26 +23,24 @@ module SurfaceChrome
   # repeated by every Inertia controller. `banner_domain` selects the banner stream the family
   # answers with (`auth` reads `sign`, `base` reads `acme`); nil opts out of the banner, which is
   # what the families without a banner region do. `footer_navigation` marks the families whose
-  # layout also carries the sign navigation and the cross-host footer links.
+  # layout carries the cross-host footer links (preference, and dashboard when signed in).
   FAMILY_CHROME = {
     "base" => { family_label: "BASE", banner_domain: :acme, footer_navigation: false },
     "auth" => { family_label: nil, banner_domain: :sign, footer_navigation: true },
     "core" => { family_label: "CORE", banner_domain: nil, footer_navigation: false },
-    "side" => { family_label: "SIDE", banner_domain: nil, footer_navigation: false },
+    "warp" => { family_label: "WARP", banner_domain: nil, footer_navigation: false },
     "palm" => { family_label: "PALM", banner_domain: nil, footer_navigation: false },
+    "edit" => { family_label: "EDIT", banner_domain: nil, footer_navigation: false },
   }.freeze
 
   # The operational surfaces are mounted with a route prefix that does not match their controller
   # module, so route helpers cannot be composed from the module name alone.
   SURFACE_ROUTE_NAMES = { "dev" => "developer", "net" => "network" }.freeze
 
-  # Only the three user-facing surfaces have a preference authority to send a visitor to, so the
-  # operational surfaces render no cookie or theme controls rather than linking to a host that
-  # does not exist.
-  PREFERENCE_SURFACES = %w(app com org).freeze
-
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     inertia_share chrome: -> { surface_chrome }
+    inertia_share clear_history: -> { session[:inertia_clear_history] == true }
   end
 
   private
@@ -70,18 +68,62 @@ module SurfaceChrome
       surface: configuration.fetch(:surface),
       brand: chrome_brand,
       banner: chrome_banner(configuration.fetch(:banner_domain)),
-      primary_navigation: chrome_primary_navigation,
+      restricted_mode: chrome_restricted_mode,
       footer_navigation: configuration.fetch(:footer_navigation) ? chrome_footer_navigation : nil,
-      cookie_controls: chrome_preference_surface? ? chrome_cookie_controls : nil,
-      theme_controls: chrome_preference_surface? ? chrome_theme_controls : nil,
+      cookie_controls: chrome_cookie_controls,
+      theme_controls: chrome_theme_controls,
       copyright: chrome_copyright,
     }
   end
 
+  # Restricted Mode (Emergency Access) is a property of the session, not of a
+  # page, so it is published once here and rendered by the persistent layout.
+  # No screen can omit the indicator, because no screen supplies it: a page that
+  # forgets about Emergency Access still renders inside the same chrome.
+  #
+  # The decision comes from the session row the request authenticated against --
+  # the same authority that mints the `authn_ctx` claim -- never from a request
+  # parameter, a cookie the browser can write, or page state.
+  #
+  # Hiding navigation is not authorization. The banner and the trimmed
+  # navigation are there so the operator understands what they are looking at;
+  # the server denies the unavailable operations regardless
+  # (docs/security/org-emergency-access.md).
+  def chrome_restricted_mode
+    return nil unless chrome_authentication_context.standby?
+
+    scope = "layouts.shared.restricted_mode"
+    {
+      label: chrome_t("#{scope}.label"),
+      description: chrome_t("#{scope}.description"),
+      sign_out: {
+        label: chrome_t("#{scope}.sign_out"),
+        href: chrome_url(
+          "new_#{chrome_configuration.fetch(:family)}_#{chrome_route_surface}_sign_out_path",
+          { ri: current_region_identifier },
+        ),
+      },
+    }
+  end
+
+  # A surface with no authenticated session, and a surface whose sessions cannot
+  # carry a context at all, are both Normal by construction rather than by a
+  # lookup that could be made to answer otherwise.
+  def chrome_authentication_context
+    return AuthenticationContextValue.normal unless respond_to?(:current_session, true)
+
+    session_record = current_session
+    return AuthenticationContextValue.normal if session_record.blank?
+
+    session_record.authentication_context_value
+  end
+
   def chrome_brand
+    family = chrome_configuration.fetch(:family)
+    destination = (%w(base warp).include?(family) && chrome_logged_in?) ? "dashboard" : "root"
     {
       name: ENV.fetch("BRAND_NAME"),
-      href: chrome_url("#{chrome_configuration.fetch(:family)}_#{chrome_route_surface}_root_path"),
+      href: chrome_url("#{family}_#{chrome_route_surface}_#{destination}_path"),
     }
   end
 
@@ -89,8 +131,14 @@ module SurfaceChrome
     SURFACE_ROUTE_NAMES.fetch(chrome_configuration.fetch(:surface)) { chrome_configuration.fetch(:surface) }
   end
 
-  def chrome_preference_surface?
-    PREFERENCE_SURFACES.include?(chrome_configuration.fetch(:surface))
+  # Whether the controls render, and where they send their reads and writes, is a family-and-surface
+  # decision (PreferenceBrowserControlsRegistry). A pair the registry does not list raises rather than
+  # rendering controls against a host that may not serve their endpoint.
+  def chrome_preference_controls
+    PreferenceBrowserControlsRegistry.fetch(
+      family: chrome_configuration.fetch(:family),
+      surface: chrome_configuration.fetch(:surface),
+    )
   end
 
   # The banner query previously ran inside a layout partial on every response. It stays server-side
@@ -108,63 +156,41 @@ module SurfaceChrome
     { title: banner.title.presence, body: banner.body }
   end
 
-  # Navigation is an authorization-shaped decision, so the server decides which links exist rather
-  # than sending every link and letting React hide some. `@hide_auth_navigation` keeps its existing
-  # meaning: ceremonies that must not offer an escape hatch suppress the primary navigation.
-  def chrome_primary_navigation
-    return nil unless chrome_configuration.fetch(:footer_navigation)
-    return nil if @hide_auth_navigation
-
-    family = chrome_configuration.fetch(:family)
-    surface = chrome_configuration.fetch(:surface)
-
-    if chrome_logged_in?
-      [{ label: chrome_t("sign.#{surface}.layout.nav.logout"),
-         href: chrome_url("new_#{family}_#{surface}_sign_out_path"), }]
-    else
-      [
-        { label: chrome_t("sign.#{surface}.layout.nav.sign_up"),
-          href: chrome_url("#{family}_#{surface}_sign_up_path"), },
-        { label: chrome_t("sign.#{surface}.layout.nav.log_in"), href: chrome_url("#{family}_#{surface}_sign_in_path") },
-      ]
-    end
-  end
-
   def chrome_footer_navigation
     surface = chrome_configuration.fetch(:surface)
-    family = chrome_configuration.fetch(:family)
     base_options = { ri: current_region_identifier, host: base_authority_host }
+    links = []
 
-    first_link =
-      if chrome_logged_in?
-        {
-          label: chrome_t("sign.#{surface}.preferences.footer.dashboard"),
-          href: chrome_url("base_#{surface}_dashboard_url", base_options),
-        }
-      else
-        { label: chrome_t("sign.#{surface}.preferences.footer.home"),
-          href: chrome_url("#{family}_#{surface}_root_path"), }
-      end
+    if chrome_logged_in?
+      links << {
+        label: chrome_t("sign.#{surface}.preferences.footer.dashboard"),
+        href: chrome_url("base_#{surface}_dashboard_url", base_options),
+      }
+    end
 
-    [
-      first_link,
-      {
-        label: chrome_t("sign.#{surface}.preferences.footer.preference"),
-        href: chrome_url("base_#{surface}_preference_url", base_options),
-      },
-      {
-        label: chrome_t("sign.#{surface}.preferences.footer.settings"),
-        href: chrome_url("base_#{surface}_identity_url", base_options),
-      },
-    ]
+    links << {
+      label: chrome_t("sign.#{surface}.preferences.footer.preference"),
+      href: chrome_url("base_#{surface}_preference_url", base_options),
+    }
+
+    links
   end
 
   def chrome_cookie_controls
+    endpoint_path = chrome_preference_controls.cookie_endpoint_path
+    return nil if endpoint_path.nil?
+
     surface = chrome_configuration.fetch(:surface)
     scope = "layouts.shared.footer_cookie_controls"
+    # The cookie screen owns consent while it is being edited; showing the banner there would
+    # put two controls for the same decision on one page.
+    hidden = params[:action].to_s == "edit" &&
+      (params[:preference_screen].to_s == "cookie" || controller_path.end_with?("/preference/cookies"))
 
     {
+      hidden: hidden,
       scope: surface,
+      endpoint_url: endpoint_path,
       settings_url: chrome_cookie_settings_url(surface),
       title: chrome_t("#{scope}.title"),
       description_html: chrome_t("#{scope}.description_html", privacy_policy: chrome_t("#{scope}.privacy_policy")),
@@ -176,10 +202,23 @@ module SurfaceChrome
   end
 
   def chrome_cookie_settings_url(surface)
-    options = request.query_parameters.slice(*PREFERENCE_QUERY_KEYS)
-    # An auth surface renders on the sign host while cookie preferences are edited on the base
-    # authority host, so the link has to be absolute across that boundary.
-    options = options.merge(host: base_authority_host) if chrome_configuration.fetch(:footer_navigation)
+    # Query parameters arrive with string keys; url helpers merge default_url_options under
+    # symbols. Passing the strings through as extra options duplicated `ri` on the href, which
+    # is how the settings control pointed at a query the destination does not read as one value.
+    options = request.query_parameters.slice(*PREFERENCE_QUERY_KEYS).symbolize_keys
+    # Cookie preferences belong to Base even when the banner renders on another host.
+    host =
+      if chrome_configuration.fetch(:footer_navigation)
+        base_authority_host
+      else
+        case surface
+        when "app" then ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+        when "com" then ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+        when "org" then ENV.fetch("PUBLIC_BASE_STAFF_URL")
+        else raise ArgumentError, "unsupported cookie preference surface: #{surface.inspect}"
+        end
+      end
+    options = options.merge(host: host)
 
     chrome_url("edit_base_#{surface}_preference_cookie_url", options)
   end
@@ -187,12 +226,16 @@ module SurfaceChrome
   # The theme screen owns the theme control while it is being edited; showing the footer copy of it
   # there would put two controls for one value on the same page.
   def chrome_theme_controls
+    endpoint_path = chrome_preference_controls.theme_endpoint_path
+    return nil if endpoint_path.nil?
+
     scope = "layouts.shared.footer_theme_controls"
     hidden = params[:action].to_s == "edit" &&
       (params[:preference_screen].to_s == "theme" || controller_path.end_with?("/preference/themes"))
 
     {
       hidden: hidden,
+      endpoint_url: endpoint_path,
       title: chrome_t("#{scope}.title"),
       description: chrome_t("#{scope}.description"),
       options: {

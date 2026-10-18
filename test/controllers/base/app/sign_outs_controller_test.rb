@@ -6,108 +6,204 @@ require "test_helper"
 
 class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @user = create_verified_user_with_email(email_address: "base-app-sign-out-#{SecureRandom.hex(4)}@example.com")
     host! @host
+    https!
     # The shared completion path renders through the jump-aware helpers, which need signing keys.
     load_jump_rt_env!
   end
 
   test "new redirects to the confirmation page without mutation" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
 
     get new_base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
 
     assert_response :see_other
     assert_equal edit_base_app_sign_out_path(ri: "jp"), URI.parse(response.location).request_uri
     assert_predicate token.reload, :currently_usable?
+    assert_equal last_used_at, token.reload.last_used_at
   end
 
   test "edit sign out renders confirmation without mutation" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token.update!(last_used_at: 10.minutes.ago)
+    last_used_at = token.reload.last_used_at
 
     get edit_base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
 
     assert_response :success
     assert_equal "base/app/sign_outs/edit", inertia_component
+    assert_equal I18n.t("sign.shared.sign_out.title"), inertia_props.fetch("title")
     assert_equal I18n.t("sign.shared.sign_out.confirm_description"), inertia_props.fetch("description")
     assert_includes inertia_props.fetch("form").fetch("action"), base_app_sign_out_path
+    assert_equal I18n.t("actions.cancel"), inertia_props.dig("back_link", "label")
+    assert_equal base_app_dashboard_path(ri: "jp"), inertia_props.dig("back_link", "href")
+    assert_nil inertia_props["home_link"]
+    assert_not_includes response.body, I18n.t("sign.shared.sign_out.home_link")
     assert_predicate token.reload, :currently_usable?
+    assert_equal last_used_at, token.reload.last_used_at
   end
 
-  test "post sign out revokes the current session and completes on the base surface" do
+  test "edit does not rotate a refresh token when the access cookie is absent" do
     token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
+    refresh_plain = token.rotate_refresh_token!
+    refresh_digest = token.refresh_token_digest
+    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = refresh_plain
 
-    post base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
-
-    assert_response :see_other
-    assert_predicate token.reload, :revoked?
-
-    # Completion is surface-local: the browser must not be handed to another host,
-    # and the completion marker must not travel in the URL.
-    location = URI.parse(response.location)
-
-    assert_equal @host, location.host
-    assert_equal base_app_sign_out_completion_path(ri: "jp"), location.request_uri
-
-    get response.location
-
-    assert_response :success
-    assert_equal "base/app/sign_outs/complete", inertia_component
-    assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
-  end
-
-  # `encrypt_history` keeps this tab's history entries encrypted, but the key that decrypts them
-  # lives in the same tab's sessionStorage, so it survives sign-out on its own. `clearHistory` is
-  # what drops the key, and without it Back after signing out restores the privileged page.
-  test "the page rendered after sign out tells the client to drop its history key" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
-
-    post base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
-    get response.location
-
-    assert_response :success
-    assert inertia_page.fetch("clearHistory"),
-           "the sign-out completion page must carry clearHistory so Back cannot restore a signed-in page"
-  end
-
-  # The flag is consumed by the render that follows sign-out. A later page must not keep clearing
-  # history, which would discard the signed-out visitor's ordinary navigation state.
-  test "clear history is not repeated on the page after the sign out completion" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
-
-    post base_app_sign_out_url(host: @host, ri: "jp"), headers: session_headers(token)
-    get response.location
     get edit_base_app_sign_out_url(host: @host, ri: "jp")
 
     assert_response :success
-    assert_not inertia_page.fetch("clearHistory")
+    assert_equal refresh_digest, token.reload.refresh_token_digest
+    assert_equal refresh_plain, cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
   end
 
-  test "post sign out without a resolved session renders friendly completion" do
-    post base_app_sign_out_url(host: @host, ri: "jp")
+  test "receiver-local logout revokes authority before one-shot completion and Home" do
+    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    https!
+    rp_headers = session_headers(token)
+    rp_headers.fetch("Cookie").split("; ").each do |pair|
+      name, value = pair.split("=", 2)
+      cookies[name] = Rack::Utils.unescape(value)
+    end
+    csrf_token = fetch_csrf_token(edit_base_app_sign_out_url(host: @host, ri: "jp"), headers: rp_headers)
+    post base_app_sign_out_url(host: @host, ri: "jp"), headers: {
+      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+    }
+
+    assert_response :see_other
+    assert_predicate token.reload, :currently_usable?
+    authority = URI.parse(response.location)
+
+    assert_equal @host, authority.host
+    assert_equal "/oidc/logout", authority.path
+    get authority.request_uri
 
     assert_response :success
-    assert_equal "base/app/sign_outs/complete", inertia_component
+    assert_predicate token.reload, :currently_usable?
+    csrf_token = fetch_csrf_token(authority.request_uri)
+    form = response.parsed_body.at_css("form")
+    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
+    fields["authenticity_token"] = csrf_token
+    post form["action"], params: fields, headers: {
+      "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin", "X-CSRF-Token" => csrf_token,
+    }
+
+    assert_response :see_other
+    assert_predicate token.reload, :revoked?
+    origin = URI.parse(response.location)
+    get origin.request_uri
+
+    assert_response :success
+    assert_equal "base/app/sign_outs/edit", inertia_component
+    challenge = Rack::Utils.parse_nested_query(origin.query.to_s).fetch("logout_challenge")
+    csrf_token = fetch_csrf_token(origin.request_uri)
+    form_props = inertia_props.fetch("form")
+    post form_props.fetch("action"),
+         params: {
+           logout_challenge: challenge,
+           ri: "jp",
+           authenticity_token: csrf_token,
+           logout_intent_proof: form_props.fetch("logout_intent_proof"),
+         }, headers: {
+           "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin",
+         }
+
+    assert_response :see_other
+    completion = response.location
+    get completion
+
+    assert_response :success
+    assert_equal "base/app/sign_outs/edit", inertia_component
+    assert inertia_page.fetch("clearHistory")
     assert_equal I18n.t("sign.shared.sign_out.completed_title"), inertia_props.fetch("title")
+    assert_equal base_app_root_path(ri: "jp"), inertia_props.dig("home_link", "href")
+    get completion
+
+    assert_response :not_found
+    get base_app_root_url(host: @host, ri: "jp")
+
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+    get base_app_dashboard_url(host: @host, ri: "jp"), headers: rp_headers
+
+    assert_response :found
+    destination = URI.parse(response.location)
+
+    assert_equal @host, destination.host
+    assert_equal "/sign", destination.path
+    assert_equal "jp", Rack::Utils.parse_nested_query(destination.query.to_s).fetch("ri")
+    assert_predicate token.reload, :revoked?
+  end
+
+  test "sign out without an RP session refuses authority mutation" do
+    before = AcmeLogoutTransaction.count
+    post base_app_sign_out_url(host: @host, ri: "jp")
+
+    assert_response :unauthorized
+    assert_nil response.location
+    assert_equal before, AcmeLogoutTransaction.count
+    get base_app_root_url(host: @host, ri: "jp")
+
+    assert_response :success
+    assert_equal "base/app/roots/index", inertia_component
+  end
+
+  test "the retired sign out completion route is not recognized" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("http://#{@host}/sign/out/complete", method: :get)
+    end
   end
 
   private
 
   def session_headers(token)
-    access_token = jwt_access_token_for(
-      @user, host: @host, session_public_id: token.public_id, resource_type: "client",
-    )
-    set_access_cookie(access_token)
-    {
-      "Host" => @host,
-      "X-TEST-CURRENT-USER" => @user.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => token.public_id,
-      "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}",
-    }
+    rp_cookie =
+      begin
+        fixture_root = token
+        fixture_actor = @user
+        fixture_host = @host
+        base_headers = as_user_headers(fixture_actor, host: fixture_host, session_public_id: fixture_root.public_id)
+        fixture_root.rotate_refresh_token! unless fixture_root.device_session.current_refresh_token_id
+        fixture_client = OidcClientRegistry.find!("base-app-ww")
+        @base_rp_fixture_credentials ||= {}
+        fixture_key = [fixture_client.client_id, fixture_root.public_id]
+        unless @base_rp_fixture_credentials[fixture_key]
+          fixture_now = OpAppGrant.database_now
+          fixture_rp = OpAppGrant.create!(
+            client_token: fixture_root, oidc_client_id: fixture_client.client_id,
+            oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+            oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,
+            refresh_token_expires_at: fixture_now + 1.hour,
+          )
+          fixture_access = AuthenticationTokenService.encode(
+            fixture_actor, host: fixture_host, resource_type: "client",
+                           session_public_id: fixture_root.public_id, base_session_public_id: fixture_root.public_id,
+                           oidc_sid: fixture_rp.public_id, oidc_jti: fixture_rp.oidc_jti,
+                           expires_at: fixture_now + 1.hour, scopes: %w(openid profile),
+                           issuer: OidcIssuer.for_client(fixture_client), audiences: [fixture_client.aud],
+                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fixture_client),
+                           subject: OidcSubject.for(
+                             fixture_actor,
+                             resource_type: "client",
+                           ), client_id: fixture_client.client_id,
+          )
+          fixture_refresh = fixture_rp.issue_refresh_token!
+          @base_rp_fixture_credentials[fixture_key] = [
+            base_headers.fetch("Cookie"),
+            "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(fixture_access)}",
+            "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(fixture_refresh)}",
+          ].join("; ")
+        end
+        @base_rp_fixture_credentials.fetch(fixture_key)
+      end
+    { "Host" => @host,
+      "Cookie" => rp_cookie,
+      "HTTP_COOKIE" => rp_cookie,
+      "X-TEST-SESSION-PUBLIC-ID" => token.public_id, }
   end
 
   def bearer_headers(token, host: nil, headers: {})
@@ -131,26 +227,6 @@ class Base::App::SignOutsControllerTest
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
-  end
-
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
   end
 
   def ensure_user_reference_records!
@@ -197,10 +273,8 @@ class Base::App::SignOutsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -212,10 +286,8 @@ class Base::App::SignOutsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -307,9 +379,15 @@ class Base::App::SignOutsControllerTest
     { "X-CSRF-Token" => token }
   end
 
-  def fetch_csrf_token(path)
-    get(path)
-    response.body[/name="authenticity_token" value="([^"]+)"/, 1] || response.body
+  def fetch_csrf_token(path, headers: {})
+    with_forgery_protection do
+      get(path, headers: headers)
+      csrf_token = response.body[/<meta name="csrf-token" content="([^"]+)"/, 1] ||
+        response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+
+      assert_predicate csrf_token, :present?, "expected a CSRF token in the response"
+      csrf_token
+    end
   end
 
   def social_callback_headers(host)
@@ -350,7 +428,8 @@ class Base::App::SignOutsControllerTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,
@@ -451,10 +530,8 @@ class Base::App::SignOutsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -474,12 +551,12 @@ class Base::App::SignOutsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 
@@ -547,12 +624,12 @@ class Base::App::SignOutsControllerTest
       elsif normalized.include?("core")
         "CORE"
       elsif normalized.include?("auth") || normalized.include?("sign") || normalized.include?("log.umaxica")
-        "SIGN"
+        "AUTH"
       else
         "BASE"
       end
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -566,83 +643,5 @@ class Base::App::SignOutsControllerTest
         "APP"
       end
     "surface:#{service}_#{surface}"
-  end
-
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    token_public_id = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(user, host: host, session_public_id: token_public_id, resource_type: "client")
-    set_access_cookie(access_token)
-    base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
-    base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id,
-      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    token_public_id = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      staff, host: host, session_public_id: token_public_id,
-             resource_type: "operator",
-    )
-    set_access_cookie(access_token)
-    base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
-    base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id,
-      visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    token_public_id = session_public_id.presence || token.public_id
-    access_token = jwt_access_token_for(
-      visitor, host: host, session_public_id: token_public_id,
-               resource_type: "visitor",
-    )
-    set_access_cookie(access_token)
-    base["Cookie"] = [base["Cookie"], "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"].compact.join("; ")
-    base["X-TEST-SESSION-PUBLIC-ID"] = token_public_id
-    base
   end
 end

@@ -30,7 +30,7 @@ export default function MfaChallengeShow({
       <ErrorList errors={error === null ? [] : [error]} />
 
       <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-base">
           <span className="font-medium text-fg">{toggleTitle}</span>
           <span className="text-fg-muted">{stateLabel}</span>
         </div>

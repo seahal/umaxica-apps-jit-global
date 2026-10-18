@@ -13,6 +13,8 @@
 class ClientOccurrenceStatus < OccurrenceRecord
   include ReferenceRecord
 
+  include OccurrenceStatus
+
   # Fixed IDs - do not modify these values
   NOTHING = 0
   LEGACY_NOTHING = 1
@@ -20,8 +22,6 @@ class ClientOccurrenceStatus < OccurrenceRecord
   INACTIVE = 3
   DELETED = 4
   DEFAULTS = [NOTHING, LEGACY_NOTHING, ACTIVE, INACTIVE, DELETED].freeze
-
-  include OccurrenceStatus
 
   has_many :client_occurrences, foreign_key: :status_id, dependent: :restrict_with_error,
                                 inverse_of: :user_occurrence_status

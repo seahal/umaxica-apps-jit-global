@@ -15,9 +15,7 @@ class AuthenticationCredentialInventoryOwnerTest < ActiveSupport::TestCase
       AuthenticationCredentialInventory::Result.new(
         actor: @owner,
         excluding: @excluding,
-        aal1_methods: [:email_otp],
-        aal2_methods: [:passkey],
-        aal3_methods: [:hardware_key],
+        sign_in_methods: [:email_otp],
         step_up_methods: [:email_otp, :passkey],
         uv_step_up_methods: [:email_otp, :passkey],
         contact_identifiers: [:email],
@@ -39,43 +37,33 @@ class AuthenticationCredentialInventoryOwnerTest < ActiveSupport::TestCase
     end
   end
 
-  test "authentication method inventory is an alias for credential inventory" do
+  test "credential inventory is the single inventory entry point" do
     with_inventory do
-      assert_same @inventory, @owner.authentication_method_inventory(excluding: @excluding)
+      assert_same @inventory, @owner.authentication_credential_inventory(excluding: @excluding)
     end
   end
 
-  test "aal1 and login methods share inventory result" do
+  test "sign-in capabilities and login methods share inventory result" do
     with_inventory do
-      assert_equal [:email_otp], @owner.aal1_methods(excluding: @excluding)
-      assert_equal [:email_otp], @owner.login_methods(excluding: @excluding)
-      assert_equal 1, @owner.aal1_method_count(excluding: @excluding)
-      assert @owner.aal1_available?(excluding: @excluding)
-      assert @owner.login_available?(excluding: @excluding)
-      assert @owner.retains_aal1_after?(excluding: @excluding)
-      assert @owner.retains_login_after?(excluding: @excluding)
+      assert_equal [:email_otp], @owner.sign_in_methods(excluding: @excluding)
+      assert @owner.has_usable_sign_in_capability?(excluding: @excluding)
+      assert_equal [:email_otp], @owner.usable_sign_in_capabilities(excluding: @excluding)
     end
   end
 
-  test "aal2 and step up methods are independent inventory dimensions" do
+  test "step-up capabilities are independent from sign-in capabilities" do
     with_inventory do
-      assert_equal [:passkey], @owner.aal2_methods(excluding: @excluding)
       assert_equal [:email_otp, :passkey], @owner.step_up_methods(excluding: @excluding)
-      assert_equal 1, @owner.aal2_method_count(excluding: @excluding)
-      assert @owner.aal2_available?(excluding: @excluding)
-      assert @owner.step_up_available?(excluding: @excluding)
-      assert @owner.retains_aal2_after?(excluding: @excluding)
-      assert @owner.retains_step_up_after?(excluding: @excluding)
+      assert_equal [:email_otp, :passkey], @owner.usable_step_up_capabilities(excluding: @excluding)
+      assert @owner.has_usable_step_up_capability?(excluding: @excluding)
     end
   end
 
-  test "contactability and aal3 methods expose inventory result" do
+  test "contactability exposes inventory result" do
     with_inventory do
       assert_equal [:email], @owner.contact_identifiers(excluding: @excluding)
       assert_equal 1, @owner.contact_identifier_count(excluding: @excluding)
-      assert @owner.contactable?(excluding: @excluding)
-      assert @owner.retains_contactability_after?(excluding: @excluding)
-      assert_equal [:hardware_key], @owner.aal3_methods(excluding: @excluding)
+      assert @owner.has_contact_identifier?(excluding: @excluding)
     end
   end
 

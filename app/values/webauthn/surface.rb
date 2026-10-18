@@ -10,16 +10,17 @@ module Webauthn
     class UnknownSurfaceError < StandardError; end
 
     attr_reader :key, :env_prefix, :passkey_class_name, :passkey_status_class_name,
-                :ceremony_transaction_class_name, :actor_foreign_key
+                :ceremony_transaction_class_name, :actor_foreign_key, :actor_association_name
 
     def initialize(key, env_prefix:, passkey_class_name:, passkey_status_class_name:,
-                   ceremony_transaction_class_name:, actor_foreign_key:)
+                   ceremony_transaction_class_name:, actor_foreign_key:, actor_association_name:)
       @key = key
       @env_prefix = env_prefix
       @passkey_class_name = passkey_class_name
       @passkey_status_class_name = passkey_status_class_name
       @ceremony_transaction_class_name = ceremony_transaction_class_name
       @actor_foreign_key = actor_foreign_key
+      @actor_association_name = actor_association_name
       freeze
     end
 
@@ -39,6 +40,7 @@ module Webauthn
         passkey_status_class_name: "ClientPasskeyStatus",
         ceremony_transaction_class_name: "ClientPasskeyCeremonyTransaction",
         actor_foreign_key: "user_id",
+        actor_association_name: :user,
       ),
       com: new(
         :com,
@@ -47,6 +49,7 @@ module Webauthn
         passkey_status_class_name: "VisitorPasskeyStatus",
         ceremony_transaction_class_name: "VisitorPasskeyCeremonyTransaction",
         actor_foreign_key: "visitor_id",
+        actor_association_name: :visitor,
       ),
       org: new(
         :org,
@@ -55,6 +58,7 @@ module Webauthn
         passkey_status_class_name: "OperatorPasskeyStatus",
         ceremony_transaction_class_name: "OperatorPasskeyCeremonyTransaction",
         actor_foreign_key: "staff_id",
+        actor_association_name: :staff,
       ),
     }.freeze
 

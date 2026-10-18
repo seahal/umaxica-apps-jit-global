@@ -15,6 +15,8 @@ class ExternalIdentityRepositoryPortTest < ActiveSupport::TestCase
   test "port methods raise NotImplementedError until an adapter implements them" do
     assert_raises(NotImplementedError) { @repository.find_by_subject("sub", lock: false) }
     assert_raises(NotImplementedError) { @repository.find_for_user(Object.new) }
+    assert_raises(NotImplementedError) { @repository.find_by_subject_for_link("sub", lock: false) }
+    assert_raises(NotImplementedError) { @repository.find_for_user_for_link(Object.new) }
     assert_raises(NotImplementedError) do
       @repository.build_for_user(user: Object.new, principal: Object.new, credential_candidate: Object.new)
     end

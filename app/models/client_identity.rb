@@ -36,8 +36,13 @@ class ClientIdentity < AppRpRecord
              class_name: "ClientIdentityState",
              foreign_key: :status_id,
              inverse_of: :client_identities
-  has_one :persona, dependent: :restrict_with_error, inverse_of: :client_identity
+  has_one :client_persona,
+          class_name: "ClientPersona",
+          dependent: :restrict_with_error,
+          inverse_of: :client_identity
   has_many :persona_assignments, dependent: :destroy, inverse_of: :client_identity
+  has_many :oidc_identity_bindings, class_name: "ClientOidcIdentityBinding",
+                                    dependent: :restrict_with_error, inverse_of: :client_identity
 
   validates :issuer, :subject, :audience, :source_record_id, presence: true
   validates :public_id, uniqueness: true

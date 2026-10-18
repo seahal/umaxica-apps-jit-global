@@ -31,11 +31,15 @@ class ClientChronicleLevelTest < ActiveSupport::TestCase
   end
 
   test "ensure_defaults! creates records" do
-    ClientChronicleLevel.delete_all
-    assert_difference("ClientChronicleLevel.count", 5) do
+    # Referenced levels retain the audit facts that name them.
+    missing = ClientChronicleLevel::DEFAULTS - ClientChronicle.distinct.pluck(:level_id)
+
+    assert_not_empty missing
+    ClientChronicleLevel.where(id: missing).delete_all
+    assert_difference("ClientChronicleLevel.count", missing.length) do
       ClientChronicleLevel.ensure_defaults!
     end
-    assert ClientChronicleLevel.exists?(id: ClientChronicleLevel::DEBUG)
+    assert_equal ClientChronicleLevel::DEFAULTS.sort, ClientChronicleLevel.order(:id).pluck(:id)
   end
 
   test "returns all default records" do

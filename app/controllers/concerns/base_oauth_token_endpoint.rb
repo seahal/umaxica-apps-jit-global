@@ -4,10 +4,33 @@
 module BaseOauthTokenEndpoint
   extend ActiveSupport::Concern
 
+  include OpClientAdmissionGate
+
   def create
-    result = ::OidcTokenExchangeCoordinator.call(
+    return render_client_not_admitted unless op_client_admitted?(params[:client_id].to_s)
+
+    result = ::OidcTokenExchangeCoordinator.call(**token_exchange_arguments)
+
+    if result.success?
+      response.headers["Cache-Control"] = "no-store"
+      response.headers["Pragma"] = "no-cache"
+      render json: result.token_response, status: :ok
+    else
+      render json: { error: result.error, error_description: result.error_description },
+             status: result.error.to_s.in?(
+               %w(server_error
+                  temporarily_unavailable),
+             ) ? :service_unavailable : :bad_request
+    end
+  end
+
+  private
+
+  def token_exchange_arguments
+    {
       grant_type: params[:grant_type],
       code: params[:code],
+      refresh_token: params[:refresh_token],
       redirect_uri: params[:redirect_uri],
       client_id: params[:client_id],
       client_secret: params[:client_secret],
@@ -17,15 +40,14 @@ module BaseOauthTokenEndpoint
       dpop_proof: request.headers["DPoP"],
       token_endpoint_uri: request.original_url,
       request_method: request.request_method,
-    )
+      expected_resource_type: oauth_token_resource_type,
+      attempt_ref: params[:attempt_ref].presence,
+    }
+  end
 
-    if result.success?
-      response.headers["Cache-Control"] = "no-store"
-      response.headers["Pragma"] = "no-cache"
-      render json: result.token_response, status: :ok
-    else
-      render json: { error: result.error, error_description: result.error_description },
-             status: :bad_request
-    end
+  def oauth_token_resource_type
+    self.class.const_get(:OIDC_RESOURCE_TYPE, false)
+  rescue NameError
+    raise NameError, "#{self.class.name} must define OIDC_RESOURCE_TYPE"
   end
 end

@@ -1,4 +1,4 @@
-import { Link, router } from "@inertiajs/react";
+import { router } from "@inertiajs/react";
 import { useState } from "react";
 
 import Button from "@/components/ui/Button";
@@ -6,6 +6,7 @@ import Checkbox from "@/components/ui/Checkbox";
 import ErrorList from "@/components/ui/ErrorList";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import TextLink from "@/components/ui/TextLink";
 import type { PageLink, TurnstileProps } from "@/features/base_com/identity/types";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
@@ -26,8 +27,6 @@ export type SecretCredentialFormProps = {
   cancel_link: PageLink;
   turnstile: TurnstileProps;
 };
-
-const LINK = "text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline";
 
 export default function SecretCredentialForm({
   title,
@@ -100,9 +99,9 @@ export default function SecretCredentialForm({
 
         {secret ? (
           <div className="flex flex-col gap-1 rounded-md border border-line bg-surface-muted p-3">
-            <p className="text-sm font-medium text-fg">{secret.label}</p>
-            <p className="font-mono text-sm text-fg">{secret.value}</p>
-            <p className="text-xs text-fg-muted">{secret.one_time_notice}</p>
+            <p className="text-base font-medium text-fg">{secret.label}</p>
+            <p className="wrap-anywhere font-mono text-base text-fg">{secret.value}</p>
+            <p className="text-base font-medium text-fg">{secret.one_time_notice}</p>
           </div>
         ) : null}
 
@@ -111,13 +110,14 @@ export default function SecretCredentialForm({
           onToken={setToken}
         />
 
-        <div className="flex items-center justify-end gap-3">
-          <Link
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <TextLink
             href={cancelLink.href}
-            className={LINK}
+            inertia
+            tone="muted"
           >
             {cancelLink.label}
-          </Link>
+          </TextLink>
           <Button
             type="submit"
             isDisabled={processing}

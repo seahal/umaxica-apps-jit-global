@@ -30,7 +30,7 @@ module Publishing
       assign_category(entry.current_revision, @setup_term)
 
       version = PromoteRevisionOperation.call(revision: entry.current_revision)
-      snapshot = version.single_taxonomy_assignments.sole
+      snapshot = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: version.id)
 
       assert_equal "category", snapshot.vocabulary_key_snapshot
       assert_equal "setup", snapshot.term_slug_snapshot
@@ -45,8 +45,10 @@ module Publishing
 
       version = PromoteRevisionOperation.call(revision: entry.current_revision)
 
-      assert_equal %w(rails ruby), version.multiple_taxonomy_assignments.map(&:term_slug_snapshot)
-      assert_equal [0, 1], version.multiple_taxonomy_assignments.map(&:position_snapshot)
+      assignments = Docs::App::VersionMultipleTaxonomyAssignment.where(entry_version_id: version.id).order(:position)
+
+      assert_equal %w(rails ruby), assignments.map(&:term_slug_snapshot)
+      assert_equal [0, 1], assignments.map(&:position_snapshot)
     end
 
     test "renaming or moving a term afterwards does not change what the version published" do
@@ -57,7 +59,7 @@ module Publishing
       @setup_term.update!(name: "新しい名前", slug: "renamed")
       MoveTaxonomySubtreeOperation.call(term: @setup_term, new_parent: nil)
 
-      snapshot = version.reload.single_taxonomy_assignments.sole
+      snapshot = Docs::App::VersionSingleTaxonomyAssignment.find_by!(entry_version_id: version.reload.id)
 
       assert_equal "setup", snapshot.term_slug_snapshot
       assert_equal "セットアップ", snapshot.term_name_snapshot
@@ -102,17 +104,6 @@ module Publishing
       assert_equal 1, Docs::App::EntryVersion.where(entry_revision_id: entry.current_revision.id).count
       assert_equal 1, Docs::App::VersionSingleTaxonomyAssignment.where(entry_version_id: first.id).count
       assert_equal 1, Docs::App::VersionMultipleTaxonomyAssignment.where(entry_version_id: first.id).count
-    end
-
-    test "a caller that loses the race is handed the winning version, not an arbitrary row" do
-      entry = publishing_draft(audience: "app", surface: "docs", slug: "raced", title: "Raced")
-      assign_tags(entry.current_revision, [@ruby])
-      winner = PromoteRevisionOperation.call(revision: entry.current_revision)
-
-      # Simulates the loser's path: its insert was rejected, so it re-reads.
-      loser = PromoteRevisionOperation.new(revision: entry.current_revision)
-
-      assert_equal winner.id, loser.send(:verify_complete!, winner).id
     end
 
     test "a promoted revision and its assignments are frozen by the database" do

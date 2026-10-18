@@ -9,24 +9,29 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
   RAW_PT_PARAM = /\bparams\[:pt\]/.freeze
   LEGACY_XT_REDIRECT = /\bredirect_to_xt(?:_url)?\b/.freeze
 
+  # Every entry builds its target from a route helper with a configured host, or from a destination
+  # persisted and validated when its transaction was issued. None reads the target from a parameter.
   ALLOW_OTHER_HOST_ALLOWLIST = %w(
-    app/controllers/base/app/oidc/authorizations_controller.rb
-    app/controllers/base/com/oidc/authorizations_controller.rb
-    app/controllers/base/org/oidc/authorizations_controller.rb
-    app/controllers/auth/app/sign/in/sessions_controller.rb
-    app/controllers/auth/app/sign/ins_controller.rb
-    app/controllers/auth/app/sign/outs_controller.rb
-    app/controllers/auth/app/sign/ups_controller.rb
-    app/controllers/auth/org/sign/in/entra/authorizations_controller.rb
+    app/controllers/auth/app/ceremony_bindings_controller.rb
+    app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb
+    app/controllers/auth/app/verification/cancellations_controller.rb
+    app/controllers/auth/com/ceremony_bindings_controller.rb
+    app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb
+    app/controllers/auth/com/verification/cancellations_controller.rb
+    app/controllers/auth/org/ceremony_bindings_controller.rb
+    app/controllers/auth/org/verification/cancellations_controller.rb
+    app/controllers/base/app/identity/totps_controller.rb
+    app/controllers/concerns/auth_local_result_handoff.rb
+    app/controllers/concerns/auth_oidc_result_handoff.rb
+    app/controllers/concerns/auth_step_up_result_handoff.rb
+    app/controllers/concerns/base_ceremony_binding_confirmation.rb
+    app/controllers/concerns/base_identity_passkey_management.rb
     app/controllers/concerns/common_redirect.rb
-    app/controllers/concerns/oidc_callback.rb
+    app/controllers/concerns/oidc_rp_logout_authority.rb
     app/controllers/concerns/oidc_rp_logout_launcher.rb
     app/controllers/concerns/oidc_sso_initiator.rb
-    app/controllers/concerns/sign_oidc_logout.rb
-    app/controllers/core/app/sign/outs_controller.rb
-    app/controllers/palm/app/oidc/authorizations_controller.rb
-    app/controllers/sign/app/sign/ins_controller.rb
-    app/controllers/sign/app/sign/outs_controller.rb
+    app/controllers/concerns/sign_out_notice.rb
+    app/controllers/concerns/sign_up_social_birthdate_support.rb
   ).freeze
 
   RAW_PT_ALLOWLIST_PATTERNS = [
@@ -46,15 +51,10 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
     assert_empty offenders
   end
 
-  test "allow_other_host true is limited to jump facade" do
-    offenders =
-      ruby_files.select do |path|
-        next false if ALLOW_OTHER_HOST_ALLOWLIST.include?(path)
+  test "allow_other_host true is limited to reviewed Jump and protocol handoff boundaries" do
+    users = ruby_files.select { |path| File.read(path).match?(DIRECT_ALLOW_OTHER_HOST) }
 
-        File.read(path).match?(DIRECT_ALLOW_OTHER_HOST)
-      end
-
-    assert_empty offenders
+    assert_equal ALLOW_OTHER_HOST_ALLOWLIST.sort, users.sort
   end
 
   test "legacy xt redirect facade is not used" do

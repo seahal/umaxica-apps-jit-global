@@ -1,6 +1,8 @@
 import { useForm } from "@inertiajs/react";
 
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
+import TextLink from "@/components/ui/TextLink";
 
 // The sign-out confirmation ceremony, shared by the auth surfaces.
 //
@@ -21,11 +23,12 @@ export type SignOutConfirmationProps = {
   form: {
     action: string;
     logout_challenge: string | null;
+    logout_intent_proof: string | null;
   };
   cancel: {
     label: string;
     action: string;
-  };
+  } | null;
   home_link: SignOutLink;
 };
 
@@ -39,7 +42,10 @@ export default function SignOutConfirmation({
   cancel,
   home_link: homeLink,
 }: SignOutConfirmationProps) {
-  const confirmation = useForm({ logout_challenge: form.logout_challenge ?? "" });
+  const confirmation = useForm({
+    logout_challenge: form.logout_challenge ?? "",
+    logout_intent_proof: form.logout_intent_proof ?? "",
+  });
   const cancellation = useForm({});
 
   const submitConfirmation = (event: React.SyntheticEvent<HTMLFormElement>) => {
@@ -49,16 +55,19 @@ export default function SignOutConfirmation({
 
   const submitCancellation = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
-    cancellation.delete(cancel.action);
+    if (cancel) {
+      cancellation.delete(cancel.action);
+    }
   };
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{heading}</h1>
-
+    <Page
+      title={heading}
+      width="narrow"
+    >
       {activeContext ? (
         <>
-          <p className="text-sm text-fg-muted">{confirmDescription}</p>
+          <p className="text-base text-fg-muted">{confirmDescription}</p>
           <div className="flex flex-wrap items-center gap-3">
             <form
               action={form.action}
@@ -73,39 +82,36 @@ export default function SignOutConfirmation({
                 {submitLabel}
               </Button>
             </form>
-            <form
-              action={cancel.action}
-              method="post"
-              onSubmit={submitCancellation}
-            >
-              <input
-                type="hidden"
-                name="_method"
-                value="delete"
-              />
-              <Button
-                type="submit"
-                variant="secondary"
-                isDisabled={cancellation.processing}
+            {cancel ? (
+              <form
+                action={cancel.action}
+                method="post"
+                onSubmit={submitCancellation}
               >
-                {cancel.label}
-              </Button>
-            </form>
+                <input
+                  type="hidden"
+                  name="_method"
+                  value="delete"
+                />
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  isDisabled={cancellation.processing}
+                >
+                  {cancel.label}
+                </Button>
+              </form>
+            ) : null}
           </div>
         </>
       ) : (
-        <p className="text-sm text-fg-muted">{alreadySignedOut}</p>
+        <p className="text-base text-fg-muted">{alreadySignedOut}</p>
       )}
 
-      <p className="text-sm">
+      <p className="text-base">
         {/* A document visit: the destination is another surface entry point with its own guards. */}
-        <a
-          href={homeLink.href}
-          className="text-accent hover:underline"
-        >
-          {homeLink.label}
-        </a>
+        <TextLink href={homeLink.href}>{homeLink.label}</TextLink>
       </p>
-    </section>
+    </Page>
   );
 }

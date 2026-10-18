@@ -9,50 +9,44 @@ module Base
     class AccountsController < Base::App::FullAccessController
       include ::SurfaceInertiaPage
 
+      include ::BaseMembershipRelay
+
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      before_action :authenticate_client!
+      MEMBERSHIP_SURFACE = "app"
 
+      public
+
+      # R5-WU15: listed and authorized by the owner over HTTPS.
       def index
-        authorize!(current_client, to: :show?)
-        accounts = switcher.available_accounts
+        result = membership_result!(membership_authority.accounts)
+        return unless result
 
         render inertia: true, props: {
           title: "Accounts",
           body: "account",
           empty: "None available",
-          entries: accounts.map { |account| serialize_account(account) },
+          entries: result.data.fetch("accounts").map { |account| serialize_account(account.fetch("public_id")) },
+          create_action: { label: "Create Account" },
+          up_link: dashboard_up_link,
         }
       end
 
       def show
-        account = find_account!
-        authorize!(account, to: :show?, with: AccountPolicy)
+        return unless membership_result!(membership_authority.account(params.expect(:id)))
 
-        render inertia: true, props: { title: "Account", body: "account" }
+        render inertia: true, props: {
+          title: "Account",
+          body: "account",
+          up_link: { label: t("actions.up"), href: base_app_accounts_path(ri: params[:ri]) },
+        }
       end
 
       private
 
-      def serialize_account(account)
-        {
-          public_id: account.public_id,
-          label: account.public_id,
-          href: base_app_account_path(account.public_id, ri: params[:ri]),
-        }
-      end
-
-      # Scoped to the principal's available accounts: a foreign or non-existent id raises
-      # RecordNotFound (404), which is the authoritative ownership gate for show/edit/update.
-      def find_account!
-        switcher.find_account(params.expect(:id)) || raise(ActiveRecord::RecordNotFound)
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :app, principal: current_client, session: current_session,
-        )
+      def serialize_account(public_id)
+        { public_id:, label: public_id, href: base_app_account_path(public_id, ri: params[:ri]) }
       end
     end
   end

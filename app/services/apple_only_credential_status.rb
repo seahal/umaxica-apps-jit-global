@@ -13,7 +13,7 @@ class AppleOnlyCredentialStatus
   def call
     return false unless client
 
-    AuthenticationCredentialInventory.call(client, reload: true).aal1_methods == [:apple]
+    AuthenticationCredentialInventory.call(client, reload: true).sign_in_methods == [:apple]
   end
 
   private

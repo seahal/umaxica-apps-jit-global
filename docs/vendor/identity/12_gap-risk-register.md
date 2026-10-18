@@ -27,8 +27,6 @@ This is not a backlog replacement.
 # Source Evidence
 
 - `docs/vendor/identity/*`
-- `docs/auth-ceremony/EVIDENCE-LEDGER.md`
-- `docs/auth-ceremony/OPEN-QUESTIONS.md`
 - `docs/security/session-token-authority.md`
 - `docs/security/social-callback-boundary.md`
 - `docs/security/observability-boundary.md`
@@ -50,10 +48,10 @@ This is not a backlog replacement.
 | G-013       | OPEN_QUESTION | High              | Major               | Social linking policy needed explicit documentation before this package.                                             | Current package `07_social-linking-policy.md`                                                                     | Account takeover risk if policy is unclear.                                                                                              | Preserve the fail-closed, explicit-confirmation rule.                                         | Product/security                         | Open                                                                            |
 | G-014       | CONTRADICTION | Medium            | Major               | Some docs use older `acme/www` or `sign/id` language while current vendor docs use Acme / Sign / Core / Base / Palm. | `docs/identity/authority-boundary.md`, `docs/security/*`                                                          | Mixed vocabulary can confuse external reviewers.                                                                                         | Keep vendor docs current-vocabulary only and note historical context separately.              | Internal architecture                    | Open                                                                            |
 | G-015       | FOLLOW_UP     | Medium            | Major               | Identity runbook coverage should later include incident, key rotation, and rollback paths.                           | `docs/runbooks/*`                                                                                                 | Recovery guidance is fragmented today.                                                                                                   | Draft a consolidated runbook when scope allows.                                               | Operations/SRE                           | Open                                                                            |
-| GAP-002     | GAP           | Critical          | Blocker             | Chronicle DB-level immutability absent; NR-004 requires DB-level prevention or detection of update/delete.           | `docs/vendor/identity/15_audit-log-integrity-requirement.md`, `plans/umaxica-immutable-pinwheel.md`               | Critical audit events can be modified or deleted without DB-level prevention or detection.                                               | Select and implement DB-level append-only or tamper-evidence remediation.                     | Internal architecture / SRE              | OPEN                                                                            |
+| GAP-002     | GAP           | Critical          | Blocker             | Chronicle DB-level immutability absent; NR-004 requires DB-level prevention or detection of update/delete.           | `docs/vendor/identity/15_audit-log-integrity-requirement.md`, `docs/vendor/identity/11_decision-register.md`      | Critical audit events can be modified or deleted without DB-level prevention or detection.                                               | Select and implement DB-level append-only or tamper-evidence remediation.                     | Internal architecture / SRE              | OPEN                                                                            |
 | GAP-NEW-001 | GAP           | High              | Major               | Recovery passcode verification has no rate limit / lockout.                                                          | `docs/vendor/identity/14_account-recovery-procedure.md`, `docs/vendor/identity/04_cookie-session-token-matrix.md` | Recovery passcodes lack abuse throttling beyond entropy and Argon2 storage.                                                              | Specify and implement rate limit / attempt lockout before production use.                     | Internal architecture / product security | OPEN                                                                            |
-| GAP-NEW-006 | GAP           | Critical          | Blocker             | MFA reset UI DISABLED; 5 prerequisite conditions required before enablement.                                         | `docs/vendor/identity/14_account-recovery-procedure.md`, `plans/umaxica-immutable-pinwheel.md`                    | Account recovery cannot be enabled safely without runbook, state machine, abuse protection, audit requirements, and acceptance criteria. | Complete the five prerequisite conditions before enabling the UI.                             | Internal architecture / product security | OPEN                                                                            |
-| GAP-NEW-007 | GAP           | Critical          | Blocker             | Catastrophic account recovery, all credentials lost, is undefined.                                                   | `docs/vendor/identity/14_account-recovery-procedure.md`, `plans/umaxica-immutable-pinwheel.md`                    | Users with all credentials lost have no defined recovery path.                                                                           | Define catastrophic recovery procedure, approval path, audit events, and acceptance criteria. | Internal architecture / product security | OPEN                                                                            |
+| GAP-NEW-006 | GAP           | Critical          | Blocker             | MFA reset UI DISABLED; 5 prerequisite conditions required before enablement.                                         | `docs/vendor/identity/14_account-recovery-procedure.md`, `docs/vendor/identity/11_decision-register.md`           | Account recovery cannot be enabled safely without runbook, state machine, abuse protection, audit requirements, and acceptance criteria. | Complete the five prerequisite conditions before enabling the UI.                             | Internal architecture / product security | OPEN                                                                            |
+| GAP-NEW-007 | GAP           | Critical          | Blocker             | Catastrophic account recovery, all credentials lost, is undefined.                                                   | `docs/vendor/identity/14_account-recovery-procedure.md`, `docs/vendor/identity/11_decision-register.md`           | Users with all credentials lost have no defined recovery path.                                                                           | Define catastrophic recovery procedure, approval path, audit events, and acceptance criteria. | Internal architecture / product security | OPEN                                                                            |
 
 # Contradiction Notes
 
@@ -63,6 +61,17 @@ This is not a backlog replacement.
 # Open Questions
 
 - Which of the follow-ups should be promoted into stable docs versus an ADR or runbook.
+
+# Open Decisions From The 2026-06 Auth Ceremony Review
+
+The 2026-06 auth ceremony review (`docs/auth-ceremony/`, removed 2026-09-13) left these owner
+decisions open. Its other findings are recorded as decisions in `11_decision-register.md` or were
+since implemented (Turnstile hostname/action/replay binding, TOTP same-window replay protection).
+
+- New email trust cooldown: whether to adopt it, for how long, and whether surfaces differ.
+  Proposal: `plans/backlog/new-email-trust-cooldown.md`.
+- Telephone AAL1: whether telephone OTP alone may establish AAL1 on `app` and `com`, or an
+  additional verifier is always required, as on `org`.
 
 # Related Documents
 

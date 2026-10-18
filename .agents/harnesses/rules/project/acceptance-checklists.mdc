@@ -1,0 +1,21 @@
+---
+name: acceptance-checklists
+description: Read and maintain docs/checklists/ when changing behavior it covers.
+---
+
+# Acceptance Checklists
+
+`docs/checklists/` states behavior that must keep working. See `docs/checklists/README.md`.
+
+- Before changing behavior, read the checklist for the affected area, when one exists.
+- Preserve every existing item unless the task intentionally changes that contract; then update the
+  item in the same change.
+- When a change adds behavior that must hold from now on, add an item. Leave out criteria that only
+  describe the change itself.
+- When a checklist disagrees with current code, a spec or an ADR, report the disagreement before
+  choosing an implementation path.
+- A checklist item is not evidence. Record what was actually verified in `evidence/`.
+
+Keep item IDs stable within each functional checklist. State surface applicability and link the
+accepted source. Use behavior statements, not permanent checked boxes or copies of test code.
+One-time migration and feature-only criteria stay in their spec.

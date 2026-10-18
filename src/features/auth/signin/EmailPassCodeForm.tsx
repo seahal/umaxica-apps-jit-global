@@ -3,8 +3,8 @@
 // The code itself never reaches this page - only the field that collects it. Whether the code is
 // correct, how many attempts remain, and whether the account is locked are all decided by the
 // server, which re-renders this page with the resulting messages.
-import { useForm } from "@inertiajs/react";
-import { useRef } from "react";
+import { router, useForm } from "@inertiajs/react";
+import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
@@ -12,7 +12,7 @@ import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 import { readString } from "@/lib/payload";
 
 import OtpResendButton, { type OtpResend } from "./OtpResendButton";
-import type { SignInLink, SignInTurnstile } from "./types";
+import type { SignInTurnstile } from "./types";
 
 export type EmailPassCodeField = {
   scope: string;
@@ -40,7 +40,7 @@ export type EmailPassCodeFormProps = {
   turnstile: SignInTurnstile;
   form_errors: string[];
   delivery_help: string;
-  back_link: SignInLink;
+  back_link: { label: string };
 };
 
 export default function EmailPassCodeForm({
@@ -55,6 +55,7 @@ export default function EmailPassCodeForm({
 }: EmailPassCodeFormProps) {
   const field = form.pass_code_field;
   const input = useRef<HTMLInputElement>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
   const { data, setData, patch, processing } = useForm<{
     [key: string]: string | null | Record<string, string>;
     "cf-turnstile-response": string;
@@ -69,6 +70,12 @@ export default function EmailPassCodeForm({
   const value = readString(data[field.scope], field.field) ?? "";
   const fieldId = `${field.scope}_${field.field}`;
 
+  const clearSubmissionState = () => {
+    setData(field.scope, { [field.field]: "" });
+    setData("cf-turnstile-response", "");
+    setTurnstileKey((key) => key + 1);
+  };
+
   return (
     <Page
       title={title}
@@ -78,7 +85,7 @@ export default function EmailPassCodeForm({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          patch(form.action);
+          patch(form.action, { onFinish: clearSubmissionState });
         }}
         className="flex flex-col gap-4"
       >
@@ -87,7 +94,7 @@ export default function EmailPassCodeForm({
             className="animate-shake rounded-md border border-danger bg-surface p-3"
             role="alert"
           >
-            <ul className="flex flex-col gap-1 text-sm text-danger">
+            <ul className="flex flex-col gap-1 text-base text-error">
               {formErrors.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -103,7 +110,7 @@ export default function EmailPassCodeForm({
         <div className="flex flex-col gap-1">
           <label
             htmlFor={fieldId}
-            className="text-sm font-medium text-fg"
+            className="text-base font-medium text-fg"
           >
             {field.label}
           </label>
@@ -120,7 +127,7 @@ export default function EmailPassCodeForm({
             inputMode={field.inputmode}
             pattern={field.pattern}
             required
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg
+            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-base text-fg
               placeholder:text-fg-muted"
           />
         </div>
@@ -128,12 +135,13 @@ export default function EmailPassCodeForm({
         <OtpResendButton
           resend={otpResend}
           onResent={() => {
-            setData(field.scope, { [field.field]: "" });
+            clearSubmissionState();
             input.current?.focus();
           }}
         />
 
         <TurnstileWidget
+          key={turnstileKey}
           site_key={turnstile.site_key}
           mode={turnstile.mode}
           action={turnstile.action}
@@ -149,16 +157,17 @@ export default function EmailPassCodeForm({
         </Button>
       </form>
 
-      <p className="text-sm text-fg-muted">{deliveryHelp}</p>
+      <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
-      <p className="text-sm">
-        {/* Document visit: restarting the ceremony issues a new code. */}
-        <a
-          href={backLink.href}
-          className="text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+      <p className="text-base">
+        <button
+          type="button"
+          onClick={() => router.delete(form.action, { data: { pt: form.pt } })}
+          disabled={processing}
+          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
         >
           {backLink.label}
-        </a>
+        </button>
       </p>
     </Page>
   );

@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: operator_workspace_accounts
@@ -22,11 +24,9 @@
 #  index_operator_workspace_accounts_on_status_id      (status_id)
 #
 
-# frozen_string_literal: true
-
 class OperatorWorkspaceAccount < OrgRpRecord
   include Retainable
-  include ::Account
+  include ::PublicId
 
   attribute :status_id, default: OperatorWorkspaceAccountStatus::NOTHING
 

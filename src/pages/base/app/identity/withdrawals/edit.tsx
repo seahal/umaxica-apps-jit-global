@@ -91,10 +91,10 @@ export default function WithdrawalEdit({
       {recovery ? (
         <Card>
           {recovery.available_message ? (
-            <p className="text-sm text-fg">{recovery.available_message}</p>
+            <p className="text-base text-fg">{recovery.available_message}</p>
           ) : null}
           {recovery.unavailable_message ? (
-            <p className="text-sm text-fg-muted">{recovery.unavailable_message}</p>
+            <p className="text-base text-fg-muted">{recovery.unavailable_message}</p>
           ) : null}
           {recoveryAction && recoveryLabel ? (
             <Button
@@ -112,7 +112,7 @@ export default function WithdrawalEdit({
       {termination ? (
         <Card>
           {termination.available_at_message ? (
-            <p className="text-sm text-fg-muted">{termination.available_at_message}</p>
+            <p className="text-base text-fg-muted">{termination.available_at_message}</p>
           ) : null}
           {terminationAction && terminationLabel ? (
             <Button
@@ -128,7 +128,7 @@ export default function WithdrawalEdit({
         </Card>
       ) : null}
 
-      <p className="text-sm">
+      <p className="text-base">
         <TextLink
           href={erasureLink.href}
           inertia

@@ -1,13 +1,12 @@
 # CMS architecture remediation phase 1
 
 - Date: 2026-09-03
-- Scope: Rails publishing/CMS reproducibility, migration-path ownership, reconstruction
-  authority, architecture guards, 3x4 matrix documentation. Edge CMS wiring not in
-  scope.
-- Worktree: umaxica-apps-jit-global at `80dc4151fce6d290c8a5ead581126adc975b62c7`
-  (feature branch; not reset to audited `fd328d64`).
-- Edge inspected: umaxica-apps-edge `6cd77c4422ed85c51e6014de550d628e2e4764b2`
-  (matches audited SHA). No Edge files changed.
+- Scope: Rails publishing/CMS reproducibility, migration-path ownership, reconstruction authority,
+  architecture guards, 3x4 matrix documentation. Edge CMS wiring not in scope.
+- Worktree: umaxica-apps-jit-global at `80dc4151fce6d290c8a5ead581126adc975b62c7` (feature branch;
+  not reset to audited `fd328d64`).
+- Edge inspected: umaxica-apps-edge `6cd77c4422ed85c51e6014de550d628e2e4764b2` (matches audited
+  SHA). No Edge files changed.
 
 ## Commands
 
@@ -41,9 +40,8 @@ bin/rubocop lib/entra_omniauth_boot_credentials.rb \
 
 ## Result
 
-Pass on the commands above. Publishing tests continue to use the existing test
-database reconstructed from migrations; committed `db/*_structure.sql` files
-remain header stubs.
+Pass on the commands above. Publishing tests continue to use the existing test database
+reconstructed from migrations; committed `db/*_structure.sql` files remain header stubs.
 
 ## Remaining issues
 
@@ -51,5 +49,5 @@ remain header stubs.
 - Edge CMS consumption not implemented; 12-cell Edge client extraction deferred.
 - `publishing_media_usages` exclusive-arc polymorphism unchanged.
 - Stub structure.sql dumps not regenerated.
-- Public host spelling differs between Rails (`docs.jp.umaxica.app`) and Edge
-  README (`docs.umaxica.app`).
+- Public host spelling differs between Rails (`docs.jp.umaxica.app`) and Edge README
+  (`docs.umaxica.app`).

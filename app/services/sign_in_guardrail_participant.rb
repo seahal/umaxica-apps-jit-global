@@ -6,7 +6,6 @@ class SignInGuardrailParticipant
 
   DEFAULT_EVALUATORS = [
     :actor_login_allowed_item,
-    :existing_restricted_session_item,
   ].freeze
 
   def initialize(cycle:, actor:, evaluators: DEFAULT_EVALUATORS)
@@ -25,10 +24,10 @@ class SignInGuardrailParticipant
   end
 
   def advance_if_clear!
-    cycle.class.transaction do
-      cycle.lock!
+    cycle.with_cycle_lock do
+      cycle.require_active_cycle!
       result = evaluate
-      return result if result.blocking?
+      next result if result.blocking?
 
       cycle.advance_sign_in_to_checkpoint!
       result
@@ -51,23 +50,6 @@ class SignInGuardrailParticipant
     return nil if actor.login_allowed?
 
     blocking_item(:actor_login_not_allowed)
-  end
-
-  def existing_restricted_session_item
-    return nil unless actor
-
-    metadata = surface_metadata
-    return nil unless metadata
-
-    token_class = metadata.fetch(:token_class)
-    foreign_key = metadata.fetch(:foreign_key)
-    return nil unless token_class.restricted_status.exists?(foreign_key => actor.id)
-
-    blocking_item(:restricted_session_exists)
-  end
-
-  def surface_metadata
-    SignInSessionLimitManager::SURFACES[cycle.class]
   end
 
   def blocking_item(key)

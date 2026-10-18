@@ -40,8 +40,10 @@ module ExternalAuthenticationInfrastructureOmniauthGoogleOidcEnforcement
   def verified_id_info
     @verified_id_info ||=
       begin
-        nonce = session.delete("omniauth.nonce").to_s
-        raise OmniAuth::Strategies::OAuth2::CallbackError.new(:invalid_nonce, "nonce is missing") if nonce.empty?
+        nonce = session.delete("omniauth.nonce")
+        unless nonce.is_a?(String) && !nonce.empty?
+          raise OmniAuth::Strategies::OAuth2::CallbackError.new(:invalid_nonce, "nonce is missing")
+        end
 
         token = access_token.params["id_token"].to_s
         raise OmniAuth::Strategies::OAuth2::CallbackError.new(:invalid_id_token, "ID token is missing") if token.empty?
@@ -65,13 +67,15 @@ module ExternalAuthenticationInfrastructureOmniauthGoogleOidcEnforcement
   end
 
   def verify_google_claims!(payload, expected_nonce:)
-    subject = payload["sub"].to_s
-    nonce = payload["nonce"].to_s
+    # Claims are compared as the JSON strings they must be; a number or other
+    # type is a mismatch, never converted into a string that might compare.
+    subject = payload["sub"]
+    nonce = payload["nonce"]
     now = Time.now.to_i
     issued_at = Integer(payload.fetch("iat"))
     expires_at = Integer(payload.fetch("exp"))
 
-    raise JWT::InvalidSubError if subject.empty?
+    raise JWT::InvalidSubError unless subject.is_a?(String) && !subject.empty?
     raise JWT::DecodeError, "nonce mismatch" unless secure_compare(nonce, expected_nonce)
     raise JWT::ExpiredSignature if expires_at <= now - CLOCK_SKEW
     return unless issued_at > now + CLOCK_SKEW || issued_at < now - MAX_TOKEN_AGE - CLOCK_SKEW
@@ -80,7 +84,11 @@ module ExternalAuthenticationInfrastructureOmniauthGoogleOidcEnforcement
 
   end
 
+  # Being prepended, this also replaces OmniAuth::Strategies::OAuth2#secure_compare, which the
+  # callback phase calls with `session.delete("omniauth.state")`. That value is nil when the
+  # session lost its state, and the result must be a csrf_detected failure, not a NoMethodError.
   def secure_compare(left, right)
+    return false unless left.is_a?(String) && right.is_a?(String)
     return false if left.bytesize != right.bytesize
 
     ActiveSupport::SecurityUtils.secure_compare(left, right)

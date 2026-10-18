@@ -13,7 +13,12 @@ class IdentityPasskeyCeremonyResultIssuerTest < ActiveSupport::TestCase
   test "issues a result token with claims bound to the candidate and transaction" do
     captured = nil
 
-    with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
+    with_ceremony(
+      issue: ->(claims, **) {
+        captured = claims
+        "issued-token"
+      },
+    ) do
       result = issuer.issue!
 
       assert_equal "issued-token", result
@@ -39,7 +44,12 @@ class IdentityPasskeyCeremonyResultIssuerTest < ActiveSupport::TestCase
   test "uses the supplied challenge id when present" do
     captured = nil
 
-    with_ceremony(issue: ->(claims, **) { captured = claims; "issued-token" }) do
+    with_ceremony(
+      issue: ->(claims, **) {
+        captured = claims
+        "issued-token"
+      },
+    ) do
       issuer(challenge_id: "explicit-challenge").issue!
     end
 

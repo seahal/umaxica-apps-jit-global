@@ -11,9 +11,7 @@
 #  number                             :string           not null
 #  number_digest                      :string
 #  otp_attempts_count                 :integer          default(0), not null
-#  otp_counter                        :text             not null
-#  otp_expires_at                     :datetime
-#  otp_private_key                    :string           not null
+#  otp_last_sent_at                   :datetime
 #  created_at                         :datetime         not null
 #  updated_at                         :datetime         not null
 #  staff_id                           :bigint           not null
@@ -117,7 +115,7 @@ class OperatorTelephoneTest < ActiveSupport::TestCase
       staff: @staff,
     )
 
-    expected = IdentifierBlindIndex.bidx_for_telephone("+15551234567")
+    expected = IdentifierBlindIndex.bidx_for_telephone("+15551234567", realm: :org)
 
     assert_equal expected, staff_telephone.number_digest
   end
@@ -131,8 +129,10 @@ class OperatorTelephoneTest < ActiveSupport::TestCase
     )
 
     assert_equal staff_telephone,
-                 OperatorTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("+15557654321"))
-    assert_nil OperatorTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("12"))
+                 OperatorTelephone.find_by(
+                   number_digest: IdentifierBlindIndex.bidx_for_telephone("+15557654321", realm: :org),
+                 )
+    assert_nil OperatorTelephone.find_by(number_digest: IdentifierBlindIndex.bidx_for_telephone("12", realm: :org))
   end
 
   test "should generate UUID v7 before creation" do

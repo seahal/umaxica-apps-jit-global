@@ -12,6 +12,25 @@ class OidcSsoInitiatorTestController < ApplicationController
     head :ok unless performed?
   end
 
+  def fresh
+    redirect_to_oidc_authorization_url(
+      initiate_oidc_session!(pt: params[:pt].presence || "/fresh", prompt: "login", max_age: 60),
+    )
+  end
+
+  def hinted
+    redirect_to_oidc_authorization_url(
+      initiate_oidc_session!(pt: "/hinted"),
+    )
+  end
+
+  def burst
+    params.fetch(:count, "1").to_i.times do |index|
+      initiate_oidc_session!(pt: "/burst-#{index}")
+    end
+    head :no_content
+  end
+
   def logged_in?
     request.headers["X-Logged-In"] == "1"
   end
@@ -21,34 +40,25 @@ class OidcSsoInitiatorTestController < ApplicationController
   end
 
   def oidc_client_id
-    "base-rails-rp"
+    "core-app-jp"
   end
 
   def oidc_sign_host
     Rails.configuration.x.boot_config.fetch(:hosts).sign_service.host
   end
 
-  # Base::App::ApplicationController resolves this to PUBLIC_BASE_SERVICE_URL, which is
-  # same-site with the Auth host. Pointing the stand-in at a different family would make
-  # the hop cross-site and exercise the jump gateway instead of the direct authorize path.
+  # Public browser authority remains Base; cross-host authorization uses Jump even within one TLD.
   def oidc_base_authority_host
     Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
   end
 
   def oidc_callback_url
-    "https://#{Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host}/oidc/callback"
+    OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
   end
 
+  # Acme is Base-hosted and has no Jump issuer of its own.
   def jump_rt_issuer_namespace
-    "ACME_APP"
-  end
-end
-
-class OidcSsoInitiatorRegistryCallbackTestController < ApplicationController
-  include OidcSsoInitiator
-
-  def oidc_client_id
-    "base-rails-rp"
+    "BASE_APP"
   end
 end
 
@@ -57,6 +67,9 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     load_jump_rt_env!
     Rails.application.routes.draw do
       get "/oidc/sso" => "oidc_sso_initiator_test#index"
+      get "/oidc/sso/fresh" => "oidc_sso_initiator_test#fresh"
+      get "/oidc/sso/hinted" => "oidc_sso_initiator_test#hinted"
+      get "/oidc/sso/burst" => "oidc_sso_initiator_test#burst"
     end
   end
 
@@ -69,11 +82,13 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
       Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
     end
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
-      "https://#{Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host}/oidc/callback"
+      OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
     end
   end
 
-  test "authenticate! redirects unauthenticated html requests to oidc authorize url" do
+  # A protected page is not a Sign entry: it points at the passive GET /sign on the same host and
+  # starts no OIDC flow (specs/sign-fqdn-integrated-plan/plan.md section 5).
+  test "authenticate! sends an unauthenticated html request to the passive sign entry without a flow" do
     io = StringIO.new
     logger = Logger.new(io)
 
@@ -82,120 +97,101 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
-    location = response.location
-    uri = URI.parse(location)
+    location = URI.parse(response.location)
 
-    assert_equal configured_host(:base_service), uri.host
-    assert_equal "/oauth/authorize", uri.path
-    assert_not_equal "jump.umaxica.net", uri.host
-
-    authorize_params = Rack::Utils.parse_nested_query(uri.query)
-
-    assert_equal "base-rails-rp", authorize_params.fetch("client_id")
-    assert_equal "https://#{configured_host(:acme_service)}/oidc/callback", authorize_params.fetch("redirect_uri")
-    session_cookie =
-      response.headers["Set-Cookie"].to_s.split("\n").find { |line| line.start_with?("session=") }
-
-    assert_predicate session_cookie, :present?
-    assert_operator session_cookie.bytesize, :<, 3500
+    assert_equal configured_host(:sign_service), location.host
+    assert_equal "/sign", location.path
+    assert_equal "/oidc/sso", Rack::Utils.parse_nested_query(location.query).fetch("pt")
+    assert_nil session["oidc_pending_flows"]
     assert_nil session[:oidc_code_verifier]
-    assert_nil session[:oidc_state]
-    assert_nil session[:oidc_nonce]
-    assert_nil session[:oidc_pt]
-    pending_flow = session.fetch("oidc_pending_flows").fetch(authorize_params.fetch("state"))
-
-    assert_predicate pending_flow.fetch("code_verifier"), :present?
-    assert_equal authorize_params.fetch("nonce"), pending_flow.fetch("nonce")
-    assert_equal "/oidc/sso", pending_flow.fetch("pt")
-    assert_includes io.string, "oidc.sso.redirect_policy.direct"
-    assert_includes io.string, "reason_code"
-    assert_includes io.string, "target_host"
-    assert_not_includes io.string, authorize_params.fetch("state")
-    assert_not_includes io.string, authorize_params.fetch("nonce")
-    assert_not_includes io.string, pending_flow.fetch("code_verifier")
-    assert_not_includes io.string, response.location
-    assert_not_includes io.string, "oauth/authorize?"
+    assert_not_includes io.string, "oidc.sso.redirect_policy"
   end
 
-  test "authenticate! preserves the protected request query in oidc return path" do
-    # https, as a browser would: an http request to a public host is a scheme mismatch and
-    # takes the jump gateway instead of the direct authorize hop.
+  test "authenticate! preserves the protected request query in the sign entry return path" do
     get "/oidc/sso", params: { ri: "jp" },
                      headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
     assert_response :redirect
-    assert_nil session[:oidc_pt]
-
     query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
-    pending_flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
 
-    assert_equal "/oidc/sso?ri=jp", pending_flow.fetch("pt")
+    assert_equal "/oidc/sso?ri=jp", query.fetch("pt")
+    assert_equal "jp", query.fetch("ri")
+    assert_nil session["oidc_pending_flows"]
   end
 
-  test "token endpoint uses local rails port for local public Acme hosts" do
-    # This test is about the .localhost rewrite, so it states a local authority host
-    # instead of inheriting the configured public one. The teardown restores it.
-    OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) do
-      Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host
-    end
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create(
-      "HTTP_HOST" => configured_host(:sign_service),
-      "HTTPS" => "on",
-    )
+  test "authorization URL carries prompt and max_age into the pending flow" do
+    get "/oidc/sso/fresh", headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
-    with_env("PORT" => "3000") do
-      assert_equal "http://#{configured_host(:acme_service)}:3000/oauth/token", controller.send(:oidc_token_url)
+    assert_response :redirect
+    gateway = URI.parse(response.location)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    uri = URI.parse(payload.fetch("url"))
+    query = Rack::Utils.parse_nested_query(uri.query)
+
+    assert_equal "login", query.fetch("prompt")
+    assert_equal "60", query.fetch("max_age")
+    assert_equal 60, session.fetch("oidc_pending_flows").fetch(query.fetch("state")).fetch("max_age")
+  end
+
+  test "normal flow does not emit screen hint or move PKCE state into scalar session keys" do
+    get "/oidc/sso/hinted", headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
+
+    assert_response :redirect
+    gateway = URI.parse(response.location)
+    payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+    query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
+
+    assert_nil query["screen_hint"]
+    flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
+
+    assert_equal "/hinted", flow.fetch("pt")
+    assert_predicate flow.fetch("code_verifier"), :present?
+    assert_predicate flow.fetch("nonce"), :present?
+    assert_nil session[:oidc_code_verifier]
+    assert_nil session[:oidc_state]
+    assert_nil session[:oidc_nonce]
+    assert_nil session[:oidc_pt]
+  end
+
+  test "pending flows remain independent and are bounded to two entries" do
+    get "/oidc/sso/burst", params: { count: 3 },
+                           headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
+
+    assert_response :no_content
+
+    flows = session.fetch("oidc_pending_flows")
+
+    assert_equal 2, flows.size
+    assert_equal ["/burst-1", "/burst-2"], flows.values.map { |flow| flow.fetch("pt") }
+    assert_not_equal flows.values[0].fetch("code_verifier"), flows.values[1].fetch("code_verifier")
+    assert_not_equal flows.values[0].fetch("nonce"), flows.values[1].fetch("nonce")
+  end
+
+  test "unsafe return targets are reduced to the local root" do
+    [
+      "https://evil.example/after",
+      "//evil.example/after",
+      "/dashboard?next=https://evil.example/after",
+      "/dashboard%2fevil",
+      "/dashboard\u0000",
+    ].each do |target|
+      get "/oidc/sso/fresh", params: { pt: target },
+                             headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
+
+      assert_response :redirect
+      gateway = URI.parse(response.location)
+      payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
+      state = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query).fetch("state")
+
+      assert_equal "/", session.fetch("oidc_pending_flows").fetch(state).fetch("pt"), target
     end
   end
 
-  test "token endpoint keeps public https origin outside local environments" do
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create(
-      "HTTP_HOST" => configured_host(:sign_service),
-      "HTTPS" => "on",
-    )
-
-    Rails.stub(:env, ActiveSupport::StringInquirer.new("production")) do
-      assert_equal "https://#{configured_host(:base_service)}/oauth/token", controller.send(:oidc_token_url)
-    end
-  end
-
-  test "token endpoint local rewrite is limited to configured Acme hosts" do
-    unconfigured_acme_host = "acme-unconfigured.example.test"
-    OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) { unconfigured_acme_host }
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create(
-      "HTTP_HOST" => configured_host(:sign_service),
-      "HTTPS" => "on",
-    )
-
-    with_env("PORT" => "3000") do
-      assert_equal "https://#{unconfigured_acme_host}/oauth/token", controller.send(:oidc_token_url)
-    end
-  ensure
-    OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) do
-      Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host
-    end
-  end
-
-  test "oidc callback url fails closed when request host is not registered for the client" do
-    controller = OidcSsoInitiatorRegistryCallbackTestController.new
-    controller.request = ActionDispatch::TestRequest.create(
-      "HTTP_HOST" => "attacker.example.test",
-      "HTTPS" => "on",
-    )
-
-    assert_raises(ActionController::BadRequest) do
-      controller.send(:oidc_callback_url)
-    end
-  end
-
-  test "authenticate! keeps using jump for cross-site oidc authorize urls" do
-    cross_site_acme_host = configured_host(:acme_corporate)
+  test "the started flow keeps using jump for cross-site oidc authorize urls" do
+    cross_site_acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host
     OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) { cross_site_acme_host }
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
-      "https://#{cross_site_acme_host}/oidc/callback"
+      OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
     end
 
     io = StringIO.new
@@ -203,7 +199,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
     Rails.stub(:logger, logger) do
       https!
-      get("/oidc/sso", headers: { "Host" => configured_host(:sign_service) })
+      get("/oidc/sso/hinted", headers: { "Host" => configured_host(:sign_service) })
     end
 
     assert_response :redirect
@@ -226,55 +222,8 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
       Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host
     end
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
-      "https://#{Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host}/oidc/callback"
+      OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
     end
-  end
-
-  test "safe_oidc_pt strips foreign hosts" do
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create("HTTP_HOST" => "www.example.com")
-
-    assert_equal "/", controller.send(:safe_oidc_pt, "http://attacker.example/evil")
-    assert_equal "/", controller.send(:safe_oidc_pt, "https://attacker.example/evil")
-    assert_equal "/",
-                 controller.send(
-                   :safe_oidc_pt,
-                   "https://#{configured_host(:acme_service)}/oauth/authorize?client_id=base-rails-rp",
-                 )
-  end
-
-  test "safe_oidc_pt rejects scheme based payloads" do
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create("HTTP_HOST" => "www.example.com")
-
-    assert_equal "/", controller.send(:safe_oidc_pt, "javascript:alert(1)")
-    assert_equal "/", controller.send(:safe_oidc_pt, "data:text/html,<script>")
-    assert_equal "/", controller.send(:safe_oidc_pt, "//attacker.example/")
-  end
-
-  test "safe_oidc_pt rejects userinfo even when host matches" do
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create("HTTP_HOST" => "www.example.com")
-
-    assert_equal "/", controller.send(:safe_oidc_pt, "http://attacker@www.example.com/path")
-    assert_equal "/", controller.send(:safe_oidc_pt, "http://user:pw@www.example.com/path")
-  end
-
-  test "safe_oidc_pt rejects control characters" do
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create("HTTP_HOST" => "www.example.com")
-
-    assert_equal "/", controller.send(:safe_oidc_pt, "/foo\r\nSet-Cookie: x=1")
-    assert_equal "/", controller.send(:safe_oidc_pt, "/foo\x00bar")
-  end
-
-  test "safe_oidc_pt returns same-host internal path only" do
-    controller = OidcSsoInitiatorTestController.new
-    controller.request = ActionDispatch::TestRequest.create("HTTP_HOST" => "www.example.com")
-
-    assert_equal "/oidc/sso", controller.send(:safe_oidc_pt, "http://www.example.com/oidc/sso")
-    assert_equal "/oidc/sso?ri=jp", controller.send(:safe_oidc_pt, "http://www.example.com/oidc/sso?ri=jp")
-    assert_equal "/already/relative", controller.send(:safe_oidc_pt, "/already/relative")
   end
 
   test "authenticate! renders unauthorized json for unauthenticated json requests" do
@@ -296,19 +245,6 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
   end
 
   private
-
-  def with_env(values)
-    previous = {}
-    values.each do |key, value|
-      previous[key] = ENV[key]
-      value.nil? ? ENV.delete(key) : ENV[key] = value
-    end
-    yield
-  ensure
-    previous.each do |key, value|
-      value.nil? ? ENV.delete(key) : ENV[key] = value
-    end
-  end
 end
 
 # DAMP local helper copy for former shared test support.
@@ -346,95 +282,15 @@ class OidcSsoInitiatorTestController
     headers
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id,
-      user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id,
-      staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id,
-      visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -531,10 +387,8 @@ class OidcSsoInitiatorTestController
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -546,10 +400,8 @@ class OidcSsoInitiatorTestController
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -642,14 +494,13 @@ class OidcSsoInitiatorTestController
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
     {
-      "JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
       "PUBLIC_JUMP_GATEWAY_URL" => "https://jump.umaxica.net",
-      "JWT_SIGN_APP_ACTIVE_KID" => "sign-app-test",
-      "JWT_SIGN_APP_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_ORG_ACTIVE_KID" => "sign-org-test",
-      "JWT_SIGN_ORG_PRIVATE_KEY" => jump_rt_key,
-      "JWT_SIGN_COM_ACTIVE_KID" => "sign-com-test",
-      "JWT_SIGN_COM_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-test",
+      "JWT_AUTH_APP_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_ORG_ACTIVE_KID" => "sign-org-test",
+      "JWT_AUTH_ORG_PRIVATE_KEY" => jump_rt_key,
+      "JWT_AUTH_COM_ACTIVE_KID" => "sign-com-test",
+      "JWT_AUTH_COM_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_APP_ACTIVE_KID" => "acme-app-test",
       "JWT_ACME_APP_PRIVATE_KEY" => jump_rt_key,
       "JWT_ACME_ORG_ACTIVE_KID" => "acme-org-test",
@@ -757,7 +608,7 @@ class OidcSsoInitiatorTestController
     lines.flat_map { |line| line.to_s.split("\n") }.compact_blank
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "base-rails-rp")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app-jp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 
@@ -835,63 +686,6 @@ class OidcSsoInitiatorTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -944,10 +738,8 @@ class OidcSsoInitiatorTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -988,12 +780,11 @@ class OidcSsoInitiatorTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end

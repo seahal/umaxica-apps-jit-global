@@ -3,37 +3,98 @@
 
 module GroupAvatarMemberships
   class Attach < ApplicationService
-    def initialize(group:, avatar:, role: "member", position: nil)
+    AuthorizationDenied = AvatarOwnerMembershipLockService::AuthorizationDenied
+
+    def initialize(group:, avatar:, actor:, surface:, subject_public_id:, account_public_id:, position: nil)
       super()
       @group = group
       @avatar = avatar
-      @role = role
+      @actor = actor
+      @surface = surface.to_s
+      @subject_public_id = subject_public_id.to_s
+      @account_public_id = account_public_id.to_s
       @position = position
     end
 
     def call
-      raise ArgumentError, "group is not active" unless group.active?
-      raise ArgumentError, "avatar is not active" unless active_avatar?
+      observed_group_owner = AvatarGroupOwnershipPeriodSource.current.find_by!(avatar_group_id: group.id)
+      unless observed_group_owner.owner_surface == surface
+        raise AuthorizationDenied, "group owner surface does not match actor surface"
+      end
 
-      GroupAvatarMembership.create!(
-        avatar_group: group,
+      AvatarOwnerMembershipLockService.call(
+        actor: actor,
+        surface: surface,
+        subject_public_id: subject_public_id,
+        owner_collective_public_id: observed_group_owner.owner_collective_public_id,
+        permission: "avatar.group.attach",
         avatar: avatar,
-        role: role,
-        position: position || next_position,
-        state: "active",
-      )
+      ) do
+        Avatar.transaction do
+          locked_group = AvatarGroup.lock.find(group.id)
+          locked_avatar = Avatar.lock.find(avatar.id)
+          raise ArgumentError, "group is not active" unless locked_group.active?
+          raise ArgumentError, "avatar is not active" unless active_avatar?(locked_avatar)
+
+          authorize_same_owner!(locked_group, locked_avatar, observed_group_owner)
+
+          GroupAvatarMembership.create!(
+            avatar_group: locked_group,
+            avatar: locked_avatar,
+            role: GroupAvatarMembership::ROLE,
+            position: position || next_position(locked_group),
+            state: "active",
+          )
+        end
+      end
     end
 
     private
 
-    attr_reader :group, :avatar, :role, :position
+    attr_reader :group, :avatar, :actor, :surface, :subject_public_id, :account_public_id, :position
 
-    def active_avatar?
-      avatar.lifecycle_state&.key == "active" && avatar.accessible?
+    def active_avatar?(record)
+      AvatarLifecycleState.find_by(id: record.lifecycle_state_id)&.key == "active" && record.accessible?
     end
 
-    def next_position
-      group.group_avatar_memberships.active.maximum(:position).to_i + 1
+    def authorize_same_owner!(locked_group, locked_avatar, observed_group_owner)
+      unless %w(app org).include?(surface) &&
+          account_public_id.present? && account_public_id == subject_public_id &&
+          locked_group.account_surface == surface && locked_group.account_public_id == account_public_id
+        raise AuthorizationDenied, "group account scope does not match actor context"
+      end
+
+      group_owner = AvatarGroupOwnershipPeriodSource.current.lock.find_by(avatar_group_id: locked_group.id)
+      avatar_owner = AvatarOwnershipPeriodSource.current_for(locked_avatar, lock: true)
+      raise ArgumentError, "current owner missing" unless group_owner && avatar_owner
+      unless [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
+          [observed_group_owner.owner_surface, observed_group_owner.owner_collective_public_id]
+        raise AuthorizationDenied, "group owner changed while attaching Avatar"
+      end
+
+      ensure_avatar_permission!(locked_avatar, group_owner.owner_collective_public_id, "avatar.group.attach")
+      unless group_owner.owner_surface == surface &&
+          [group_owner.owner_surface, group_owner.owner_collective_public_id] ==
+              [avatar_owner.owner_surface, avatar_owner.owner_collective_public_id]
+        raise ArgumentError, "group and Avatar current owners differ"
+      end
+    end
+
+    def ensure_avatar_permission!(avatar, collective_public_id, permission)
+      return if AvatarPermissionResolver.call(
+        actor: actor,
+        surface: surface,
+        subject_public_id: subject_public_id,
+        owner_collective_public_id: collective_public_id,
+        permission: permission,
+        avatar: avatar,
+      )
+
+      raise AuthorizationDenied, "#{permission} permission required"
+    end
+
+    def next_position(locked_group)
+      locked_group.group_avatar_memberships.active.maximum(:position).to_i + 1
     end
   end
 end

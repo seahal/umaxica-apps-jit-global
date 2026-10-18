@@ -99,7 +99,7 @@ Ratified as already implemented: one-time-consume rotation with a generation cou
 
 ### Timeouts (point 5)
 
-- Absolute cap: retained. Refresh-token `discarded_at` is set at issuance and preserved across
+- Absolute cap: retained. Refresh-token `discard_at` is set at issuance and preserved across
   rotation, so the family has an absolute lifetime that rotation does not extend.
 - Idle timeout: implemented. Server-side idle expiry is driven by token activity timestamps and
   `SecurityTokenLifetimes`.

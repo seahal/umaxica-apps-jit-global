@@ -40,6 +40,9 @@ scope module: :help, as: :help do
         # Versioned help API.
         namespace :v0 do
           # Published help entries, addressed by opaque public_id.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of
@@ -89,6 +92,9 @@ scope module: :help, as: :help do
         # Versioned help API.
         namespace :v0 do
           # Published help entries, addressed by opaque public_id.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of
@@ -138,6 +144,9 @@ scope module: :help, as: :help do
         # Versioned help API.
         namespace :v0 do
           # Published help entries, addressed by opaque public_id.
+          # FIXME: [routing] Replace this custom parameter after the endpoint adopts standard `:id`;
+          # removing it sooner breaks the current controller lookup contract. See
+          # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
           resources :entries, only: %i(index show), param: :public_id
 
           # Machine-readable health and revision. The literal ".json" is part of

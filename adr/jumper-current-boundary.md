@@ -110,4 +110,3 @@ This ADR does not decide that future shape.
 - `adr/current-context-boundary-by-engine.md` — obsolete engine-era predecessor
 - `adr/preference-soft-bubble-doctrine.md` — current single-app preference runtime doctrine
 - `adr/secure-jump-link-redirector.md` — current jump redirector behavior
-- `plans/active/jumper-current-jump-plan.md` — implementation plan for the first jump pass

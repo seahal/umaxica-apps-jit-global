@@ -29,7 +29,7 @@ export default function PasskeyNew({
 
       <a
         href={cancelLink.href}
-        className="text-sm text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+        className="ui-text-link text-base text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
       >
         {cancelLink.label}
       </a>

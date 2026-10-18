@@ -21,6 +21,7 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
   }.freeze
 
   setup do
+    ClientSignInFlowState::DEFAULTS.each { |id| ClientSignInFlowState.find_or_create_by!(id: id) }
     ActionMailer::Base.deliveries.clear
   end
 
@@ -31,24 +32,35 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
   test "issue enqueues one noticed email delivery for the app surface" do
     record = create_otp_email_record(:app, address: "notifier-app@example.com")
 
-    assert_enqueued_jobs 1, only: Noticed::DeliveryMethods::Email do
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       Notify::App::OtpNotifier.issue(record: record, otp_code: "123456")
     end
   end
 
   # The linchpin of the migration: Noticed serializes `params` straight into the
   # delivery job, so anything secret has to be ciphertext before `with` is called.
-  test "issue puts only the encrypted otp into the job arguments" do
+  test "issue puts encrypted sensitive values into the job arguments" do
     record = create_otp_email_record(:app, address: "notifier-secret@example.com")
     clear_enqueued_jobs
 
-    Notify::App::OtpNotifier.issue(record: record, otp_code: "123456")
+    Notify::App::OtpNotifier.issue(
+      record: record,
+      otp_code: "123456",
+      verification_token: "verification-token",
+    )
 
     arguments = enqueued_jobs.last[:args].inspect
 
     assert_not_includes arguments, "123456"
     assert_not_includes arguments, "notifier-secret@example.com"
+    assert_not_includes arguments, "verification-token"
     assert_equal "123456", OutboundSensitivePayload.decrypt_email_otp(enqueued_encrypted_hotp_token)
+    assert_equal(
+      "verification-token",
+      OutboundSensitivePayload.decrypt_email_verification_token(
+        enqueued_jobs.last[:args].last.fetch("params").fetch("encrypted_verification_token"),
+      ),
+    )
   end
 
   test "issue serialises the recipient as a global id" do
@@ -91,6 +103,33 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
     assert_equal ["notifier-render@example.com"], mail.to
     assert_match "123456", mail.html_part.body.decoded
     assert_match "verification-token", mail.html_part.body.decoded
+  end
+
+  test "purpose-specific delivery reaches the app mailer without exposing the otp" do
+    owner = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
+    record = owner.client_emails.create!(
+      address: "notifier-purpose@example.com", confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
+    ).tap(&:finalize_binding!)
+    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "local_sign_in", local_sign_in_flow_ref: issuance.transaction.public_id,
+    )
+    code = ceremony.issue_email_otp!(contact: record, destination: record.address)
+
+    perform_enqueued_jobs do
+      Notify::App::OtpNotifier.issue(
+        record: record, otp_code: code, purpose: :sign_in,
+        auth_ceremony_session_ref: ceremony.id.to_s,
+        auth_email_otp_generation: ceremony.reload.email_otp_context.fetch("generation"),
+      )
+    end
+
+    mail = ActionMailer::Base.deliveries.last
+
+    assert_equal I18n.t("mail.email.app.otp_mailer.create.subjects.sign_in"), mail.subject
+    assert_not_includes mail.subject, code
   end
 
   # Regression guard for the surface boundary: an app OTP must never leave through

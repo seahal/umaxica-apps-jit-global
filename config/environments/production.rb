@@ -74,7 +74,7 @@ Rails.application.configure do
   # Prevent health checks from clogging up the logs.
   config.silence_healthcheck_path = "/health"
 
-  # Report deprecations via Sentry (do not silence them)
+  # Keep deprecations observable through the bounded Rails application-log subscriber.
   config.active_support.report_deprecations = true
   config.active_support.deprecation = :notify
 
@@ -90,49 +90,17 @@ Rails.application.configure do
   # Require --no-sandbox flag to run destructive console operations
   config.sandbox_by_default = true
 
-  # Rails.cache and the rate-limit store are separate application contracts even
-  # though both speak the Redis protocol. CACHE_REDIS_URL and
-  # RATE_LIMIT_REDIS_URL are resolved independently so a deployment can point
-  # them at separate services, separate managed databases, or the same provider,
-  # without the application knowing which. Both use one-argument ENV.fetch: a
-  # missing URL must stop the boot rather than silently degrade to an in-process
-  # store that makes cache and rate-limit state per-process.
-  #
-  # Nothing authoritative lives in either. Cache entries are reconstructible and
-  # carry an explicit TTL; rate-limit counters expire with their window.
+  # Production URLs are explicit credentials in config/valkey.yml (`url_key`).
+  # A missing URL stops the boot. The nonprod logical DB map is not consulted.
+  require_relative "../../lib/umaxica/valkey/settings"
+  require_relative "../../lib/umaxica/valkey/store_error_handler"
 
-  # `RedisCacheStore` swallows a connection error and returns nil. For the cache
-  # that is correct -- a miss reconstructs from source. For rate limiting it is
-  # not: Rails' `rate_limit` reads `count = store.increment(...)` and acts only
-  # `if count && count > to`, so a nil turns every limit off. A Valkey outage
-  # therefore drops abuse protection fleet-wide and, without this, does it
-  # silently -- indistinguishable from ordinary traffic under the limit.
-  #
-  # Whether rate limiting should instead fail closed is a real question, but it
-  # is an availability decision and not one to make implicitly here. What is not
-  # in question is that the degradation must be visible. The exception message is
-  # omitted on purpose: it can carry the store URL, and these URLs may embed
-  # credentials.
-  valkey_store_error_handler =
-    lambda do |store|
-      lambda do |method:, exception:, returning:|
-        Rails.logger.error(
-          JitLogEvent.format(
-            "valkey.store.unavailable",
-            store: store,
-            op: method.to_s,
-            error_class: exception.class.name,
-            degraded_to: returning.inspect,
-          ),
-        )
-      end
-    end
-
+  valkey = Umaxica::Valkey::Settings.load
   cache_namespace = ["cache", Rails.env, ENV["CACHE_NAMESPACE_SUFFIX"].presence].compact.join(":")
   config.cache_store = :redis_cache_store, {
-    url: ENV.fetch("CACHE_REDIS_URL"),
+    url: valkey.cache.url,
     namespace: cache_namespace,
-    error_handler: valkey_store_error_handler.call("cache"),
+    error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("cache"),
   }
   rate_limit_namespace = [
     "rate_limit",
@@ -141,9 +109,9 @@ Rails.application.configure do
   ].compact.join(":")
   config.x.rate_limit.store =
     ActiveSupport::Cache::RedisCacheStore.new(
-      url: ENV.fetch("RATE_LIMIT_REDIS_URL"),
+      url: valkey.rate_limit.url,
       namespace: rate_limit_namespace,
-      error_handler: valkey_store_error_handler.call("rate_limit"),
+      error_handler: Umaxica::Valkey::StoreErrorHandler.lambda_for("rate_limit"),
     )
 
   # Replace the default in-process and non-durable queuing backend for Active Job.
@@ -173,9 +141,13 @@ Rails.application.configure do
     read_timeout: 10,
   }
 
-  # Locale fallbacks are configured in config/initializers/locale.rb, which is the single source of
-  # truth for the load path, available locales, and the fallback chain. Setting them here as well
-  # would be overwritten by that initializer and hide which value actually applies.
+  # config/initializers/locale.rb is the single source of truth for the load path, available
+  # locales, and the fallback chain itself; setting config.i18n.fallbacks here as well would be
+  # overwritten by that initializer and hide which value actually applies. These two settings are
+  # what it reads: production keeps the en <-> ja chain and serves the other language silently, so
+  # a visitor is never shown an error page for a missing translation.
+  config.x.locale.fallbacks_enabled = true
+  config.x.locale.raise_on_fallback = false
 
   # Do not dump schema after migrations.
   config.active_record.dump_schema_after_migration = false
@@ -198,44 +170,36 @@ Rails.application.configure do
     boot_hosts.core_service.host,
     boot_hosts.core_corporate.host,
     boot_hosts.core_staff.host,
+    boot_hosts.tech_staff.host,
     "auth.umaxica.app",
     "auth.umaxica.com",
     "auth.umaxica.org",
-    "side-jp.umaxica.app",
-    "side-jp.umaxica.com",
-    "side-jp.umaxica.org",
+    "www-jp.umaxica.app",
+    "www-jp.umaxica.com",
+    "www-jp.umaxica.org",
     "www.umaxica.app",
     "www.umaxica.com",
     "www.umaxica.org",
-    # Legacy Core host family. `adr/core-canonical-public-host.md` chose jp.umaxica.* as
-    # canonical; these stay until the external OAuth/OIDC redirect URIs are re-registered
-    # and the jpx.* column defaults are migrated, then they are removed.
-    "jpx.umaxica.app",
-    "jpx.umaxica.com",
-    "jpx.umaxica.org",
-    # Canonical Core host family. Listed alongside the legacy families during the cutover so
-    # the origin answers on the new name before the edge publishes it.
+    # Core public authority uses only the canonical jp.* host family.
     "jp.umaxica.app",
     "jp.umaxica.com",
     "jp.umaxica.org",
     boot_hosts.palm_service.host,
-    boot_hosts.palm_corporate.host,
-    boot_hosts.palm_staff.host,
+    boot_hosts.docs_service.host,
+    boot_hosts.docs_corporate.host,
+    boot_hosts.docs_staff.host,
+    boot_hosts.news_service.host,
+    boot_hosts.news_corporate.host,
+    boot_hosts.news_staff.host,
     boot_hosts.help_service.host,
     boot_hosts.help_corporate.host,
     boot_hosts.help_staff.host,
     boot_hosts.info_service.host,
     boot_hosts.info_corporate.host,
     boot_hosts.info_staff.host,
+    boot_hosts.guid_service.host,
+    boot_hosts.edit_staff.host,
   ]
-  # The docs and news surfaces have no host entry. Their only entries here were
-  # `docs.*.localhost` and `news.*.localhost` -- private development ingress names, which
-  # no production request can carry: the edge routes no such name, and
-  # ConfigValues::HostFamilyValues defines no docs/news member to derive a real one from.
-  # They were removed rather than left as a development ingress name accepted in
-  # production. Add the real ingress hosts here (preferably via boot_config) before serving
-  # either surface publicly.
-
   # Skip DNS rebinding protection for the internal health probes, and only for them.
   #
   # This previously matched `"/health"` alone, while the probe set this application mounts is four

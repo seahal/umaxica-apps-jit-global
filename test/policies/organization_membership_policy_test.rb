@@ -31,13 +31,18 @@ class OrganizationMembershipPolicyTest < ActiveSupport::TestCase
     assert_not OrganizationMembershipPolicy.new(bootstrap.collective, user: nil).index?
   end
 
-  test "org operator can manage memberships in its own bureau" do
+  # Holding a membership (even the OWNER kind the selector bootstrap assigns) lets an operator read
+  # their bureau's roster, not change it: who may change org memberships is not yet decided.
+  test "org operator can read but not change memberships in its own bureau" do
     operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     membership = bootstrap.account.current_memberships.first
 
-    assert_predicate OrganizationMembershipPolicy.new(bootstrap.collective, user: operator), :create?
-    assert_predicate OrganizationMembershipPolicy.new(membership, user: operator), :destroy?
+    assert_predicate OrganizationMembershipPolicy.new(bootstrap.collective, user: operator), :index?
+    assert_predicate OrganizationMembershipPolicy.new(membership, user: operator), :show?
+    assert_not OrganizationMembershipPolicy.new(bootstrap.collective, user: operator).create?
+    assert_not OrganizationMembershipPolicy.new(membership, user: operator).update?
+    assert_not OrganizationMembershipPolicy.new(membership, user: operator).destroy?
   end
 
   test "visitor cannot manage app enterprise memberships" do

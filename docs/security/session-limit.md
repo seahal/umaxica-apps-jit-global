@@ -8,61 +8,111 @@
 > imply sign-side authority. Do not use this document to reintroduce sign-side sessions, refresh,
 > preference, dashboard, account lifecycle, token issuance, logout, or step-up freshness.
 
-This document records the current session-limit behavior for sign-in flows across the `app`, `com`,
-and `org` surfaces.
+This document records the session-limit behavior for sign-in flows across the `app`, `com`, and
+`org` surfaces.
+
+> **Waiting lease and resolution admission implemented (2026-10-16).** R2-WU01 stores the waiting
+> slot on each realm resolution, enforces one live actor lease with a database partial unique index,
+> and reconciles elapsed rows through the named writer. R2-WU02 maps a competing live lease to the
+> existing generic sign-in refusal (`:session_limit_conflict`, HTTP 403). R2-WU03 implements atomic
+> purge, explicit POST continuation, natural promotion, cancel and expiry completion.
+
+## Login Units, Waiting Slot And Refusal
+
+A login unit is one signed-in browser (one root session) of an actor on a realm. A full-access unit
+has ordinary access. N is the realm's limit of full-access units.
+
+| Realm | N   | Full-access counts | Waiting unit | Sign-in refused |
+| ----- | --- | ------------------ | ------------ | --------------- |
+| `app` | 2   | 0, 1, 2            | 3rd sign-in  | 4th onward      |
+| `com` | 1   | 0, 1               | 2nd sign-in  | 3rd onward      |
+| `org` | 1   | 0, 1               | 2nd sign-in  | 3rd onward      |
+
+Decided under the actor lock on the writer, with the database clock:
+
+1. Fewer than N full-access units: the sign-in becomes a full-access unit.
+2. N full-access units and no open resolution for the actor: the sign-in becomes the waiting unit,
+   an open session-limit resolution with no token, cookie, `current_resource` or RP grant.
+3. N full-access units and an open resolution (`PENDING` or `SESSION_SELECTED`, unexpired) for the
+   actor: the sign-in is refused outright. Nothing is issued, no resolution is created and no purge
+   choice is offered. R2-WU01 enforces the actor's single waiting lease under the actor lock;
+   R2-WU02 maps an occupied lease to the existing generic sign-in refusal
+   (`:session_limit_conflict`, HTTP 403) without exposing the other flow.
+
+- Existing full-access units are unaffected while a waiting unit exists.
+- The waiting unit may only select one full-access unit, explicitly continue the bound sign-in, or
+  cancel itself. It never reaches MFA reset or any full-access page.
+- It becomes full access only through the explicit bound continuation after the full-access count
+  drops below N (purge, sign-out, expiry or revocation); the count is rechecked under the actor
+  lock. There is no background promotion.
+- The slot frees when the waiting unit is promoted, cancelled or expires (15 minutes, capped by the
+  parent flow).
+- Two sign-ins arriving together at N with a free slot: exactly one becomes the waiting unit, the
+  other is refused.
 
 ## Surfaces And Limits
 
-Each surface has its own token model and independent session limit.
+Each surface has its own token model and independent session limit. The limit counts ACTIVE,
+unexpired, unrotated token rows. No restricted placeholder is issued
+(`adr/root-login-establishment-boundary.md`).
 
-| Surface | Actor      | Token model     | Active sessions | Restricted session | Total live sessions |
-| ------- | ---------- | --------------- | --------------- | ------------------ | ------------------- |
-| `app`   | `Client`   | `ClientToken`   | 2               | 1                  | 3                   |
-| `com`   | `Visitor`  | `VisitorToken`  | 1               | 1                  | 2                   |
-| `org`   | `Operator` | `OperatorToken` | 1               | 1                  | 2                   |
+| Surface | Actor      | Token model     | Active sessions | Model total-row ceiling |
+| ------- | ---------- | --------------- | --------------- | ----------------------- |
+| `app`   | `Client`   | `ClientToken`   | 2               | 3                       |
+| `com`   | `Visitor`  | `VisitorToken`  | 1               | 2                       |
+| `org`   | `Operator` | `OperatorToken` | 1               | 2                       |
 
-The active-session constants are:
-
-- `ClientToken::MAX_SESSIONS_PER_USER = 2`
-- `VisitorToken::MAX_SESSIONS_PER_VISITOR = 1`
-- `OperatorToken::MAX_SESSIONS_PER_STAFF = 1`
-
-The model-level total live-session constants are:
-
-- `ClientToken::MAX_TOTAL_SESSIONS_PER_USER = 3`
-- `VisitorToken::MAX_TOTAL_SESSIONS_PER_VISITOR = 2`
-- `OperatorToken::MAX_TOTAL_SESSIONS_PER_STAFF = 2`
+The total-row ceiling is the token model's create validation (`MAX_TOTAL_SESSIONS_*`); it remains
+the last line of defence. When it refuses a login that the active-session gate allowed, the commit
+is retried once under the actor lock and sent to the ordinary session-limit resolution, so the
+result is `:session_limit_pending` and nothing is issued. If that retry is refused as well, the
+login answers `:session_limit_conflict` with HTTP 503: a temporary failure that issues nothing and
+leaves the sign-in flow resumable. The former immediate 403 (`session_limit_hard_reject`) no longer
+exists.
 
 ## Login-Time Behavior
 
-`Authentication::Base#log_in` evaluates the actor's session-limit state before issuing a new token.
+`AuthenticationBase#log_in(resource, establishment:)` decides under the actor row lock, in one
+ticket-database transaction:
 
-1. If active sessions are below the surface limit, login issues a normal active token.
-2. If active sessions are at the surface limit and no restricted session exists, login issues a
-   restricted token.
-3. If active sessions are at the surface limit and a restricted session already exists, login is
-   rejected with `:session_limit_hard_reject` and HTTP `403 Forbidden`.
+1. Below the limit, it commits one ACTIVE session and returns `status: :success`.
+2. At the limit, it writes nothing and returns `status: :session_limit_pending`. The sign-in flow
+   moves to `SESSION_LIMIT_PENDING` and is the only pending state; no token, cookie,
+   `current_resource`, or `LOGGED_IN` audit exists for the attempt.
 
-Restricted sessions are short-lived and exist only to let the actor manage sessions. They are issued
-with a 15-minute TTL.
+An open resolution occupies the actor's waiting slot under the actor lock. R2-WU01 expires elapsed
+rows before a new claim and rejects a second live claim. R2-WU02 catches that named occupied-slot
+outcome at the root-admission boundary and returns the existing generic `:session_limit_conflict`
+result with HTTP 403; the existing flow and lease remain unchanged.
 
-## Restricted Session Management
+## Session-Limit Resolution
 
-Restricted sessions may access the Sign-In session management endpoint for their own surface:
+- Auth: none. An Auth host runs credential ceremonies and issues no session, so it never holds a
+  resolution; its former `/sign/in/session` page is removed.
+- Base app, OIDC resume: `/sign/in/limitation` with the `ClientSessionLimitResolutionTransaction`
+  challenge.
+- Base app, social completion: `/sign/in/limitation` on the Base host that ran the completion,
+  located through that host's flow locator. The URL carries no grant.
 
-- `app`: `Sign::App::In::SessionsController`
-- `com`: `Sign::Com::In::SessionsController`
-- `org`: `Sign::Org::In::SessionsController`
+The show action is read-only. The existing update path accepts PATCH/PUT to select a candidate and
+an explicit POST with `continue=1` to continue the same browser-bound flow. All three Base
+limitation routes expose that POST mapping without adding a new action surface. Selection records a
+candidate; it does not revoke a session. The final `log_in` call obtains the actor, parent-flow and
+resolution locks in the canonical order and calls
+`SessionLimitResolutionTransactionable#finalize_for_session_issuance!`.
 
-Acme also owns a browser ceremony for session-limit resolution at `/sign/in/limitation`. It is not
-an OIDC protocol endpoint, and it is not part of the Sign RP surface. The OIDC branch uses
-`resolution_challenge`; the social branch uses `social_resolution`.
+If natural sign-out or expiry has already brought the count below N, finalization marks the
+resolution complete without revoking the selected history. If the count is still full, finalization
+revalidates the selected target as an active session, revokes it through the authoritative current
+session logout primitive, recounts and commits the new root and terminal resolution in the same OP
+transaction. A stale or invalid selected target fails closed. A failed transaction leaves the
+existing sessions and waiting lease intact. Competing new login and continuation attempts serialize
+on the actor; the first eligible final commit wins, and no GET, polling or background request
+promotes a waiting flow.
 
-The session management flow lists active and restricted sessions for the current actor. The actor
-can revoke existing sessions. After revocation, the restricted session is promoted to active only if
-the active-session count is below the surface limit.
-
-If the actor cancels instead, the restricted token is revoked and the request is logged out.
+Cancelling fails only the waiting flow; no existing session is touched. com and org use the same
+ceremony at `/sign/in/limitation` on their Base host (`Base::Com::Sign::In::LimitationsController`,
+`Base::Org::Sign::In::LimitationsController`).
 
 ## Sign-In Families
 
@@ -73,29 +123,19 @@ same completion gate:
 - Google social sign-in
 - Apple social sign-in
 - passkey / WebAuthn sign-in
-- TOTP / passcode / secret credential sign-in
+- TOTP / passcode MFA continuation
 
 Each family reaches `establish_signed_in_session!` or a shared MFA continuation path before a token
 is issued. Step-up does not create a new login unit and must not advance this model.
 
 Login units are counted per `ClientToken`, not per RP-specific downstream token. A social sign-in,
-email OTP sign-in, passkey sign-in, or secret credential sign-in that arrives through the same
-browser/device still contributes one login unit when it mints one `ClientToken`.
+email OTP sign-in, or passkey sign-in that arrives through the same browser/device still contributes
+one login unit when it mints one `ClientToken`.
 
 ## Gate State
 
-For DB-backed sign-in cycles, `SignIn::SessionLimitManager` is the authoritative session-limit
-participant. It accepts only cycles at `SESSION_LIMIT_PENDING`, binds the restricted token to
-`cycle.token_id`, promotes only when the active-session count is below the surface limit, advances
-successful promotions to `GUARDRAIL_PENDING`, and moves cancelled cycles to `FAILED`.
-
-Legacy `SessionLimitGate` Rails session state remains as compatibility fallback for sign-in entry
-points that have not yet been fully wired to DB-backed cycle locators. The legacy gate contains a
-nonce, issue time, return path, and flow name. It expires after 15 minutes and is consumed after
-successful session management.
-
-The durable session state is the token row and its token-status reference id. The long-term sign-in
-sequence authority is the DB-backed sign-in cycle, not the legacy gate session key.
+The DB-backed `*SignInFlow` is the pending authority. `SessionLimitGate` only remembers the return
+path in the Rails session; it holds no principal and grants nothing.
 
 ## Token Status Reference
 
@@ -116,13 +156,42 @@ The current token-status ids reserve space between active and terminal states:
 | `RESTRICTED` | 103 |
 | `REVOKED`    | 104 |
 
-New token rows default to `ACTIVE`. Restricted login flow rows are issued with `RESTRICTED`, and
-revocation updates the reference id to `REVOKED`.
+New token rows default to `ACTIVE`, and revocation updates the reference id to `REVOKED`.
+`RESTRICTED` is no longer written; existing rows authenticate nothing and expire through their
+`discard_at`. It was the former session-limit placeholder; the waiting unit replaces it and is a
+resolution, never a token row. It is unrelated to org Emergency Access "Restricted Mode", which is
+an authentication context (`docs/security/org-emergency-access.md`).
 
 ## Enforcement Notes
 
-The login flow uses write-role reads when counting active and restricted sessions, so the decision
-is based on the primary database state.
+The login flow counts ACTIVE sessions and reads the cooldown anchor on the writer inside the
+issuance transaction, so the decision is based on the primary database state.
 
 The token models also validate total live-session count on create. This validation gives a
 model-level failure before excess live token rows are accepted.
+
+## R2-WU03 Delivery (2026-10-16)
+
+The three realm resolution models now permit a resolved row without selected-session facts when
+capacity was freed naturally. The existing state/timestamp checks remain in place for selected
+completions, and the forward migrations validate the adjusted checks separately. The source and
+schema paths were exercised against the local development databases; the focused model, controller,
+integration and Inertia component checks are recorded in the R2-WU03 evidence file.
+
+## R2-WU04 Delivery (2026-10-16)
+
+Authentication and credential continuation now require an explicit `ACTIVE` token status in addition
+to expiry, rotation and device-session checks. Browser RP access, root lookup, OIDC Code and
+UserInfo validation, Refresh and reissue, Step-Up, and credential ceremony consumers refuse
+historical `RESTRICTED` (103) rows before principal creation. The old RestrictedSessionGuard, its
+callback registrations and its refresh exception path were removed; the status reference and
+historical token/audit rows remain readable. MFA reset remains a GET-only unavailable page, and the
+three Base reset controllers are unreachable from a historical 103 session.
+
+## Delivered reconciliation (2026-10-06)
+
+All three realms use the durable session-limit resolution contract. The parent sign-in flow remains
+in `SESSION_ISSUANCE_PENDING` while the child transaction is bound to actor, browser, realm and OIDC
+transaction where present. Resolve, cancel, expire and conflict transitions lock and reload the
+owner and use the database clock; there is no early `SESSION_LIMIT_PENDING` graph edge or
+placeholder session. The former Acme/sign authority wording is historical.

@@ -8,7 +8,13 @@
 # so switching an FQDN off stops the request before it can consume a rate-limit budget, touch a
 # session, or reach a controller action.
 #
+# On Global and Publishing policy roots, `DefaultNoStore#apply_default_no_store` runs one step
+# earlier. It only marks the response `no-store` (no request input, budget, or state), which is what
+# lets the 503 rendered here carry that directive. See
+# adr/global-and-publishing-default-no-store-policy.md.
+#
 #   request
+#     -> default no-store          (Global / Publishing policy roots only)
 #     -> FQDN availability gate    (here)
 #     -> rate limit
 #     -> current context / preference
@@ -37,6 +43,7 @@ module FqdnAvailabilityGate
   # this from swallowing unrelated bugs the way `rescue StandardError` would.
   FLAG_STORE_ERRORS = [ActiveRecord::ActiveRecordError].freeze
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     prepend_before_action(:enforce_fqdn_availability!)
   end

@@ -1,18 +1,19 @@
 // React port of the `cookie-banner` Stimulus controller.
 //
-// The consent decision itself stays on the server: this component only reports a choice to
-// /web/v0/cookie and reflects what the server answers. It never writes the consent cookie itself,
+// The consent decision itself stays on the server: this component only reports a choice to the
+// endpoint the server declared for this page and reflects what the server answers. It never writes the consent cookie itself,
 // because the verified preference JWT is minted server-side.
 import { useEffect, useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import { hasRecordedCookieConsent } from "@/lib/cookies";
 import { readBoolean } from "@/lib/payload";
-import { csrfToken, preferenceQueryParameters } from "@/lib/request";
+import { csrfToken, preferenceQueryParameters, sameOriginEndpoint } from "@/lib/request";
 import type { ChromeCookieControls } from "@/types/inertia";
 
-function cookieEndpointUrl(): string {
-  const endpoint = new URL("/web/v0/cookie", window.location.origin);
+function cookieEndpointUrl(endpointUrl: string): string {
+  const endpoint = sameOriginEndpoint(endpointUrl);
   for (const [key, value] of preferenceQueryParameters()) {
     endpoint.searchParams.set(key, value);
   }
@@ -20,6 +21,14 @@ function cookieEndpointUrl(): string {
 }
 
 export default function CookieBanner({ controls }: { controls: ChromeCookieControls }) {
+  if (controls.hidden) {
+    return null;
+  }
+
+  return <CookieBannerPrompt controls={controls} />;
+}
+
+function CookieBannerPrompt({ controls }: { controls: ChromeCookieControls }) {
   // Nothing is painted until something says the visitor has not answered. The consent buffer
   // cookie is a projection of the same decision the endpoint below reports, and reading it through
   // the Cookie Store API is asynchronous, so it can no longer seed the first render - starting
@@ -35,6 +44,7 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
   // two reads race - one local, one over the network - and without this a slow cookie read could
   // raise a banner the server had already said to hide.
   const reconciled = useRef(false);
+  const endpointUrl = controls.endpoint_url;
 
   useEffect(() => {
     let active = true;
@@ -49,9 +59,11 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
       }
     };
 
+    const url = cookieEndpointUrl(endpointUrl);
+
     const readConsent = async () => {
       try {
-        const response = await fetch(cookieEndpointUrl());
+        const response = await fetch(url);
         if (!response.ok) {
           return;
         }
@@ -78,7 +90,7 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
     return () => {
       active = false;
     };
-  }, []);
+  }, [endpointUrl]);
 
   if (!visible) {
     return null;
@@ -87,7 +99,7 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
   const submitConsent = async (consented: boolean) => {
     setSubmitting(true);
     try {
-      const response = await fetch(cookieEndpointUrl(), {
+      const response = await fetch(cookieEndpointUrl(endpointUrl), {
         method: "PATCH",
         headers: {
           Accept: "application/json",
@@ -125,7 +137,7 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
     <section
       id="cookie-banner"
       aria-labelledby="cookie-title"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface shadow-lg"
+      className="border-t border-line bg-surface"
     >
       <div className="relative mx-auto flex max-w-4xl flex-col gap-3 p-4">
         <Button
@@ -171,7 +183,7 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
           {controls.title}
         </h2>
 
-        <p className="text-sm text-fg-muted">{controls.description_html}</p>
+        <p className="text-base text-fg-muted">{controls.description_html}</p>
 
         <div className="flex flex-wrap gap-2">
           <Button
@@ -183,13 +195,13 @@ export default function CookieBanner({ controls }: { controls: ChromeCookieContr
             {controls.reject_all}
           </Button>
 
-          <Button
+          <ButtonLink
             variant="secondary"
             size="sm"
-            onPress={() => window.location.assign(controls.settings_url)}
+            href={controls.settings_url}
           >
             {controls.open_settings}
-          </Button>
+          </ButtonLink>
 
           <Button
             size="sm"

@@ -7,7 +7,7 @@ class StaffLifecycleBoundaryTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+    @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
     @staff = operators(:one)
     @token = OperatorToken.create!(staff: @staff, public_id: "ol#{SecureRandom.hex(8)}")
@@ -16,7 +16,85 @@ class StaffLifecycleBoundaryTest < ActionDispatch::IntegrationTest
 
   test "org withdrawal route is informational instead of destructive self service" do
     with_step_up_satisfied do
-      get base_org_identity_withdrawal_url(ri: "jp"), headers: headers
+      http_headers_2 =
+        begin
+          fx0_base =
+            begin
+              f0_headers = as_staff_headers(
+                @staff,
+                host: @host,
+                headers: browser_headers,
+                session_public_id: @token.public_id,
+              )
+              f0_host = f0_headers["Host"]
+              f0_route =
+                begin
+                  Rails.application.routes.recognize_path("https://#{f0_host}/") if f0_host.present?
+                rescue ActionController::RoutingError
+                  nil
+                end
+              f0_family, f0_surface = f0_route&.fetch(:controller)&.split("/")
+              if %w(base warp core edit).include?(f0_family) && f0_surface == "org"
+                f0_client_id =
+                  case f0_family
+                  when "base" then "base-#{f0_surface}-ww"
+                  when "edit" then "edit-org-ww"
+                  else "#{f0_family}-#{f0_surface}"
+                  end
+                f0_token = OperatorToken.find_by!(public_id: f0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+                f0_client = OidcClientRegistry.find!(f0_client_id)
+                f0_key = [f0_client.client_id, f0_token.public_id]
+                @base_browser_rp_credentials ||= {}
+                if !@base_browser_rp_credentials[f0_key] && f0_token.currently_usable? &&
+                    !(f0_token.device_session_id && OpOrgGrant.exists?(
+                      device_session_id: f0_token.device_session_id,
+                      oidc_client_id: f0_client.client_id,
+                      revoked_at: nil,
+                    ))
+                  f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
+                  f0_now = Time.current
+                  f0_session = OpOrgGrant.create!(
+                    operator_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
+                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
+                    refresh_token_expires_at: f0_now + 10.minutes,
+                  )
+                  f0_access = AuthenticationTokenService.encode(
+                    f0_token.actor_record, host: f0_host, resource_type: "operator",
+                                           session_public_id: f0_token.public_id,
+                                           base_session_public_id: f0_token.public_id,
+                                           oidc_sid: f0_session.public_id, oidc_jti: f0_session.oidc_jti,
+                                           expires_at: f0_now + 10.minutes, scopes: %w(openid profile),
+                                           issuer: OidcIssuer.for_client(f0_client), audiences: [f0_client.aud],
+                                           jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f0_client),
+                                           subject: OidcSubject.for(
+                                             f0_token.actor_record,
+                                             resource_type: "operator",
+                                           ), client_id: f0_client.client_id,
+                  )
+                  @base_browser_rp_credentials[f0_key] = [f0_access, f0_session.issue_refresh_token!]
+                end
+                if @base_browser_rp_credentials[f0_key]
+                  f0_access, f0_refresh = @base_browser_rp_credentials.fetch(f0_key)
+                  f0_cookie = [
+                    f0_headers.fetch("Cookie"),
+                    "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f0_access)}",
+                    "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f0_refresh)}",
+                  ].join("; ")
+                  f0_headers = f0_headers.merge(
+                    "Cookie" => f0_cookie,
+                    "HTTP_COOKIE" => f0_cookie,
+                  )
+                end
+              end
+              f0_headers
+            end
+          fx0_base.merge(
+            "Authorization" => "Bearer #{
+            jwt_access_token_for(@staff, host: @host, session_public_id: @token.public_id, resource_type: "operator")
+          }",
+          )
+        end
+      get base_org_identity_withdrawal_url(ri: "jp"), headers: http_headers_2
     end
 
     assert_response :success
@@ -26,13 +104,175 @@ class StaffLifecycleBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "org withdrawal endpoint does not accept app com destructive withdrawal verbs" do
+    http_headers_1 =
+      begin
+        fx1_base =
+          begin
+            f1_headers = as_staff_headers(
+              @staff,
+              host: @host,
+              headers: browser_headers,
+              session_public_id: @token.public_id,
+            )
+            f1_host = f1_headers["Host"]
+            f1_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f1_host}/") if f1_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f1_family, f1_surface = f1_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f1_family) && f1_surface == "org"
+              f1_client_id =
+                case f1_family
+                when "base" then "base-#{f1_surface}-ww"
+                when "edit" then "edit-org-ww"
+                else "#{f1_family}-#{f1_surface}"
+                end
+              f1_token = OperatorToken.find_by!(public_id: f1_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f1_client = OidcClientRegistry.find!(f1_client_id)
+              f1_key = [f1_client.client_id, f1_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f1_key] && f1_token.currently_usable? &&
+                  !(f1_token.device_session_id && OpOrgGrant.exists?(
+                    device_session_id: f1_token.device_session_id,
+                    oidc_client_id: f1_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
+                f1_now = Time.current
+                f1_session = OpOrgGrant.create!(
+                  operator_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
+                  refresh_token_expires_at: f1_now + 10.minutes,
+                )
+                f1_access = AuthenticationTokenService.encode(
+                  f1_token.actor_record, host: f1_host, resource_type: "operator",
+                                         session_public_id: f1_token.public_id,
+                                         base_session_public_id: f1_token.public_id,
+                                         oidc_sid: f1_session.public_id, oidc_jti: f1_session.oidc_jti,
+                                         expires_at: f1_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f1_client), audiences: [f1_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f1_client),
+                                         subject: OidcSubject.for(
+                                           f1_token.actor_record,
+                                           resource_type: "operator",
+                                         ), client_id: f1_client.client_id,
+                )
+                @base_browser_rp_credentials[f1_key] =
+                  [f1_access, f1_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f1_key]
+                f1_access, f1_refresh = @base_browser_rp_credentials.fetch(f1_key)
+                f1_cookie = [
+                  f1_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f1_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f1_refresh)}",
+                ].join("; ")
+                f1_headers = f1_headers.merge(
+                  "Cookie" => f1_cookie,
+                  "HTTP_COOKIE" => f1_cookie,
+                )
+              end
+            end
+            f1_headers
+          end
+        fx1_base.merge(
+          "Authorization" => "Bearer #{
+                jwt_access_token_for(
+                  @staff,
+                  host: @host,
+                  session_public_id: @token.public_id,
+                  resource_type: "operator",
+                )
+              }",
+        )
+      end
     patch base_org_identity_withdrawal_url(ri: "jp"),
           params: { ack_deactivate_today: "1" },
-          headers: headers
+          headers: http_headers_1
 
     assert_response :not_found
 
-    delete base_org_identity_withdrawal_url(ri: "jp"), headers: headers
+    http_headers_0 =
+      begin
+        fx2_base =
+          begin
+            f2_headers = as_staff_headers(
+              @staff,
+              host: @host,
+              headers: browser_headers,
+              session_public_id: @token.public_id,
+            )
+            f2_host = f2_headers["Host"]
+            f2_route =
+              begin
+                Rails.application.routes.recognize_path("https://#{f2_host}/") if f2_host.present?
+              rescue ActionController::RoutingError
+                nil
+              end
+            f2_family, f2_surface = f2_route&.fetch(:controller)&.split("/")
+            if %w(base warp core edit).include?(f2_family) && f2_surface == "org"
+              f2_client_id =
+                case f2_family
+                when "base" then "base-#{f2_surface}-ww"
+                when "edit" then "edit-org-ww"
+                else "#{f2_family}-#{f2_surface}"
+                end
+              f2_token = OperatorToken.find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
+              f2_client = OidcClientRegistry.find!(f2_client_id)
+              f2_key = [f2_client.client_id, f2_token.public_id]
+              @base_browser_rp_credentials ||= {}
+              if !@base_browser_rp_credentials[f2_key] && f2_token.currently_usable? &&
+                  !(f2_token.device_session_id && OpOrgGrant.exists?(
+                    device_session_id: f2_token.device_session_id,
+                    oidc_client_id: f2_client.client_id,
+                    revoked_at: nil,
+                  ))
+                f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
+                f2_now = Time.current
+                f2_session = OpOrgGrant.create!(
+                  operator_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
+                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
+                  refresh_token_expires_at: f2_now + 10.minutes,
+                )
+                f2_access = AuthenticationTokenService.encode(
+                  f2_token.actor_record, host: f2_host, resource_type: "operator",
+                                         session_public_id: f2_token.public_id,
+                                         base_session_public_id: f2_token.public_id,
+                                         oidc_sid: f2_session.public_id, oidc_jti: f2_session.oidc_jti,
+                                         expires_at: f2_now + 10.minutes, scopes: %w(openid profile),
+                                         issuer: OidcIssuer.for_client(f2_client), audiences: [f2_client.aud],
+                                         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(f2_client),
+                                         subject: OidcSubject.for(
+                                           f2_token.actor_record,
+                                           resource_type: "operator",
+                                         ), client_id: f2_client.client_id,
+                )
+                @base_browser_rp_credentials[f2_key] = [f2_access, f2_session.issue_refresh_token!]
+              end
+              if @base_browser_rp_credentials[f2_key]
+                f2_access, f2_refresh = @base_browser_rp_credentials.fetch(f2_key)
+                f2_cookie = [
+                  f2_headers.fetch("Cookie"),
+                  "#{OidcRpBrowserCredentialContract::ACCESS_COOKIE}=#{Rack::Utils.escape(f2_access)}",
+                  "#{OidcRpBrowserCredentialContract::REFRESH_COOKIE}=#{Rack::Utils.escape(f2_refresh)}",
+                ].join("; ")
+                f2_headers = f2_headers.merge(
+                  "Cookie" => f2_cookie,
+                  "HTTP_COOKIE" => f2_cookie,
+                )
+              end
+            end
+            f2_headers
+          end
+        fx2_base.merge(
+          "Authorization" => "Bearer #{
+          jwt_access_token_for(@staff, host: @host, session_public_id: @token.public_id, resource_type: "operator")
+        }",
+        )
+      end
+    delete base_org_identity_withdrawal_url(ri: "jp"), headers: http_headers_0
 
     assert_response :not_found
     assert_nil @staff.reload.deactivated_at
@@ -57,23 +297,15 @@ class StaffLifecycleBoundaryTest < ActionDispatch::IntegrationTest
       audience: "step_up:org",
       purpose_bound: true,
       audience_bound: true,
+      phishing_resistant_required: true,
+      user_verification_required: true,
+      full_reauthentication_required: false,
+      resource_bound: true,
+      tenant_bound: true,
     )
     StepUpResolver.stub(:call, satisfied, &)
   end
 
-  def headers
-    base = as_staff_headers(
-      @staff,
-      host: @host,
-      headers: browser_headers,
-      session_public_id: @token.public_id,
-    )
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(@staff, host: @host, session_public_id: @token.public_id, resource_type: "operator")
-      }",
-    )
-  end
   private
 
   def bearer_headers(token, host: nil, headers: {})
@@ -99,26 +331,6 @@ class StaffLifecycleBoundaryTest
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
     service =
@@ -127,12 +339,12 @@ class StaffLifecycleBoundaryTest
       elsif normalized.include?("core")
         "CORE"
       elsif normalized.include?("auth") || normalized.include?("sign") || normalized.include?("log.umaxica")
-        "SIGN"
+        "AUTH"
       else
         "BASE"
       end
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -192,10 +404,8 @@ class StaffLifecycleBoundaryTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -207,10 +417,8 @@ class StaffLifecycleBoundaryTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -345,7 +553,8 @@ class StaffLifecycleBoundaryTest
     headers = social_callback_headers(host)
     headers["Referer"] = referer if referer.present?
     if user
-      user_headers = as_user_headers(user, host: host)
+      user_headers =
+        as_user_headers(user, host: host)
       token = ClientToken.find_by(public_id: user_headers["X-TEST-SESSION-PUBLIC-ID"])
       mark_token_step_up_satisfied_for_test(
         token,
@@ -431,63 +640,6 @@ class StaffLifecycleBoundaryTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -503,10 +655,8 @@ class StaffLifecycleBoundaryTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -526,12 +676,12 @@ class StaffLifecycleBoundaryTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

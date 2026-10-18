@@ -60,14 +60,20 @@ apple_team_id = Rails.app.creds.option(:OMNI_AUTH_APPLE_TEAM_ID)
 apple_key_id = Rails.app.creds.option(:OMNI_AUTH_APPLE_KEY_ID)
 apple_pem = Rails.app.creds.option(:OMNI_AUTH_APPLE_PRIVATE_KEY)
 
-# Org (staff) Microsoft Entra ID credential. Tenant id and client id are read
-# through ExternalAuthentication::ProviderRegistry, which names them on the
-# provider entry; only the secret is needed here, because it is the one value
-# the OmniAuth client options must carry. Production still fails boot when the
-# secret is absent. Development and test omit the entra provider instead of
-# requiring an unused IdP credential for CMS and other non-Entra tests.
-entra_client_secret = EntraOmniauthBootCredentials.secret_for_boot(
-  Rails.app.creds.option(:OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET),
+# Org (staff) Microsoft Entra ID credentials. All three (tenant id, client id,
+# client secret) are resolved and shape-validated here so a non-local deployment
+# fails at boot rather than on the first staff sign-in. Only the secret is passed
+# into the OmniAuth client options -- the strategy reads tenant id and client id
+# through ExternalAuthentication::ProviderRegistry per request, so a rotation does
+# not require a redeploy -- but all three are required together, because a provider
+# registered with two of the three cannot complete a ceremony.
+#
+# Development and test omit the entra provider when none of the three are set,
+# instead of requiring unused IdP credentials for CMS and other non-Entra tests.
+entra_boot_credentials = EntraOmniauthBootCredentials.resolve_for_boot(
+  tenant_id: Rails.app.creds.option(:OMNI_AUTH_ENTRA_ORG_TENANT_ID),
+  client_id: Rails.app.creds.option(:OMNI_AUTH_ENTRA_ORG_CLIENT_ID),
+  client_secret: Rails.app.creds.option(:OMNI_AUTH_ENTRA_ORG_CLIENT_SECRET),
 )
 
 module OmniAuthCallbackOrigin
@@ -162,20 +168,46 @@ class OmniAuthSocialProviderHostMatrix
     end
   end
 
+  APP_HOST_ENV_KEYS = %w(
+    PUBLIC_AUTH_SERVICE_URL PRIVATE_AUTH_SERVICE_URL
+    PUBLIC_BASE_SERVICE_URL PRIVATE_BASE_SERVICE_URL
+  ).freeze
   ORG_HOST_ENV_KEYS = %w(PUBLIC_AUTH_STAFF_URL PRIVATE_AUTH_STAFF_URL).freeze
   COM_HOST_ENV_KEYS = %w(
     PUBLIC_AUTH_CORPORATE_URL PRIVATE_AUTH_CORPORATE_URL
     PUBLIC_BASE_CORPORATE_URL PRIVATE_BASE_CORPORATE_URL
   ).freeze
 
+  # Deny by default. Every surface is recognized explicitly, and a host that
+  # matches none of them classifies as :unknown, which `allowed?` refuses for
+  # every provider and every /social/* path.
+  #
+  # The previous `:app` fallback made this middleware allow-by-default: any host
+  # Rails Host Authorization admits but that owns no auth surface (warp, base,
+  # core, help, info, palm, ...) was treated as the app auth host and could start
+  # a Google/Apple ceremony, or reach the non-provider /social/* endpoints, on an
+  # origin those callbacks were never registered for. Host Authorization running
+  # in another layer is not a reason for this layer to fail open.
+  #
+  # Host source is the shared boot config (ConfigValues::HostFamilyValues), plus
+  # the same PUBLIC_/PRIVATE_ ENV keys the org and com branches already consult;
+  # no new host list is defined here.
   def surface_for_host(host)
     boot_hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+
+    # Both the auth service host (which owns the OmniAuth request/callback
+    # paths) and the base service host (config/routes/base.rb, which owns
+    # /social/authentication/continuation, .../completion and the app-surface
+    # provider callbacks) belong to the app surface, mirroring the com pair
+    # below.
+    app_hosts = [boot_hosts.auth_service.host, boot_hosts.base_service.host]
+    return :app if app_hosts.include?(host) || env_host_match?(APP_HOST_ENV_KEYS, host)
     return :org if host == boot_hosts.auth_staff.host || env_host_match?(ORG_HOST_ENV_KEYS, host)
 
     com_hosts = [boot_hosts.sign_corporate.host, boot_hosts.auth_corporate.host, boot_hosts.base_corporate.host]
     return :com if com_hosts.include?(host) || env_host_match?(COM_HOST_ENV_KEYS, host)
 
-    :app
+    :unknown
   end
 
   def env_host_match?(keys, host)
@@ -279,9 +311,9 @@ Rails.application.config.middleware.use(OmniAuth::Builder) do
   # registry entry names, and the strategy applies the tenant-fixed endpoints
   # per request. Callback: GET /social/entra/callback.
   #
-  # Local boots without a secret skip this provider so publishing tests do not
-  # depend on Entra credentials. Production still required the secret above.
-  if entra_client_secret
+  # Local boots with no Entra credentials skip this provider so publishing tests
+  # do not depend on Entra credentials. Non-local boots already failed above.
+  if entra_boot_credentials
     provider :umaxica_entra,
              {
                name: "entra",
@@ -292,7 +324,7 @@ Rails.application.config.middleware.use(OmniAuth::Builder) do
                send_nonce: true,
                pkce: true,
                discovery: false,
-               client_options: { secret: entra_client_secret },
+               client_options: { secret: entra_boot_credentials.client_secret },
              }
   end
 end
@@ -300,6 +332,9 @@ end
 # OmniAuth request phase accepts only the Rails authenticity-token-protected form submission.
 # Callback state validation is enforced by SocialCallbackGuard and CallbackStateStore.
 OmniAuth.config.allowed_request_methods = [:post]
+Rails.application.config.to_prepare do
+  OmniAuth.config.request_validation_phase = OmniauthRailsCsrfVerifier.new
+end
 OmniAuth.config.after_request_phase = proc { |env| SocialCallbackGuard.capture_request_state!(env) }
 
 # =============================================================================
@@ -307,15 +342,63 @@ OmniAuth.config.after_request_phase = proc { |env| SocialCallbackGuard.capture_r
 # =============================================================================
 # Redirect to our custom failure endpoint.
 # This uses OmniAuth standard path: /social/failure
+#
+# OmniAuth rescues every StandardError raised by a strategy and routes it here,
+# so a defect in our own code (NoMethodError, TypeError, ...) would otherwise
+# look like an ordinary provider failure and silently bounce the user back to
+# the sign-in page. Those defects stop here with a plain-text 500 instead.
+module OmniAuthFatalFailure
+  module_function
+
+  DEFECT_CLASSES = [NameError, TypeError, ArgumentError, FrozenError, NotImplementedError].freeze
+
+  def defect?(error)
+    DEFECT_CLASSES.any? { |klass| error.is_a?(klass) }
+  end
+
+  # Only the class and the code location are logged: exception messages can
+  # embed request or provider data.
+  def log!(error, strategy:)
+    origin = error.backtrace&.find { |frame| frame.start_with?(Rails.root.to_s) && frame.exclude?("/vendor/") }
+    Rails.logger.error(
+      JitLogEvent.format(
+        "social_auth.fatal",
+        strategy: strategy,
+        error_class: error.class.name,
+        origin: origin || error.backtrace&.first,
+      ),
+    )
+  end
+
+  def response
+    Rack::Response.new(
+      [I18n.t("errors.social_auth.fatal", locale: I18n.default_locale)],
+      500,
+      "Content-Type" => "text/plain; charset=utf-8",
+      "Cache-Control" => "no-store",
+    ).finish
+  end
+end
+
 OmniAuth.config.on_failure =
   proc do |env|
     request = Rack::Request.new(env)
-    message = env["omniauth.error.type"]&.to_s || "unknown_error"
+    error = env["omniauth.error"]
+    message =
+      if error.is_a?(ActionController::InvalidCrossOriginRequest)
+        "csrf_detected"
+      else
+        env["omniauth.error.type"]&.to_s || "unknown_error"
+      end
     strategy = env["omniauth.error.strategy"]&.name || "unknown"
+
+    if error && OmniAuthFatalFailure.defect?(error)
+      OmniAuthFatalFailure.log!(error, strategy: strategy)
+      next OmniAuthFatalFailure.response
+    end
 
     # Provider exception messages can contain response bodies or credentials;
     # retain only allowlisted classification metadata.
-    error = env["omniauth.error"]
     if error
       Rails.logger.error(
         JitLogEvent.format(

@@ -11,8 +11,15 @@ owner: internal-architecture-owner
 last-reviewed: 2026-06-24
 source-of-truth: current-repository-evidence
 confidentiality: internal-vendor-shareable
-related-audit-ledger: plans/umaxica-immutable-pinwheel.md
+related-audit-ledger: docs/vendor/identity/11_decision-register.md
 ---
+
+> **Current-contract supersession (2026-09-23):** This vendor baseline predates the accepted
+> Base/Auth authority decision and is retained for historical assessment context. Its Acme-only
+> authority, signed-result, and legacy RP statements must not be used as current requirements. The
+> active Rails contract is defined by `adr/base-auth-ceremony-and-seven-rp-boundary.md` and the
+> current security/architecture documents. Do not implement or register an additional authority from
+> this historical baseline.
 
 # Purpose
 
@@ -44,15 +51,15 @@ architecture owner will be rejected during technical review.
 
 # 1. Document Status
 
-| Field                | Value                                                                    |
-| -------------------- | ------------------------------------------------------------------------ |
-| Status               | rfi-draft — shareable in RFI with conditions (see §14)                   |
-| Owner                | internal-architecture-owner                                              |
-| Audience             | SIer, security-vendor, internal-architecture, implementation-team        |
-| Confidentiality      | internal-vendor-shareable                                                |
-| Source of truth      | current repository evidence, cross-referenced with audit ledger          |
-| Last reviewed        | 2026-06-24 (Round 4 audit)                                               |
-| Related audit ledger | `plans/umaxica-immutable-pinwheel.md` (DECISION DEC-001~013, NR-001~004) |
+| Field                | Value                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| Status               | rfi-draft — shareable in RFI with conditions (see §14)                              |
+| Owner                | internal-architecture-owner                                                         |
+| Audience             | SIer, security-vendor, internal-architecture, implementation-team                   |
+| Confidentiality      | internal-vendor-shareable                                                           |
+| Source of truth      | current repository evidence, cross-referenced with audit ledger                     |
+| Last reviewed        | 2026-06-24 (Round 4 audit)                                                          |
+| Related audit ledger | `docs/vendor/identity/11_decision-register.md` (DECISION DEC-001~~013, NR-001~~004) |
 
 ---
 
@@ -684,7 +691,7 @@ This document may be shared with SIer in RFI with the following conditions:
 
 1. Share as `rfi-draft`. State clearly that this is not yet a finalized, owner-reviewed document.
 2. Include the ⚠ Critical Framing Warning (§0) verbatim in any covering note.
-3. `notes/oauth2-1-compliance-gap.md` **MUST NOT** be included in the RFI resource set. It is a
+3. `research/oauth2-1-compliance-gap.md` **MUST NOT** be included in the RFI resource set. It is a
    stale non-authoritative note that describes a superseded AS attribution model. Seal before first
    SIer contact (DEC-001).
 4. `docs/vendor/identity/08_threat-model.md` is shareable in RFI as **context only / not normative /
@@ -699,7 +706,7 @@ Before using this document in an RFP:
 1. `owner` must be a named person or team, not `internal-architecture-owner`.
 2. `last-reviewed` must be updated to reflect the RFP review date.
 3. `status` must be updated from `rfi-draft` to `rfp-approved` or equivalent.
-4. `notes/oauth2-1-compliance-gap.md` must be updated or archived (DEC-002).
+4. `research/oauth2-1-compliance-gap.md` must be updated or archived (DEC-002).
 5. `08_threat-model.md` must have owner confirmed and internal review completed (DEC-010).
 6. MFA reset prerequisites (DEC-009) must be met or formally deferred with owner acceptance.
 7. Audit log integrity implementation method must be selected and documented (DEC-013).
@@ -721,4 +728,4 @@ Before using this document in an RFP:
 | `adr/acme-sign-core-base-port-boundary.md`                 | ADR confirming Acme as sole AS.                                       |
 | `adr/security-audit-findings-2026-06-13.md`                | Security findings FINDING-01~04.                                      |
 | `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` | Refresh replay = compromise decision.                                 |
-| `plans/umaxica-immutable-pinwheel.md`                      | Full audit ledger. DEC-001~013 and NR-001~004 originate here.         |
+| `docs/vendor/identity/11_decision-register.md`             | Full audit ledger. DEC-001~~013 and NR-001~~004 originate here.       |

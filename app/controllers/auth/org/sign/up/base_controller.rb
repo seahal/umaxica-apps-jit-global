@@ -34,15 +34,12 @@ module Auth
           before_action :set_color_theme
           append_after_action :finish_request
 
-          protect_from_forgery using: :header_or_legacy_token,
-                               trusted_origins: JitHostOriginEnv.trusted_origins(
-                                 ENV.fetch("PRIVATE_AUTH_STAFF_URL"),
-                               ),
-                               with: :exception
+          protect_from_forgery using: :header_or_legacy_token, with: :exception
 
           private
 
           def after_login_path
+            complete_auth_ceremony_session!
             base_org_identity_url(ri: current_region_identifier, host: base_authority_host)
           end
         end

@@ -28,15 +28,16 @@ class SignInCycleLocator
 
   NONCE_BYTES = 32
 
-  def initialize(session, surface:, cycle_class: nil, actor: nil, token: nil)
+  def initialize(session, surface:, cycle_class: nil, actor: nil, token: nil, allow_principal_without_token: false)
     @session = session
     @surface = normalize_surface(surface)
     @cycle_class = cycle_class || CYCLE_CLASSES.fetch(@surface)
     @actor = actor
     @token = token
+    @allow_principal_without_token = allow_principal_without_token
   end
 
-  def current
+  def current(include_terminal: false)
     payload = current_payload
     return nil unless payload
 
@@ -45,7 +46,7 @@ class SignInCycleLocator
     return nil unless cycle.nonce_matches?(payload.fetch("nonce"))
     return nil unless actor_binding_valid?(cycle)
     return nil unless token_binding_valid?(cycle)
-    return nil if terminal?(cycle)
+    return nil if terminal?(cycle) && !include_terminal
 
     cycle
   rescue KeyError
@@ -91,7 +92,15 @@ class SignInCycleLocator
 
   def actor_binding_valid?(cycle)
     return true if cycle.principal_id.blank?
-    return false if actor.blank?
+
+    if actor.blank?
+      # Without an authenticated actor, only an OIDC-started ceremony can be
+      # resumed through the nonce this browser's session holds. Session-limit
+      # continuation is authorized by its durable child transaction instead.
+      return false if cycle.token_id.present?
+
+      return @allow_principal_without_token
+    end
     return false unless actor.is_a?(ACTOR_CLASSES.fetch(surface))
 
     actor.id == cycle.principal_id
@@ -105,7 +114,8 @@ class SignInCycleLocator
   end
 
   def terminal?(cycle)
-    cycle.sign_in_completed? || cycle.sign_in_failed?
+    cycle.sign_in_completed? || cycle.sign_in_failed? || cycle.sign_in_expired? ||
+      cycle.sign_in_cancelled? || cycle.sign_in_halted?
   end
 
   def ensure_supported_cycle!(cycle)

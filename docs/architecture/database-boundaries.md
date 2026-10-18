@@ -1,5 +1,13 @@
 # Database Boundaries
 
+> **Global / Regional ownership settled (2026-09-08):** `adr/global-regional-database-ownership.md`
+> is the normative decision. `*_zenith`, `*_ticket`, `*_setting`, `*_signal`, `avatar`, and
+> `publishing` are **Global-only**. `chronicle`, `occurrence`, `primary`, and `queue` exist as
+> independent (never shared) databases in both Global and Regional. Regional owns one new
+> application database. There is no `*_principal` regional-ready database; that role is retired. The
+> `search` and `storage` reserved connections (zero migrations) are deletion candidates for the
+> split.
+
 > **Partially superseded by Identity Authority inversion:** Physical database names and table/model
 > placement do not imply logical identity authority. `acme/www` is the Session, Token, Account,
 > Preference, Authorization, and downstream-token Authority. `sign/id` is ceremony-only. Existing
@@ -16,17 +24,21 @@ See `docs/architecture/database-authority-placement.md` for the placement contra
 
 Surface-owned database connections use `surface_role` names.
 
-| Surface | Principal       | Ticket       | Zenith       | Signal       | Setting       |
-| ------- | --------------- | ------------ | ------------ | ------------ | ------------- |
-| `app`   | `app_principal` | `app_ticket` | `app_zenith` | `app_signal` | `app_setting` |
-| `org`   | `org_principal` | `org_ticket` | `org_zenith` | `org_signal` | `org_setting` |
-| `com`   | `com_principal` | `com_ticket` | `com_zenith` | `com_signal` | `com_setting` |
+| Surface | Principal       | Ticket        | Zenith       | Signal       | Setting       |
+| ------- | --------------- | ------------- | ------------ | ------------ | ------------- |
+| `app`   | `app_principal` | `op_base_app` | `app_zenith` | `app_signal` | `app_setting` |
+| `org`   | `org_principal` | `op_base_org` | `org_zenith` | `org_signal` | `org_setting` |
+| `com`   | `com_principal` | `op_base_com` | `com_zenith` | `com_signal` | `com_setting` |
+
+The OP authentication stores use the `op_base_*` names defined by `one.md` section 5.2. This is the
+current exception to the generic `surface_role` ticket vocabulary; the corresponding replica keys
+are `op_base_app_replica`, `op_base_org_replica`, and `op_base_com_replica`.
 
 Role meanings:
 
 - `principal`: retained connection key reserved for future regional-ready application data. Current
   semantic principal models use the matching `*_zenith` physical database.
-- `ticket`: login/session/OIDC ticket persistence.
+- `op_base`: login/session/OIDC persistence owned by the same-realm OP Base.
 - `zenith`: Zenith/RP-facing account, identity binding, and local projection state.
 - `signal`: notification-origin state for email, web push, banners, and related channels.
 - `setting`: login-independent surface setting and preference state.
@@ -38,13 +50,13 @@ The implemented target mapping is:
 | Current     | Target          |
 | ----------- | --------------- |
 | `principal` | `app_principal` |
-| `mark`      | `app_ticket`    |
+| `mark`      | `op_base_app`   |
 | `resident`  | `app_zenith`    |
 | `operator`  | `org_principal` |
-| `token`     | `org_ticket`    |
+| `token`     | `op_base_org`   |
 | `personnel` | `org_zenith`    |
 | `guest`     | `com_principal` |
-| `symbol`    | `com_ticket`    |
+| `symbol`    | `op_base_com`   |
 | `visitor`   | `com_zenith`    |
 | `setting`   | `com_setting`   |
 
@@ -68,6 +80,11 @@ The current `notification` connection will split into three surface signal datab
 
 These database names remain independent cross-cutting or infrastructure boundaries:
 
+- `primary` — Rails default database (`db/migrate`, dump `db/structure.sql`). Durable,
+  low-frequency, application-wide configuration or metadata that does not have a strong domain,
+  lifecycle, scaling, retention, isolation, or operational reason to own a dedicated database.
+  Flipper currently uses it. It is not an indiscriminate catch-all: data with a meaningful
+  independent ownership boundary stays in its dedicated database.
 - `queue`
 - `storage`
 - `search`

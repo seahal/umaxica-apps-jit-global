@@ -1,12 +1,12 @@
 # typed: false
 # frozen_string_literal: true
 
-# Legacy compatibility gate for concurrent session-limit management.
+# Return-target carrier for concurrent session-limit management.
 #
-# DB-backed sign-in cycles should use SignInSessionLimitManager as the
-# authoritative session-limit participant. This concern remains only for
-# sign-in entry points that have not yet been fully wired to DB-backed cycle
-# locators.
+# The durable session-limit resolution transaction is the authority for a
+# pending sign-in (adr/root-login-establishment-boundary.md). This gate holds
+# no principal and grants nothing; it only remembers the browser binding and
+# where the browser returns after the limit is resolved.
 #
 # Provides server-side session gating for concurrent session limit management.
 # When a user exceeds their maximum concurrent sessions, they are redirected to
@@ -48,7 +48,7 @@ module SessionLimitGate
   #
   # @param pt [String] The path target to use after session management (must start with "/")
   # @param flow [String] Identifier for the authentication flow (e.g., "in.email.session")
-  def issue_session_limit_gate!(pt:, flow:)
+  def issue_session_limit_gate!(pt:, flow:, resolution_challenge: nil, resolution_binding: nil, actor_type: nil)
     safe_pt = safe_internal_path(pt)
 
     session[GATE_SESSION_KEY] = {
@@ -56,7 +56,10 @@ module SessionLimitGate
       "issued_at" => Time.current.to_i,
       "pt" => safe_pt,
       "flow" => flow.to_s,
-    }
+      "resolution_challenge" => resolution_challenge.presence,
+      "resolution_binding" => resolution_binding.presence,
+      "actor_type" => actor_type.presence,
+    }.compact
   end
 
   def require_session_limit_gate!(login_path:)
@@ -64,7 +67,6 @@ module SessionLimitGate
 
     unless valid_gate?(gate)
       session.delete(GATE_SESSION_KEY)
-      flash[:alert] = I18n.t("session_limit.gate_expired")
       redirect_to(login_path)
       return false
     end
@@ -94,19 +96,55 @@ module SessionLimitGate
     valid_gate?(session[GATE_SESSION_KEY])
   end
 
-  def session_limit_hard_reject_for?(resource)
-    return false unless resource
-
-    session_limit_state_for(resource) == :hard_reject
+  # Creates the durable child transaction used by the session-limit ceremony.
+  # The Rails session carries only the opaque raw browser binding and challenge;
+  # the actor, parent flow, and selected-session authority remain in Ticket.
+  def issue_session_limit_resolution!(flow:, actor:, oidc_authorization_transaction: nil, audit_context: {})
+    raw_binding = SecureRandom.urlsafe_base64(32)
+    resolution_model = SessionLimitResolutionTransactionable.model_for(actor)
+    issuance = resolution_model.issue!(
+      sign_in_flow: flow,
+      actor: actor,
+      browser_binding_digest: resolution_model.digest_challenge(raw_binding),
+      oidc_authorization_transaction: oidc_authorization_transaction,
+      audit_context: audit_context,
+    )
+    issue_session_limit_gate!(
+      pt: flow.return_to,
+      flow: flow.public_id,
+      resolution_challenge: issuance.challenge,
+      resolution_binding: raw_binding,
+      actor_type: actor.class.name,
+    )
+    issuance
   end
 
-  def render_session_limit_hard_reject(message: nil, http_status: nil)
+  def session_limit_resolution
+    gate = session[GATE_SESSION_KEY]
+    return unless valid_gate?(gate)
+
+    challenge = gate["resolution_challenge"].presence
+    return unless challenge
+
+    model = resolution_model_for_gate(gate)
+    model.find_by(challenge_digest: model.digest_challenge(challenge))
+  end
+
+  def session_limit_resolution_binding
+    gate = session[GATE_SESSION_KEY]
+    return unless valid_gate?(gate)
+
+    gate["resolution_binding"].presence
+  end
+
+  # Renders a sign-in refusal that issued nothing. `error_code` names the refusal for JSON clients.
+  def render_sign_in_refusal(message: nil, http_status: nil, error_code: "sign_in_refused")
     msg = message || I18n.t("session_limit.login_limit_exceeded")
     status = http_status || :forbidden
 
     respond_to do |format|
       format.html { render plain: msg, status: status }
-      format.json { render json: { error: msg, error_code: "session_limit_hard_reject" }, status: status }
+      format.json { render json: { error: msg, error_code: error_code }, status: status }
     end
   end
 
@@ -119,5 +157,15 @@ module SessionLimitGate
     expires_at = issued_at + GATE_TTL_SECONDS
 
     Time.current.to_i < expires_at
+  end
+
+  def resolution_model_for_gate(gate)
+    case gate["actor_type"].to_s
+    when "Client" then ClientSessionLimitResolutionTransaction
+    when "Visitor" then VisitorSessionLimitResolutionTransaction
+    when "Operator" then OperatorSessionLimitResolutionTransaction
+    else
+      raise FlowConfigurationError, "unsupported session-limit gate actor type"
+    end
   end
 end

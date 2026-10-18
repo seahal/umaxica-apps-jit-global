@@ -27,7 +27,7 @@ class SignInSequenceCarrier
 
     now = Time.current
     payload = {
-      "id" => SecureRandom.uuid,
+      "id" => PublicId.generate,
       "surface" => surface.to_s,
       "actor_type" => actor.class.name,
       "actor_id" => actor.id,
@@ -66,12 +66,12 @@ class SignInSequenceCarrier
     SignInSequence.new(payload)
   end
 
-  def fail!(terminal_state: "FAILED")
-    finish!(terminal_state: terminal_state)
-  end
-
   def expire!
     finish!(terminal_state: "EXPIRED")
+  end
+
+  def halt!
+    finish!(terminal_state: "HALTED")
   end
 
   def complete!
@@ -87,6 +87,9 @@ class SignInSequenceCarrier
   def finish!(terminal_state:)
     sequence = current
     return sequence if sequence.blank?
+    unless %w(COMPLETED EXPIRED HALTED).include?(terminal_state.to_s)
+      raise ArgumentError, "unsupported sign-in sequence terminal state"
+    end
 
     payload = sequence.payload.merge(
       "state" => terminal_state.to_s,
@@ -132,7 +135,6 @@ class SignInSequenceCarrier
     {
       "mfa_challenge_id" => refs[:mfa_challenge_id].presence,
       "session_limit_gate_id" => refs[:session_limit_gate_id].presence,
-      "restricted_login_public_id" => refs[:restricted_login_public_id].presence,
     }.compact
   end
 end

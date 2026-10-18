@@ -24,7 +24,7 @@ security headers.
 - Permissions-Policy, Cross-Origin-Embedder-Policy, Cross-Origin-Opener-Policy, and
   Cross-Origin-Resource-Policy are configured in `config/initializers/permissions_policy.rb`.
 - Session cookie transport is configured through `config/initializers/session_store.rb` and
-  `lib/session_cookie_config.rb`.
+  `lib/jit_session_cookie_config.rb`.
 - Turnstile scripts should only be loaded on pages that render a Turnstile form, and inline
   Turnstile setup scripts must use CSP nonces.
 - Do not re-enable Rails' legacy `Feature-Policy` header; use the explicit `Permissions-Policy`

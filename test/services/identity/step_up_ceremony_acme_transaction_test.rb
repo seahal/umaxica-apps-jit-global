@@ -34,74 +34,39 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
 
       assert_equal issuance.transaction.transaction_id, grant["transaction_id"]
       assert_equal issuance.transaction.grant_jti, grant["jti"]
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issuance.transaction.transaction_id)
+      assert_match(/\A[A-Za-z0-9_-]{21}\z/, issuance.transaction.grant_jti)
+      assert_not_equal issuance.transaction.transaction_id, issuance.transaction.grant_jti
       assert_equal @client.public_id, grant["actor_ref"]
       assert_equal @token.public_id, grant["session_ref"]
       assert_equal %w(totp passkey), grant["allowed_methods"]
     end
   end
 
-  test "valid result consumes once and commits freshness through acme service" do
-    travel_to @now do
-      issuance = issue_transaction!
-      result_token = result_for(issuance.transaction)
+  test "retries a generated step-up transaction reference collision at the database boundary" do
+    create_transaction!("a" * 21, expires_at: nil, grant_jti: "e" * 21)
+    generated = ["a" * 21, "g" * 21, "b" * 21, "h" * 21]
 
-      consumption = IdentityStepUpCeremonyResultConsumer.new(transaction: issuance.transaction, now: @now)
-        .call(result_token)
-
-      assert_predicate consumption.transaction.reload, :consumed?
-      assert_equal "result-1", consumption.transaction.result_jti
-      assert_equal "totp", consumption.transaction.method
-      assert_equal "aal2", consumption.transaction.aal
-
-      IdentityStepUpCeremonyFreshnessCommitter.call!(
-        result_token: result_token,
-        token: @token,
-        expected_scope: "settings_email",
-        expected_aal: "aal2",
-        expected_method: "totp",
-        audience: "step_up:app",
-        now: @now,
-      )
-
-      assert_equal @now.to_i, @token.reload.last_step_up_at.to_i
-      assert_equal "settings_email", @token.last_step_up_scope
-      assert_raises(IdentityStepUpCeremonyContract::Error) do
-        IdentityStepUpCeremonyResultConsumer.new(transaction: issuance.transaction.reload, now: @now)
-          .call(result_token)
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        create_transaction!(nil, expires_at: nil)
       end
-    end
+
+    assert_equal "b" * 21, transaction.transaction_id
+    assert_equal "h" * 21, transaction.grant_jti
   end
 
-  test "result consumer rejects wrong binding insufficient aal disallowed method and expired transaction" do
-    travel_to @now do
-      issuance = issue_transaction!
+  test "retries a generated step-up grant reference collision at the database boundary" do
+    create_transaction!("j" * 21, expires_at: nil, grant_jti: "i" * 21)
+    generated = ["k" * 21, "i" * 21, "l" * 21, "m" * 21]
 
-      assert_step_up_error("actor_ref does not match transaction") do
-        IdentityStepUpCeremonyResultConsumer.new(transaction: issuance.transaction, now: @now)
-          .call(result_for(issuance.transaction, "actor_ref" => "wrong"))
+    transaction =
+      PublicId.stub(:generate, -> { generated.shift }) do
+        create_transaction!(nil, expires_at: nil)
       end
 
-      assert_step_up_error("scope does not match transaction") do
-        IdentityStepUpCeremonyResultConsumer.new(transaction: issuance.transaction, now: @now)
-          .call(result_for(issuance.transaction, "scope" => "settings_phone"))
-      end
-
-      assert_step_up_error("AAL is insufficient") do
-        IdentityStepUpCeremonyResultConsumer.new(transaction: issuance.transaction, now: @now)
-          .call(result_for(issuance.transaction, "aal" => "aal1"))
-      end
-
-      assert_step_up_error("method is not allowed") do
-        IdentityStepUpCeremonyResultConsumer.new(transaction: issuance.transaction, now: @now)
-          .call(result_for(issuance.transaction, "method" => "email_otp"))
-      end
-
-      expired = create_transaction!("expired-txn", expires_at: @now - 1.minute)
-      assert_step_up_error("transaction is expired") do
-        IdentityStepUpCeremonyResultConsumer.new(transaction: expired, now: @now)
-          .call(result_for(expired, "expires_at" => (@now + 1.minute).to_i))
-      end
-    end
+    assert_equal "l" * 21, transaction.transaction_id
+    assert_equal "m" * 21, transaction.grant_jti
   end
 
   test "transaction scopes and purger retain recent records and purge old records" do
@@ -110,12 +75,12 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
       expired_recent = create_transaction!("expired-recent", expires_at: @now - 1.hour)
       expired_old = create_transaction!("expired-old", expires_at: @now - 8.days)
       consumed_old = issue_transaction!(transaction_id: "consumed-old").transaction
-      consumed_old.consume_result!(
-        result_jti: "consumed-old-result",
-        method: "totp",
-        aal: "aal2",
-        verified_at: @now - 8.days,
-        consumed_at: @now - 8.days,
+      # A week-old consumed row cannot be produced through the database-clocked transitions, so the
+      # stored state is written directly; the transitions themselves are covered by the model tests.
+      # The purger removes a row only once both its expiry and its terminal time are past retention.
+      consumed_old.update_columns(
+        status: "consumed", result_jti: "consumed-old-result", method: "totp", aal: "aal1",
+        verified_at: @now - 8.days, consumed_at: @now - 8.days, expires_at: @now - 8.days,
       )
 
       assert_includes ClientStepUpCeremonyTransaction.active_at(@now), active
@@ -147,38 +112,16 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
     assert_empty OperatorStepUpCeremonyTransaction.column_names & forbidden_columns
   end
 
-  test "consume_result raises when result_jti collides with an existing consumed transaction" do
-    travel_to @now do
-      first = issue_transaction!(transaction_id: "collide-first").transaction
-      first.consume_result!(
-        result_jti: "step-up-colliding",
-        method: "totp",
-        aal: "aal2",
-        verified_at: @now,
-        consumed_at: @now,
-      )
-
-      second = create_transaction!("collide-second", expires_at: @now + 1.hour)
-
-      assert_step_up_error("result_jti has already been consumed") do
-        second.consume_result!(
-          result_jti: "step-up-colliding",
-          method: "totp",
-          aal: "aal2",
-          verified_at: @now,
-          consumed_at: @now,
-        )
-      end
-    end
-  end
-
   test "surface validation rejects surface that does not match ceremony surface" do
     txn = ClientStepUpCeremonyTransaction.new(
       surface: "com",
       actor_ref: @client.public_id,
       session_ref: @token.public_id,
       required_scope: "settings_email",
-      required_aal: "aal2",
+      required_aal: "none",
+      step_up_required: true, user_verification_required: false,
+      full_reauthentication_required: false, phishing_resistant_required: false,
+      audience: "step_up:app", token_binding: @token.public_id, require_session_binding: true,
       allowed_methods: "totp,passkey",
       transaction_id: SecureRandom.uuid,
       grant_jti: SecureRandom.uuid,
@@ -197,7 +140,10 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
       actor_ref: @client.public_id,
       session_ref: @token.public_id,
       required_scope: "settings_email",
-      required_aal: "aal2",
+      required_aal: StepUpRequirement::NO_AAL,
+      step_up_required: true, user_verification_required: false,
+      full_reauthentication_required: false, phishing_resistant_required: false,
+      audience: "step_up:app", token_binding: @token.public_id, require_session_binding: true,
       allowed_methods: %w(totp passkey),
       transaction_id: transaction_id,
       expires_at: expires_at,
@@ -205,15 +151,19 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
     )
   end
 
-  def create_transaction!(transaction_id, expires_at:)
+  def create_transaction!(transaction_id, expires_at:, grant_jti: nil)
     ClientStepUpCeremonyTransaction.create_transaction!(
       surface: "app",
       actor_ref: @client.public_id,
       session_ref: @token.public_id,
       required_scope: "settings_email",
-      required_aal: "aal2",
+      required_aal: StepUpRequirement::NO_AAL,
+      step_up_required: true, user_verification_required: false,
+      full_reauthentication_required: false, phishing_resistant_required: false,
+      audience: "step_up:app", token_binding: @token.public_id, require_session_binding: true,
       allowed_methods: %w(totp passkey),
       transaction_id: transaction_id,
+      grant_jti: grant_jti,
       expires_at: expires_at,
       now: @now,
     )
@@ -233,10 +183,14 @@ class IdentityStepUpCeremonyAcmeTransactionTest < ActiveSupport::TestCase
         "grant_jti" => transaction.grant_jti,
         "result_jti" => overrides.fetch("result_jti", "result-1"),
         "scope" => transaction.required_scope,
-        "aal" => "aal2",
+        "aal" => "aal1",
         "method" => "totp",
         "verified_at" => @now.to_i,
         "challenge_id" => "challenge-1",
+        "phishing_resistant" => false,
+        "user_verified" => false,
+        "credential_ref" => "credential-public-id",
+        "full_reauthentication" => false,
         "expires_at" => transaction.expires_at.to_i,
         "iat" => @now.to_i,
         "exp" => transaction.expires_at.to_i,

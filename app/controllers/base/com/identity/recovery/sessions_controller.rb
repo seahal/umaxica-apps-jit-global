@@ -56,7 +56,9 @@ module Base
 
           def identity_email_model = VisitorEmail
 
-          def recovery_subject_from_email(email) = email&.visitor
+          def recovery_email_ceremony_model = VisitorEmailCeremonyTransaction
+
+          def recovery_subject_from_email(email) = email && Visitor.find(email.visitor_id)
 
           def recovery_surface = :com
 

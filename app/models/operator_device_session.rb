@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_device_sessions
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                         :bigint           not null, primary key
 #  dbsc_bound_at              :datetime
@@ -32,7 +32,7 @@
 #  index_operator_device_sessions_on_revoked_at                (revoked_at)
 #  index_operator_device_sessions_on_staff_id                  (staff_id)
 #
-class OperatorDeviceSession < OrgTicketRecord
+class OperatorDeviceSession < OpBaseOrgRecord
   include DeviceSessionable
 
   belongs_to :staff, class_name: "Operator", inverse_of: :operator_device_sessions
@@ -41,5 +41,8 @@ class OperatorDeviceSession < OrgTicketRecord
   # fail validation, so sign-out could not revoke such sessions.
   belongs_to :current_refresh_token, class_name: "OperatorToken", optional: true
   has_many :staff_tokens, class_name: "OperatorToken", foreign_key: :device_session_id,
-                          dependent: :nullify, inverse_of: :device_session
+                          dependent: :restrict_with_exception, inverse_of: :device_session
+  has_many :op_org_grants, foreign_key: :device_session_id,
+                           dependent: :restrict_with_exception,
+                           inverse_of: :operator_device_session
 end

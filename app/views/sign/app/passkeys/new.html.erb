@@ -3,16 +3,16 @@
 <%# Colours come from the shared tokens rather than palette steps, so this page follows the theme
     the visitor chose. It previously paired `bg-white` with `dark:bg-zinc-900`, which resolved
     against the operating system and ignored an explicit light or dark choice. %>
-<div class="flex min-h-[60vh] flex-col items-center justify-center">
-  <div class="w-full max-w-md rounded-xl border border-line bg-surface p-8 shadow-sm">
-    <h1 class="mb-2 text-2xl font-bold text-fg">Passkey Settings</h1>
-    <p class="mb-6 text-sm text-fg-muted">Domain: <code class="rounded bg-surface-muted px-2 py-1"><%= @current_host %></code></p>
+<div class="mx-auto flex w-full max-w-md flex-col gap-8">
+  <div class="flex flex-col gap-4">
+    <h1 class="text-2xl leading-snug font-semibold text-fg sm:text-3xl">Passkey Settings</h1>
+    <p class="mb-6 text-base text-fg-muted">Domain: <code class="rounded bg-surface-muted px-2 py-1"><%= @current_host %></code></p>
 
     <div id="passkey-status" class="mb-6 flex flex-col gap-2">
       <% if @passkey_exists %>
         <%# The tick is decorative; "registered" is carried by the sentence, not by the glyph or
             by colour alone. %>
-        <p class="text-sm text-fg"><span aria-hidden="true">✅</span> Passkey is registered.</p>
+        <p class="text-base text-fg"><span aria-hidden="true">✅</span> Passkey is registered.</p>
         <button id="register-btn" data-update="true" class="w-full rounded-md bg-accent px-6 py-3 font-medium text-accent-fg transition-colors hover:bg-accent-hover">
           Update Passkey (Replace)
         </button>
@@ -20,7 +20,7 @@
           Remove Passkey
         </button>
       <% else %>
-        <p class="text-sm text-fg-muted">No passkey registered.</p>
+        <p class="text-base text-fg-muted">No passkey registered.</p>
         <button id="register-btn" data-update="false" class="w-full rounded-md bg-accent px-6 py-3 font-medium text-accent-fg transition-colors hover:bg-accent-hover">
           Register Passkey
         </button>
@@ -30,7 +30,7 @@
     <%# The `hidden` attribute, not the `hidden` utility: the script clears it by setting the
         property, and a class would keep `display:none` applied after that. `role="status"`
         means the outcome is announced rather than only shown. %>
-    <div id="message" hidden role="status" class="mt-4 font-mono text-sm"></div>
+    <div id="message" hidden role="status" class="mt-4 text-base"></div>
   </div>
 </div>
 
@@ -41,7 +41,7 @@
       msg.textContent = text;
       // Tokens rather than palette steps, and `hidden` rather than an inline style, so the
       // message follows the chosen theme and the policy never sees a style attribute.
-      msg.className = `mt-4 font-mono text-sm ${isError ? 'text-danger' : 'text-fg-muted'}`;
+      msg.className = `mt-4 text-base ${isError ? 'text-error' : 'text-fg-muted'}`;
       msg.hidden = false;
     }
   }

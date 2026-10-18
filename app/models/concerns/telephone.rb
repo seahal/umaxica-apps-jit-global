@@ -4,19 +4,17 @@
 module Telephone
   extend ActiveSupport::Concern
   include TelephoneNormalization
-  include OtpLockable
+  include TelephoneOtpPolicy
 
   # Requires:
   # - number
   # - number_digest
-  # - otp_counter
-  # - otp_private_key
   # - otp_attempts_count
   #
   # Optional:
   # - number_bidx        (set only when the column exists)
   #
-  # Registers (in addition to OtpLockable):
+  # Registers:
   # - before_validation :normalize_number_from_raw
   # - before_validation :set_number_digests
   # - scope :with_number
@@ -26,43 +24,43 @@ module Telephone
   # - validates :confirm_using_mfa
   # - validates :pass_code
   #
-  # OTP attempt/lock/expiry mechanics live in OtpLockable. Telephone tables do
-  # not carry otp_last_sent_at, so OtpLockable anchors its time windows on
-  # created_at for these records, and cooldown is intentionally not provided.
-
-  # Re-published from OtpLockable so existing Telephone::CONST references keep working.
-  MAX_OTP_ATTEMPTS = OtpLockable::MAX_OTP_ATTEMPTS
-  OTP_ATTEMPT_WINDOW = OtpLockable::OTP_ATTEMPT_WINDOW
-  OTP_LOCKOUT_DURATION = OtpLockable::OTP_LOCKOUT_DURATION
+  MAX_OTP_ATTEMPTS = TelephoneOtpPolicy::MAX_OTP_ATTEMPTS
+  OTP_ATTEMPT_WINDOW = TelephoneOtpPolicy::OTP_ATTEMPT_WINDOW
+  OTP_LOCKOUT_DURATION = TelephoneOtpPolicy::OTP_LOCKOUT_DURATION
 
   attr_accessor :confirm_policy, :confirm_using_mfa, :pass_code
   attr_writer :raw_number
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     before_validation :normalize_number_from_raw
     before_validation :set_number_digests
     scope :with_number, ->(value) do
-      digest = IdentifierBlindIndex.bidx_for_telephone(value)
+      digest = IdentifierBlindIndex.bidx_for_telephone(value, realm: identifier_hmac_realm)
       digest.present? ? where(number_digest: digest) : none
     end
-
-    encrypts :number
 
     validate :validate_telephone_number
 
     validates :confirm_policy, acceptance: true,
-                               unless: Proc.new { |a| a.raw_number.blank? && a.pass_code.present? }
+                               unless: proc { |a| a.raw_number.blank? && a.pass_code.present? }
     validates :confirm_using_mfa, acceptance: true,
-                                  unless: Proc.new { |a| a.raw_number.blank? && a.pass_code.present? }
+                                  unless: proc { |a| a.raw_number.blank? && a.pass_code.present? }
     validates :pass_code, numericality: { only_integer: true },
                           length: { is: 6 },
                           presence: true,
-                          unless: Proc.new { |a| a.pass_code.blank? && a.raw_number.present? }
+                          unless: proc { |a| a.pass_code.blank? && a.raw_number.present? }
   end
 
   class_methods do
+    public
+
+    def identifier_hmac_realm
+      self::IDENTIFIER_REALM
+    end
+
     def find_by_number(value)
-      digest = IdentifierBlindIndex.bidx_for_telephone(value)
+      digest = IdentifierBlindIndex.bidx_for_telephone(value, realm: identifier_hmac_realm)
       return nil if digest.blank?
 
       find_by(number_digest: digest)
@@ -84,7 +82,7 @@ module Telephone
   end
 
   def set_number_digests
-    digest = IdentifierBlindIndex.bidx_for_telephone(raw_number)
+    digest = IdentifierBlindIndex.bidx_for_telephone(raw_number, realm: self.class.identifier_hmac_realm)
     self.number_bidx = digest if respond_to?(:number_bidx=)
     self.number_digest = digest if respond_to?(:number_digest=)
   end

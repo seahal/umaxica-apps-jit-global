@@ -15,6 +15,9 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
     "ignored rescue nil" => /rescue\s+nil\b/,
     "thread-local request state" => /\bThread\.current\b/,
     "class variable request state" => /@@[A-Za-z_]/,
+    # History encryption is on globally (config/initializers/inertia_rails.rb). A per-render or
+    # per-controller `encrypt_history:` is either redundant or an opt-out, so neither may appear.
+    "Inertia history encryption override" => /\bencrypt_history:/,
   }.freeze
 
   SHARED_SELF_SERVICE_RENDER_PATTERN = /render\s+["']acme\/shared\/self_service\/show["']/.freeze
@@ -88,21 +91,15 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
   SENSITIVE_SKIP_PATTERN =
     /skip_before_action\s+:(?:enforce_verification_if_required|enforce_step_up_prereqs!|authenticate_client!)/
 
+  # Scoped Auth cancellation and Email ceremonies no longer skip these callbacks: their explicit
+  # admitted context and ownership policy replace the former Auth root prerequisite.
   SENSITIVE_SKIP_ALLOWLIST = %w(
-    app/controllers/auth/app/verification/base_controller.rb
-    app/controllers/auth/app/verification/emails_controller.rb
-    app/controllers/auth/com/verification/base_controller.rb
-    app/controllers/auth/com/verification/emails_controller.rb
-    app/controllers/auth/org/verification/base_controller.rb
     app/controllers/base/app/edge/v0/cookies_controller.rb
     app/controllers/base/com/edge/v0/cookies_controller.rb
     app/controllers/base/org/edge/v0/cookies_controller.rb
-    app/controllers/core/app/edge/v0/cookies_controller.rb
-    app/controllers/core/app/edge/v0/dbsc_controller.rb
-    app/controllers/core/com/edge/v0/cookies_controller.rb
-    app/controllers/core/com/edge/v0/dbsc_controller.rb
-    app/controllers/core/org/edge/v0/cookies_controller.rb
-    app/controllers/core/org/edge/v0/dbsc_controller.rb
+    app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
+    app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
+    app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
   ).freeze
 
   test "verification and client-auth before_actions are skipped only in the reviewed allowlist" do

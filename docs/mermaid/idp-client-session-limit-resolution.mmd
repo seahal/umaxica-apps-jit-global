@@ -1,0 +1,41 @@
+stateDiagram-v2
+    %% Durable child of ClientSignInFlow; the parent stays SESSION_ISSUANCE_PENDING.
+    state "PENDING id=10" as PENDING
+    state "SESSION_SELECTED id=20" as SESSION_SELECTED
+    state "RESOLVED id=100" as RESOLVED
+    state "EXPIRED id=910" as EXPIRED
+    state "CANCELLED id=920" as CANCELLED
+
+    [*] --> PENDING: issue!
+    PENDING --> SESSION_SELECTED: select_session!
+    PENDING --> RESOLVED: explicit POST continue / finalize_for_session_issuance!
+    PENDING --> EXPIRED: expiry
+    PENDING --> CANCELLED: cancel!
+    SESSION_SELECTED --> RESOLVED: explicit POST continue / finalize_for_session_issuance!
+    SESSION_SELECTED --> EXPIRED: expiry
+    SESSION_SELECTED --> CANCELLED: cancel!
+
+    note right of PENDING
+        Client actor, parent flow, OIDC transaction when present,
+        browser binding and challenge are checked under Ticket locks.
+        At most one open child exists per parent and at most one
+        live waiting lease exists per actor. Terminal rows release
+        waiting_slot; the database partial unique index enforces it.
+    end note
+    note left of PENDING
+        R2-WU01 implemented (nine.md P-8): the open child is the
+        app waiting unit (N=2, slot N+1). Under the canonical actor
+        lock and OP writer, elapsed open rows become EXPIRED before
+        issue! claims waiting_slot=1. A second live lease raises the
+        named occupied-slot outcome; R2-WU02 maps it at the root
+        admission boundary to the existing generic :session_limit_conflict
+        result with HTTP 403, without changing the existing flow or lease.
+        The waiting unit may only select, explicitly continue the bound flow, or cancel;
+        it never reaches MFA reset or any full-access page. Selection does not revoke.
+    end note
+    note right of RESOLVED
+        AuthenticationBase#log_in finalizes the parent and child in one OP transaction.
+        If capacity is already free, selected facts are retained and no session is revoked.
+        If capacity is full, the selected target is revalidated and revoked atomically.
+        Terminal states release waiting_slot and are immutable.
+    end note

@@ -35,8 +35,10 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     auth/app auth/com auth/org
     base/app base/com base/org
     core/app core/com core/org
-    side/app side/com side/org
+    edit/org
+    warp/app warp/com warp/org
     palm/app
+    tech/org
   ).freeze
 
   # Targets deliberately outside the contract. An unexplained absence is indistinguishable from the
@@ -44,7 +46,7 @@ class RiRoutingContractTest < ActiveSupport::TestCase
 
   # Infrastructure editions: health probes, CSP sinks and root stubs only. They serve no regional
   # HTML and are not reachable by ordinary users.
-  RI_EXEMPT_INFRASTRUCTURE_TARGETS = %w(base/dev base/net core/dev core/net).freeze
+  RI_EXEMPT_INFRASTRUCTURE_TARGETS = %w(base/dev base/net core/dev core/net guid/net).freeze
 
   # Publishing content surfaces. Their language comes from the published document
   # (PublishingContentRendering), not from request context, so they do not carry `ri`.
@@ -55,7 +57,8 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     news/app news/com news/org
   ).freeze
 
-  RI_EXEMPT_TARGETS = (RI_EXEMPT_INFRASTRUCTURE_TARGETS + RI_EXEMPT_CONTENT_TARGETS).freeze
+  RI_EXEMPT_TARGETS =
+    (RI_EXEMPT_INFRASTRUCTURE_TARGETS + RI_EXEMPT_CONTENT_TARGETS).freeze
 
   # Controllers inside a participating target that legitimately do not run `set_region`. Every entry
   # is a machine-to-machine endpoint: protocol redirects and token/cookie transports that must not
@@ -66,48 +69,33 @@ class RiRoutingContractTest < ActiveSupport::TestCase
   RI_SKIP_ALLOWLIST = %w(
     app/controllers/auth/app/edge/v0/token/checks_controller.rb
     app/controllers/auth/app/edge/v0/token/dbsc_controller.rb
-    app/controllers/auth/app/oidc/authorizations_controller.rb
-    app/controllers/auth/app/oidc/callbacks_controller.rb
     app/controllers/auth/app/omniauth/omniauth_callbacks_controller.rb
     app/controllers/auth/com/edge/v0/token/checks_controller.rb
     app/controllers/auth/com/edge/v0/token/dbsc_controller.rb
-    app/controllers/auth/com/oidc/authorizations_controller.rb
-    app/controllers/auth/com/oidc/callbacks_controller.rb
     app/controllers/auth/org/edge/v0/token/checks_controller.rb
     app/controllers/auth/org/edge/v0/token/dbsc_controller.rb
-    app/controllers/auth/org/oidc/authorizations_controller.rb
-    app/controllers/auth/org/oidc/callbacks_controller.rb
     app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb
     app/controllers/base/app/edge/v0/cookies_controller.rb
     app/controllers/base/app/oauth/authorizations_controller.rb
-    app/controllers/base/app/oidc/authorizations_controller.rb
     app/controllers/base/app/oidc/callbacks_controller.rb
     app/controllers/base/com/edge/v0/cookies_controller.rb
     app/controllers/base/com/oauth/authorizations_controller.rb
-    app/controllers/base/com/oidc/authorizations_controller.rb
     app/controllers/base/com/oidc/callbacks_controller.rb
     app/controllers/base/org/edge/v0/cookies_controller.rb
     app/controllers/base/org/oauth/authorizations_controller.rb
-    app/controllers/base/org/oidc/authorizations_controller.rb
     app/controllers/base/org/oidc/callbacks_controller.rb
-    app/controllers/core/app/edge/v0/cookies_controller.rb
-    app/controllers/core/app/edge/v0/dbsc_controller.rb
-    app/controllers/core/app/oidc/authorizations_controller.rb
+    app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/app/oidc/callbacks_controller.rb
-    app/controllers/core/com/edge/v0/cookies_controller.rb
-    app/controllers/core/com/edge/v0/dbsc_controller.rb
-    app/controllers/core/com/oidc/authorizations_controller.rb
+    app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/com/oidc/callbacks_controller.rb
-    app/controllers/core/org/edge/v0/cookies_controller.rb
-    app/controllers/core/org/edge/v0/dbsc_controller.rb
-    app/controllers/core/org/oidc/authorizations_controller.rb
+    app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/org/oidc/callbacks_controller.rb
-    app/controllers/side/app/oidc/authorizations_controller.rb
-    app/controllers/side/app/oidc/callbacks_controller.rb
-    app/controllers/side/com/oidc/authorizations_controller.rb
-    app/controllers/side/com/oidc/callbacks_controller.rb
-    app/controllers/side/org/oidc/authorizations_controller.rb
-    app/controllers/side/org/oidc/callbacks_controller.rb
+    app/controllers/edit/org/oidc/callbacks_controller.rb
+    app/controllers/palm/app/oidc/callbacks_controller.rb
+    app/controllers/tech/org/oidc/callbacks_controller.rb
+    app/controllers/warp/app/oidc/callbacks_controller.rb
+    app/controllers/warp/com/oidc/callbacks_controller.rb
+    app/controllers/warp/org/oidc/callbacks_controller.rb
   ).freeze
 
   # Controllers that render HTML on a participating target and still run without region

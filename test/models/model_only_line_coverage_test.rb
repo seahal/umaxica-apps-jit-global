@@ -9,9 +9,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     configuration = Actor::Configuration.new(feature: "enabled")
     same = Actor::Configuration.new(feature: "enabled")
 
-    # rubocop:disable Minitest/AssertNil,Minitest/AssertPredicate
-    assert null_value.nil?
-    # rubocop:enable Minitest/AssertNil,Minitest/AssertPredicate
+    assert_withheld { null_value.nil? }
     assert_equal null_value, Actor::Configuration::NullValue.new
     assert_respond_to null_value, :anything
     assert_same null_value, null_value.anything.deeply.missing
@@ -85,8 +83,8 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
       record.discard_now!(purge_after: 1.day, now: now)
     end
 
-    assert_equal record.created_at, updates.last[:discarded_at]
-    assert_operator updates.last[:purged_at], :>, updates.last[:discarded_at]
+    assert_equal record.created_at, updates.last[:discard_at]
+    assert_operator updates.last[:purge_eligible_at], :>, updates.last[:discard_at]
   end
 
   test "preference value records apply their default option ids" do
@@ -165,101 +163,79 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "session limit transaction creates finds and completes every remaining state" do
-    created_attributes = nil
-    relation = Object.new
-    relation.define_singleton_method(:active_at) { |_now| self }
-    relation.define_singleton_method(:find_by) { |**_attributes| nil }
-    created = ClientSessionLimitResolutionTransaction.new(status: "pending", expires_at: 1.minute.from_now)
-    actor = Client.new(public_id: "client-session-limit")
-    oidc_transaction = Struct.new(:id).new(321)
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    digest = ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32))
+    issuance = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow,
+      actor: actor,
+      browser_binding_digest: digest,
+    )
+    record = issuance.transaction
 
-    ClientSessionLimitResolutionTransaction.stub(:open_status, relation) do
-      ClientSessionLimitResolutionTransaction.stub(
-        :create!,
-        ->(**attributes) { created_attributes = attributes; created },
-      ) do
-        issuance = ClientSessionLimitResolutionTransaction.issue_for_oidc!(
-          actor: actor, oidc_transaction: oidc_transaction,
-        )
+    assert_predicate record, :pending?
+    assert_equal record.id, ClientSessionLimitResolutionTransaction.find_active_by_challenge(issuance.challenge).id
+    token = ClientToken.create!(user: actor)
+    record.select_session!(
+      actor: actor,
+      challenge: issuance.challenge,
+      session_ref: token.public_id,
+      browser_binding_digest: digest,
+    )
 
-        assert_same created, issuance.transaction
-      end
+    assert_equal token.public_id, record.reload.selected_session_ref
+    record.resolve!(actor: actor, challenge: issuance.challenge, browser_binding_digest: digest)
+
+    assert_predicate record.reload, :resolved?
+    assert_not_nil record.finalized_at
+    assert_raises(FlowInvalidTransition) do
+      record.cancel!(actor: actor, challenge: issuance.challenge, browser_binding_digest: digest)
     end
+    another_flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlowState::SESSION_ISSUANCE_PENDING,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    another = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: another_flow,
+      actor: actor,
+      browser_binding_digest: digest,
+    )
+    another.transaction.cancel!(actor: actor, challenge: another.challenge, browser_binding_digest: digest)
 
-    assert_equal "pending", created_attributes[:status]
-
-    found = Object.new
-    find_relation = Object.new
-    find_relation.define_singleton_method(:active_at) { |_now| self }
-    find_relation.define_singleton_method(:find_by) { |**_attributes| found }
-
-    ClientSessionLimitResolutionTransaction.stub(:open_status, find_relation) do
-      assert_same found, ClientSessionLimitResolutionTransaction.find_active_by_challenge("challenge")
-    end
-
-    updates = []
-    created.stub(:update!, ->(attributes) { updates << attributes }) do
-      now = Time.current
-      created.status = "resolved"
-
-      assert_predicate created, :resolved?
-      created.status = "cancelled"
-
-      assert_predicate created, :cancelled?
-      created.mark_session_selected!(session_ref: 123, now: now)
-      created.finalize!(now: now)
-      created.cancel!(now: now)
-    end
-
-    assert_equal "123", updates.first[:selected_session_ref]
-    assert_equal "resolved", updates.second[:status]
-    assert_equal "cancelled", updates.third[:status]
+    assert_predicate another.transaction.reload, :cancelled?
+    assert_predicate another_flow.reload, :sign_in_session_issuance_pending?
   end
 
   test "oidc token usage scope and rotation update the refresh token family" do
-    assert_kind_of ActiveRecord::Relation, ClientTokenUsage.currently_usable_at(Time.current)
+    assert_kind_of ActiveRecord::Relation, OpAppGrant.currently_usable_at(Time.current)
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(user: actor)
+    usage = OpAppGrant.create!(
+      client_token: root, oidc_client_id: "base-app-ww", oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpAppGrant.database_now,
+      refresh_token_expires_at: OpAppGrant.database_now + 10.minutes,
+    )
+    previous = usage.issue_refresh_token!
+    digest = usage.refresh_token_digest
+    generation = usage.refresh_generation
+    root_generation = root.reload.refresh_token_generation
+    rotated = usage.rotate_refresh_token!(expires_at: OpAppGrant.database_now + 10.minutes)
 
-    usage = ClientTokenUsage.new(public_id: "usage-public-id", refresh_token_digest: "previous")
-    updates = []
-    usage.stub(:with_lock, ->(&block) { block.call }) do
-      usage.stub(:active?, true) do
-        usage.stub(:generate_refresh_token, ["raw-token", "verifier"]) do
-          usage.stub(:encoded_refresh_token_digest, "next-digest") do
-            usage.stub(:update!, ->(attributes) { updates << attributes }) do
-              assert_equal "raw-token", usage.rotate_refresh_token!(expires_at: 1.hour.from_now)
-            end
-          end
-        end
-      end
-    end
-
-    assert_equal "previous", updates.last[:previous_refresh_token_digest]
-    assert_equal "next-digest", updates.last[:refresh_token_digest]
-  end
-
-  test "secret credential one time verification consumes its final use" do
-    credential = ClientSecretCredential.new(uses_remaining: 1)
-
-    credential.stub(:with_lock, ->(&block) { block.call }) do
-      credential.stub(:reload, credential) do
-        credential.stub(:authenticate, true) do
-          credential.stub(:sign_in_status_allowed?, true) do
-            credential.stub(:sign_in_kind_allowed?, true) do
-              credential.stub(:expired_for_secret_credential_sign_in?, false) do
-                credential.stub(:one_time_secret_credential?, true) do
-                  credential.stub(:save!, true) do
-                    assert credential.verify_for_secret_credential_sign_in!("secret")
-                  end
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-
-    assert_equal 0, credential.uses_remaining
-    assert_equal ClientSecretCredential.status_id_for(:used), credential.user_secret_status_id
+    assert_not_equal previous, rotated
+    assert_equal digest, usage.reload.previous_refresh_token_digest
+    assert_not_equal digest, usage.refresh_token_digest
+    assert_equal generation + 1, usage.refresh_generation
+    assert_equal root_generation, root.reload.refresh_token_generation
   end
 
   test "avatar group and memberships expose state and timestamp validation" do
@@ -308,14 +284,15 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal ClientProcessorErasureNotification.status_id_for("PENDING"), notification.status_id
     assert_predicate notification.requested_at, :present?
 
-    updates = []
-    notification.stub(:update!, ->(attributes) { updates << attributes }) do
-      notification.mark_notified!
-      notification.mark_failed!(code: :temporary, message: "retry")
-    end
+    assert_equal 1, notification.delivery_generation
 
-    assert_equal ClientProcessorErasureNotification.status_id_for("NOTIFIED"), updates.first[:status_id]
-    assert_equal ClientProcessorErasureNotification.status_id_for("FAILED"), updates.last[:status_id]
+    notification.status_id = ClientProcessorErasureNotification.status_id_for("RETRYABLE_FAILURE")
+
+    assert_predicate notification, :retryable_failure?
+
+    notification.status_id = ClientProcessorErasureNotification.status_id_for("PERMANENT_FAILURE")
+
+    assert_predicate notification, :permanent_failure?
 
     notification.status_id = ClientProcessorErasureNotification.status_id_for("SKIPPED")
 
@@ -350,27 +327,28 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "sign in flow recognizes legacy states and advances to return" do
-    flow = ClientSignInFlow.new
-    flow.stub(:cycle_status?, true) do
-      assert_predicate flow, :sign_in_primary_pending?
-      assert_predicate flow, :sign_in_dashboard_pending?
-      assert_predicate flow, :sign_in_return_pending?
-    end
+    flow = ClientSignInFlow.new(state_id: ClientSignInFlowState::PRIMARY_PENDING)
 
-    calls = []
-    flow.stub(:transition_sign_in_to!, ->(*arguments, **options) { calls << [arguments, options] }) do
-      flow.advance_sign_in_to_return!
-    end
+    assert_predicate flow, :sign_in_primary_pending?
+    assert_not_respond_to flow, :sign_in_dashboard_pending?
+    assert_not_respond_to flow, :sign_in_return_pending?
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      state_id: ClientSignInFlowState::CHECKPOINT_PENDING, issued_at: now, expires_at: now + 5.minutes,
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+    )
+    flow.advance_sign_in_to_selector!
 
-    assert_equal "RETURN_PENDING", calls.last.first.first
+    assert_predicate flow.reload, :sign_in_selector_pending?
+    assert_raises(FlowInvalidTransition) { flow.advance_sign_in_to_mfa! }
   end
 
   test "step up purge scope and connection owners cover every store" do
     now = Time.zone.parse("2026-07-18 08:00:00")
 
     assert_kind_of ActiveRecord::Relation, ClientStepUpCeremonyTransaction.purgeable_at(now)
-    assert_equal OrgTicketRecord, OperatorStepUpCeremonyTransaction.connection_owner
-    assert_equal ComTicketRecord, VisitorStepUpCeremonyTransaction.connection_owner
+    assert_equal OpBaseOrgRecord, OperatorStepUpCeremonyTransaction.connection_owner
+    assert_equal OpBaseComRecord, VisitorStepUpCeremonyTransaction.connection_owner
   end
 
   test "small public model APIs and reference defaults are covered by model tests" do
@@ -389,8 +367,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal "public", Client.new(public_id: "public").to_param
     assert_equal "nothing", AppPreference.new.adult_content_gate
     assert_equal "nothing", ClientPreference.new.adult_content_gate
-    assert_predicate ClientSecretCredential.new(user_secret_kind_id: ClientSecretCredentialKind::ONE_TIME),
-                     :one_time_secret_credential?
+    assert_not ClientSecretCredential.new.available_at?(at: Client.database_now)
   end
 
   test "email lookup and ceremony candidate validation cover valid and invalid shapes" do
@@ -448,7 +425,12 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     created = Object.new
     attributes = nil
 
-    ClientWithdrawalCeremony.stub(:create!, ->(**values) { attributes = values; created }) do
+    ClientWithdrawalCeremony.stub(
+      :create!, ->(**values) {
+                  attributes = values
+                  created
+                },
+    ) do
       assert_same created, ClientWithdrawalCeremony.issue!(subject: subject)
     end
     assert_same subject, attributes[:client]
@@ -459,57 +441,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     )
 
     assert_predicate ceremony, :expired?
-  end
-
-  test "secret credential usability accepts a positive one-time counter" do
-    credential = ClientSecretCredential.new(uses_remaining: 1)
-    credential.stub(:sign_in_status_allowed?, true) do
-      credential.stub(:sign_in_kind_allowed?, true) do
-        credential.stub(:expired_for_secret_credential_sign_in?, false) do
-          credential.stub(:permanent_secret_credential?, false) do
-            assert_predicate credential, :usable_for_secret_credential_sign_in?
-          end
-        end
-      end
-    end
-  end
-
-  test "step up result collision is translated to the ceremony contract error" do
-    now = Time.zone.parse("2026-07-18 08:00:00")
-    first = ClientStepUpCeremonyTransaction.create_transaction!(
-      actor_ref: "collision-actor-1", session_ref: "collision-session-1",
-      required_scope: "settings_email", required_aal: "aal2", allowed_methods: %w(totp),
-      transaction_id: "collision-transaction-1", grant_jti: "collision-grant-1", now: now,
-    )
-    first.consume_result!(
-      result_jti: "collision-result", method: "totp", aal: "aal2",
-      verified_at: now, consumed_at: now,
-    )
-    second = ClientStepUpCeremonyTransaction.create_transaction!(
-      actor_ref: "collision-actor-2", session_ref: "collision-session-2",
-      required_scope: "settings_email", required_aal: "aal2", allowed_methods: %w(totp),
-      transaction_id: "collision-transaction-2", grant_jti: "collision-grant-2", now: now,
-    )
-
-    assert_raises(IdentityStepUpCeremonyContract::Error) do
-      second.consume_result!(
-        result_jti: "collision-result", method: "totp", aal: "aal2",
-        verified_at: now, consumed_at: now,
-      )
-    end
-  end
-
-  test "oidc authorization resume URL delegates to the configured Acme origin" do
-    origin = Object.new
-    origin.define_singleton_method(:authorization_endpoint) do |query:|
-      "https://acme.example.test/authorize?login_challenge=#{query.fetch(:login_challenge)}"
-    end
-    transaction = ClientOidcAuthorizationTransaction.new(login_challenge: "login-challenge")
-
-    Oidc::AcmeServiceOrigin.stub(:from, origin) do
-      assert_equal "https://acme.example.test/authorize?login_challenge=login-challenge",
-                   transaction.acme_resume_url
-    end
   end
 
   test "org preference chronicle defaults its actor to its subject" do
@@ -534,12 +465,12 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "step up transaction exposes scopes claims and valid state transitions" do
-    now = Time.zone.parse("2026-07-18 08:00:00")
+    now = ClientStepUpCeremonyTransaction.database_now
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor-model-coverage",
       session_ref: "session-model-coverage",
       required_scope: "settings_email",
-      required_aal: "aal2",
+      required_aal: "none",
       allowed_methods: %w(totp totp passkey),
       resource_ref: "resource-model-coverage",
       return_to: "/settings/email",
@@ -561,16 +492,14 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
                    now: now,
                  )
 
-    consumed = transaction.consume_result!(
-      result_jti: "model-coverage-result",
-      method: "totp",
-      aal: "aal2",
-      verified_at: now,
-      consumed_at: now,
+    transaction.record_verification!(
+      method: "totp", aal: "aal1", phishing_resistant: false, user_verified: false,
+      verified_at: now, verified_credential_ref: SecureRandom.uuid,
     )
+    transaction.with_lock { transaction.commit_consumption!(now: ClientStepUpCeremonyTransaction.database_now) }
 
-    assert_predicate consumed, :consumed?
-    assert_includes ClientStepUpCeremonyTransaction.consumed, consumed
+    assert_predicate transaction.reload, :consumed?
+    assert_includes ClientStepUpCeremonyTransaction.consumed, transaction
   end
 
   test "step up cancellation scopes and validations reject invalid state" do
@@ -579,7 +508,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
       actor_ref: "actor-model-cancel",
       session_ref: "session-model-cancel",
       required_scope: "settings_email",
-      required_aal: "aal2",
+      required_aal: "none",
       allowed_methods: %w(totp),
       transaction_id: "model-coverage-cancel",
       grant_jti: "model-coverage-cancel-grant",
@@ -587,10 +516,10 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
       now: now,
     )
 
-    canceled = transaction.cancel!(canceled_at: now)
+    transaction.commit_cancellation!(now: now)
 
-    assert_predicate canceled, :canceled?
-    assert_includes ClientStepUpCeremonyTransaction.canceled, canceled
+    assert_predicate transaction.reload, :canceled?
+    assert_includes ClientStepUpCeremonyTransaction.canceled, transaction
 
     invalid = ClientStepUpCeremonyTransaction.new(
       surface: "com",

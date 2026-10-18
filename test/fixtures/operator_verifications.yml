@@ -2,12 +2,12 @@
 # == Schema Information
 #
 # Table name: operator_verifications
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id             :bigint           not null, primary key
-#  discarded_at   :datetime         default(Infinity), not null
+#  discard_at   :datetime         default(Infinity), not null
 #  last_used_at   :datetime
-#  purged_at      :datetime         default(Infinity), not null
+#  purge_eligible_at      :datetime         default(Infinity), not null
 #  token_digest   :string           not null
 #  created_at     :datetime         not null
 #  updated_at     :datetime         not null
@@ -26,12 +26,12 @@ _fixture:
   model_class: OperatorVerification
 
 # Table name: staff_verifications
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id             :bigint           not null, primary key
-#  discarded_at      :datetime         default(Infinity), not null
+#  discard_at      :datetime         default(Infinity), not null
 #  last_used_at   :datetime
-#  purged_at       :datetime         default(Infinity), not null
+#  purge_eligible_at       :datetime         default(Infinity), not null
 #  token_digest   :string           not null
 #  created_at     :datetime         not null
 #  updated_at     :datetime         not null

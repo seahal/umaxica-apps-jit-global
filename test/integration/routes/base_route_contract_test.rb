@@ -117,17 +117,17 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
         method: :get,
       )
 
-      assert_equal "base/app/dashboards", recognized[:controller]
+      assert_equal "base/app/roots", recognized[:controller]
       assert_equal "show", recognized[:action]
 
-      recognized = Rails.application.routes.recognize_path(
-        "http://#{host}/oidc/authorization",
-        method: :get,
-      )
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path(
+          "http://#{host}/oidc/authorization",
+          method: :get,
+        )
+      end
 
-      assert_equal "base/app/oidc/authorizations", recognized[:controller]
-      assert_equal "show", recognized[:action]
-
+      # The Base self-RP receives its authorization response here (two.md D-50).
       recognized = Rails.application.routes.recognize_path(
         "http://#{host}/oidc/callback",
         method: :get,
@@ -196,16 +196,22 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
       assert_equal "base/app/sign_outs", recognized[:controller]
       assert_equal "create", recognized[:action]
 
-      recognized = Rails.application.routes.recognize_path(
-        "http://#{host}/sign/out/complete",
-        method: :get,
-      )
-
-      assert_equal "base/app/sign_outs/completions", recognized[:controller]
-      assert_equal "show", recognized[:action]
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path(
+          "http://#{host}/lobby",
+          method: :get,
+        )
+      end
 
       assert_raises(ActionController::RoutingError) do
-        Rails.application.routes.recognize_path("http://#{host}/sign/out", method: :delete)
+        Rails.application.routes.recognize_path("http://#{host}/sign/out/complete", method: :get)
+      end
+
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path(
+          "http://#{host}/sign/out",
+          method: :delete,
+        )
       end
 
       recognized = Rails.application.routes.recognize_path(
@@ -282,17 +288,17 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
       method: :get,
     )
 
-    assert_equal "base/com/dashboards", recognized[:controller]
+    assert_equal "base/com/roots", recognized[:controller]
     assert_equal "show", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/oidc/authorization",
-      method: :get,
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_COM_HOST}/oidc/authorization",
+        method: :get,
+      )
+    end
 
-    assert_equal "base/com/oidc/authorizations", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
+    # The Base self-RP receives its authorization response here (two.md D-50).
     recognized = Rails.application.routes.recognize_path(
       "http://#{BASE_COM_HOST}/oidc/callback",
       method: :get,
@@ -329,16 +335,22 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal "base/com/sign_outs", recognized[:controller]
     assert_equal "create", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_COM_HOST}/sign/out/complete",
-      method: :get,
-    )
-
-    assert_equal "base/com/sign_outs/completions", recognized[:controller]
-    assert_equal "show", recognized[:action]
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_COM_HOST}/lobby",
+        method: :get,
+      )
+    end
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/sign/out", method: :delete)
+      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/sign/out/complete", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_COM_HOST}/sign/out",
+        method: :delete,
+      )
     end
 
     recognized = Rails.application.routes.recognize_path(
@@ -414,17 +426,17 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
       method: :get,
     )
 
-    assert_equal "base/org/dashboards", recognized[:controller]
+    assert_equal "base/org/roots", recognized[:controller]
     assert_equal "show", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_ORG_HOST}/oidc/authorization",
-      method: :get,
-    )
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_ORG_HOST}/oidc/authorization",
+        method: :get,
+      )
+    end
 
-    assert_equal "base/org/oidc/authorizations", recognized[:controller]
-    assert_equal "show", recognized[:action]
-
+    # The Base self-RP receives its authorization response here (two.md D-50).
     recognized = Rails.application.routes.recognize_path(
       "http://#{BASE_ORG_HOST}/oidc/callback",
       method: :get,
@@ -461,16 +473,22 @@ class BaseRouteContractTest < ActionDispatch::IntegrationTest
     assert_equal "base/org/sign_outs", recognized[:controller]
     assert_equal "create", recognized[:action]
 
-    recognized = Rails.application.routes.recognize_path(
-      "http://#{BASE_ORG_HOST}/sign/out/complete",
-      method: :get,
-    )
-
-    assert_equal "base/org/sign_outs/completions", recognized[:controller]
-    assert_equal "show", recognized[:action]
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_ORG_HOST}/lobby",
+        method: :get,
+      )
+    end
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/sign/out", method: :delete)
+      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/sign/out/complete", method: :get)
+    end
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "http://#{BASE_ORG_HOST}/sign/out",
+        method: :delete,
+      )
     end
 
     recognized = Rails.application.routes.recognize_path(

@@ -33,6 +33,7 @@ class SocialAuthSignupFinalizerFailureTest < ActiveSupport::TestCase
         assert_raises(SocialAuth::ProviderError) do
           SocialAuthSignupFinalizer.call(
             principal: principal, credential_candidate: nil, birthdate: 30.years.ago.to_date,
+            ceremony_started_at: Time.current,
           )
         end
       end

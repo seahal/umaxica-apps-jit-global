@@ -79,8 +79,8 @@ by Rails. Direct `Actor.session` reads are removed.
 
 Decoded access-token claims are not a general application API. `Actor.token` is removed. If a
 low-level auth or policy boundary must inspect raw access-token claims, use
-`Actor.authn.access_claims` and prefer adding typed authentication readers such as `acr`, `amr`,
-`restricted?`, or `verified?` instead of spreading raw claim access.
+`Actor.authn.access_claims` and prefer adding typed authentication readers such as `acr`, `amr`, or
+`verified?` instead of spreading raw claim access.
 
 Authorization keeps the existing Action Policy context key `:user`. `Actor` is the request-context
 facade, but this ADR does not rename Action Policy's authorization context to `:actor`. Policy
@@ -136,3 +136,11 @@ current intent.
 - `adr/preference-soft-bubble-doctrine.md` — preference value-object doctrine; its read-side API is
   superseded from `Current::Preference` / `Current.preference` to `Actor::Preference` /
   `Actor.preferences`.
+
+## R2-WU04 implementation amendment (2026-10-16)
+
+The retired session-limit token status is not request-local authentication context. The unused
+`Actor::Authentication#restricted?` reader and its construction flag were removed. Historical token
+status 103 remains a durable status-row value for retention and inspection, but it is rejected
+before principal creation and is never exposed through `Actor.authn`. Emergency authentication
+context continues to come from the typed `authn_ctx` claim and the durable operator-token context.

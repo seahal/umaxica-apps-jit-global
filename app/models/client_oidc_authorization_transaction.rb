@@ -4,13 +4,16 @@
 # == Schema Information
 #
 # Table name: client_oidc_authorization_transactions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                         :bigint           not null, primary key
 #  acr                        :string
 #  actor_ref                  :string
 #  auth_method                :string
 #  authenticated_at           :datetime
+#  authorization_grant_redeemed_at :datetime
+#  base_finalized_at          :datetime
+#  browser_session_ref        :string
 #  code_challenge             :string           not null
 #  code_challenge_method      :string           not null
 #  consumed_at                :datetime
@@ -20,6 +23,10 @@
 #  login_challenge_expires_at :datetime         not null
 #  nonce                      :string           not null
 #  redirect_uri               :string           not null
+#  result_consumed_at         :datetime
+#  result_digest              :string
+#  result_expires_at          :datetime
+#  result_generation          :integer          default(0), not null
 #  response_type              :string           not null
 #  scope                      :string           not null
 #  session_ref                :string
@@ -37,8 +44,12 @@
 #  idx_on_login_challenge_91d464d261                               (login_challenge) UNIQUE
 #  index_client_oidc_authorization_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class ClientOidcAuthorizationTransaction < AppTicketRecord
+class ClientOidcAuthorizationTransaction < OpBaseAppRecord
   include OidcAuthorizationTransactionable
 
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+
   oidc_authorization_surface "app"
+
+  belongs_to :secret_sign_in_flow, class_name: "ClientSignInFlow", optional: true
 end

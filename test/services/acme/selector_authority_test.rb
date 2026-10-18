@@ -40,7 +40,8 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
       subject: persona,
       avatar_params: { moniker: "Second Avatar" },
       handle_params: { handle: "second-#{SecureRandom.hex(5)}" },
-      organization_public_id: enterprise.public_id,
+      owner_surface: "app",
+      owner_collective_public_id: enterprise.public_id,
     )
 
     assert_predicate result, :success?
@@ -49,6 +50,17 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
 
     assert_equal "selection_required", result[:status]
     assert_equal 2, result[:accounts].size
+  end
+
+  test "com automatic selection returns its authenticated Dashboard" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    token = VisitorToken.create!(visitor: visitor)
+    BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
+    result = BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
+
+    assert_equal "selected", result[:status]
+    assert_equal "/dashboard", result[:next]
+    assert_predicate token.reload, :selected_actor_context?
   end
 
   test "rejects another identity selection" do
@@ -87,5 +99,42 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
     assert_raises BaseSelectorAuthority::InvalidSelection do
       BaseSelectorAuthority.select(surface: :app, principal: @user, session: @token, params: params)
     end
+  end
+
+  test "org selector keeps Avatar optional and can select a Bureau owned Avatar" do
+    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    token = OperatorToken.create!(staff: operator)
+    bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
+    selector = BaseSelectorAuthority.new(surface: :org, principal: operator, session: token)
+
+    initial_candidates = selector.selectable_candidates
+
+    assert_equal 1, initial_candidates.size
+    assert_nil initial_candidates.first.fetch(:avatar)
+
+    created = AvatarProvisioning::Create.call(
+      actor: operator,
+      subject_type: :agent,
+      subject: bootstrap.account,
+      avatar_params: { moniker: "Org Avatar" },
+      handle_params: { handle: "org-#{SecureRandom.hex(5)}" },
+      owner_surface: "org",
+      owner_collective_public_id: bootstrap.collective.public_id,
+    )
+
+    assert_predicate created, :success?
+
+    avatar_candidate = selector.selectable_candidates.find { |candidate| candidate.dig(:public, :avatar_public_id) }
+
+    assert_equal created.avatar.public_id, avatar_candidate.dig(:public, :avatar_public_id)
+    result = BaseSelectorAuthority.select(
+      surface: :org,
+      principal: operator,
+      session: token,
+      params: avatar_candidate.fetch(:public),
+    )
+
+    assert_equal "selected", result.fetch(:status)
+    assert_equal created.avatar.public_id, token.reload.selected_avatar_public_id
   end
 end

@@ -266,4 +266,7 @@ module ChainSeal
 
     ActiveSupport::SecurityUtils.secure_compare(left, right)
   end
+
+  private_class_method :block_hash_for, :sign_block_hash, :validate_seal!, :validate_kid!, :validate_hash_hex!,
+                       :validate_private_key!, :validate_ec_key!, :block_hash_bytes, :asn1_to_raw_signature
 end

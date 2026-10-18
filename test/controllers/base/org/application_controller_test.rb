@@ -13,7 +13,9 @@ module Base
         assert_includes controller.class, RateLimit
         assert_includes controller.class, ::PreferenceGlobal
         assert_includes controller.class, ::PreferenceAdoption
-        assert_includes controller.class, ::AuthenticationOperator
+        assert_includes controller.class, ::BrowserRpAuthentication
+        assert_includes controller.class, ::BrowserRpSafeRequestRefresh
+        assert_includes controller.class, ::BrowserRpUnsafeRequestRefresh
         assert_includes controller.class, ::AuthorizationOperator
         assert_includes controller.class, ::VerificationOperator
         assert_includes controller.class, ActionPolicy::Controller
@@ -37,12 +39,13 @@ module Base
         before_filters = callbacks.select { |c| c.kind == :before }.map(&:filter)
 
         expected_order = %i(
+          authenticate_browser_rp_unsafe_request!
+          authenticate_browser_rp_safe_request!
           set_current_context
           reset_flash
           set_preferences_cookie
           resolve_param_context
           set_region
-          transparent_refresh_access_token
           set_current_actor
           apply_localization_preferences
           set_color_theme
@@ -60,26 +63,6 @@ module Base
         around_filters = callbacks.select { |c| c.kind == :around }.map(&:filter)
 
         assert_includes around_filters, :with_actor_lifecycle
-      end
-
-      test "has oidc_client_id method" do
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_client_id
-        assert_equal "base-rails-rp", controller.send(:oidc_client_id)
-      end
-
-      test "has oidc_sign_host method" do
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_sign_host
-      end
-
-      test "has oidc_base_host method" do
-        controller = ApplicationController.new
-
-        assert_respond_to controller, :oidc_base_host
-        assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"), controller.send(:oidc_base_host)
       end
     end
   end

@@ -37,9 +37,9 @@ class OrgComNoSocialCleanupSecurityTest < ActiveSupport::TestCase
     # exactly the ones this controller puts in its props.
     source = read("app/controllers/auth/org/sign/ins_controller.rb")
 
-    assert_match(/new_auth_org_sign_in_passkey_path/, source)
-    assert_match(/new_auth_org_sign_in_secret_path/, source)
-    assert_no_match(/social_authentication|google|apple|microsoft/i, source)
+    assert_match(/auth_org_social_entra_session_path/, source)
+    assert_match(/new_auth_org_sign_in_emergency_passkey_path/, source)
+    assert_no_match(/google|apple/i, source)
   end
 
   test "org routes expose local sign in and passkey verification only" do
@@ -47,9 +47,10 @@ class OrgComNoSocialCleanupSecurityTest < ActiveSupport::TestCase
     org_block = surface_block(source, "# Staff credential gateway host")
 
     assert_match(/resource :passkey, only: :new/, org_block)
-    assert_match(/resource :secret, only: %i\(new create\)/, org_block)
-    assert_match(/resource :passkey, only: %i\(new create\)/, org_block)
-    assert_no_match(/namespace :social|resource :totp|resources :totps/, org_block)
+    assert_match(/resource :options, only: :create/, org_block)
+    assert_match(/resource :verification, only: :create/, org_block)
+    assert_match(/scope :entra, as: :entra/, org_block)
+    assert_no_match(/resource\(?\s*:secret|resource :totp|resources :totps/, org_block)
   end
 
   test "com pages do not expose social auth helpers" do
@@ -68,9 +69,9 @@ class OrgComNoSocialCleanupSecurityTest < ActiveSupport::TestCase
     source = read("config/routes/auth.rb")
     com_block = surface_block(source, "# Corporate credential gateway host", "# Staff credential gateway host")
 
-    assert_match(/resource :email, only: %i\(new create edit update\)/, com_block)
-    assert_match(/resource :secret, only: %i\(new create\)/, com_block)
-    assert_no_match(/namespace :social|google|apple|microsoft/i, com_block)
+    assert_match(/resource :email, only: %i\(new create edit update destroy\)/, com_block)
+    assert_match(/resource :passkey, only: :new/, com_block)
+    assert_no_match(/resource\(?\s*:secret|namespace\s*\(?\s*:social|google|apple|microsoft/i, com_block)
   end
 
   test "app routes and omniauth config keep app social providers" do

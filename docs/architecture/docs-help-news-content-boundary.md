@@ -14,11 +14,16 @@ This document describes the current responsibility split for `docs`, `help`, and
 ## Frontend Ownership
 
 Edge owns the public frontend for `docs`, `help`, `news`, `info`, and `core`. Current Edge runtime
-is TanStack Start on Cloudflare Workers. An Astro migration for the twelve content units is
-accepted in Edge `adr/015` but is not deployed. Historical Rails ADRs that name Next.js remain
-history.
+is TanStack Start on Cloudflare Workers. An Astro migration for the twelve content units is accepted
+in Edge `adr/015` but is not deployed. Historical Rails ADRs that name Next.js remain history.
 
 The twelve audience × surface cells are listed in `docs/architecture/content-surface-matrix.md`.
+
+> **Rails rendering strategy (2026-09-14):** Per `adr/publish-repository-importmap-boundary.md`, the
+> future publish repository (which absorbs `info`/`docs`/`news`/`help` and, eventually,
+> `edit.*.org`) renders with Rails-standard importmap, not `vite_rails`/Inertia/React. This is
+> consistent with — not a change to — the Edge-owns-the-screen boundary above: Rails' HTML for these
+> surfaces stays thin either way, so it carries no JS bundler or JS runtime dependency.
 
 Edge owns, when those pages are implemented:
 
@@ -72,7 +77,7 @@ GET /health/startup
 GET /api/v0/health.json   # application/json machine health
 GET /api/v0/revision.json
 GET /api/v0/entries
-GET /api/v0/entries/:slug
+GET /api/v0/entries/:public_id
 ```
 
 The same route shape applies independently under each docs, help, and news app/com/org host.
@@ -97,8 +102,8 @@ Rails should not own:
 - `/robots.txt`;
 - `/sitemap.xml`;
 - `/auth/callback`;
-- `/web/v0/cookie`;
-- `/web/v0/theme`;
+- browser preference endpoints (`/api/v0/preferences/{cookie,theme}`; content hosts are not in
+  `PreferenceBrowserControlsRegistry`);
 - mutation routes;
 - dedicated taxonomy routes (taxonomy is a field on an entry and a filter parameter on the index,
   never its own resource);
@@ -123,6 +128,10 @@ equivalent API-only base that does not depend on:
 - preference cookies or preference writes;
 - OIDC callbacks.
 
+The surface-local `BareController` is the cache policy root: it declares `DefaultNoStore`, so every
+response starts as `Cache-Control: no-store`, and an action that serves cacheable public content opts
+in from the action (`docs/reference/http-cache-policy.md`). Public does not imply cacheable.
+
 `app` and `com` content reads are public by default. `org` content reads may become authenticated or
 org-scoped in the future, but that must reuse the existing authority boundary and must not make
 `docs`, `help`, or `news` a new identity, session, or authorization authority.
@@ -145,9 +154,9 @@ namespace  surface  slug  locale  title  summary  body  published_at  taxonomy
 audience (`app`/`com`/`org`). `body` is always the complete JSON object.
 
 Taxonomy is decided in `adr/publishing-taxonomy-architecture.md`. Each entry exposes
-`taxonomy.category` (one object with its breadcrumb `path`, or `null`) and `taxonomy.tag` (an ordered
-array), rendered from the published version's frozen snapshots rather than from the current draft or
-from current term names. The index accepts `?category=<slug>` and `?tag=<slug>`.
+`taxonomy.category` (one object with its breadcrumb `path`, or `null`) and `taxonomy.tag` (an
+ordered array), rendered from the published version's frozen snapshots rather than from the current
+draft or from current term names. The index accepts `?category=<slug>` and `?tag=<slug>`.
 
 Authoring UI, approval workflow, and any write endpoint remain out of scope for these surfaces.
 
@@ -163,3 +172,4 @@ read-only surfaces.
 - `adr/publishing-persistence-polymorphism-prohibition.md`
 - `docs/architecture/regional-content.md`
 - `docs/architecture/acme-sign-core-base-port.md`
+- `docs/architecture/oidc-non-participant-surfaces.md`

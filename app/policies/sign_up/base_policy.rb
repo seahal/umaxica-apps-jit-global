@@ -60,7 +60,7 @@ module SignUp
     end
 
     def expired?
-      ticket.respond_to?(:expired?) && ticket.expired?
+      ticket.is_a?(FlowSignUp) && ticket.expired?(ticket.class.database_now)
     end
 
     def terminal?
@@ -68,7 +68,7 @@ module SignUp
     end
 
     def terminal_status_ids
-      %w(COMPLETED FAILED EXPIRED CANCELLED).filter_map do |status_name|
+      %w(COMPLETED FAILED EXPIRED CANCELLED HALTED).filter_map do |status_name|
         ticket.status_id_for(status_name)
       rescue KeyError
         nil

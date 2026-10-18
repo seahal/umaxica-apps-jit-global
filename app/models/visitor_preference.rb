@@ -38,7 +38,15 @@
 #  fk_rails_...  (visitor_id => visitors.id)
 #
 class VisitorPreference < ComPrincipalRecord
+  include ::PublicId
   include ::PreferenceExplicitFields
+
+  DESTROY_DEPENDENT_ASSOCIATIONS = %i(
+    visitor_preference_language visitor_preference_timezone visitor_preference_region visitor_preference_theme
+    visitor_preference_currency visitor_preference_date_format visitor_preference_time_format
+    visitor_preference_motion visitor_preference_density visitor_preference_page_size
+    visitor_preference_adult_content_gate
+  ).freeze
 
   belongs_to :visitor, inverse_of: :visitor_preference
 
@@ -92,10 +100,8 @@ class VisitorPreference < ComPrincipalRecord
   validates :functional, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :targetable, inclusion: { in: [true, false] }
-  validates :public_id, length: { maximum: 21 }, uniqueness: true, allow_blank: true
-
   after_initialize :set_defaults
-  before_validation :generate_public_id, on: :create
+  before_destroy :preload_dependent_associations, prepend: true
 
   def adult_content_gate
     visitor_preference_adult_content_gate&.option&.name || "nothing"
@@ -103,8 +109,10 @@ class VisitorPreference < ComPrincipalRecord
 
   private
 
-  def generate_public_id
-    self.public_id = Nanoid.generate(size: 21) if public_id.blank?
+  def preload_dependent_associations
+    ActiveRecord::Associations::Preloader.new(
+      records: [self], associations: DESTROY_DEPENDENT_ASSOCIATIONS,
+    ).call
   end
 
   def set_defaults

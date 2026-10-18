@@ -2,9 +2,9 @@
 //
 // Whether a session is still active is a server decision: `form` is absent when there is nothing
 // left to sign out of, so the button cannot be offered by the client on its own.
-import { Link } from "@inertiajs/react";
-
 import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
+import Page from "@/components/ui/Page";
 import { csrfToken } from "@/lib/csrf";
 
 export type SignOutConfirmationForm = {
@@ -19,20 +19,34 @@ export type SignOutConfirmationProps = {
   active: boolean;
   description: string;
   form: SignOutConfirmationForm | null;
-  home_link: { label: string; href: string };
-};
+} & (
+  | { back_link: { label: string; href: string }; home_link?: never }
+  | { home_link: { label: string; href: string }; back_link?: never }
+);
 
-export default function SignOutConfirmation({
-  title,
-  description,
-  form,
-  home_link: homeLink,
-}: SignOutConfirmationProps) {
+export default function SignOutConfirmation(props: SignOutConfirmationProps) {
+  const { title, description, form } = props;
+  // Server props still need runtime validation even though callers have an exclusive union.
+  const links: {
+    back_link?: { label: string; href: string };
+    home_link?: { label: string; href: string };
+  } = props;
+  if (links.back_link !== undefined && links.home_link !== undefined) {
+    throw new Error("A sign-out page must provide one return link");
+  }
+
+  const returnLink = links.back_link ?? links.home_link;
+
+  if (!returnLink) {
+    throw new Error("A sign-out return link is required");
+  }
+
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-      <p className="text-sm text-fg-muted">{description}</p>
-
+    <Page
+      title={title}
+      description={description}
+      width="narrow"
+    >
       {form ? (
         // A full document POST, as the ERB form was: sign-out ends the session the Inertia app
         // runs in, so the response is a navigation rather than a page swap.
@@ -64,21 +78,20 @@ export default function SignOutConfirmation({
             </Button>
           </div>
           <noscript>
-            <p className="text-sm text-fg-muted">{form.confirm_description}</p>
+            <p className="text-base text-fg-muted">{form.confirm_description}</p>
           </noscript>
         </form>
       ) : null}
 
       <p>
-        <Link
-          href={homeLink.href}
-          className="inline-flex items-center justify-center gap-2 rounded-md border border-line
-            bg-surface px-4 py-2 text-sm font-medium text-fg transition-colors
-            hover:bg-surface-muted"
+        <ButtonLink
+          href={returnLink.href}
+          variant="secondary"
+          inertia
         >
-          {homeLink.label}
-        </Link>
+          {returnLink.label}
+        </ButtonLink>
       </p>
-    </section>
+    </Page>
   );
 }

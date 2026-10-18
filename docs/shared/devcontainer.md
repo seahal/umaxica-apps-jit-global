@@ -9,8 +9,8 @@ the required host configuration.
 
 - Install the Dev Containers extension.
 - Open the repository folder and run **Reopen in Container**.
-- `postCreateCommand` runs `bundle install && pnpm install`. Wait for that command to finish in the
-  Dev Containers log before starting tasks.
+- `devcontainer.json` declares no `postCreateCommand`. Run `bundle install` and
+  `bun install --frozen-lockfile` inside the container before starting tasks.
 
 ## IntelliJ IDEA (Gateway)
 
@@ -21,7 +21,8 @@ the required host configuration.
 
 ### Notes
 
-- Published host ports are loopback-only and are declared in `.devcontainer/compose.yaml`: `3000`
-  and `3036` on `core`. No JetBrains backend port is published; Gateway tunnels its own connection.
-  `docs/operations/development-host-port-exposure.md` is the contract.
+- Published host ports are loopback-only and are declared in `.devcontainer/compose.yaml`: host
+  `3001` forwards to Rails `3000`, while Vite uses `3036` on `core`. No JetBrains backend port is
+  published; Gateway tunnels its own connection. `docs/operations/development-host-port-exposure.md`
+  is the contract.
 - The image carries no desktop or X11 libraries. Only the headless IntelliJ backend is supported.

@@ -71,9 +71,9 @@ together, running `pnpm install --lockfile-only` so `pnpm-lock.yaml` records the
 
 `devEngines.packageManager` — pnpm's newer field, which supports ranges — is not adopted here. It
 would allow a range rather than an exact version, but reading it requires a newer CI setup action
-than this repository currently uses, so it is deferred to that upgrade. The lockfile verification
-it used to be wanted for is no longer exclusive to it: since pnpm 12, a plain `packageManager` pin
-is recorded in `pnpm-lock.yaml` under `packageManagerDependencies` as well.
+than this repository currently uses, so it is deferred to that upgrade. The lockfile verification it
+used to be wanted for is no longer exclusive to it: since pnpm 12, a plain `packageManager` pin is
+recorded in `pnpm-lock.yaml` under `packageManagerDependencies` as well.
 
 ## Consequences
 

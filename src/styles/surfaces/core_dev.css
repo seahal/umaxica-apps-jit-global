@@ -4,36 +4,23 @@
  * One trust boundary links exactly one of these files and nothing else, so a rule written for
  * another surface cannot reach this one. `source(none)` turns off Tailwind's automatic source
  * detection, which scans the whole Vite root and would otherwise generate every surface's
- * utilities into every surface's stylesheet; the `@source` lines below name the only markup this
+ * utilities into every surface's stylesheet; the `@source` line below names the only markup this
  * surface renders.
+ *
+ * This root page is a standalone document that bypasses the surface layouts, matching the
+ * info/docs/help/news dev-facing root pages rather than the Inertia-backed app/com/org surfaces.
  */
 @import "tailwindcss" source(none);
 @import "../theme.css";
 @import "../base.css";
 
 @plugin "@tailwindcss/typography";
-@plugin "@tailwindcss/forms";
-@plugin "tailwindcss-react-aria-components";
 
-@source "../../pages/core/dev";
-@source "../../layouts";
-@source "../../components";
-@source "../../features";
-
-/*
- * The ERB this surface renders. Tailwind only emits a utility it has seen written down, so without
- * these lines every class in the Turbo-rendered views and the shared layout partials is dropped
- * from the bundle and those screens render unstyled.
- */
-@source "../../../app/views/layouts/core/dev";
-@source "../../../app/views/layouts/shared";
-@source "../../../app/views/shared";
 @source "../../../app/views/core/dev";
 
 /*
  * Edition identity: one hue per TLD so an FQDN is recognisable on sight. `theme.css` mixes both the
- * light and the dark page background from this one token, so the two modes cannot drift apart, and
- * this is the only thing a surface owns.
+ * light and the dark page background from this one token, so the two modes cannot drift apart.
  */
 :root {
   --ui-tint: var(--color-yellow-500);

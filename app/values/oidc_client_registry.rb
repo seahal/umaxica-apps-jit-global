@@ -11,15 +11,13 @@ module OidcClientRegistry
   class ClientAuthenticationConfigurationError < StandardError; end
 
   DEFAULT_ALLOWED_SCOPES = %w(openid profile email).freeze
-  PALM_ALLOWED_SCOPES = (DEFAULT_ALLOWED_SCOPES + %w(palm.read)).freeze
 
   VisitorAccount =
     Data.define(
       :client_id, :client_secret, :redirect_uris, :redirect_uris_by_realm, :post_logout_redirect_uris,
       :aud, :resource_type,
       :name, :domains, :allowed_scopes, :registered_token_endpoint_auth_method,
-      :metadata_token_endpoint_auth_method, :jwt_namespace, :backchannel_logout_uris,
-      :backchannel_logout_session_required,
+      :metadata_token_endpoint_auth_method, :jwt_namespace, :required_operator_capability,
     ) do
       def public_client?
         registered_token_endpoint_auth_method == "none"
@@ -58,8 +56,7 @@ module OidcClientRegistry
       redirect_uris: all_redirect_uris,
       redirect_uris_by_realm: redirect_uris_by_realm,
       post_logout_redirect_uris: (config[:post_logout_redirect_uris] || []).uniq,
-      backchannel_logout_uris: (config[:backchannel_logout_uris] || []).uniq,
-      backchannel_logout_session_required: config.fetch(:backchannel_logout_session_required, false),
+      required_operator_capability: config[:required_operator_capability],
       aud: config[:aud],
       resource_type: config[:resource_type],
       name: config[:name],
@@ -98,18 +95,6 @@ module OidcClientRegistry
     logout_uri_resource_type(uri) == normalize_resource_type(resource_type)
   end
 
-  def backchannel_logout_uris_for(client_id:, resource_type: nil)
-    filter_logout_uris(find(client_id)&.backchannel_logout_uris || [], resource_type)
-  end
-
-  def logout_clients_for_resource_type(resource_type)
-    clients.filter_map do |client_id, config|
-      next if filter_logout_uris(Array(config[:backchannel_logout_uris]), resource_type).blank?
-
-      find(client_id)
-    end
-  end
-
   # @param client_id [String]
   # @param secret_credential [String]
   # @return [Boolean]
@@ -137,8 +122,15 @@ module OidcClientRegistry
   end
 
   def validate_private_key_jwt_configuration!
+    # An RP cell process holds only its own client key (RuntimeRole.rp_private_env_names).
+    checked_ids =
+      if RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+        [RpCellBinding.fetch(RuntimeRole.cell_connection).client_id]
+      else
+        client_ids
+      end
     missing =
-      client_ids.filter_map do |client_id|
+      checked_ids.filter_map do |client_id|
         client = find(client_id)
         next unless client&.private_key_jwt_client?
         next if client.jwt_namespace.present? &&
@@ -195,7 +187,7 @@ module OidcClientRegistry
       %i(
         sign_service sign_staff sign_corporate
         base_service base_staff base_corporate
-        side_service side_staff side_corporate
+        warp_service warp_staff warp_corporate
         core_service core_staff core_corporate
       ).map { |name| [name, hosts.public_send(name).to_s] }
     env_signature =
@@ -203,7 +195,9 @@ module OidcClientRegistry
         PUBLIC_AUTH_SERVICE_URL PUBLIC_AUTH_STAFF_URL PUBLIC_AUTH_CORPORATE_URL
         PRIVATE_AUTH_SERVICE_URL PRIVATE_AUTH_STAFF_URL PRIVATE_AUTH_CORPORATE_URL
         BASE_SERVICE_URL BASE_STAFF_URL BASE_CORPORATE_URL
-        SIDE_SERVICE_URL SIDE_STAFF_URL SIDE_CORPORATE_URL
+        PUBLIC_WARP_SERVICE_URL PUBLIC_WARP_STAFF_URL PUBLIC_WARP_CORPORATE_URL
+        PUBLIC_EDIT_STAFF_URL
+        PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL PUBLIC_CORE_CORPORATE_URL
         CORE_SERVICE_URL CORE_STAFF_URL CORE_CORPORATE_URL
       ).map { |name| [name, ENV.fetch(name, nil)] }
 
@@ -232,30 +226,6 @@ module OidcClientRegistry
     []
   end
 
-  def public_host?(host)
-    parsed_host = normalize_host(host)
-    return false if parsed_host.blank?
-
-    uri = URI.parse("//#{parsed_host}")
-    return false if uri.host.blank?
-
-    ip = IPAddr.new(uri.host)
-    !ip.loopback? && !ip.private? && !ip.link_local?
-  rescue IPAddr::InvalidAddressError
-    uri.host.present? && uri.host != "localhost"
-  rescue URI::InvalidURIError
-    false
-  end
-
-  def filter_logout_uris(uris, resource_type)
-    return uris if resource_type.blank?
-
-    normalized_resource_type = normalize_resource_type(resource_type)
-    uris.select do |uri|
-      logout_uri_resource_type(uri) == normalized_resource_type
-    end
-  end
-
   def logout_uri_resource_type(uri)
     host = URI.parse(uri.to_s).host.to_s
     return "operator" if logout_hosts_for("operator").include?(host)
@@ -269,31 +239,57 @@ module OidcClientRegistry
   def logout_hosts_for(resource_type)
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     case normalize_resource_type(resource_type)
-    when "operator"
-      [
-        normalize_host(hosts.sign_staff),
-        normalize_host(hosts.auth_staff),
-        normalize_host(hosts.core_staff),
-        normalize_host(ENV.fetch("PRIVATE_AUTH_STAFF_URL", nil)),
-        normalize_host(ENV.fetch("PUBLIC_AUTH_STAFF_URL", nil)),
-      ].compact_blank.uniq
-    when "visitor"
-      [
-        normalize_host(hosts.sign_corporate),
-        normalize_host(hosts.auth_corporate),
-        normalize_host(hosts.core_corporate),
-        normalize_host(ENV.fetch("PRIVATE_AUTH_CORPORATE_URL", nil)),
-        normalize_host(ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", nil)),
-      ].compact_blank.uniq
-    else
-      [
-        normalize_host(hosts.sign_service),
-        normalize_host(hosts.auth_service),
-        normalize_host(hosts.core_service),
-        normalize_host(ENV.fetch("PRIVATE_AUTH_SERVICE_URL", nil)),
-        normalize_host(ENV.fetch("PUBLIC_AUTH_SERVICE_URL", nil)),
-      ].compact_blank.uniq
+    when "operator" then operator_logout_hosts(hosts)
+    when "visitor" then visitor_logout_hosts(hosts)
+    else client_logout_hosts(hosts)
     end
+  end
+
+  def operator_logout_hosts(hosts)
+    [
+      normalize_host(hosts.sign_staff),
+      normalize_host(hosts.auth_staff),
+      normalize_host(hosts.base_staff),
+      normalize_host(hosts.core_staff),
+      normalize_host(hosts.warp_staff),
+      configured_logout_host("PUBLIC_EDIT_STAFF_URL"),
+      configured_logout_host("PRIVATE_AUTH_STAFF_URL"),
+      configured_logout_host("PUBLIC_AUTH_STAFF_URL"),
+      configured_logout_host("BASE_STAFF_URL"),
+    ].compact_blank.uniq
+  end
+
+  def visitor_logout_hosts(hosts)
+    [
+      normalize_host(hosts.sign_corporate),
+      normalize_host(hosts.auth_corporate),
+      normalize_host(hosts.base_corporate),
+      normalize_host(hosts.core_corporate),
+      normalize_host(hosts.warp_corporate),
+      configured_logout_host("PRIVATE_AUTH_CORPORATE_URL"),
+      configured_logout_host("PUBLIC_AUTH_CORPORATE_URL"),
+      configured_logout_host("BASE_CORPORATE_URL"),
+    ].compact_blank.uniq
+  end
+
+  def client_logout_hosts(hosts)
+    [
+      normalize_host(hosts.sign_service),
+      normalize_host(hosts.auth_service),
+      normalize_host(hosts.base_service),
+      normalize_host(hosts.core_service),
+      normalize_host(hosts.warp_service),
+      configured_logout_host("PRIVATE_AUTH_SERVICE_URL"),
+      configured_logout_host("PUBLIC_AUTH_SERVICE_URL"),
+      configured_logout_host("BASE_SERVICE_URL"),
+    ].compact_blank.uniq
+  end
+
+  def configured_logout_host(name)
+    value = ENV[name]
+    return if value.nil?
+
+    normalize_host(value)
   end
 
   def redirect_uris_by_realm_for(config)
@@ -317,10 +313,10 @@ module OidcClientRegistry
     host.to_s
   end
 
-  private_class_method :clients, :build_clients,
+  private_class_method :clients, :build_clients, :client_config_signature,
                        :resolve_secret_credential, :domains_from_redirect_uris,
-                       :public_host?, :redirect_uris_by_realm_for,
-                       :filter_logout_uris, :logout_uri_resource_type, :logout_hosts_for,
+                       :redirect_uris_by_realm_for,
+                       :logout_uri_resource_type, :logout_hosts_for,
                        :normalize_resource_type, :metadata_auth_method, :normalize_allowed_scopes,
                        :normalize_host
 end

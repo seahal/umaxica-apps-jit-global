@@ -12,15 +12,20 @@ module AuthenticationJwtConfiguration
   VALID_RESOURCE_TYPES = %w(client operator visitor).freeze
 
   def self.leeway_seconds
-    Integer(ENV["AUTH_JWT_LEEWAY_SECONDS"].presence || "30", 10)
+    SecurityJwtRfc9068AccessTokenProfile::CLOCK_SKEW_LEEWAY_SECONDS
   end
 
-  def self.issuer(resource_type = nil)
-    base = ENV.fetch("AUTH_JWT_ISSUER")
-    normalized_resource_type = normalize_resource_type(resource_type)
-    return base if normalized_resource_type.nil?
+  # `iss` names the authorization server, not the token subtype, so every
+  # resource type shares one issuer per environment.
+  def self.issuer
+    ENV.fetch("AUTH_JWT_ISSUER")
+  end
 
-    "#{base}:#{normalized_resource_type}"
+  def self.client_id(resource_type)
+    normalized_resource_type = normalize_resource_type(resource_type)
+    raise ArgumentError, "unsupported auth resource type: #{resource_type.inspect}" if normalized_resource_type.nil?
+
+    ENV.fetch("AUTH_JWT_#{normalized_resource_type.upcase}_CLIENT_ID")
   end
 
   # Audience is a resource-type boundary: a visitor token must not validate where
@@ -36,9 +41,32 @@ module AuthenticationJwtConfiguration
 
     env_key = "AUTH_JWT_#{normalized_resource_type.upcase}_AUDIENCES"
     audiences = parse_audiences(ENV.fetch(env_key), env_key:)
+    SecurityJwtRfc9068AccessTokenProfile.assert_production_identifiers!(audiences, label: env_key)
     assert_distinct_audiences!(normalized_resource_type, audiences)
     audiences
   end
+
+  # Boot-time check so a production process with an incomplete or
+  # non-production auth token configuration refuses to start instead of
+  # failing on the first request that mints or verifies a token.
+  def self.validate!
+    SecurityJwtRfc9068AccessTokenProfile.assert_production_identifiers!([issuer], label: "AUTH_JWT_ISSUER")
+    VALID_RESOURCE_TYPES.each do |resource_type|
+      audiences(resource_type)
+      client_id(resource_type)
+    end
+    true
+  end
+
+  def self.private_key
+    JitSecurityJwtKeyring.private_key_for_active
+  end
+
+  def self.public_key
+    JitSecurityJwtKeyring.public_key_for_active
+  end
+
+  public_class_method :leeway_seconds, :issuer, :client_id, :audiences, :validate!, :private_key, :public_key
 
   def self.parse_audiences(raw, env_key:)
     values = raw.split(",").map(&:strip)
@@ -61,21 +89,6 @@ module AuthenticationJwtConfiguration
     end
   end
   private_class_method :assert_distinct_audiences!
-
-  def self.token_type(resource_type)
-    normalized_resource_type = normalize_resource_type(resource_type)
-    raise ArgumentError, "unsupported auth resource type: #{resource_type.inspect}" if normalized_resource_type.nil?
-
-    "auth-access-token;#{normalized_resource_type}"
-  end
-
-  def self.private_key
-    JitSecurityJwtKeyring.private_key_for_active
-  end
-
-  def self.public_key
-    JitSecurityJwtKeyring.public_key_for_active
-  end
 
   def self.normalize_resource_type(resource_type)
     return nil if resource_type.blank?

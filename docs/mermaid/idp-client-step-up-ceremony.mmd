@@ -1,0 +1,34 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "pending" as pending
+    state "verified" as verified
+    state "consumed" as consumed
+    state "canceled" as canceled
+    state "expired" as expired
+    state "revoked" as revoked
+    %% expired, canceled and revoked are absorbing terminal states.
+    [*] --> pending
+    pending --> verified: record_verification! / record_registration_verification!
+    verified --> verified: prepare_result_delivery!
+    pending --> canceled: Base cancellation committer
+    pending --> expired: Base cancellation at TTL
+    pending --> revoked: token revoke_step_up_authority!
+    verified --> canceled: Base cancellation committer
+    verified --> expired: Base cancellation at TTL
+    verified --> revoked: token revoke_step_up_authority!
+    verified --> consumed: Base freshness / registration final committer
+    pending --> consumed: Base registration consumption for email_otp only
+    pending --> consumed: consume_email_registration! original locked parent after Source commit
+    revoked --> [*]
+    consumed --> [*]
+    canceled --> [*]
+    note right of pending
+        Auth proof returns to owning Base operation.
+        The single named model writer rejects every terminal rewrite.
+        expired is stored only by the owner expiry operation.
+        Cancellation, expiry and revocation cannot rewrite a terminal.
+        Generic result delivery is not an authorization shortcut.
+        consumed registration proof does not grant freshness.
+        Base cancellation/freshness require a usable DeviceSession and its current root.
+        Base locks owner, device, token, then ceremony parent.
+    end note

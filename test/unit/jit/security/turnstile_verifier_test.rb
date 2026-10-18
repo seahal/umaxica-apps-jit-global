@@ -8,10 +8,6 @@ require "jit_security_turnstile_verifier"
 module Jit
   module Security
     class TurnstileVerifierTest < ActiveSupport::TestCase
-      # Pure unit test - no database/fixtures needed
-      self.use_transactional_tests = false
-      self.fixture_table_names = []
-
       def setup
         # All four stub slots, not just the two this file sets: the challenge slot wins over the
         # verifier slot inside the stub, so a value left behind by another test would answer these
@@ -75,13 +71,6 @@ module Jit
         end
       end
 
-      test "parse_expires_at falls back when the challenge timestamp is unusable" do
-        verifier = JitSecurityTurnstileVerifier.new(token: "tok", remote_ip: "1.2.3.4", secret_key: "secret")
-
-        assert_kind_of ActiveSupport::TimeWithZone, verifier.send(:parse_expires_at, nil)
-        assert_kind_of ActiveSupport::TimeWithZone, verifier.send(:parse_expires_at, "not-a-time")
-      end
-
       test "injected verifier returns the stubbed response" do
         TurnstileVerifierStub.response = { "success" => true, "mock" => true }
         result = Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
@@ -95,6 +84,14 @@ module Jit
         result = Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
 
         assert result["success"]
+      end
+
+      test "injected verifier rejects an unstubbed provider call" do
+        TurnstileVerifierStub.reset!
+
+        assert_raises(TestSupport::ExternalCommunicationError) do
+          Turnstile::VerifierFactory.current.verify(token: "foo", remote_ip: "127.0.0.1")
+        end
       end
 
       test "performs http request when verifying" do
@@ -176,7 +173,11 @@ module Jit
         mock_response_body = '{"success": true}'
 
         config_called = false
-        fake = -> { config_called = true; "should-not-use" }
+        fake =
+          -> {
+            config_called = true
+            "should-not-use"
+          }
         JitSecurityTurnstileConfig.stub(:stealth_secret_key, fake) do
           stub_turnstile_response(mock_response_body) do
             result = JitSecurityTurnstileVerifier.verify(
@@ -280,7 +281,12 @@ module Jit
         mock_response2_body = response
 
         consumed = []
-        TurnstileReplayStore.stub(:consume!, ->(**kwargs) { consumed << kwargs; true }) do
+        TurnstileReplayStore.stub(
+          :consume!, ->(**kwargs) {
+                       consumed << kwargs
+                       true
+                     },
+        ) do
           JitSecurityTurnstileConfig.stub(:visible_secret_key, "visible-secret") do
             stub_turnstile_response(mock_response_body) do
               ok = JitSecurityTurnstileVerifier.verify_for_ceremony(
@@ -340,6 +346,35 @@ module Jit
           end
         end
         logger.verify
+      end
+
+      test "verifying twice runs the real connection builder and never mutates the frozen siteverify URI" do
+        # Regression: VERIFY_URI is a frozen class constant. OutboundHttp::Connection.build used to
+        # hand it straight to Faraday, which mutates the URI's path, so every real Turnstile check
+        # raised FrozenError and returned an "unavailable" failure (HTTP 422 on Google/Apple
+        # sign-up confirmation). Exercise the real builder here and stub only the network POST.
+        TurnstileVerifierStub.enabled = false
+        uri_before = JitSecurityTurnstileVerifier::VERIFY_URI.dup
+        fake_response = Struct.new(:body).new('{"success": true}')
+        real_build = OutboundHttp::Connection.method(:build)
+
+        OutboundHttp::Connection.stub(
+          :build, lambda { |**kwargs|
+                    connection = real_build.call(**kwargs)
+                    connection.define_singleton_method(:post) { |*| fake_response }
+                    connection
+                  },
+        ) do
+          2.times do
+            result = JitSecurityTurnstileVerifier.verify(token: "tok", remote_ip: "1.2.3.4", secret_key: "secret")
+
+            assert result["success"], "verification failed: #{result.inspect}"
+            assert_nil result["error"]
+          end
+        end
+
+        assert_predicate JitSecurityTurnstileVerifier::VERIFY_URI, :frozen?
+        assert_equal uri_before.to_s, JitSecurityTurnstileVerifier::VERIFY_URI.to_s
       end
 
       private

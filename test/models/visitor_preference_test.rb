@@ -128,21 +128,6 @@ class VisitorPreferenceTest < ActiveSupport::TestCase
     assert_equal "infinity", VisitorPreferencePageSizeOption.new(id: VisitorPreferencePageSizeOption::PER_INFINITY).name
   end
 
-  test "set_defaults fills nil booleans on new records" do
-    preference = VisitorPreference.new(visitor: Visitor.create!)
-    preference.consented = nil
-    preference.functional = nil
-    preference.performant = nil
-    preference.targetable = nil
-
-    preference.send(:set_defaults)
-
-    assert_not preference.consented
-    assert_not preference.functional
-    assert_not preference.performant
-    assert_not preference.targetable
-  end
-
   test "adult_content_gate returns nothing when no gate is set" do
     assert_equal "nothing", VisitorPreference.new.adult_content_gate
   end

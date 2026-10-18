@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: app_preference_language_options
@@ -6,8 +8,6 @@
 #
 #  id :bigint           not null, primary key
 #
-
-# frozen_string_literal: true
 
 class AppPreferenceLanguageOption < AppSettingRecord
   # Fixed IDs - do not modify these values
@@ -23,14 +23,14 @@ class AppPreferenceLanguageOption < AppSettingRecord
 
   self.primary_key = :id
 
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
+
   def name
     case id
     when JA then "ja"
     when EN then "en"
     end
-  end
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 end

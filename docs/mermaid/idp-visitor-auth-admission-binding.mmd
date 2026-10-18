@@ -1,0 +1,24 @@
+stateDiagram-v2
+    %% Realm-specific rendering of the shared D-82 Base/Auth admission contract.
+    [*] --> issued: parent Visitor flow / binding transaction
+    issued --> attached: Auth attaches active session and confirmation reference
+    issued --> retired: expiry or explicit restart
+    attached --> confirmed: Base confirms nonce digest and root token
+    attached --> retired: expiry or cancellation
+    confirmed --> redeemed: matching browser-bound Auth session redeems
+    confirmed --> retired: expiry or cancellation
+    redeemed --> [*]
+    retired --> [*]
+    note right of issued
+        References identify the operation;
+        the browser nonce digest is the proof binding.
+        No Auth general login session is created.
+        Distinct pending parents may share an active sid,
+        including continuity admitted for an earlier parent.
+        Attachment grants no authority for the new purpose.
+        GET checks nonce ownership without mutation.
+        Transitions use the owning Ticket DB clock.
+        Browser receivers lock root owner/device/token when present,
+        then the exact parent, binding and Auth rows in ID order.
+        Auth cookies are written only after Ticket commit.
+    end note

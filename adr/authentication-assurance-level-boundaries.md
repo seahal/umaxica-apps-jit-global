@@ -2,6 +2,11 @@
 
 **Status:** Partially superseded (2026-08-31)
 
+> **Partial supersession (2026-10-15):** `adr/authentication-security-cycle-consolidation-2026-10-15.md` section 5 makes
+> AAL1/AAL2/AAL3 explanation and assessment vocabulary only. Runtime authorization uses concrete
+> requirements, not an AAL hierarchy, and a UMAXICA step-up is not NIST AAL2. OIDC `acr`/`amr`
+> remain Pending.
+
 > **Partial supersession (2026-08-31):** Email OTP is never achieved NIST AAL; TOTP alone and
 > current UV passkey ceremonies are recorded as AAL1; fresh Umaxica step-up, achieved AAL, phishing
 > resistance, method policy, and freshness are independent.
@@ -265,3 +270,12 @@ Future AAL3 design should consider:
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`
 - `docs/security/authentication-assurance-levels.md`
 - `docs/security/step-up-mfa-status.md`
+
+## Delivered reconciliation (2026-10-06)
+
+This ADR's AAL vocabulary is a label ledger, not an authorization API. The explicit step-up
+requirement, phishing resistance, user verification, method, scope, actor/resource binding and
+freshness are evaluated independently and are carried through the delivered ceremony. Unsupported
+legacy AAL demands are refused rather than translated. `docs/security/step-up-operation-inventory.md`
+is the current operation matrix; older statements that make AAL the policy authority are
+superseded.

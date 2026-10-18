@@ -4,7 +4,9 @@
 module AuthenticationJwtTokens
   extend ActiveSupport::Concern
 
-  def encode_login_access_token(resource, token_record, token_kind_id:, dpop_jkt:, access_expires_at:)
+  def encode_login_access_token(
+    resource, token_record, token_kind_id:, dpop_jkt:, access_expires_at:, authentication_event_at: nil
+  )
     AuthenticationToken.encode(
       resource,
       host: request.host,
@@ -13,10 +15,15 @@ module AuthenticationJwtTokens
       oidc_jti: token_record_oidc_jti(token_record),
       resource_type: resource_type,
       dpop_jkt: dpop_jkt,
-      expires_at: access_expires_at,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: access_expires_at,
+        absolute_expiry: token_record_expiry_at(token_record),
+      ),
       acr: "aal1",
       amr: normalize_amr(token_kind_id, token_record: token_record),
+      auth_time: authentication_event_at || token_record_authentication_event_at(token_record),
       jwt_issuer_id: auth_jwt_issuer_id,
+      authentication_context: token_record_authentication_context(token_record),
     )
   end
 
@@ -31,10 +38,15 @@ module AuthenticationJwtTokens
       oidc_jti: token_record_oidc_jti(token_record),
       resource_type: resource_type,
       dpop_jkt: token_record_attribute(token_record, :dpop_jkt),
-      expires_at: access_expires_at,
+      expires_at: SessionAbsoluteExpiryValue.cap(
+        proposed_expiry: access_expires_at,
+        absolute_expiry: token_record_expiry_at(token_record),
+      ),
       acr: "aal1",
       amr: nil,
+      auth_time: token_record_authentication_event_at(token_record) || current_authentication_event_at_for_token,
       jwt_issuer_id: auth_jwt_issuer_id,
+      authentication_context: token_record_authentication_context(token_record),
     )
   end
 
@@ -51,10 +63,25 @@ module AuthenticationJwtTokens
     )
   end
 
-  def token_record_oidc_sid(token_record)
-    token_session_public_id(token_record).presence ||
-      token_record_attribute(token_record, :oidc_sid).presence ||
-      token_record&.public_id
+  # The session row is the single authority for the authentication context, and
+  # every access token -- first issue, refresh rotation, and mid-session
+  # reissue -- reads it from here. A continuation therefore cannot mint a Normal
+  # token for an Emergency session: there is nowhere else for the value to come
+  # from. See docs/security/org-emergency-access.md.
+  def token_record_authentication_context(token_record)
+    token_record.strict_authentication_context_value.to_s
+  end
+
+  def token_record_authentication_event_at(token_record)
+    return nil unless token_record&.respond_to?(:authentication_event_at)
+
+    token_record.authentication_event_at
+  end
+
+  def current_authentication_event_at_for_token
+    return unless respond_to?(:current_authentication_event_at, true)
+
+    current_authentication_event_at
   end
 
   def token_record_oidc_jti(token_record)
@@ -62,8 +89,22 @@ module AuthenticationJwtTokens
   end
 
   def token_session_public_id(token_record)
-    token_record&.try(:device_session)&.public_id.presence ||
-      token_record&.public_id
+    device_session = token_device_session(token_record)
+    device_session&.public_id.presence || token_record&.public_id
+  end
+
+  def token_device_session(token_record)
+    return unless token_record&.has_attribute?(:device_session_id)
+
+    device_session_id = token_record.device_session_id
+    return if device_session_id.blank?
+
+    case token_record
+    when ClientToken then ClientDeviceSession.find(device_session_id)
+    when OperatorToken then OperatorDeviceSession.find(device_session_id)
+    when VisitorToken then VisitorDeviceSession.find(device_session_id)
+    else raise ArgumentError, "unsupported authentication token record"
+    end
   end
 
   def token_record_attribute(token_record, attribute)
@@ -82,38 +123,11 @@ module AuthenticationJwtTokens
     )
   end
 
-  def reissue_access_token!
-    resource = current_resource
-    return unless resource
-    return unless current_session
-
-    now = Time.current
-    access_expires_at = access_token_expires_at_for(current_session, now: now)
-
-    new_access_token = AuthenticationToken.encode(
-      resource,
-      host: request.host,
-      session_public_id: token_session_public_id(current_session),
-      oidc_sid: token_session_public_id(current_session),
-      oidc_jti: token_record_oidc_jti(current_session),
-      resource_type: resource_type,
-      dpop_jkt: token_record_attribute(current_session, :dpop_jkt),
-      expires_at: access_expires_at,
-      jwt_issuer_id: auth_jwt_issuer_id,
-    )
-    return unless new_access_token
-
-    cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = cookie_options.merge(
-      value: new_access_token,
-      expires: access_expires_at,
-    )
-    Actor.install_context!(preferences: resolved_current_preference(resource)) if respond_to?(
-      :resolved_current_preference, true,
-    )
-  end
-
   def access_token_expires_at_for(token_record, now: Time.current)
-    [now + AuthenticationBase::ACCESS_TOKEN_TTL, token_record_expiry_at(token_record)].compact.min
+    SessionAbsoluteExpiryValue.cap(
+      proposed_expiry: now + AuthenticationBase::ACCESS_TOKEN_TTL,
+      absolute_expiry: token_record_expiry_at(token_record),
+    )
   end
 
   def auth_jwt_issuer_id
@@ -121,15 +135,15 @@ module AuthenticationJwtTokens
   end
 
   def auth_jwt_namespace
-    return "SIGN_#{resource_surface_key.to_s.upcase}" unless respond_to?(:controller_path)
+    return "AUTH_#{resource_surface_key.to_s.upcase}" unless respond_to?(:controller_path)
 
     service, surface = controller_path.to_s.split("/", 3)
     service = service.to_s.upcase
     surface = surface.to_s.upcase
     namespace = "#{service}_#{surface}"
-    return namespace if JitSecurityJwtRegistry::SURFACE_NAMESPACES.include?(namespace)
+    return namespace if JitSecurityJwtRegistry::ACCESS_TOKEN_SURFACE_NAMESPACES.include?(namespace)
 
-    "SIGN_#{resource_surface_key.to_s.upcase}"
+    "AUTH_#{resource_surface_key.to_s.upcase}"
   end
 
   def resource_surface_key

@@ -6,7 +6,12 @@
 // because the server answers a wrong code by re-rendering this page with 422 or 429 and a correct
 // one with a redirect into the next step.
 import Button from "@/components/ui/Button";
+import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import CeremonyCancellation, {
+  type CeremonyCancellationProps,
+} from "@/features/auth/CeremonyCancellation";
+import TurnstileWidget, { type TurnstileWidgetProps } from "@/features/turnstile/TurnstileWidget";
 
 import { csrfToken } from "./csrf";
 
@@ -21,10 +26,13 @@ export type OtpVerificationFormProps = {
   code_placeholder: string;
   submit_label: string;
   delivery_help: string;
+  /** Interactive challenge required by email registration checkpoints. */
+  turnstile?: TurnstileWidgetProps | null;
   /** Heading shown above the validation errors, or null when there are none. */
   error_heading: string | null;
   errors: string[];
-  return_link: { label: string; href: string };
+  /** Ends the sign-up; /sign/up is not a step back once a code has been sent. */
+  cancel: CeremonyCancellationProps;
 };
 
 export default function OtpVerificationForm({
@@ -36,20 +44,23 @@ export default function OtpVerificationForm({
   code_placeholder: codePlaceholder,
   submit_label: submitLabel,
   delivery_help: deliveryHelp,
+  turnstile,
   error_heading: errorHeading,
   errors,
-  return_link: returnLink,
+  cancel,
 }: OtpVerificationFormProps) {
   return (
-    <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-fg">{title}</h1>
-      <p className="text-sm text-fg-muted">{description}</p>
-
+    <Page
+      title={title}
+      description={description}
+      width="narrow"
+    >
       <form
         action={action}
         method="post"
         data-turbo="false"
         className="flex flex-col gap-4"
+        aria-describedby={errors.length > 0 ? "otp-errors" : undefined}
       >
         <input
           type="hidden"
@@ -64,9 +75,9 @@ export default function OtpVerificationForm({
 
         {errors.length > 0 ? (
           <div
-            role="alert"
-            className="flex flex-col gap-2 rounded-md border border-danger bg-surface p-3 text-sm
-              text-danger"
+            id="otp-errors"
+            className="flex flex-col gap-2 rounded-md border border-danger bg-surface p-3 text-base
+              text-error"
           >
             {/* v8 ignore next -- a heading is only sent when the list is non-empty */}
             {errorHeading ? <h2 className="font-semibold">{errorHeading}</h2> : null}
@@ -89,19 +100,19 @@ export default function OtpVerificationForm({
           pattern="[0-9]*"
         />
 
+        {turnstile ? (
+          <TurnstileWidget
+            key={turnstile.challenge_id ?? "otp"}
+            {...turnstile}
+          />
+        ) : null}
+
         <Button type="submit">{submitLabel}</Button>
       </form>
 
-      <p className="text-sm text-fg-muted">{deliveryHelp}</p>
+      <p className="text-base text-fg-muted">{deliveryHelp}</p>
 
-      <p className="text-sm">
-        <a
-          href={returnLink.href}
-          className="text-fg underline-offset-4 hover:underline"
-        >
-          {returnLink.label}
-        </a>
-      </p>
-    </section>
+      <CeremonyCancellation {...cancel} />
+    </Page>
   );
 }

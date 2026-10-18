@@ -2,34 +2,111 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "base64"
 # require "helpers/global_test_support"
 
 class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
+  include AuthEmailMfaHelper
+
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+    https!
+    VisitorSignInFlowState.ensure_defaults!
     ensure_visitor_reference_records!
-    VisitorSecretCredentialStatus::DEFAULTS.each { |id| VisitorSecretCredentialStatus.find_or_create_by!(id: id) }
-    VisitorSecretCredentialKind::DEFAULTS.each { |id| VisitorSecretCredentialKind.find_or_create_by!(id: id) }
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
     @visitor = create_verified_visitor_with_email(
       email_address: "com_challenge_#{SecureRandom.hex(4)}@example.com",
     )
-    @visitor.update!(mfa_level_enabled: true)
-    @visitor.visitor_telephones.create!(
-      number: "+819011111111",
-      visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
+    @visitor.visitor_emails.last.finalize_binding!
+    @visitor.reload.update!(mfa_level_enabled: true)
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
+    get auth_com_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
 
-    _secret_credential, @raw_secret_credential = VisitorSecretCredential.issue!(
-      name: "Hub secret_credential",
-      visitor_id: @visitor.id,
-      visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN,
-      uses: 10,
-      status: :active,
+    assert_response :see_other
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    get auth_com_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_com_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+    assert_response :see_other
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+      flow: VisitorSignInFlow.find_by!(
+        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
+      ),
+      surface: "com", phase: "PRIMARY_PENDING",
     )
+  end
+
+  test "contradictory MFA GET and HEAD preserve the original com flow and issue no session" do
+    flow = VisitorSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    before = flow.attributes
+    path = auth_com_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+
+    assert_no_difference -> { VisitorToken.count } do
+      get path
+
+      assert_response :conflict
+      assert_equal "text/plain", response.media_type
+      assert_equal "戻るはだめです", response.body
+      assert_nil response.headers["Location"]
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal before, flow.reload.attributes
+
+      head path
+
+      assert_response :conflict
+      assert_empty response.body
+      assert_nil response.headers["Location"]
+      assert_includes response.headers["Cache-Control"], "no-store"
+      assert_equal before, flow.reload.attributes
+    end
+  end
+
+  test "missing malformed and wrong-surface MFA bindings cannot halt the com flow" do
+    flow = VisitorSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    wrong_surface = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "PRIMARY_PENDING")
+    before = flow.attributes
+
+    [nil, "", "invalid", wrong_surface].each do |binding|
+      assert_no_difference -> { VisitorToken.count } do
+        delete auth_com_sign_in_challenge_path(ri: "jp", fb: binding)
+      end
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal before, flow.reload.attributes
+    end
+  end
+
+  test "a contradictory com mutation halts once and replay cannot issue a session" do
+    flow = VisitorSignInFlow.find_by!(
+      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
+    )
+    path = auth_com_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
+
+    assert_no_difference -> { VisitorToken.count } do
+      delete path
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+      assert_equal VisitorSignInFlowState::HALTED, flow.reload.state_id
+      terminal = flow.attributes
+
+      delete path
+
+      assert_response :conflict
+      assert_equal terminal, flow.reload.attributes
+    end
   end
 
   teardown do
@@ -38,10 +115,10 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "show requires pending_mfa" do
-    get auth_com_sign_in_challenge_path(ri: "jp")
+    get mfa_challenge_path
 
-    assert_response :see_other
-    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
   end
 end
 
@@ -52,7 +129,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   TEST_VERIFICATION_COOKIE_PREFIX = "test_verified:"
 
-  test "show offers the passkey ceremony to a visitor holding an active passkey" do
+  test "show offers the passkey ceremony after email authentication" do
     VisitorPasskey.create!(
       visitor: @visitor,
       webauthn_id: Base64.urlsafe_encode64("com_challenge_passkey_id", padding: false),
@@ -62,17 +139,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
 
-    post auth_com_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @visitor.visitor_emails.first.address,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
-
-    assert_redirected_to auth_com_sign_in_challenge_path
-
-    follow_redirect!
+    establish_pending_mfa!
     follow_redirect!
 
     assert_response :success
@@ -81,27 +148,83 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     assert_nil inertia_props.fetch("no_methods_notice")
   end
 
-  test "show tells a visitor with no usable factor that no method is available" do
-    post auth_com_sign_in_secret_path(ri: "jp"), params: {
-      secret_credential_login_form: {
-        identifier: @visitor.visitor_emails.first.address,
-        secret_credential_value: @raw_secret_credential,
-      },
-      "cf-turnstile-response": "test_token",
-    }
+  test "show tells an email-authenticated visitor with no passkey that no method is available" do
+    assert_empty VisitorPasskey.active.where(visitor_id: @visitor.id)
 
-    assert_redirected_to auth_com_sign_in_challenge_path
-
-    follow_redirect!
+    establish_pending_mfa!
     follow_redirect!
 
     assert_response :success
     assert_empty inertia_props.fetch("methods")
     assert_predicate inertia_props.fetch("no_methods_notice"), :present?
-    assert_predicate inertia_props.fetch("back_link"), :present?
+    assert_not inertia_props.key?("back_link")
+    assert_equal "delete", inertia_props.fetch("cancel").fetch("method")
+  end
+
+  test "destroy ends the pending MFA ceremony and returns to the sign-in entry point" do
+    establish_pending_mfa!
+    cycle = VisitorSignInFlow.where(principal_id: @visitor.id).order(:id).last
+
+    assert_predicate cycle, :sign_in_mfa_pending?
+
+    assert_no_difference -> { VisitorToken.where(visitor_id: @visitor.id).count } do
+      delete mfa_challenge_path
+    end
+
+    assert_response :see_other
+    assert_redirected_to auth_com_sign_in_path(ri: "jp")
+    assert_predicate cycle.reload, :sign_in_halted?
+    assert_nil session[:pending_mfa]
+    assert_nil session[:mfa_user_id]
+    assert_nil session[:com_sign_in_flow_locator]
+  end
+
+  test "a cancelled MFA challenge cannot be resumed" do
+    establish_pending_mfa!
+    delete mfa_challenge_path
+
+    get mfa_passkey_path
+
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
+  end
+
+  test "destroy without a pending MFA ceremony changes nothing and returns to sign-in" do
+    assert_no_difference -> { VisitorToken.count } do
+      delete mfa_challenge_path
+    end
+
+    assert_response :conflict
+    assert_equal "戻るはだめです", response.body
   end
 
   private
+
+  def mfa_binding_params
+    locator = session[:com_sign_in_flow_locator]
+    cycle = VisitorSignInFlow.find_by(public_id: locator&.[]("public_id"))
+    cycle ||= VisitorSignInFlow.where(principal_id: @visitor.id).order(:id).last
+    return {} unless cycle
+
+    { fb: SignInFlowBindingCodec.encode(flow: cycle, surface: "com", phase: "MFA_PENDING") }
+  end
+
+  def mfa_challenge_path
+    auth_com_sign_in_challenge_path(ri: "jp", **mfa_binding_params)
+  end
+
+  def mfa_passkey_path
+    new_auth_com_sign_in_challenge_passkey_path(ri: "jp", **mfa_binding_params)
+  end
+
+  def establish_pending_mfa!
+    email_record = @visitor.visitor_emails.first
+    sign_in_with_email_to_mfa!(
+      surface: :com,
+      email_record: email_record,
+      email: email_record.address,
+    )
+  end
 
   def configured_host(surface_name)
     Rails.configuration.x.boot_config.fetch(:hosts).public_send(surface_name).host
@@ -111,31 +234,11 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -195,10 +298,8 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -210,10 +311,8 @@ class Auth::Com::Sign::In::ChallengesControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -434,75 +533,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-    )
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-    )
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    base.merge(
-      "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-    )
-  end
-
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
@@ -515,13 +545,15 @@ class Auth::Com::Sign::In::ChallengesControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -541,12 +573,12 @@ class Auth::Com::Sign::In::ChallengesControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

@@ -4,34 +4,29 @@
 module Palm
   module App
     module Oidc
-      class CallbacksController < Palm::App::BareController
-        AUTHENTICATION_MODE = :bare
+      class CallbacksController < Palm::App::ApplicationController
+        include ::OidcCallback
+        include ::OidcRpIdentityProvisioning
 
-        before_action :skip_callback_session!
-        after_action :set_callback_cache_headers
+        AUTHENTICATION_MODE = :open
+        class_attribute :oidc_rp_actor_class, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+        class_attribute :oidc_rp_identity_class, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+        class_attribute :oidc_rp_binding_class, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+        class_attribute :oidc_rp_bridge_class, instance_accessor: false # rubocop:disable ThreadSafety/ClassAndModuleAttributes
+        provisions_oidc_rp_identity actor_class: Client, identity_class: ClientIdentity,
+                                    binding_class: ClientOidcIdentityBinding
+        declare_authentication_mode! :open
 
-        def show
-          render_callback_stub
-        end
+        skip_before_action :set_region, raise: false
 
         private
 
-        def skip_callback_session!
-          request.session_options[:skip] = true
+        def oidc_rp_credentials_only?
+          true
         end
 
-        def render_callback_stub
-          render(
-            # rubocop:disable I18n/RailsI18n/DecorateString
-            plain: "This URL is reserved for completing app authentication.\n" \
-                   "Open the mobile app and try signing in again.",
-            # rubocop:enable I18n/RailsI18n/DecorateString
-            status: :ok,
-          )
-        end
-
-        def set_callback_cache_headers
-          response.headers["Cache-Control"] = "no-store"
+        def oidc_client_id
+          RpDeploymentBindingValue.client_id("palm-app")
         end
       end
     end

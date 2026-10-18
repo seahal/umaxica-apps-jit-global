@@ -67,15 +67,14 @@ export default function Page({
   children,
 }: PageProps) {
   const UP_CLASS =
-    "inline-flex w-fit items-center gap-1 text-sm text-fg-muted underline-offset-4 " +
-    "hover:text-fg hover:underline";
+    "ui-text-link inline-flex w-fit items-center gap-1 text-base text-fg-muted hover:text-fg";
 
   // The arrow is decorative: the label already says where the link goes, so announcing "left arrow"
   // in front of it would only add noise.
   const upBody = (
     <>
       <span aria-hidden="true">&larr;</span>
-      <span>{up?.label}</span>
+      <span className="ui-link-label">{up?.label}</span>
     </>
   );
 
@@ -99,21 +98,25 @@ export default function Page({
 
   return (
     <div className={`mx-auto flex w-full flex-col gap-8 ${WIDTHS[width]}`}>
-      {upLink || title || description ? (
+      {upLink || title || description || actions ? (
         <header className="flex flex-col gap-3">
           {upLink}
 
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             {title ? (
-              <h1 className="text-2xl font-semibold tracking-tight text-balance text-fg">
+              <h1 className="min-w-0 wrap-anywhere text-2xl leading-snug font-semibold text-balance text-fg sm:text-3xl">
                 {title}
               </h1>
             ) : null}
 
-            {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+            {actions ? (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>
+            ) : null}
           </div>
 
-          {description ? <p className="text-sm text-pretty text-fg-muted">{description}</p> : null}
+          {description ? (
+            <p className="ui-prose text-base text-pretty text-fg-muted">{description}</p>
+          ) : null}
         </header>
       ) : null}
 

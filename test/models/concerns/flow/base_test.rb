@@ -31,8 +31,8 @@ class FlowBaseTest < ActiveSupport::TestCase
     @connection = ActiveRecord::Base.connection
     @connection.create_table(:cycle_base_test_records, force: true) do |t|
       t.integer(:cycle_status_id, null: false)
-      t.datetime(:discarded_at, null: false)
-      t.datetime(:purged_at, null: false)
+      t.datetime(:discard_at, null: false)
+      t.datetime(:purge_eligible_at, null: false)
       t.datetime(:expires_at)
       t.timestamps
     end
@@ -56,8 +56,8 @@ class FlowBaseTest < ActiveSupport::TestCase
   test "cycle_status_id requires an explicit status column configuration" do
     record = UnconfiguredCycleBaseTestRecord.create!(
       cycle_status_id: 10,
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     )
 
     error = assert_raises(FlowConfigurationError) { record.cycle_status_id }
@@ -65,85 +65,22 @@ class FlowBaseTest < ActiveSupport::TestCase
     assert_match(/cycle_status_column/, error.message)
   end
 
-  test "transition_cycle_to updates status when current status is allowed" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
+  test "transition_cycle_to is private and cannot bypass named operations" do
+    record = build_record
 
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now + 1.hour)
-      record.transition_cycle_to!(20, allowed_from: [10])
-
-      assert_equal 20, record.reload.cycle_status_id
-    end
-  end
-
-  test "transition_cycle_to applies additional changes with the status update" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now + 1.hour)
-      record.transition_cycle_to!(20, allowed_from: [10], changes: { expires_at: now + 2.hours })
-      record.reload
-
-      assert_equal 20, record.cycle_status_id
-      assert_equal now + 2.hours, record.expires_at
-    end
-  end
-
-  test "transition_cycle_to rejects disallowed current status without mutation" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now + 1.hour)
-      error =
-        assert_raises(FlowInvalidTransition) do
-          record.transition_cycle_to!(30, allowed_from: [20])
-        end
-
-      assert_match(/invalid transition/, error.message)
-      assert_equal 10, record.reload.cycle_status_id
-    end
-  end
-
-  test "transition_cycle_to rejects discarded cycles" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now, purged_at: now + 1.day)
-      error =
-        assert_raises(FlowInvalidTransition) do
-          record.transition_cycle_to!(20, allowed_from: [10])
-        end
-
-      assert_match(/cycle is discarded/, error.message)
-      assert_equal 10, record.reload.cycle_status_id
-    end
-  end
-
-  test "transition_cycle_to rejects expired cycles" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-
-    travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, expires_at: now)
-      error =
-        assert_raises(FlowInvalidTransition) do
-          record.transition_cycle_to!(20, allowed_from: [10])
-        end
-
-      assert_match(/cycle is expired/, error.message)
-      assert_equal 10, record.reload.cycle_status_id
-    end
+    assert_not_respond_to record, :transition_cycle_to!
   end
 
   test "discard_cycle updates retention timestamps when order is valid" do
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, purged_at: now + 2.days)
-      record.discard_cycle!(discarded_at: now + 1.second, purged_at: now + 30.days)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, purge_eligible_at: now + 2.days)
+      record.discard_cycle!(discard_at: now + 1.second, purge_eligible_at: now + 30.days)
       record.reload
 
-      assert_equal now + 1.second, record.discarded_at
-      assert_equal now + 30.days, record.purged_at
+      assert_equal now + 1.second, record.discard_at
+      assert_equal now + 30.days, record.purge_eligible_at
     end
   end
 
@@ -151,30 +88,23 @@ class FlowBaseTest < ActiveSupport::TestCase
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
 
     travel_to now do
-      record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, purged_at: now + 2.days)
+      record = build_record(cycle_status_id: 10, discard_at: now + 1.day, purge_eligible_at: now + 2.days)
       error =
         assert_raises(ArgumentError) do
-          record.discard_cycle!(discarded_at: now + 2.days, purged_at: now + 1.day)
+          record.discard_cycle!(discard_at: now + 2.days, purge_eligible_at: now + 1.day)
         end
 
-      assert_match(/discarded_at must be <= purged_at/, error.message)
-      assert_equal now + 1.day, record.reload.discarded_at
+      assert_match(/discard_at must be <= purge_eligible_at/, error.message)
+      assert_equal now + 1.day, record.reload.discard_at
     end
-  end
-
-  test "read_cycle_time reads attribute value through column validation" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-    record = build_record(cycle_status_id: 10, discarded_at: now + 1.day, purged_at: now + 2.days)
-
-    assert_equal now + 1.day, record.send(:read_cycle_time, :discarded_at)
   end
 
   test "ensure_cycle_column raises for missing column" do
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
     record = MisconfiguredCycleBaseTestRecord.create!(
       cycle_status_id: 10,
-      discarded_at: now + 1.day,
-      purged_at: now + 2.days,
+      discard_at: now + 1.day,
+      purge_eligible_at: now + 2.days,
     )
 
     error = assert_raises(FlowConfigurationError) { record.cycle_status_id }
@@ -182,60 +112,17 @@ class FlowBaseTest < ActiveSupport::TestCase
     assert_match(/does not have nonexistent_status_column/, error.message)
   end
 
-  test "cycle_future_time returns true for infinity" do
-    record = build_record
-
-    assert record.send(:cycle_future_time?, Float::INFINITY, Time.current)
-  end
-
-  test "cycle_future_time returns true for future time" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-    record = build_record
-
-    travel_to now do
-      assert record.send(:cycle_future_time?, now + 1.hour, now)
-    end
-  end
-
   test "retainable_required raises when Retainable is not included" do
     now = Time.zone.local(2026, 5, 19, 10, 0, 0)
     record = UnconfiguredCycleBaseTestRecord.create!(
       cycle_status_id: 10,
-      discarded_at: now + 1.day,
-      purged_at: now + 2.days,
+      discard_at: now + 1.day,
+      purge_eligible_at: now + 2.days,
     )
 
     error = assert_raises(FlowConfigurationError) { record.cycle_accessible? }
 
     assert_match(/include Retainable/, error.message)
-  end
-
-  test "cycle boundary predicates follow retention and expiry timestamps" do
-    now = Time.zone.local(2026, 5, 19, 10, 0, 0)
-    record = nil
-
-    travel_to now do
-      record = build_record(
-        cycle_status_id: 10,
-        discarded_at: now + 1.second,
-        purged_at: now + 2.seconds,
-        expires_at: now + 1.second,
-      )
-
-      assert_predicate record, :cycle_accessible?
-      assert_not record.cycle_expired?
-      assert_not record.cycle_purgeable?
-    end
-
-    travel_to now + 1.second do
-      assert_not record.cycle_accessible?
-      assert_predicate record, :cycle_expired?
-      assert_not record.cycle_purgeable?
-    end
-
-    travel_to now + 2.seconds do
-      assert_predicate record, :cycle_purgeable?
-    end
   end
 
   test "with_cycle_lock requires a block" do
@@ -247,57 +134,15 @@ class FlowBaseTest < ActiveSupport::TestCase
   end
 
   test "with_cycle_lock rejects unpersisted records" do
-    record = CycleBaseTestRecord.new(cycle_status_id: 10, discarded_at: 1.day.from_now, purged_at: 2.days.from_now)
+    record = CycleBaseTestRecord.new(
+      cycle_status_id: 10,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
 
     error = assert_raises(FlowInvalidTransition) { record.send(:with_cycle_lock) { nil } }
 
     assert_match(/cycle must be persisted/, error.message)
-  end
-
-  test "ensure_retention_order rejects blank discarded_at" do
-    record = build_record
-
-    error =
-      assert_raises(ArgumentError) {
-        record.send(:ensure_retention_order!, discarded_at: nil, purged_at: Time.current)
-      }
-
-    assert_match(/discarded_at is required/, error.message)
-  end
-
-  test "ensure_retention_order rejects blank purged_at" do
-    record = build_record
-
-    error =
-      assert_raises(ArgumentError) {
-        record.send(:ensure_retention_order!, discarded_at: Time.current, purged_at: nil)
-      }
-
-    assert_match(/purged_at is required/, error.message)
-  end
-
-  test "cycle_time_after handles various infinity and blank combinations" do
-    record = build_record
-
-    assert_not record.send(:cycle_time_after?, nil, Time.current)
-    assert_not record.send(:cycle_time_after?, Time.current, nil)
-    assert_not record.send(:cycle_time_after?, Float::INFINITY, Float::INFINITY)
-    assert record.send(:cycle_time_after?, Float::INFINITY, Time.current)
-    assert_not record.send(:cycle_time_after?, Time.current, Float::INFINITY)
-    assert record.send(:cycle_time_after?, 1.hour.from_now, Time.current)
-  end
-
-  test "cycle_future_time returns false for nil value" do
-    record = build_record
-
-    assert_not record.send(:cycle_future_time?, nil, Time.current)
-  end
-
-  test "cycle_past_or_present_time returns false for nil or infinity" do
-    record = build_record
-
-    assert_not record.send(:cycle_past_or_present_time?, nil, Time.current)
-    assert_not record.send(:cycle_past_or_present_time?, Float::INFINITY, Time.current)
   end
 
   private
@@ -305,8 +150,8 @@ class FlowBaseTest < ActiveSupport::TestCase
   def build_record(**attrs)
     defaults = {
       cycle_status_id: 10,
-      discarded_at: 1.day.from_now,
-      purged_at: 2.days.from_now,
+      discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
     }
     CycleBaseTestRecord.create!(defaults.merge(attrs))
   end

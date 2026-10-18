@@ -22,11 +22,26 @@ class VisitorPreferenceTimezoneOption < ComPrincipalRecord
   AMERICA_ANCHORAGE = 7
   PACIFIC_HONOLULU = 8
 
+  DEFAULTS = [
+    ETC_UTC,
+    ASIA_TOKYO,
+    AMERICA_NEW_YORK,
+    AMERICA_CHICAGO,
+    AMERICA_DENVER,
+    AMERICA_LOS_ANGELES,
+    AMERICA_ANCHORAGE,
+    PACIFIC_HONOLULU,
+  ].freeze
+
   has_many :visitor_preference_timezones,
            class_name: "VisitorPreferenceTimezone",
            foreign_key: :option_id,
            inverse_of: :option,
            dependent: :restrict_with_error
+
+  def self.ensure_defaults!
+    insert_missing_fixed_ids!(DEFAULTS)
+  end
 
   def name
     case id
@@ -39,21 +54,6 @@ class VisitorPreferenceTimezoneOption < ComPrincipalRecord
     when AMERICA_ANCHORAGE then "America/Anchorage"
     when PACIFIC_HONOLULU then "Pacific/Honolulu"
     end
-  end
-
-  DEFAULTS = [
-    ETC_UTC,
-    ASIA_TOKYO,
-    AMERICA_NEW_YORK,
-    AMERICA_CHICAGO,
-    AMERICA_DENVER,
-    AMERICA_LOS_ANGELES,
-    AMERICA_ANCHORAGE,
-    PACIFIC_HONOLULU,
-  ].freeze
-
-  def self.ensure_defaults!
-    insert_missing_fixed_ids!(DEFAULTS)
   end
 
   self.primary_key = :id

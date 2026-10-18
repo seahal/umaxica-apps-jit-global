@@ -10,8 +10,8 @@ class RetentionPurgeLegalHoldTest < ActiveJob::TestCase
     client.update_columns(
       withdrawal_started_at: 40.days.ago,
       deactivated_at: 39.days.ago,
-      discarded_at: 39.days.ago,
-      purged_at: 1.day.ago,
+      discard_at: 39.days.ago,
+      purge_eligible_at: 1.day.ago,
     )
     ClientRetentionHold.create!(client: client, reason_code: "legal_hold")
     privacy_request = ClientPrivacyRequest.create!(client: client)
@@ -29,8 +29,8 @@ class RetentionPurgeLegalHoldTest < ActiveJob::TestCase
     visitor.update_columns(
       withdrawal_started_at: 40.days.ago,
       deactivated_at: 39.days.ago,
-      discarded_at: 39.days.ago,
-      purged_at: 1.day.ago,
+      discard_at: 39.days.ago,
+      purge_eligible_at: 1.day.ago,
     )
     VisitorRetentionHold.create!(visitor: visitor, reason_code: "legal_hold")
     privacy_request = VisitorPrivacyRequest.create!(visitor: visitor)

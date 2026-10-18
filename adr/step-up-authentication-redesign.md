@@ -9,6 +9,15 @@
 > reintroduce sign-side sessions, refresh tokens, preference writes, dashboards, account lifecycle,
 > downstream token issuance, authorization decisions, or step-up freshness.
 
+> **Amendment (2026-10-15):** `adr/authentication-security-mode.md` sets per-Security-Mode step-up
+> method sets and a maximum validity of 15 minutes (`NORMAL`) or 5 minutes (`ADVANCED`), and
+> replaces scope-level reuse (C5) with operation-, target-, actor- and session-bound evidence
+> consumed once. Not yet implemented.
+
+> **Amendment (2026-10-15, later):** `adr/authentication-security-cycle-consolidation-2026-10-15.md` section 5 removes any
+> runtime use of a required AAL level; step-up requirements are concrete (methods, phishing
+> resistance, UV, TTL, scope, binding). `required_aal` is deprecated for staged removal.
+
 **Correction (2026-05-19):** The current route contract for `settings_mfa` is
 `/settings/mfa/challenge` on every sign surface. WebAuthn challenge state remains in the Rails
 session store; only email OTP step-up state uses the cache-backed `step_up_session:*` keys.
@@ -38,7 +47,7 @@ result was a half-built system with multiple regressions:
   honor `params[:rt]`, so the "setup → register → return to the original sensitive action" loop is
   silently broken. The user lands on `/settings` instead of the action they were trying to do.
 - `ClientStepUpSession` / `VisitorStepUpSession` / `OperatorStepUpSession` exist with full schemas
-  (`status, attempt_count, verified_at, discarded_at, method`, `Retainable`) but no controllers wire
+  (`status, attempt_count, verified_at, discard_at, method`, `Retainable`) but no controllers wire
   them. Controllers store step-up state in cookie sessions instead. Two parallel mechanisms, only
   the cookie one is alive.
 - Orphan views under `app/views/sign/{app,org}/step_up/` (8 files) reference `@step_up_session` /
@@ -79,12 +88,17 @@ redesign decisions agreed in the 2026-05-11 design dialogue.
 - **B3.** `UNIQUE(<token>_id)` constraint enforces the singleton at the DB layer (replaces the
   previous non-unique `(<actor>_id, status)` index).
 - **B4.** `STATUSES` reduced to `%w(PENDING VERIFIED)`. `CANCELLED` is unnecessary because overwrite
-  replaces the old ticket; `EXPIRED` is unnecessary because `discarded_at < Time.current` is
+  replaces the old ticket; `EXPIRED` is unnecessary because `discard_at < Time.current` is
   computed at read time.
 - **B5.** Email OTP secret/counter state lives in cache, keyed by
   `step_up_session:{step_up_session_id}:email_otp`, with TTL ≤ `STEP_UP_TTL`. WebAuthn challenge
   bytes remain in the Rails session store and continue to use the existing one-time-use / TTL
   challenge lifecycle.
+
+- **B6.** Step-up completion consumes the token-bound row under a PostgreSQL row lock. The
+  completion result is issued only inside the pending-row transaction, and the row is destroyed
+  before that transaction commits. A concurrent completion therefore observes no pending ticket
+  and cannot issue a second ceremony result.
 
 ### C. Judgement logic
 
@@ -112,7 +126,7 @@ redesign decisions agreed in the 2026-05-11 design dialogue.
   a new ticket via overwrite is required. Account-wide lockout is intentionally out of scope and may
   be layered on later if abuse is observed.
 - **C5.** TTL is unified at **15 minutes** for `STEP_UP_TTL` (token freshness for repeat operations)
-  and `STEP_UP_TTL` (`step_up_session.discarded_at` window). The previous
+  and `STEP_UP_TTL` (`step_up_session.discard_at` window). The previous
   `VERIFICATION_POST_TTL = 30.minutes` and `VERIFICATION_GET_TTL = 15.minutes` distinction is
   dropped in favor of one value.
 - **C6.** `ConfiguredMethods` and `AvailableMethods` results are recomputed every request and not
@@ -303,8 +317,7 @@ so the destination page owns the inline messaging — see
 
 ## Consequences
 
-- The implementation plan is captured in `plans/active/step_up-step-up-rebuild.md`. Implementation
-  will be carried out by a separate AI agent in phases.
+- Implementation will be carried out by a separate AI agent in phases.
 - Schema migrations keep the step-up tables on the three token databases (`mark`, `symbol`, `token`)
   and key them by token id.
 - Controllers in `settings/` namespaces gain a new `before_action` helper and now honor
@@ -326,4 +339,12 @@ so the destination page owns the inline messaging — see
   `AuthMethodGuard.last_method?` (the unlink-side guard complementary to step-up).
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md` — refresh-path AAL guarantees that this
   ADR's `step_up_satisfied?` depends on.
-- `plans/active/step_up-step-up-rebuild.md` — the implementation plan that operationalizes this ADR.
+
+## Delivered reconciliation (2026-10-06)
+
+The current step-up contract is recorded in `docs/security/step-up-operation-inventory.md`.
+Requirement, method choice, admission, Auth result, cancellation, conflict, continuation and final
+mutation are now one explicit operation boundary. Legacy AAL labels remain storage or wire history
+only and are not authorization inputs. The historical bootstrap and ownership language above is
+superseded where it conflicts with the delivered Base/Auth paths; first registration is a separate
+bootstrap transaction and cannot be reused as ordinary step-up freshness.

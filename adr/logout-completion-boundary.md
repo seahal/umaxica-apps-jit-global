@@ -37,11 +37,9 @@ in the session, not the URL.
 `/sign/out/edit` confirmation, and redirect back to the exact registered `post_logout_redirect_uri`
 or a surface-local `/sign/out/complete`.
 
-Palm remains a future Universal/App Link contract only:
-
-```text
-https://<palm-host>/sign/out/complete
-```
+Palm is an approved native RP. Its implemented browser authorization and Jump logout handoff
+contract is recorded in `adr/jump-directed-rails-handoff-contract.md`; native custom-scheme
+completion delivery remains outside the Jump graph.
 
 ## Consequences
 
@@ -57,3 +55,16 @@ https://<palm-host>/sign/out/complete
 - `adr/acme-session-and-token-authority.md`
 - `adr/sign-credential-gateway-surface.md`
 - `adr/logout-primitive-and-composition.md`
+
+## Historical completion amendment (2026-10-06)
+
+This superseded ADR remains historical, but its completion distinction is retained for the current
+logout design. Browser-ceremony completion, the security commit that revokes authority, and
+retirement of already-issued access JWTs are separate facts. A completed logout records that the
+logout mutation finished; it does not claim that every access JWT is invalid before its `exp` plus
+leeway.
+
+The current Browser RP flow is defined by `two.md` and `adr/logout-ceremony-boundary.md`: authority
+revocation is the irreversible first phase, then authority cleanup, origin cleanup, initiating
+RP-session revocation, and finalization occur. This paragraph **amends the historical
+interpretation only**; the ADR's superseded route contract is not restored.

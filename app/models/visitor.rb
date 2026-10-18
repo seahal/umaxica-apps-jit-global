@@ -13,10 +13,10 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
-#  discarded_at                :datetime         default(Infinity), not null
+#  discard_at                :datetime         default(Infinity), not null
 #  lock_version                :integer          default(0), not null
 #  mfa_level_enabled           :boolean          default(FALSE), not null
-#  purged_at                   :datetime         default(Infinity), not null
+#  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
 #  token_valid_after_at        :datetime
@@ -37,11 +37,11 @@
 #  index_visitors_on_access_state           (access_state)
 #  index_visitors_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_visitors_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
-#  index_visitors_on_discarded_at           (discarded_at)
+#  index_visitors_on_discard_at           (discard_at)
 #  index_visitors_on_mfa_level_id           (mfa_level_id)
 #  index_visitors_on_mfa_status_id          (mfa_status_id)
 #  index_visitors_on_public_id              (public_id) UNIQUE
-#  index_visitors_on_purged_at              (purged_at)
+#  index_visitors_on_purge_eligible_at              (purge_eligible_at)
 #  index_visitors_on_status_id              (status_id)
 #  index_visitors_on_terminated_at          (terminated_at) WHERE (terminated_at IS NOT NULL)
 #  index_visitors_on_token_valid_after_at   (token_valid_after_at) WHERE (token_valid_after_at IS NOT NULL)
@@ -83,9 +83,11 @@ class Visitor < ComPrincipalRecord
   ].freeze
   RECOVERY_IDENTITY_REQUIRED_MESSAGE = I18n.t("models.visitor.recovery_identity_required")
 
+  encrypts :admin_locked_reason_note
+
   attribute :status_id, default: VisitorStatus::NOTHING
-  mfa_level_reference VisitorMfaLevel
-  mfa_status_reference VisitorMfaStatus
+
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   belongs_to :visitor_status,
              class_name: "VisitorStatus",
@@ -133,6 +135,10 @@ class Visitor < ComPrincipalRecord
   has_many :visitor_device_sessions,
            dependent: :destroy,
            inverse_of: :visitor
+  has_one :authority_lock,
+          class_name: "VisitorAuthorityLock",
+          dependent: :destroy,
+          inverse_of: :visitor
   has_many :visitor_banners,
            dependent: :destroy,
            inverse_of: :visitor
@@ -152,9 +158,27 @@ class Visitor < ComPrincipalRecord
           class_name: "VisitorAccount",
           inverse_of: :visitor,
           dependent: :destroy
+  has_many :individual_ownerships, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :owned_individuals, through: :individual_ownerships, source: :individual
+  has_many :individual_administration_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :individual_delegation_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :individual_usage_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :individual_view_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :company_ownerships, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :owned_companies, through: :company_ownerships, source: :company
+  has_many :company_administration_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :company_delegation_grants, dependent: :restrict_with_error, inverse_of: :visitor
+  has_many :company_view_grants, dependent: :restrict_with_error, inverse_of: :visitor
   has_one :core_com_visitor_bridge,
           dependent: :destroy,
           inverse_of: :visitor
+
+  validates :status_id, numericality: { only_integer: true }
+  mfa_level_reference VisitorMfaLevel
+  mfa_status_reference VisitorMfaStatus
+
+  before_destroy :admit_identifier_history_erasure, prepend: true
+  before_destroy :erase_dead_identifier_histories
 
   def staff?
     false
@@ -177,18 +201,24 @@ class Visitor < ComPrincipalRecord
   end
 
   def verified_email?
+    # Only an effective binding identifies the Visitor (D-85); a verified-status candidate does not.
     if visitor_emails.loaded?
-      visitor_emails.any? { |e| VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.visitor_email_status_id) }
+      visitor_emails.any? { |e|
+        e.binding_effective? && VERIFIED_RECOVERY_EMAIL_STATUS_IDS.include?(e.visitor_email_status_id)
+      }
     else
-      visitor_emails.exists?(visitor_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
+      visitor_emails.effective_binding.exists?(visitor_email_status_id: VERIFIED_RECOVERY_EMAIL_STATUS_IDS)
     end
   end
 
   def verified_telephone?
     if visitor_telephones.loaded?
-      visitor_telephones.any? { |t| VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.visitor_telephone_status_id) }
+      visitor_telephones.any? { |t|
+        t.binding_effective? && VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS.include?(t.visitor_telephone_status_id)
+      }
     else
-      visitor_telephones.exists?(visitor_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
+      visitor_telephones.effective_binding
+        .exists?(visitor_telephone_status_id: VERIFIED_RECOVERY_TELEPHONE_STATUS_IDS)
     end
   end
 
@@ -206,7 +236,30 @@ class Visitor < ComPrincipalRecord
 
   private
 
+  def admit_identifier_history_erasure
+    with_lock do
+      now = self.class.database_now
+      if !lapsed?(now) || !purgeable?(now) || visitor_retention_holds.active_at(now).exists? ||
+          ComEnforcementCase.principal_effect_blocking?(public_id, :withdrawal_purge_blocked) ||
+          ComEnforcementCase.principal_effect_blocking?(public_id, :principal_hard_delete_blocked)
+        errors.add(:base, "Identity is recoverable or legally retained")
+        throw(:abort)
+      end
+
+      if notification_records.exists? || VisitorAccount.exists?(visitor_id: id)
+        errors.add(:base, "Cross-database children require the account purge workflow")
+        throw(:abort)
+      end
+    end
+  end
+
+  def erase_dead_identifier_histories
+    VisitorEmailHistory.where(visitor_id: id).delete_all
+    VisitorTelephoneHistory.where(visitor_id: id).delete_all
+  end
+
   def configured_mfa_level_methods
     step_up_methods
   end
 end
+# rubocop:enable Rails/HasManyOrHasOneDependent

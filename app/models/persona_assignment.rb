@@ -30,6 +30,6 @@
 class PersonaAssignment < AppRpRecord
   include ::AccountAssignment
 
-  belongs_to :persona, inverse_of: :persona_assignments
+  belongs_to :persona, class_name: "ClientPersona", inverse_of: :persona_assignments
   belongs_to :client_identity, inverse_of: :persona_assignments
 end

@@ -25,8 +25,8 @@ class CeremonyCandidateWriteRefusalsTest < ActiveSupport::TestCase
       expires_at: 10.minutes.from_now,
     }
 
-    IdentitySecretCredentialCeremonyCandidate.stub(
-      :create!, ->(**) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
+    IdentityCeremonyCandidateRecord.stub(
+      :create_with_generated_ref, ->(*) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
     ) do
       error =
         assert_raises(IdentitySecretCredentialCeremonyContract::Error) { store.store!(**arguments) }
@@ -53,8 +53,8 @@ class CeremonyCandidateWriteRefusalsTest < ActiveSupport::TestCase
   test "a TOTP candidate the database refuses is raised as a ceremony error" do
     store = IdentityTotpCeremonyCandidateStore.new
 
-    IdentityTotpCeremonyCandidate.stub(
-      :create!, ->(**) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
+    IdentityCeremonyCandidateRecord.stub(
+      :create_with_generated_ref, ->(*) { raise ActiveRecord::RecordNotUnique, "duplicate digest" },
     ) do
       error =
         assert_raises(IdentityTotpCeremonyContract::Error) do
@@ -66,20 +66,6 @@ class CeremonyCandidateWriteRefusalsTest < ActiveSupport::TestCase
         end
 
       assert_match(/TOTP candidate is invalid/, error.message)
-    end
-  end
-
-  # The region decides which activation options are offered, so a preference
-  # store that cannot answer falls back rather than leaving the candidate
-  # without a region at all.
-  test "an activation candidate falls back to a default region when none can be read" do
-    resolver = SignInActivationCandidateResolver.new(cycle: nil, actor: clients(:one))
-
-    assert_equal "Client", resolver.send(:default_persona)
-    assert_equal 1, resolver.candidates.size
-
-    Actor.stub(:preferences, ->(*) { raise IOError, "preference store unavailable" }) do
-      assert_equal "JP", resolver.send(:default_region)
     end
   end
 

@@ -6,7 +6,7 @@
 # end the auth session). Before this concern existed, ordinary sign-out never
 # touched the `preference_access`/`preference_refresh`/`preference_dbsc`
 # cookies or the underlying AppPreference/ComPreference/OrgPreference row at
-# all (see memos/2026-07-21-preference-lifecycle-sign-out-audit.md section 4): the
+# all (see research/2026-07-21-preference-lifecycle-sign-out-audit.md section 4): the
 # same token/jti stayed live across the sign-out boundary and rode into the
 # next sign-in's adoption merge unchanged.
 #
@@ -146,7 +146,7 @@ module PreferenceSignOutRotation
   # and expire it immediately so it also drops out of the `active` scope used
   # by every other lookup.
   def retire_preference_after_sign_out!(old_preference)
-    old_preference.update!(used_at: Time.current, discarded_at: Time.current)
+    old_preference.update!(used_at: Time.current, discard_at: Time.current)
   end
 
   # Never logs the raw token/digest/cookie value or any PII -- only the

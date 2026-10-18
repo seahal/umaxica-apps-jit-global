@@ -1,5 +1,13 @@
 # Detailed Design Specification (DDS)
 
+> Current implementation (2026-10-04): parts of this document describe an earlier shape of the
+> application. The `Sign` and `Top` namespaces,
+> `app/controllers/sign/app/registration/emails_controller.rb`, `UserIdentityEmail`,
+> `ServiceSiteContact`, and `src/pages/app/inquiry/before_submit.js` are not in the current code.
+> Current controllers live under `Auth`, `Base`, `Core`, `Warp`, `Palm`, `Edit`, `Guid`, and
+> the content surfaces `Docs`, `Help`, `Info`, and `News`, one route file each in `config/routes/`.
+> Use `README.md` ("Routing") and `docs/architecture/` for the current topology.
+
 ## Project: Umaxica App (JIT)
 
 ### Conforms to IEEE 1016:2009 and ISO/IEC/IEEE 42010:2011
@@ -20,8 +28,8 @@ collaborates to satisfy the SRS.
 - Front-end bundles in `src`
 - Data models spanning the multi-database setup defined in `config/database.yml`
 - Supporting services (`app/services`, `app/consumers`, ActionMailer, Sms providers)
-- Observability, configuration, and deployment mechanisms (pnpm-managed JS tooling, Compose,
-  Foreman, CI)
+- Observability, configuration, and deployment mechanisms (Bun-managed JS tooling, Compose, Foreman,
+  CI)
 
 ### 1.3 References
 
@@ -51,12 +59,12 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 
 ### 2.2 Primary Modules
 
-| Layer          | Components                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------- |
-| Presentation   | Namespaced controllers and Turbo/React views under `src`                                            |
-| Domain Logic   | Concerns in `app/controllers/concerns`, services in `app/services`, models per DB                   |
-| Integration    | `app/mailers`, `Outbound::Sms`, OTEL instrumentation                                                |
-| Infrastructure | Compose services (Postgres, Valkey, optional RustFS, Loki, Tempo, Grafana), pnpm/Tailwind toolchain |
+| Layer          | Components                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| Presentation   | Namespaced controllers and Turbo/React views under `src`                                           |
+| Domain Logic   | Concerns in `app/controllers/concerns`, services in `app/services`, models per DB                  |
+| Integration    | `app/mailers`, `Outbound::Sms`, OTEL instrumentation                                               |
+| Infrastructure | Compose services (Postgres, Valkey, optional RustFS, Loki, Tempo, Grafana), Bun/Tailwind toolchain |
 
 ---
 
@@ -76,17 +84,17 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 
 ### 3.2 Shared Controller Concerns
 
-| Concern               | Key responsibilities                                                                                             |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `Auth::Base`          | JWT (ES384) issuance/verification (`kid` header + keyring), login/logout helpers, refresh/device cookie handling |
+| Concern               | Key responsibilities                                                                                                  |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `Auth::Base`          | JWT (ES384) issuance/verification (`kid` header + keyring), login/logout helpers, refresh/device cookie handling      |
 | `RateLimit`           | Exposes `config.x.rate_limit.store` (a Valkey-backed `ActiveSupport::Cache::RedisCacheStore`) to the `rate_limit` DSL |
-| `DefaultUrlOptions`   | Reads signed preference cookie to append `lx`, `ri`, `tz` query params                                           |
-| `PreferenceRegions`   | Normalizes locale/timezone inputs, persists to session/cookies, handles errors                                   |
-| `Theme`               | Provides theme editing/updating with shorthand codes and preference cookie syncing                               |
-| `Cookie`              | Stores ePrivacy consent flags in signed cookies                                                                  |
-| `CloudflareTurnstile` | Validates Turnstile tokens via HTTP POST                                                                         |
-| `Redirect`            | Validates allowed redirect hosts and Base64 tokens                                                               |
-| `Health`              | `Health` service layer + `HealthCheckRendering` render text probes and `/api/v0/health.json`                     |
+| `DefaultUrlOptions`   | Reads signed preference cookie to append `lx`, `ri`, `tz` query params                                                |
+| `PreferenceRegions`   | Normalizes locale/timezone inputs, persists to session/cookies, handles errors                                        |
+| `Theme`               | Provides theme editing/updating with shorthand codes and preference cookie syncing                                    |
+| `Cookie`              | Stores ePrivacy consent flags in signed cookies                                                                       |
+| `CloudflareTurnstile` | Validates Turnstile tokens via HTTP POST                                                                              |
+| `Redirect`            | Validates allowed redirect hosts and Base64 tokens                                                                    |
+| `Health`              | `Health` service layer + `HealthCheckRendering` render text probes and `/api/v0/health.json`                          |
 
 ### 3.3 Top Namespace
 
@@ -171,8 +179,8 @@ Browser ⇄ Fastly/Cloudflare ⇄ Rails (Top/Sign/Help/Docs/News/API/BFF)
 - `src/entrypoints/application.ts` imports Turbo, Stimulus controllers, shared browser helpers, and
   the single Vite stylesheet graph.
 - Additional Vite entrypoints live under `src/entrypoints`, with page modules under `src/pages`.
-- JavaScript is bundled through Vite Rails; pnpm and Vite Plus manage linting, formatting, tests,
-  and build tooling.
+- JavaScript is bundled through Vite Rails; Bun, oxlint, oxfmt, and Vitest manage linting,
+  formatting, tests, and build tooling.
 - Tailwind CSS is compiled through the Vite-backed frontend pipeline and surfaced through `bin/dev`.
 
 ### 3.10 Services & Integrations
@@ -297,14 +305,14 @@ the runtime architecture. Adding a third Valkey use case requires an ADR.
 
 ## 6. External Interfaces
 
-| Interface            | Endpoint(s)                                                                                                        | Details                                                                                                                                                                                                                                                                                                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP/Turbo           | `/`, `/health`, `/api/v0/health.json`, `/preference/*`, `/sign/*`, `/help/contacts`, `/api/v1/inquiry/*`, `/bff/*` | Host-specific responses; `allow_browser` enforces modern clients.                                                                                                                                                                                                                                                                                                                   |
-| Cloudflare Turnstile | `https://challenges.cloudflare.com/turnstile/v0/siteverify`                                                        | Called server-side with secret key, form response, and client IP.                                                                                                                                                                                                                                                                                                                   |
-| ActionMailer         | `Email::{App,Com,Org}::{OtpMailer,AlertMailer,PromotionalMailer}`                                                  | OTP, alert, and promotion senders are fixed per surface and purpose, for example `otp@umaxica.app` and `promotion@umaxica.org`. OTP job arguments carry encrypted OTP payloads.                                                                                                                                                                                                     |
-| SMS                  | `Outbound::Sms`                                                                                                    | Called via `Outbound::Sms.deliver_later` for OTP-related flows; `SMS_PROVIDER` selects the concrete provider. SMS job arguments carry encrypted message bodies.                                                                                                                                                                                                                     |
-| OpenTelemetry        | OTLP exporter                                                                                                      | Default endpoint `http://tempo:4318/v1/traces` (configurable).                                                                                                                                                                                                                                                                                                                      |
-| Storage              | RustFS S3-compatible API                                                                                           | Opt-in local `object-storage` Compose profile with `object_storage:prepare`/`object_storage:smoke` rake tasks (`lib/tasks/object_storage.rake`) for manual verification. Not wired into the application: Shrine (`config/initializers/shrine.rb`) uses `Memory` storage in test and local `FileSystem` storage otherwise, and Active Storage (`config/storage.yml`) is `Disk`-only. |
+| Interface            | Endpoint(s)                                                                                                        | Details                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP/Turbo           | `/`, `/health`, `/api/v0/health.json`, `/preference/*`, `/sign/*`, `/help/contacts`, `/api/v1/inquiry/*`, `/bff/*` | Host-specific responses; `allow_browser` enforces modern clients.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Cloudflare Turnstile | `https://challenges.cloudflare.com/turnstile/v0/siteverify`                                                        | Called server-side with secret key, form response, and client IP.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ActionMailer         | `Email::{App,Com,Org}::{OtpMailer,AlertMailer,PromotionalMailer}`                                                  | OTP, alert, and promotion senders are fixed per surface and purpose, for example `otp@umaxica.app` and `promotion@umaxica.org`. OTP job arguments carry encrypted OTP payloads.                                                                                                                                                                                                                                                                                                                               |
+| SMS                  | `Outbound::Sms`                                                                                                    | Called via `Outbound::Sms.deliver_later` for OTP-related flows; `SMS_PROVIDER` selects the concrete provider. SMS job arguments carry encrypted message bodies.                                                                                                                                                                                                                                                                                                                                               |
+| OpenTelemetry        | OTLP exporter                                                                                                      | Default endpoint `http://tempo:4318/v1/traces` (configurable).                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Storage              | S3-compatible object storage                                                                                       | Shrine uses in-memory storage in test, configured S3-compatible storage in development/staging, and AWS S3 through the platform credential provider in production. Boundary-specific bucket configuration is fail-fast. Objects are private; the authenticated Avatar image-delivery contract and CDN URL namespace are not implemented. The opt-in local RustFS profile and `object_storage:prepare`/`object_storage:smoke` tasks verify the storage service separately. Active Storage remains `Disk`-only. |
 
 ---
 
@@ -320,12 +328,12 @@ the runtime architecture. Adding a third Valkey use case requires an ADR.
 - `bin/dev` ensures the Rails server, Vite dev server, and background jobs run concurrently via
   `foreman start -f Procfile.dev`.
 - Build/test commands:
-  - `bundle install`, `pnpm install`
+  - `bundle install`, `bun install --frozen-lockfile`
   - `bin/rails db:prepare`
   - `bin/dev`
   - Tests: `bin/rails test`
-  - Lint: `bundle exec rubocop`, `bundle exec erb_lint .`, `pnpm run lint`, `pnpm run format`,
-    `pnpm run check`
+  - Lint: `bundle exec rubocop`, `bundle exec erb_lint .`, `bun run lint`, `bun run format`,
+    `bun run check`
 
 ---
 
@@ -359,17 +367,16 @@ the runtime architecture. Adding a third Valkey use case requires an ADR.
 - `ServiceSiteContact` `before_create` raises if required content missing to prevent blank
   submissions.
 - OTEL instrumentation emits spans for HTTP requests, rate-limit store calls, and ActionMailer
-  deliveries (once
-  instrumentation enabled).
+  deliveries (once instrumentation enabled).
 - Logs stream to STDOUT → Loki (when Compose stack used) or platform logging (Cloud Run).
 
 ---
 
 ## 10. Deployment & Operations
 
-- **Local**: Compose + Foreman; pnpm handles JS lint/format tasks.
-- **CI**: GitHub Actions pipeline runs bundler install, database setup, Rails tests, pnpm linting,
-  Brakeman, Bundler Audit, and Vite Plus checks.
+- **Local**: Compose + Foreman; Bun handles JS lint/format tasks.
+- **CI**: GitHub Actions pipeline runs bundler install, database setup, Rails tests, Bun-run
+  linting, Brakeman, Bundler Audit, and the Bun `check` script.
 - **Staging/Production**:
   - Rails server deployed to Google Cloud Run (per README) or equivalent.
   - Fastly/Cloudflare handle DNS & TLS; `EDGE_*` hostnames define redirect targets.
@@ -384,7 +391,9 @@ the runtime architecture. Adding a third Valkey use case requires an ADR.
 
 1. Flesh out staff/admin flows (owner/customer/news/docs CRUD).
 2. Continue replacing legacy helper-style checks with explicit Action Policy authorization.
-3. Publish OpenAPI via Rswag and mount `/api-docs`.
+3. OpenAPI publication is in place for development: `rswag-api` serves the descriptions under
+   `openapi/` at `/openapi` and `rswag-ui` serves Swagger UI on the swagger host
+   (`config/routes/swagger.rb`). There is no `/api-docs` mount.
 4. Add geolocation- and cookie-based personalization to `Top::*` once privacy reviewed.
 5. Automate Fastly cache purges after docs/news updates.
 6. Expand SMS providers and add delivery receipt handling.

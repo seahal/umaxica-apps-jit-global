@@ -17,13 +17,10 @@ class CredentialSecurityRoutesInvariantTest < ActiveSupport::TestCase
     assert_empty offenders.map { |path| path.delete_prefix("#{Rails.root.join}") }
   end
 
-  test "credential changing app controllers call the shared security transition" do
+  test "app MFA and email credential changes retain the shared security transition" do
     required = {
       "app/controllers/base/app/identity/mfa/challenges_controller.rb" => "CredentialSecurityTransition.call",
-      "app/controllers/base/app/identity/mfa/resets_controller.rb" => "CredentialSecurityTransition.call",
-      "app/controllers/base/app/identity/secrets/removals_controller.rb" => "CredentialSecurityTransition.call",
       "app/controllers/base/app/identity/emails/registrations_controller.rb" => "CredentialSecurityTransition.call",
-      "app/services/client_secret_credentials_destroy.rb" => "CredentialSecurityTransition.call",
     }
 
     missing =
@@ -34,12 +31,46 @@ class CredentialSecurityRoutesInvariantTest < ActiveSupport::TestCase
     assert_empty missing
   end
 
-  test "password rotation route is explicitly disabled until full password change is implemented" do
-    source = Rails.root.join("app/controllers/base/app/identity/secrets/rotations_controller.rb").read
+  test "base app generic identity secret management route is absent" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}/identity/secrets",
+        method: :get,
+      )
+    end
+  end
 
-    assert_includes source, "head :forbidden"
-    assert_not_includes source, "CredentialSecurityTransition.call"
-    assert_not_includes source, "head(:not_implemented)"
+  test "app Secret uses Client ownership and fact timestamps without a kind or status axis" do
+    credential = ClientSecretCredential.new
+
+    assert_not credential.available_at?(at: Client.database_now)
+    assert_equal "Client", ClientSecretCredential.reflect_on_association(:client).class_name
+    %w(user_secret_kind_id user_secret_status_id user_identity_secret_status_id secret_kind usage_policy
+       max_uses uses_remaining use_count).each do |column|
+      assert_not_includes ClientSecretCredential.column_names, column
+    end
+  end
+
+  test "legacy permanent secret credentials expose no sign-in eligibility interface" do
+    models = [
+      [VisitorSecretCredential, VisitorSecretCredentialKind],
+      [OperatorSecretCredential, OperatorSecretCredentialKind],
+    ]
+
+    models.each do |credential_class, kind_class|
+      assert_not credential_class.respond_to?(:allowed_for_secret_credential_sign_in)
+      assert_not credential_class.const_defined?(:SIGN_IN_ALLOWED_KIND_IDS, false)
+      assert_not credential_class.const_defined?(:SIGN_IN_ALLOWED_STATUS_IDS, false)
+      assert_not credential_class.new.respond_to?(:verify_for_secret_credential_sign_in!)
+      assert_not credential_class.new.respond_to?(:usable_for_secret_credential_sign_in?)
+      assert_not credential_class.new.respond_to?(:verify_and_consume!)
+      assert_not credential_class.new.respond_to?(:permanent_secret_credential?)
+      assert_not kind_class.const_defined?(:PERMANENT, false)
+      assert_not kind_class.const_defined?(:ALLOWED_FOR_SECRET_SIGN_IN, false)
+    end
+
+    assert_equal 1, VisitorSecretCredentialKind::LOGIN
+    assert_equal 2, OperatorSecretCredentialKind::LOGIN
   end
 
   test "app MFA challenge update route reaches credential transition controller action" do

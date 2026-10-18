@@ -4,6 +4,7 @@
 module WithdrawalFlow
   extend ActiveSupport::Concern
 
+  # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include ::PublicId
     include ::Retainable
@@ -24,7 +25,7 @@ module WithdrawalFlow
     scope :active,
           -> do
             where(status_id: status_ids_for("REQUESTED", "CLOSING", "DISCARDED"))
-              .where(arel_table[:discarded_at].gt(Time.current))
+              .where(arel_table[:discard_at].gt(Time.current))
           end
   end
 

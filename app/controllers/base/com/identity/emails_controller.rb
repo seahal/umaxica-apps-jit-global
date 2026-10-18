@@ -18,22 +18,21 @@ module Base
           VisitorEmailStatus::VERIFIED_WITH_SIGN_UP,
         ].freeze
 
-        before_action :authenticate_visitor!
         before_action :authorize_emails!, only: :index
 
         def index
-          @client_emails = current_visitor.visitor_emails
+          @client_emails = VisitorEmail.where(visitor_id: current_visitor.id)
           render inertia: true, props: index_page_props
         end
 
         def edit
-          @user_email = current_visitor.visitor_emails.find_by!(public_id: params.expect(:id))
+          @user_email = VisitorEmail.find_by!(visitor_id: current_visitor.id, public_id: params.expect(:id))
           authorize!(@user_email)
           render inertia: true, props: edit_page_props
         end
 
         def update
-          @user_email = current_visitor.visitor_emails.find_by!(public_id: params.expect(:id))
+          @user_email = VisitorEmail.find_by!(visitor_id: current_visitor.id, public_id: params.expect(:id))
           authorize!(@user_email)
 
           unless cloudflare_turnstile_stealth_validation["success"]
@@ -54,7 +53,7 @@ module Base
         end
 
         def destroy
-          @user_email = current_visitor.visitor_emails.find_by!(public_id: params.expect(:id))
+          @user_email = VisitorEmail.find_by!(visitor_id: current_visitor.id, public_id: params.expect(:id))
           authorize!(@user_email)
 
           if @user_email.undeletable?
@@ -71,8 +70,10 @@ module Base
             return
           end
 
-          @user_email.destroy!
-          create_audit_event!(ClientChronicleEvent::EMAIL_REMOVED, subject: @user_email)
+          IdentityCredentialRemovalCommitter.call!(
+            actor: current_visitor, credential: @user_email, current_session: current_session, request: request,
+            actor_context: current_actor,
+          )
 
           redirect_to(
             base_com_identity_emails_path(ri: params[:ri]),

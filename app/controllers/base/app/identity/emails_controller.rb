@@ -12,21 +12,24 @@ module Base
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :authenticate_client!
         before_action :authorize_emails!, only: :index
+        # The edit page carries the delete action, so it is gated with it; this matches com,
+        # which requires settings_email step-up for the whole controller.
+        step_up only: %i(edit update destroy), scope: "settings_email"
 
         def index
-          render inertia: true, props: emails_index_props(current_client.client_emails)
+          emails = ClientEmail.where(user_id: current_client.id)
+          render inertia: true, props: emails_index_props(emails)
         end
 
         def edit
-          @user_email = current_client.client_emails.find_by!(public_id: params.expect(:id))
+          @user_email = ClientEmail.find_by!(user_id: current_client.id, public_id: params.expect(:id))
           authorize!(@user_email)
           render inertia: true, props: email_edit_props(@user_email)
         end
 
         def update
-          @user_email = current_client.client_emails.find_by!(public_id: params.expect(:id))
+          @user_email = ClientEmail.find_by!(user_id: current_client.id, public_id: params.expect(:id))
           authorize!(@user_email)
           unless cloudflare_turnstile_stealth_validation["success"]
             return render(
@@ -47,7 +50,7 @@ module Base
         end
 
         def destroy
-          @user_email = current_client.client_emails.find_by!(public_id: params.expect(:id))
+          @user_email = ClientEmail.find_by!(user_id: current_client.id, public_id: params.expect(:id))
           authorize!(@user_email)
           if @user_email.undeletable? || (verified_email?(@user_email) && !AuthMethodGuard.can_remove_email?(
             current_client, @user_email,
@@ -55,8 +58,10 @@ module Base
             return redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
           end
 
-          @user_email.destroy!
-          create_audit_event!(ClientChronicleEvent::EMAIL_REMOVED, subject: @user_email)
+          IdentityCredentialRemovalCommitter.call!(
+            actor: current_client, credential: @user_email, current_session: current_session, request: request,
+            actor_context: current_actor,
+          )
           redirect_to(base_app_identity_emails_path(ri: params[:ri]), status: :see_other)
         end
 

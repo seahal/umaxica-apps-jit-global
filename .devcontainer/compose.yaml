@@ -12,8 +12,8 @@ services:
       # `development` is the normal image. Set CORE_BUILD_TARGET=workspace in the
       # repository-local `.env` to build the nested-rootless-Podman `workspace`
       # stage instead; that stage additionally needs a `/dev/fuse` device entry,
-      # which is host-shaped and therefore belongs in your own, optional
-      # `compose.override.yaml` (see `compose.override.yaml.example`).
+      # which is host-shaped and therefore belongs in the root
+      # `compose.override.yaml`, added locally and not committed.
       # See docs/operations/development-container-targets.md.
       target: "${CORE_BUILD_TARGET:-development}"
       args:
@@ -33,7 +33,8 @@ services:
     # keep-id-mapped workload UID.
     userns_mode: keep-id
     security_opt:
-      - label=level:s0:c101,c202
+      - no-new-privileges:true
+      - "unmask=/proc/*"
     tty: true
     stdin_open: true
     # core-entrypoint `exec`s the command, so without this PID 1 is `sleep infinity`, which
@@ -47,9 +48,19 @@ services:
       - "/usr/local/bin/core-entrypoint"
     # The container stays up idle; start the Rails/Vite/jobs stack manually
     # with `bin/dev` inside the container when it is wanted.
+    #
+    # `core-desktop exec` starts the browser desktop (Xvfb, x11vnc, noVNC) and then
+    # becomes the command that follows; a desktop that fails to start is logged and
+    # skipped. See docs/operations/development-browser-desktop.md.
     command:
+      - /usr/local/bin/core-desktop
+      - exec
       - sleep
       - infinity
+    # The display the browser desktop serves, so a headed browser started from any
+    # shell in this container is drawn where noVNC can show it.
+    environment:
+      DISPLAY: ":99"
     # Rails loads the ignored repository .env via config/boot.rb. Compose only
     # supplies the process environment; it does not own application configuration.
     env_file:
@@ -90,11 +101,12 @@ services:
         target: "/home/global/workspace"
         bind:
           selinux: Z
-      # The Dev Container string-form `readonly` mounts are writable with the
-      # current rootless Podman provider. Keep host configuration and guarded
-      # workspace paths in Compose long syntax so the effective mount flags stay
-      # inspectable. The host SSH directory is intentionally absent: nothing in
-      # this container needs host private keys.
+      - type: bind
+        source: "./podman/alloy"
+        target: "/home/global/workspace/podman/alloy"
+        read_only: true
+        bind:
+          selinux: z
       - type: bind
         source: "./.github"
         target: "/home/global/workspace/.github"
@@ -136,8 +148,10 @@ services:
     # The two are separate decisions
     # (docs/operations/development-host-port-exposure.md).
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3000"
       - "127.0.0.1:3036:3036"
+      # noVNC for the browser desktop. The RFB port (5900) is not published.
+      - "127.0.0.1:6080:6080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -156,6 +170,7 @@ services:
           - core.app.localhost
           - core.com.localhost
           - core.org.localhost
+          - core.dev.localhost
           - docs.app.localhost
           - docs.com.localhost
           - docs.org.localhost
@@ -166,15 +181,18 @@ services:
           - news.com.localhost
           - news.org.localhost
           - palm.app.localhost
-          - side.app.localhost
-          - side.com.localhost
-          - side.org.localhost
+          - warp.app.localhost
+          - warp.com.localhost
+          - warp.org.localhost
           - edge.app.localhost
           - edge.com.localhost
           - edge.org.localhost
           - info.app.localhost
           - info.com.localhost
           - info.org.localhost
+          - guid.net.localhost
+          - edit.org.localhost
+          - tech.org.localhost
           # Browser-facing site names (PUBLIC_*_URL). Development is published through
           # Cloudflare Tunnel behind Cloudflare Access, and a Tunnel ingress rule resolves
           # its `service:` address on this network, so the published names have to resolve
@@ -186,21 +204,32 @@ services:
           - www.umaxica.app
           - www.umaxica.com
           - www.umaxica.org
+          - edit.umaxica.org
+          - tech.umaxica.org
           - www.umaxica.dev
-          - side-jp.umaxica.app
-          - side-jp.umaxica.com
-          - side-jp.umaxica.org
+          - www-jp.umaxica.app
+          - www-jp.umaxica.com
+          - www-jp.umaxica.org
+          - jp.umaxica.dev
           - info.umaxica.app
           - info.umaxica.com
           - info.umaxica.org
-          # Canonical Core family per adr/core-canonical-public-host.md. The legacy
-          # core-jp.*, docs-jp.*, help-jp.*, and news-jp.* aliases are gone: PUBLIC_CORE_*
-          # now names jp.umaxica.*, and PUBLIC_DOCS_* names a private *.localhost origin, so
-          # those hostnames are no longer configured anywhere and Rails would reject them.
-          - jp.umaxica.app
-          - jp.umaxica.com
-          - jp.umaxica.org
+          - guid.umaxica.net
           - palm-jp.umaxica.app
+          - mission.core.dev.localhost
+          - flipper.core.dev.localhost
+          - blazer.core.dev.localhost
+          - pghero.core.dev.localhost
+          - performance.core.dev.localhost
+          - coverband.core.dev.localhost
+          - swagger.core.dev.localhost
+          - mission.umaxica.dev
+          - flipper.umaxica.dev
+          - blazer.umaxica.dev
+          - pghero.umaxica.dev
+          - performance.umaxica.dev
+          - coverband.umaxica.dev
+          - swagger.umaxica.dev
       observability: {}
       outer:
         aliases:
@@ -212,8 +241,24 @@ services:
         condition: service_started
       valkey-cache:
         condition: service_healthy
-      valkey-rate-limit:
+      valkey-kvs:
         condition: service_healthy
+      # Diagnostic / compatibility instance (rails_performance, Coverband, and
+      # any remaining `redis://valkey:6379/...` URLs). Canonical application
+      # traffic uses valkey-cache and valkey-kvs.
+      valkey:
+        condition: service_healthy
+networks:
+  # Only `core` attaches to `outer`, and only in this Dev Container layer, so the
+  # declaration lives here: declaring it in the shared `../compose.yaml` left a
+  # network no base service used and made a plain `podman compose up` warn
+  # `unused networks: outer`.
+  outer:
+    name: "${OUTER_DOCKER_NETWORK:-umaxica-apps-global_outer}"
+    # Keep this network Compose-managed. Interpolating `external` produces a
+    # string, which podman-compose cannot safely treat as the boolean required
+    # by the Compose model and causes `up` to fail while building network args.
+    external: false
 volumes:
   umaxica-home-cache: {}
   umaxica-home-share: {}

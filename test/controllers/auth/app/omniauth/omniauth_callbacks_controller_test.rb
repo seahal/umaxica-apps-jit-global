@@ -87,10 +87,10 @@ class Auth::App::Omniauth::OmniauthCallbacksControllerTest < ActiveSupport::Test
     controller.define_singleton_method(:params) { ActionController::Parameters.new(provider: "apple", message: "cancelled", strategy: "apple") }
     controller.define_singleton_method(:redirect_to) { |*args, **kwargs| redirects << [args, kwargs] }
     controller.define_singleton_method(:auth_app_sign_in_path) { |ri: nil|
-      "/sign/in#{ri ? "?ri=#{ri}" : ""}"
+      "/sign/in#{"?ri=#{ri}" if ri}"
     }
     controller.define_singleton_method(:auth_app_sign_up_path) { |ri: nil|
-      "/sign/up#{ri ? "?ri=#{ri}" : ""}"
+      "/sign/up#{"?ri=#{ri}" if ri}"
     }
     controller.define_singleton_method(:clear_social_auth_intent!) { @cleared_for_test = true }
     controller.define_singleton_method(:test_mode_omniauth_auth_hash) { nil }

@@ -30,15 +30,15 @@ export default function BirthdateShow({
       width="narrow"
     >
       <dl className="rounded-lg border border-line bg-surface p-4">
-        <dt className="text-xs font-semibold tracking-wide text-fg-muted uppercase">
+        <dt className="text-base font-semibold tracking-wide text-fg-muted uppercase">
           {birthdateLabel}
         </dt>
-        <dd className="mt-1 text-sm text-fg">
+        <dd className="mt-1 text-base text-fg">
           {birthdate ? <span data-birthdate>{birthdate}</span> : notSet}
         </dd>
       </dl>
 
-      <p className="text-sm text-fg-muted">{changeUnavailable}</p>
+      <p className="text-base text-fg-muted">{changeUnavailable}</p>
     </Page>
   );
 }

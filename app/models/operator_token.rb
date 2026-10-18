@@ -4,15 +4,15 @@
 # == Schema Information
 #
 # Table name: operator_tokens
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
 #  dbsc_challenge_issued_at           :datetime
 #  dbsc_public_key                    :jsonb
-#  discarded_at                       :datetime         default(Infinity), not null
+#  discard_at                       :datetime         default(Infinity), not null
 #  dpop_jkt                           :string
-#  last_step_up_aal                   :string
+#  last_step_up_aal                   :string           # @deprecated label only; remove after AAL ledger retirement
 #  last_step_up_at                    :datetime
 #  last_step_up_audience              :string
 #  last_step_up_method                :string
@@ -22,16 +22,22 @@
 #  oidc_jti                           :uuid
 #  oidc_scope                         :string
 #  oidc_sid                           :uuid
-#  purged_at                          :datetime         default(Infinity), not null
+#  purge_eligible_at                          :datetime         default(Infinity), not null
 #  refresh_token_digest               :binary
 #  refresh_token_generation           :integer          default(0), not null
 #  rotated_at                         :datetime
 #  selected_at                        :datetime
 #  created_at                         :datetime         not null
+#  authentication_event_at            :datetime
 #  updated_at                         :datetime         not null
 #  dbsc_session_id                    :string
 #  device_session_id                  :bigint
 #  last_step_up_session_public_id     :string
+#  last_step_up_user_verified         :boolean
+#  last_step_up_credential_ref        :string
+#  last_step_up_full_reauthentication :boolean
+#  last_step_up_resource_ref          :string
+#  last_step_up_tenant_ref            :string
 #  oidc_client_id                     :string(64)
 #  oidc_connection_id                 :bigint
 #  public_id                          :string(21)       default(""), not null
@@ -50,12 +56,12 @@
 #  index_operator_tokens_on_created_at                     (created_at)
 #  index_operator_tokens_on_dbsc_session_id                (dbsc_session_id) UNIQUE
 #  index_operator_tokens_on_device_session_id              (device_session_id)
-#  index_operator_tokens_on_discarded_at                   (discarded_at)
+#  index_operator_tokens_on_discard_at                   (discard_at)
 #  index_operator_tokens_on_oidc_connection_id             (oidc_connection_id)
 #  index_operator_tokens_on_oidc_jti                       (oidc_jti)
 #  index_operator_tokens_on_oidc_sid                       (oidc_sid)
 #  index_operator_tokens_on_public_id                      (public_id) UNIQUE
-#  index_operator_tokens_on_purged_at                      (purged_at)
+#  index_operator_tokens_on_purge_eligible_at                      (purge_eligible_at)
 #  index_operator_tokens_on_refresh_token_digest           (refresh_token_digest) UNIQUE
 #  index_operator_tokens_on_refresh_token_family_id        (refresh_token_family_id)
 #  index_operator_tokens_on_rotated_at                     (rotated_at)
@@ -78,7 +84,7 @@
 
 # Refresh tokens are persisted as digests only.
 # OIDC sid/jti are protocol identifiers; public_id remains the token row identifier.
-class OperatorToken < OrgTicketRecord
+class OperatorToken < OpBaseOrgRecord
   self.belongs_to_required_by_default = false
 
   include ::PublicId
@@ -90,6 +96,11 @@ class OperatorToken < OrgTicketRecord
   include ::SessionOidcConnection
   include ::SelectedActorContext
 
+  SELECTED_ACTOR_CONTEXT_COLUMNS = %i(
+    selected_account_public_id selected_collective_public_id selected_collective_unit_public_id
+    selected_avatar_public_id selected_at
+  ).freeze
+
   DBSC_BINDING_METHOD_CLASS = OperatorTokenBindingMethod
   DBSC_STATUS_CLASS = OperatorTokenDbscStatus
 
@@ -99,6 +110,13 @@ class OperatorToken < OrgTicketRecord
   MAX_TOTAL_SESSIONS_PER_STAFF = 2
   session_oidc_connection_config actor_name: :staff, connection_class: OperatorOidcConnection
 
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+
+  attribute :staff_token_status_id, default: OperatorTokenStatus::ACTIVE
+  attribute :staff_token_kind_id, default: OperatorTokenKind::BROWSER_WEB
+  attribute :staff_token_binding_method_id, default: OperatorTokenBindingMethod::NOTHING
+  attribute :staff_token_dbsc_status_id, default: OperatorTokenDbscStatus::NOTHING
+
   belongs_to :staff, class_name: "Operator"
   belongs_to :staff_token_status, class_name: "OperatorTokenStatus"
   belongs_to :staff_token_kind, class_name: "OperatorTokenKind"
@@ -106,7 +124,7 @@ class OperatorToken < OrgTicketRecord
   belongs_to :staff_token_dbsc_status, class_name: "OperatorTokenDbscStatus"
   belongs_to :oidc_connection, class_name: "OperatorOidcConnection"
   belongs_to :device_session, class_name: "OperatorDeviceSession", inverse_of: :staff_tokens
-  has_many :operator_token_usages, inverse_of: :operator_token, dependent: :delete_all
+  has_many :op_org_grants, inverse_of: :operator_token, dependent: :restrict_with_exception
   has_many :staff_verifications, class_name: "OperatorVerification",
                                  foreign_key: :staff_token_id,
                                  dependent: :delete_all,
@@ -117,10 +135,6 @@ class OperatorToken < OrgTicketRecord
           inverse_of: :staff_token,
           strict_loading: false,
           dependent: :destroy
-  attribute :staff_token_status_id, default: OperatorTokenStatus::ACTIVE
-  attribute :staff_token_kind_id, default: OperatorTokenKind::BROWSER_WEB
-  attribute :staff_token_binding_method_id, default: OperatorTokenBindingMethod::NOTHING
-  attribute :staff_token_dbsc_status_id, default: OperatorTokenDbscStatus::NOTHING
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
 
@@ -129,17 +143,21 @@ class OperatorToken < OrgTicketRecord
 
   private
 
+  def step_up_authority_binding
+    [OperatorStepUpSession, OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession, :staff_token_id]
+  end
+
   # This is a model-level validation to provide a friendly error message to the user.
   # The primary enforcement of the session limit is done by a database trigger,
   # which is more reliable and avoids race conditions.
   #
-  # Operators are allowed one fully active session plus one restricted session that can
-  # only be used to manage sessions, so the total live row limit is two.
+  # The row ceiling protects the root issuer when active-capacity admission and row creation race.
+  # Historical RESTRICTED rows do not authenticate and therefore do not consume root capacity.
   def enforce_concurrent_session_limit
     return if skip_session_limit_check
     return unless staff_id
 
-    operation = -> { self.class.not_revoked.where(staff_id: staff_id, rotated_at: nil).count }
+    operation = -> { self.class.active_status.where(staff_id: staff_id, rotated_at: nil).count }
     count = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     return if count < MAX_TOTAL_SESSIONS_PER_STAFF
 

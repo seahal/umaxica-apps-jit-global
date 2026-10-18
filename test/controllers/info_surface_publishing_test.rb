@@ -10,11 +10,21 @@ class InfoSurfacePublishingTest < ActionDispatch::IntegrationTest
     { host_fallback: "info.org.localhost", audience: "org" },
   ].freeze
 
+  test "info org root renders its localized landing message" do
+    host! "info.org.localhost"
+
+    get "/", headers: { "Accept" => "text/html" }
+
+    assert_response :success
+    assert_includes response.body, "情報 API を提供しています。ブラウザ用の記事ページは Rails の外部で提供されます。"
+  end
+
   test "info surfaces read published entries from the publishing DB" do
     SURFACES.each do |surface|
       host! surface.fetch(:host_fallback)
       audience = surface.fetch(:audience)
       entry = create_published_entry(audience:, slug: "#{audience}-info-smoke")
+      slug = published_entry_slug_for_test(audience, entry)
 
       get "/api/v0/entries", headers: { "Host" => surface.fetch(:host_fallback), "Accept" => "application/json" },
                              as: :json
@@ -22,7 +32,7 @@ class InfoSurfacePublishingTest < ActionDispatch::IntegrationTest
       assert_response :success, audience
       json_entry =
         response.parsed_body.fetch("data").find { |candidate|
-          candidate.fetch("slug") == entry.slugs.first.slug
+          candidate.fetch("slug") == slug.slug
         }
 
       assert json_entry, "expected #{audience} index to include the published entry"
@@ -34,7 +44,7 @@ class InfoSurfacePublishingTest < ActionDispatch::IntegrationTest
 
       assert_response :success, audience
       assert_equal entry.public_id, response.parsed_body.fetch("public_id")
-      assert_equal entry.slugs.first.slug, response.parsed_body.fetch("slug")
+      assert_equal slug.slug, response.parsed_body.fetch("slug")
     end
   end
 
@@ -50,5 +60,18 @@ class InfoSurfacePublishingTest < ActionDispatch::IntegrationTest
 
   def create_published_entry(audience:, slug:)
     publishing_published_entry(audience:, surface: "info", slug:, title: "T")
+  end
+
+  def published_entry_slug_for_test(audience, entry)
+    case audience
+    when "app"
+      Publishing::Info::App::EntrySlug.find_by!(entry_id: entry.id, state: "canonical")
+    when "com"
+      Publishing::Info::Com::EntrySlug.find_by!(entry_id: entry.id, state: "canonical")
+    when "org"
+      Publishing::Info::Org::EntrySlug.find_by!(entry_id: entry.id, state: "canonical")
+    else
+      raise ArgumentError, "unsupported publishing audience: #{audience.inspect}"
+    end
   end
 end

@@ -6,30 +6,47 @@ require "test_helper"
 
 module Auth::App::In
   class MfaTotpsControllerTest < ActionDispatch::IntegrationTest
-    fixtures :client_statuses, :client_passkey_statuses, :client_secret_credential_kinds,
-             :client_secret_credential_statuses, :client_email_statuses, :client_totp_credential_statuses
+    include AuthEmailMfaHelper
+
+    fixtures :client_statuses, :client_passkey_statuses, :client_email_statuses, :client_totp_credential_statuses
 
     setup do
-      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
+      host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+      https!
+      ClientSignInFlowState.ensure_defaults!
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
 
       @user = Client.create!(mfa_level_enabled: true)
       @email = "mfa_totp_#{SecureRandom.hex(4)}@example.com".freeze
-      @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+      @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
+      @email_record.finalize_binding!
       @totp = ClientTotpCredential.create!(
         user: @user,
         private_key: ROTP::Base32.random_base32,
         user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         title: "totp",
       )
+      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+      )
+      get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      post "/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
 
-      _secret_credential, @raw_secret_credential = ClientSecretCredential.issue!(
-        name: "TOTP MFA secret_credential",
-        user_id: @user.id,
-        user_secret_kind_id: ClientSecretCredentialKind::PERMANENT,
-        uses: 10,
-        status: :active,
+      assert_response :see_other
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+      binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+      get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
+      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+      post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
+
+      assert_response :see_other
+      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
+        flow: ClientSignInFlow.find_by!(
+          public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
+        ),
+        surface: "app", phase: "PRIMARY_PENDING",
       )
     end
 
@@ -44,11 +61,11 @@ module Auth::App::In
 
     test "new renders form with stealth when pending_mfa exists" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       with_prosopite_paused do
-        get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
       end
 
       assert_response :success
@@ -72,22 +89,44 @@ module Auth::App::In
       assert_not_includes response.body, "送信され"
     end
 
-    test "new redirects to sign in when pending_mfa is missing" do
+    test "new exposes an actor-scoped selector when two active authenticators exist" do
+      second = ClientTotpCredential.create!(
+        user: @user,
+        private_key: ROTP::Base32.random_base32,
+        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
+        title: "second authenticator",
+      )
+      with_prosopite_paused { establish_pending_mfa_via_email! }
+
       with_prosopite_paused do
-        get new_auth_app_sign_in_challenge_totp_path(ri: "jp")
+        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
       end
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_in_path(ri: "jp")
+      selector = inertia_props.fetch("form").fetch("credential_selector")
+
+      assert_equal "totp_challenge_form[credential_public_id]", selector.fetch("name")
+      assert_equal [@totp.public_id, second.public_id].sort,
+                   selector.fetch("options").map { |option| option.fetch("value") }.sort
+      assert selector.fetch("options").all? { |option| option.fetch("label").present? }
+      assert selector.fetch("options").none? { |option| option.key?("id") }
     end
 
-    test "create with valid TOTP code redirects to settings" do
+    test "new refuses an unbound request when pending_mfa is missing" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
+      end
+
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
+    end
+
+    test "create with valid TOTP code advances Auth evidence without issuing Root credentials" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_email!
       end
 
       # Verify pending_mfa was set
-      assert_predicate session[:pending_mfa], :present?, "pending_mfa should be set after secret_credential login"
+      assert_predicate session[:pending_mfa], :present?, "pending_mfa should be set after email sign-in"
       user_id = session[:pending_mfa]["user_id"]
       user = Client.find(user_id)
 
@@ -96,7 +135,7 @@ module Auth::App::In
         .where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
 
       assert_not_empty otps,
-                       "Client should have active OTPs. All OTPs: #{user.client_totp_credentials.pluck(
+                       "Client should have active OTPs. All OTPs: #{ClientTotpCredential.where(user_id: user.id).pluck(
                          :id,
                          :user_identity_totp_credential_status_id,
                        ).inspect}"
@@ -104,24 +143,16 @@ module Auth::App::In
       # TOTP codes are only valid for a 30-second window, so generation and the
       # verifying request are pinned to the same instant -- otherwise a slow run can
       # straddle a window boundary and turn a valid code invalid before it arrives.
-      freeze_time do
-        totp_code = ROTP::TOTP.new(@totp.private_key).now
+      assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
+        freeze_time do
+          totp_code = ROTP::TOTP.new(@totp.private_key).now
 
-        with_prosopite_paused do
-          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
-            totp_challenge_form: { token: totp_code },
-          }
+          with_prosopite_paused do
+            post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
+              totp_challenge_form: { token: totp_code },
+            }
+          end
         end
-      end
-
-      # Debug: check if the response body contains TOTP verification error
-      if response.status == 422
-        errors = response.body.scan(/class="[^"]*error[^"]*"[^>]*>([^<]+)</)
-
-        flunk "TOTP verification failed (422). Errors: #{errors.inspect}. " \
-              "TOTP code: #{totp_code}. " \
-              "Client OTP count: #{user.client_totp_credentials.count}. " \
-              "pending_mfa after: #{session[:pending_mfa].inspect}"
       end
 
       assert_response :found
@@ -130,16 +161,43 @@ module Auth::App::In
       assert_includes [configured_host(:sign_service), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")], uri.host
       assert_equal auth_app_sign_in_check_path, uri.path
       assert_nil session[:pending_mfa]
-      assert_not_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+      flow = ClientSignInFlow.where(principal_id: @user.id).order(:id).last
+
+      assert_predicate flow, :sign_in_checkpoint_pending?
+      assert_equal "email", flow.authentication_method
+    end
+
+    test "a correct TOTP code submitted after the pending sign-in expired does not sign in" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_email!
+      end
+
+      expires_at = session[:pending_mfa]["expires_at"]
+
+      travel_to Time.zone.at(expires_at) + 1.second do
+        totp_code = ROTP::TOTP.new(@totp.private_key).now
+
+        with_prosopite_paused do
+          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
+            totp_challenge_form: { token: totp_code },
+          }
+        end
+      end
+
+      assert_includes [302, 303], response.status
+      assert_equal auth_app_sign_in_path, URI.parse(response.location).path
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     end
 
     test "create with invalid TOTP code renders form with error" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       with_prosopite_paused do
-        post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+        post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
           totp_challenge_form: { token: "000000" },
         }
       end
@@ -150,7 +208,7 @@ module Auth::App::In
 
     test "create with valid TOTP code and stealth failure renders form with error" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       TurnstileVerifierStub.challenge_response = { "success" => false }
@@ -159,7 +217,7 @@ module Auth::App::In
         totp_code = ROTP::TOTP.new(@totp.private_key).now
 
         with_prosopite_paused do
-          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
             totp_challenge_form: { token: totp_code },
           }
         end
@@ -175,7 +233,7 @@ module Auth::App::In
     # pre-setting last_otp_at to the window timestamp before the request arrives.
     test "create rejects TOTP code whose window has already been consumed" do
       with_prosopite_paused do
-        establish_pending_mfa_via_secret_credential!
+        establish_pending_mfa_via_email!
       end
 
       # The window computed here must be the window the request verifies against, so
@@ -188,7 +246,7 @@ module Auth::App::In
         @totp.update!(last_otp_at: Time.zone.at(otp_window_at))
 
         with_prosopite_paused do
-          post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
             totp_challenge_form: { token: totp_code },
           }
         end
@@ -198,33 +256,117 @@ module Auth::App::In
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     end
 
-    test "create without pending_mfa redirects to sign in" do
+    # The Valkey-backed rate_limit rules fail open when the store is unreachable. The PostgreSQL
+    # credential counter must still permanently revoke only the credential being guessed.
+    test "create permanently revokes the credential even when the rate-limit store is unreachable" do
       with_prosopite_paused do
-        post auth_app_sign_in_challenge_totp_path(ri: "jp"), params: {
+        establish_pending_mfa_via_email!
+      end
+
+      freeze_time do
+        rate_limit_store.with(unreachable_rate_limit_store) do
+          ClientTotpCredential::MAX_CONSECUTIVE_FAILURES.times do
+            post_totp(wrong_totp_code)
+
+            assert_response :unprocessable_content
+          end
+
+          post_totp(ROTP::TOTP.new(@totp.private_key).now)
+        end
+
+        assert_response :unprocessable_content
+        assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+        assert_equal ClientTotpCredential::MAX_CONSECUTIVE_FAILURES, @totp.reload.otp_attempts_count
+        assert_equal ClientTotpCredentialStatus::REVOKED,
+                     @totp.user_identity_totp_credential_status_id
+      end
+    end
+
+    test "the PostgreSQL terminal revocation survives a rate-limit store flush" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_email!
+      end
+
+      freeze_time do
+        rate_limit_store.with(unreachable_rate_limit_store) do
+          ClientTotpCredential::MAX_CONSECUTIVE_FAILURES.times { post_totp(wrong_totp_code) }
+        end
+
+        # A recovered-but-empty store: every Valkey counter is gone.
+        rate_limit_store.with(ActiveSupport::Cache::MemoryStore.new) do
+          post_totp(ROTP::TOTP.new(@totp.private_key).now)
+        end
+
+        assert_response :unprocessable_content
+        assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      end
+    end
+
+    test "a successful TOTP verification clears the recorded failures" do
+      with_prosopite_paused do
+        establish_pending_mfa_via_email!
+      end
+
+      freeze_time do
+        rate_limit_store.with(ActiveSupport::Cache::MemoryStore.new) do
+          2.times { post_totp(wrong_totp_code) }
+
+          assert_equal 2, @totp.reload.otp_attempts_count
+
+          post_totp(ROTP::TOTP.new(@totp.private_key).now)
+        end
+      end
+
+      assert_response :redirect
+      assert_equal 0, @totp.reload.otp_attempts_count
+    end
+
+    test "create refuses an unbound request without pending_mfa" do
+      with_prosopite_paused do
+        post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
           totp_challenge_form: { token: "123456" },
         }
       end
 
-      assert_response :see_other
-      assert_redirected_to auth_app_sign_in_path(ri: "jp")
+      assert_response :conflict
+      assert_equal "戻るはだめです", response.body
     end
 
     private
 
-    def establish_pending_mfa_via_secret_credential!
+    def post_totp(token)
       with_prosopite_paused do
         post(
-          auth_app_sign_in_secret_path(ri: "jp"), params: {
-            secret_credential_login_form: {
-              identifier: @email,
-              secret_credential_value: @raw_secret_credential,
-            },
-            "cf-turnstile-response": "test_token",
-          },
+          sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"),
+          params: { totp_challenge_form: { token: token } },
         )
       end
+    end
 
-      assert_response :redirect
+    def rate_limit_store
+      Rails.configuration.x.rate_limit.fetch(:store)
+    end
+
+    # Loopback port 1 has no listener, so every operation fails the way a Valkey outage does.
+    def unreachable_rate_limit_store
+      ActiveSupport::Cache::RedisCacheStore.new(
+        url: "redis://127.0.0.1:1/0",
+        reconnect_attempts: 0,
+        connect_timeout: 0.1,
+        error_handler: ->(**) { },
+      )
+    end
+
+    def wrong_totp_code
+      totp = ROTP::TOTP.new(@totp.private_key)
+      valid = [-30, 0, 30].map { |offset| totp.at(Time.current.to_i + offset) }
+      ("000000".."999999").find { |candidate| valid.exclude?(candidate) }
+    end
+
+    def establish_pending_mfa_via_email!
+      with_prosopite_paused do
+        sign_in_with_email_to_mfa!(surface: :app, email_record: @email_record, email: @email)
+      end
     end
   end
 end
@@ -238,31 +380,11 @@ class Auth::App::In::MfaTotpsControllerTest
 
   private
 
-  def jwt_access_token_for(resource, host: nil, session_id: nil, session_public_id: nil, resource_type: nil,
-                           dpop_jkt: nil)
-    host_value = host || (respond_to?(:request, true) ? request&.host : nil) || "unknown"
-    resource_type ||=
-      case resource
-      when Client then "client"
-      when Operator then "operator"
-      when Visitor then "visitor"
-      end
-    AuthenticationToken.encode(
-      resource,
-      host: host_value,
-      session_id: session_id,
-      session_public_id: session_public_id,
-      resource_type: resource_type,
-      dpop_jkt: dpop_jkt,
-      jwt_issuer_id: jwt_issuer_id_for_test_host(host_value, resource_type),
-    )
-  end
-
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "SIGN")
+    service = normalized.include?("acme") ? "ACME" : (normalized.include?("core") ? "CORE" : "AUTH")
     surface =
-      if service == "SIGN"
+      if service == "AUTH"
         case resource_type
         when "operator" then "ORG"
         when "visitor" then "COM"
@@ -315,10 +437,8 @@ class Auth::App::In::MfaTotpsControllerTest
     ClientEmail.create!(
       user_id: user_id,
       address: address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :app),
       user_email_status_id: ClientEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -330,10 +450,8 @@ class Auth::App::In::MfaTotpsControllerTest
         {
           visitor_id: visitor_id,
           address: address,
-          address_digest: IdentifierBlindIndex.bidx_for_email(address),
+          address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-          otp_private_key: SecureRandom.base64(24),
-          otp_counter: "",
           otp_attempts_count: 0,
           public_id: SecureRandom.alphanumeric(21),
           created_at: Time.current,
@@ -554,87 +672,6 @@ class Auth::App::In::MfaTotpsControllerTest
     host_headers.merge("X-CSRF-Token" => csrf_token)
   end
 
-  def as_user_headers(user, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-USER" => user.id.to_s)
-    return base unless user.respond_to?(:persisted?) && user.persisted? && user.class.name == "Client"
-
-    ensure_user_token_reference_records!
-    token = session_public_id.present? ? ClientToken.find_by(public_id: session_public_id) : nil
-    token ||= ClientToken.where(user_id: user.id).where("discarded_at > ?", Time.current).order(created_at: :desc).first
-    token ||= ClientToken.create!(
-      user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      user_token_status_id: ClientTokenStatus::ACTIVE,
-      user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
-      user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(user, host: host, session_public_id: token.public_id, resource_type: "client")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_staff_headers(staff, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-STAFF" => staff.id.to_s)
-    return base unless staff.respond_to?(:persisted?) && staff.persisted? && staff.class.name == "Operator"
-
-    ensure_staff_token_reference_records!
-    token = session_public_id.present? ? OperatorToken.find_by(public_id: session_public_id) : nil
-    token ||= OperatorToken.where(staff_id: staff.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(
-      staff_id: staff.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      staff_token_status_id: OperatorTokenStatus::ACTIVE,
-      staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-      staff_token_dbsc_status_id: OperatorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(staff, host: host, session_public_id: token.public_id, resource_type: "operator")
-      }",
-      )
-    else
-      base
-    end
-  end
-
-  def as_visitor_headers(visitor, host: nil, headers: {}, session_public_id: nil)
-    base = host_headers(host).merge(headers).merge("X-TEST-CURRENT-RESOURCE" => visitor.id.to_s)
-    return base unless visitor.respond_to?(:persisted?) && visitor.persisted? && visitor.class.name == "Visitor"
-
-    ensure_visitor_token_reference_records!
-    token = session_public_id.present? ? VisitorToken.find_by(public_id: session_public_id) : nil
-    token ||= VisitorToken.where(visitor_id: visitor.id).where(
-      "discarded_at > ?",
-      Time.current,
-    ).order(created_at: :desc).first
-    token ||= VisitorToken.create!(
-      visitor_id: visitor.id, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
-      visitor_token_status_id: VisitorTokenStatus::ACTIVE,
-      visitor_token_binding_method_id: VisitorTokenBindingMethod::LEGACY,
-      visitor_token_dbsc_status_id: VisitorTokenDbscStatus::NOTHING,
-    )
-    base["X-TEST-SESSION-PUBLIC-ID"] = session_public_id.presence || token.public_id
-    if token
-      base.merge(
-        "Authorization" => "Bearer #{
-        jwt_access_token_for(visitor, host: host, session_public_id: token.public_id, resource_type: "visitor")
-      }",
-      )
-    else
-      base
-    end
-  end
-
   def bearer_headers(token, host: nil, headers: {})
     host_headers(host).merge(headers).merge("Authorization" => "Bearer #{token}")
   end
@@ -661,10 +698,8 @@ class Auth::App::In::MfaTotpsControllerTest
     visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
-      address_digest: IdentifierBlindIndex.bidx_for_email(email_address),
+      address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-      otp_private_key: SecureRandom.base64(24),
-      otp_counter: "",
       otp_attempts_count: 0,
       public_id: SecureRandom.alphanumeric(21),
     )
@@ -684,12 +719,12 @@ class Auth::App::In::MfaTotpsControllerTest
   def load_jump_rt_env!
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
-    %w(SIGN_APP SIGN_ORG SIGN_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
+    %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
        BASE_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
-    ENV["JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
+    ENV["PUBLIC_JUMP_GATEWAY_URL"] = "https://jump.umaxica.net"
     JitSecurityJwtRegistry.reload! if defined?(JitSecurityJwtRegistry)
   end
 

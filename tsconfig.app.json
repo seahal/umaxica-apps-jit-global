@@ -8,7 +8,7 @@
     "module": "ESNext",
     /* Left on for three upstream declaration bugs with no local fix: @inertiajs/core's
        axiosHttpClient.d.ts imports a module the package does not depend on, and react-stately
-       references Intl.Segmenter, which no lib defines. Nothing in src/ or spec/ relies on it. */
+       references Intl.Segmenter, which no lib defines. Nothing in src/ or gait/ relies on it. */
     "skipLibCheck": true,
 
     /* Bundler mode */
@@ -41,5 +41,5 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "spec"]
+  "include": ["src", "gait"]
 }

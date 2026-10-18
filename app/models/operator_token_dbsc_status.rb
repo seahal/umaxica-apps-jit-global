@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: operator_token_dbsc_statuses
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id :bigint           not null, primary key
 #
-class OperatorTokenDbscStatus < OrgTicketRecord
+class OperatorTokenDbscStatus < OpBaseOrgRecord
   include ReferenceRecord
 
   NOTHING = 0

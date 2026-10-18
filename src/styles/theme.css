@@ -75,8 +75,17 @@
   --ui-fg-muted: var(--color-zinc-600);
 
   --ui-border: var(--color-zinc-300);
+  --ui-control-border: var(--color-zinc-500);
+  --ui-overlay-border: var(--color-zinc-700);
+  --ui-error: var(--color-red-700);
   --ui-ring: var(--color-blue-600);
 
+  --ui-focus-inner: #ffd43d;
+  --ui-focus-outer: #000;
+  --ui-link-visited: var(--color-purple-800);
+  --ui-link-active: var(--color-orange-800);
+
+  --ui-link: var(--color-blue-700);
   --ui-accent: var(--color-blue-600);
   --ui-accent-hover: var(--color-blue-700);
   --ui-accent-fg: var(--color-white);
@@ -100,8 +109,14 @@
     --ui-fg-muted: var(--color-zinc-400);
 
     --ui-border: var(--color-zinc-700);
+    --ui-control-border: var(--color-zinc-400);
+    --ui-overlay-border: var(--color-zinc-400);
+    --ui-error: var(--color-red-400);
     --ui-ring: var(--color-blue-400);
 
+    --ui-link-visited: var(--color-purple-300);
+    --ui-link-active: var(--color-orange-300);
+    --ui-link: var(--color-blue-400);
     --ui-accent: var(--color-blue-500);
     --ui-accent-hover: var(--color-blue-400);
     --ui-accent-fg: var(--color-zinc-950);
@@ -133,7 +148,11 @@
    * rule below, so no component needs a utility for it.
    */
   --color-line: var(--ui-border);
+  --color-control: var(--ui-control-border);
+  --color-overlay: var(--ui-overlay-border);
+  --color-error: var(--ui-error);
 
+  --color-link: var(--ui-link);
   --color-accent: var(--ui-accent);
   --color-accent-hover: var(--ui-accent-hover);
   --color-accent-fg: var(--ui-accent-fg);
@@ -191,16 +210,40 @@ body {
   font-family: var(--ui-font-sans);
 }
 
-/*
- * Nobody should have to remember to write a focus ring. Applying it to `:focus-visible` rather than
- * `:focus` keeps it off pointer interactions, and `currentcolor` is a fallback only: the token is
- * what normally paints it.
- */
-@layer base {
-  :focus-visible {
-    outline: 2px solid var(--ui-ring);
-    outline-offset: 2px;
+/* DADS yellow-300/black focus pair stays the same in both themes. Hidden native choice
+ * inputs expose focus on their actual clickable label; no duplicate focus stop is added. */
+:where(:focus-visible, .ui-choice-target:has(:focus-visible)) {
+  transition-property: color, background-color, border-color, opacity;
+  outline: 4px solid var(--ui-focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--ui-focus-inner);
+}
+@media (forced-colors: active) {
+  :where(:focus-visible, .ui-choice-target:has(:focus-visible)) {
+    outline-color: Highlight;
+    box-shadow: none;
   }
+}
+
+/* State changes never change glyph size or line geometry. Decorative icons stay outside
+ * the underlined label. Visited styling uses native browser history, never application state. */
+a.ui-text-link:not(:has(.ui-link-label)),
+a.ui-text-link .ui-link-label {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+a.ui-text-link:visited {
+  color: var(--ui-link-visited);
+}
+a.ui-text-link:hover {
+  text-decoration-thickness: 2px;
+}
+a.ui-text-link:hover .ui-link-label {
+  text-decoration-thickness: 2px;
+}
+a.ui-text-link:active {
+  color: var(--ui-link-active);
 }
 
 /*
@@ -236,13 +279,12 @@ body {
   textarea,
   select {
     background-color: var(--ui-surface);
-    border-color: var(--ui-border);
+    border-color: var(--ui-control-border);
     color: var(--ui-fg);
 
     /*
-     * The plugin replaces the outline with a box-shadow ring and its own blue. Re-pointing the
-     * two colours it uses keeps the ring on the theme; `:focus-visible` still paints the outline
-     * for every control the plugin does not touch.
+     * Keep the plugin's focused border on the theme. The unlayered focus rule above paints
+     * the same yellow/black indicator for native controls and component controls.
      */
     &:focus {
       --tw-ring-color: var(--ui-ring);
@@ -262,7 +304,7 @@ body {
    */
   input:where([type="checkbox"], [type="radio"]) {
     background-color: var(--ui-surface);
-    border-color: var(--ui-border);
+    border-color: var(--ui-control-border);
     color: var(--ui-accent);
   }
 }

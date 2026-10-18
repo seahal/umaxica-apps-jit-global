@@ -47,14 +47,7 @@ class CoreRouteNamingTest < ActionDispatch::IntegrationTest
         "core/#{surface}/api/v0/token/refreshes",
         "create",
       )
-      assert_recognizes_core_route(
-        host,
-        "/oidc/backchannel/logout",
-        :post,
-        "core/#{surface}/oidc/backchannel/logouts",
-        "create",
-      )
-
+      assert_unrecognized(host, "/oidc/backchannel/logout", :post)
       assert_unrecognized(host, "/oidc/backchannel_logout", :post)
       assert_unrecognized(host, "/accounts", :get)
       assert_unrecognized(host, "/robots.txt", :get)

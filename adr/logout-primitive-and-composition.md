@@ -11,6 +11,11 @@ Accepted (2026-05-20)
 > reintroduce sign-side sessions, refresh tokens, preference writes, dashboards, account lifecycle,
 > downstream token issuance, authorization decisions, or step-up freshness.
 
+> **Partial supersession (2026-10-13):** for first-party relying parties, the back-channel and
+> front-channel RP entrypoints and the planned `Oidc::BackchannelLogoutNotifier` layer described
+> below are not used. See
+> `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`.
+
 ## Context
 
 IdP-side session management needs two logout flows: revoke only the current session and revoke every
@@ -26,8 +31,8 @@ therefore revoked every active token for the user. The regression had two causes
 2. **Incorrect composition:** The service was always inserted into the ordinary logout path, so an
    operation users understood as "this browser only" signed out every device.
 
-`Authentication::LogoutAllSessions` separately provided substantially the same behavior, leaving
-two implementations of all-session revocation that could drift.
+`Authentication::LogoutAllSessions` separately provided substantially the same behavior, leaving two
+implementations of all-session revocation that could drift.
 
 Earlier sign-up and sign-in incidents also resulted from implementing one mechanism in multiple
 places. The established response is to centralize each mechanism in one concern or service and have
@@ -73,9 +78,9 @@ revoke_all_sessions(actor) =
 
 ### 4. Ordinary Logout Calls Only the Primitive
 
-`Authentication::Logoutable#logout_current_session!` only calls `LogoutCurrentSession` once,
-records the logout audit event, and clears cookies and session state in `ensure`. It has no hook such
-as `perform_single_logout` that can fan out to every device.
+`Authentication::Logoutable#logout_current_session!` only calls `LogoutCurrentSession` once, records
+the logout audit event, and clears cookies and session state in `ensure`. It has no hook such as
+`perform_single_logout` that can fan out to every device.
 
 An endpoint that intentionally signs out every device must explicitly call
 `logout_all_sessions_for!(resource:, reason:)`.
@@ -105,8 +110,8 @@ At least three RP entrypoints must ultimately reach these operations:
 1. **RP-Initiated Logout:** The user signs out within the RP. The RP invokes its primitive and may
    then redirect to the IdP `/oidc/logout` endpoint.
 2. **Back-channel Logout:** The IdP posts a `logout_token` to the RP endpoint. The RP identifies
-   sessions by `sid` or `sub`, then calls the primitive for one matching `sid` or the composition for
-   all sessions matching `sub`.
+   sessions by `sid` or `sub`, then calls the primitive for one matching `sid` or the composition
+   for all sessions matching `sub`.
 3. **Front-channel Logout:** The IdP loads the RP front-channel endpoint in an iframe, which reaches
    the same primitive or composition.
 
@@ -145,11 +150,18 @@ layer after `Authentication::LogoutAllSessions`, for example in
 - Additional all-device flows change only composition, not the primitive.
 - The absence and no-fan-out guards catch attempts to reintroduce cross-device ordinary logout.
 - The `Oidc::` namespace remains available for the real SLO protocol without a naming collision.
-- A future RP implementation must reproduce the same primitive/composition separation for its
-  local sessions.
+- A future RP implementation must reproduce the same primitive/composition separation for its local
+  sessions.
 
 ## Related
 
 - `adr/session-reset-on-privilege-transition.md`
 - `adr/refresh-revoke-aal-downgrade-and-replay-hardening.md`
-- `plans/active/logout-state-machine-implementation-plan.md`
+- GH issue #833
+
+## Delivered reconciliation (2026-10-06)
+
+The current primitive/composition boundary is implemented by the coordinated authority-first
+logout transaction and the surface-local ceremony controllers. The initiating RP is revoked after
+the parent authority commit; sibling RP sessions are not treated as synchronously revoked. The
+historical `acme/www` and `sign/id` ownership text is superseded by the Base/Warp boundary ADR.

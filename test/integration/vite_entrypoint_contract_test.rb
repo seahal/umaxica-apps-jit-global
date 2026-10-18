@@ -28,7 +28,7 @@ class ViteEntrypointContractTest < ActiveSupport::TestCase
   test "every Inertia layout loads the entrypoint belonging to its own surface" do
     layouts = inertia_layouts
 
-    assert_equal 14, layouts.size, "expected one Inertia layout per user-facing FQDN"
+    assert_equal 13, layouts.size, "expected one Inertia layout per user-facing FQDN"
 
     layouts.each do |layout|
       family, surface = layout.relative_path_from(LAYOUT_ROOT).each_filename.first(2)
@@ -77,7 +77,7 @@ class ViteEntrypointContractTest < ActiveSupport::TestCase
   end
 
   # The base family typography is not a surface of its own: it is imported by the three base surface
-  # stylesheets and by nothing else, so a family rule cannot reach the auth, side, palm, or core
+  # stylesheets and by nothing else, so a family rule cannot reach the Auth, Warp, Palm, or Core
   # surfaces.
   BASE_FAMILY_IMPORT = %(@import "../base_family.css";)
   BASE_FAMILY_STYLESHEETS = %w(base_app.css base_com.css base_org.css).freeze
@@ -143,7 +143,7 @@ class ViteEntrypointContractTest < ActiveSupport::TestCase
   end
 
   # Line breaking is language behaviour, not surface behaviour, so `base.css` owns it for all
-  # fourteen surfaces. A surface stylesheet or a family partial redefining it would silently give
+  # Inertia surfaces. A surface stylesheet or a family partial redefining it would silently give
   # one FQDN different kinsoku from the rest, and the last chunk emitted would decide the winner.
   LINE_BREAKING_PROPERTIES = %w(line-break word-break overflow-wrap).freeze
 

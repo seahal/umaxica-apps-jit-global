@@ -7,6 +7,8 @@ require "test_helper"
 # ceremony cookie has been issued: submitting an appeal against an in-force
 # enforcement case, and completing a verification-released security lock.
 class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   self.fixture_table_names = []
 
   test "app appeal submission records the appeal and returns to the recovery page" do
@@ -24,22 +26,24 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     email = ClientEmail.create!(
       user: client, address: "recovery-appeal-client@example.test", confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     enforcement_case = AppEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**_args| true }
-    OtpAdapter.stub(:for, adapter) do
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post base_app_identity_recovery_session_url(ri: "jp", host: host),
            params: { recovery_reentry: { address: email.address } }
     end
-    otp = email.reload.get_otp
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
     post base_app_identity_recovery_session_url(ri: "jp", host: host),
-         params: { pass_code: ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s }
+         params: { pass_code: code }
 
     assert_difference("AppEnforcementAppeal.count", 1) do
       post base_app_identity_recovery_appeals_url(ri: "jp", host: host),
@@ -71,22 +75,24 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     email = ClientEmail.create!(
       user: client, address: "recovery-appeal-invalid@example.test", confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     enforcement_case = AppEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**_args| true }
-    OtpAdapter.stub(:for, adapter) do
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post base_app_identity_recovery_session_url(ri: "jp", host: host),
            params: { recovery_reentry: { address: email.address } }
     end
-    otp = email.reload.get_otp
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
     post base_app_identity_recovery_session_url(ri: "jp", host: host),
-         params: { pass_code: ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s }
+         params: { pass_code: code }
 
     assert_no_difference("AppEnforcementAppeal.count") do
       post base_app_identity_recovery_appeals_url(ri: "jp", host: host),
@@ -117,22 +123,24 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     email = ClientEmail.create!(
       user: client, address: "recovery-completion-client@example.test", confirm_policy: "1",
       user_email_status_id: ClientEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     enforcement_case = AppEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: client.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**_args| true }
-    OtpAdapter.stub(:for, adapter) do
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post base_app_identity_recovery_session_url(ri: "jp", host: host),
            params: { recovery_reentry: { address: email.address } }
     end
-    otp = email.reload.get_otp
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
     post base_app_identity_recovery_session_url(ri: "jp", host: host),
-         params: { pass_code: ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s }
+         params: { pass_code: code }
 
     post base_app_identity_recovery_completion_url(ri: "jp", host: host),
          params: { enforcement_case_id: enforcement_case.public_id }
@@ -151,22 +159,24 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     email = VisitorEmail.create!(
       visitor: visitor, address: "recovery-appeal-visitor@example.test", confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     enforcement_case = ComEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: visitor.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**_args| true }
-    OtpAdapter.stub(:for, adapter) do
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post base_com_identity_recovery_session_url(ri: "jp", host: host),
            params: { recovery_reentry: { address: email.address } }
     end
-    otp = email.reload.get_otp
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
     post base_com_identity_recovery_session_url(ri: "jp", host: host),
-         params: { pass_code: ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s }
+         params: { pass_code: code }
 
     assert_difference("ComEnforcementAppeal.count", 1) do
       post base_com_identity_recovery_appeals_url(ri: "jp", host: host),
@@ -192,22 +202,24 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     email = VisitorEmail.create!(
       visitor: visitor, address: "recovery-completion-visitor@example.test", confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
-    )
+    ).tap(&:finalize_binding!)
     enforcement_case = ComEnforcementCase.create!(
       kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
       release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
       principal_public_id: visitor.public_id, applied_by_operator_public_id: "recovery-test-operator",
     )
-    EnforcementCaseApplyOperation.call(enforcement_case: enforcement_case)
-    adapter = Object.new
-    adapter.define_singleton_method(:deliver) { |**_args| true }
-    OtpAdapter.stub(:for, adapter) do
+    EnforcementCaseApplyOperation.call(
+      enforcement_case: enforcement_case,
+      actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+    )
+    assert_enqueued_jobs 1, only: OtpNotifierEmailDeliveryJob do
       post base_com_identity_recovery_session_url(ri: "jp", host: host),
            params: { recovery_reentry: { address: email.address } }
     end
-    otp = email.reload.get_otp
+    payload = ActiveJob::Arguments.deserialize(enqueued_jobs.last.fetch(:args)).last.fetch(:params)
+    code = OutboundSensitivePayload.decrypt_email_otp(payload.fetch(:encrypted_hotp_token))
     post base_com_identity_recovery_session_url(ri: "jp", host: host),
-         params: { pass_code: ROTP::HOTP.new(otp[:otp_private_key]).at(otp[:otp_counter]).to_s }
+         params: { pass_code: code }
 
     post base_com_identity_recovery_completion_url(ri: "jp", host: host),
          params: { enforcement_case_id: enforcement_case.public_id }

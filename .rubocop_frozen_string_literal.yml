@@ -1,0 +1,32 @@
+AllCops:
+  DisabledByDefault: true
+  TargetRubyVersion: 4.0
+  NewCops: disable
+  CacheRootDirectory: tmp/rubocop_cache
+  UseCache: false
+  Include:
+    - "**/*.rb"
+    - "**/*.rake"
+    - "**/*.ru"
+    - "**/Gemfile"
+    - "**/Rakefile"
+    - "bin/**/*"
+  Exclude:
+    - ".git/**/*"
+    - "vendor/**/*"
+    - "node_modules/**/*"
+    - "tmp/**/*"
+    - "log/**/*"
+    - "db/schema.rb"
+    - "db/*_schema.rb"
+    - "bin/dev"
+    - "bin/setup-diagnostic-env"
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always_true
+
+Style/DisableCopsWithinSourceCodeDirective:
+  Enabled: true
+  DisallowedCops:
+    - Style/FrozenStringLiteralComment

@@ -13,6 +13,24 @@ class OpenTelemetryInitializerTest < ActiveSupport::TestCase
     assert_includes source, "ObservabilitySpanScrubber"
   end
 
+  test "configures ActionMailer instrumentation with fixed pre-export allowlists" do
+    source = Rails.root.join("config/initializers/opentelemetry.rb").read
+
+    assert_match(
+      /c\.use\(\s*"OpenTelemetry::Instrumentation::ActionMailer".*?email_address:\s*:omit/m,
+      source,
+    )
+    assert_includes source, "notification_payload_transform:"
+    assert_includes source, "process_payload_transform:"
+    assert_includes source, '"email.x_mailer"'
+    assert_includes source, ":mailer"
+    assert_includes source, ":action"
+    assert_not_includes source, "email.subject"
+    assert_not_includes source, "email.to.address"
+    assert_not_includes source, "email.from.address"
+    assert_not_includes source, ":args"
+  end
+
   test "scrubs sensitive span attributes" do
     span = Struct.new(:attributes).new(
       {

@@ -1,0 +1,282 @@
+flowchart TB
+    %% CURRENT machine boundaries; every edge is orchestration/read dependency, never an FK.
+    LEGEND["Edges: orchestration or eligibility dependency; not FK and not a canonical external_result event. Unconnected nodes have no confirmed inter-machine caller edge."]
+    subgraph client_machines["client machine inventory"]
+        M0["idp-client-sign-in"]
+        M1["idp-client-sign-up"]
+        M2["idp-client-sign-out"]
+        M3["idp-client-auth-ceremony-session"]
+        M4["idp-client-email-ceremony"]
+        M5["idp-client-telephone-ceremony"]
+        M6["idp-client-passkey-ceremony"]
+        M7["idp-client-secret-credential-ceremony"]
+        M8["idp-client-step-up-ceremony"]
+        M9["idp-client-oidc-authorization"]
+        M10["idp-client-oauth-callback"]
+        M11["idp-client-local-result-delivery"]
+        M12["idp-client-token"]
+        M13["idp-client-dbsc"]
+        M14["idp-client-device-session"]
+        M15["idp-client-rp-session"]
+        M16["idp-client-passkey-credential"]
+        M50["idp-client-sign-up-cleanup"]
+        M51["idp-client-withdrawal-ceremony"]
+        M52["idp-client-enforcement-recovery-ceremony"]
+        M56["idp-client-totp-ceremony"]
+        M57["idp-client-social-ceremony"]
+        M58["idp-client-secret-issuance"]
+        M59["idp-client-session-limit-resolution"]
+        M60["idp-client-apple-notification"]
+        M61["idp-client-external-identity"]
+        M62["idp-client-totp-credential"]
+        M71["idp-client-secret-credential"]
+        M72["idp-client-dpop-nonce"]
+        M73["idp-client-administrative-access"]
+        M74["idp-client-email-verification-challenge"]
+        M75["idp-client-preference-dbsc"]
+        M76["idp-client-email-otp"]
+        M77["idp-client-telephone-otp"]
+        M92["idp-client-withdrawal"]
+        M96["idp-client-step-up-session"]
+        M97["idp-client-step-up-passkey-challenge"]
+        M98["idp-client-step-up-email-challenge"]
+        M99["idp-client-email-credential"]
+        M100["idp-client-telephone-credential"]
+        M101["idp-client-actor-withdrawal"]
+        M113["idp-client-actor-provisioning"]
+        M116["idp-client-enforcement-case"]
+        M117["idp-client-enforcement-appeal"]
+        M123["idp-client-mfa-readiness"]
+    end
+    subgraph visitor_machines["visitor machine inventory"]
+        M17["idp-visitor-sign-in"]
+        M18["idp-visitor-sign-up"]
+        M19["idp-visitor-sign-out"]
+        M20["idp-visitor-auth-ceremony-session"]
+        M21["idp-visitor-email-ceremony"]
+        M22["idp-visitor-telephone-ceremony"]
+        M23["idp-visitor-passkey-ceremony"]
+        M24["idp-visitor-secret-credential-ceremony"]
+        M25["idp-visitor-step-up-ceremony"]
+        M26["idp-visitor-oidc-authorization"]
+        M27["idp-visitor-local-result-delivery"]
+        M28["idp-visitor-token"]
+        M29["idp-visitor-dbsc"]
+        M30["idp-visitor-device-session"]
+        M31["idp-visitor-rp-session"]
+        M32["idp-visitor-passkey-credential"]
+        M53["idp-visitor-sign-up-cleanup"]
+        M54["idp-visitor-withdrawal-ceremony"]
+        M55["idp-visitor-enforcement-recovery-ceremony"]
+        M78["idp-visitor-secret-credential"]
+        M79["idp-visitor-dpop-nonce"]
+        M80["idp-visitor-administrative-access"]
+        M81["idp-visitor-email-verification-challenge"]
+        M82["idp-visitor-preference-dbsc"]
+        M83["idp-visitor-email-otp"]
+        M84["idp-visitor-telephone-otp"]
+        M93["idp-visitor-withdrawal"]
+        M102["idp-visitor-step-up-session"]
+        M103["idp-visitor-step-up-passkey-challenge"]
+        M104["idp-visitor-step-up-email-challenge"]
+        M105["idp-visitor-email-credential"]
+        M106["idp-visitor-telephone-credential"]
+        M107["idp-visitor-actor-withdrawal"]
+        M118["idp-visitor-enforcement-case"]
+        M119["idp-visitor-enforcement-appeal"]
+        M124["idp-visitor-mfa-readiness"]
+    end
+    subgraph operator_machines["operator machine inventory"]
+        M33["idp-operator-sign-in"]
+        M34["idp-operator-sign-up"]
+        M35["idp-operator-sign-out"]
+        M36["idp-operator-auth-ceremony-session"]
+        M37["idp-operator-email-ceremony"]
+        M38["idp-operator-telephone-ceremony"]
+        M39["idp-operator-passkey-ceremony"]
+        M40["idp-operator-secret-credential-ceremony"]
+        M41["idp-operator-step-up-ceremony"]
+        M42["idp-operator-oidc-authorization"]
+        M43["idp-operator-oauth-callback"]
+        M44["idp-operator-local-result-delivery"]
+        M45["idp-operator-token"]
+        M46["idp-operator-dbsc"]
+        M47["idp-operator-device-session"]
+        M48["idp-operator-rp-session"]
+        M49["idp-operator-passkey-credential"]
+        M66["idp-operator-organization-invitation"]
+        M67["idp-operator-operator-lifecycle"]
+        M85["idp-operator-secret-credential"]
+        M86["idp-operator-dpop-nonce"]
+        M87["idp-operator-administrative-access"]
+        M88["idp-operator-email-verification-challenge"]
+        M89["idp-operator-preference-dbsc"]
+        M90["idp-operator-email-otp"]
+        M91["idp-operator-telephone-otp"]
+        M95["idp-operator-entra-identity"]
+        M108["idp-operator-step-up-session"]
+        M109["idp-operator-step-up-passkey-challenge"]
+        M110["idp-operator-email-credential"]
+        M111["idp-operator-telephone-credential"]
+        M112["idp-operator-actor-withdrawal"]
+        M120["idp-operator-enforcement-case"]
+        M121["idp-operator-enforcement-appeal"]
+        M125["idp-operator-mfa-readiness"]
+    end
+    subgraph identity_machines["identity machine inventory"]
+        M63["idp-identity-totp-enrollment"]
+        M64["idp-identity-secret-credential-candidate"]
+        M65["idp-identity-social-candidate"]
+    end
+    subgraph shared_machines["shared machine inventory"]
+        M68["idp-shared-sequence-carrier"]
+        M69["idp-shared-authorization-code"]
+        M70["idp-shared-opaque-admission"]
+        M114["idp-shared-acme-logout"]
+        M115["idp-shared-webauthn-challenge"]
+        M122["idp-shared-sign-out-notice"]
+    end
+    subgraph security_machines["security machine inventory"]
+        M94["idp-security-one-time-reveal"]
+    end
+    M0 -->|"Auth admits Base-issued local flow"| M3
+    M3 -->|"Auth evidence / generation delivery"| M11
+    M11 -->|"Base commit rechecks flow and finalizes login"| M0
+    M0 -->|"successful root log_in establishes token"| M12
+    M9 -->|"Auth admits Base-issued OIDC transaction"| M3
+    M9 -->|"Base finalize establishes root browser session"| M12
+    M9 -->|"grant claim creates RP session under root lock"| M15
+    M12 -->|"Base bound proof admission"| M8
+    M8 -->|"Base persists pending session binding"| M96
+    M96 -->|"stores bound one-use assertion challenge"| M97
+    M97 -->|"accepted assertion records parent proof"| M8
+    M96 -->|"current generation email code delivery"| M98
+    M98 -->|"accepted delivered code records proof"| M8
+    M4 -->|"Base result consumer commits credential"| M99
+    M5 -->|"Base result consumer commits credential"| M100
+    M6 -->|"Base result consumer commits credential"| M16
+    M4 -->|"independent EVP outcome axis on same row"| M74
+    M99 -->|"contact row owns OTP proof and lock"| M76
+    M100 -->|"contact row owns OTP proof and lock"| M77
+    M12 -->|"token owns device binding registration axis"| M13
+    M12 -->|"root usability gates RP authority"| M15
+    M2 -->|"logout logical revocation"| M12
+    M2 -->|"issue/consume logout transport"| M122
+    M15 -->|"RP logout launcher issues ordered boundary"| M114
+    M101 -->|"deactivation revokes root sessions"| M12
+    M116 -->|"apply/end locks or refcount-unlocks actor"| M73
+    M116 -->|"method/principal eligibility query gates proof"| M0
+    M117 -->|"approved decision ends Case; convergence retries"| M116
+    M73 -->|"admin lock revokes sessions"| M12
+    M1 -->|"accepted signup handoff; separate durable sign-in"| M0
+    M1 -->|"terminal cancellation/failure/expiry schedules cleanup"| M50
+    M101 -->|"request/discard/recover/terminate records durable flow"| M92
+    M51 -->|"restricted withdrawal proof authorizes recovery/termination"| M101
+    M52 -->|"verified recovery ends security_lock case"| M116
+    M17 -->|"Auth admits Base-issued local flow"| M20
+    M20 -->|"Auth evidence / generation delivery"| M27
+    M27 -->|"Base commit rechecks flow and finalizes login"| M17
+    M17 -->|"successful root log_in establishes token"| M28
+    M26 -->|"Auth admits Base-issued OIDC transaction"| M20
+    M26 -->|"Base finalize establishes root browser session"| M28
+    M26 -->|"grant claim creates RP session under root lock"| M31
+    M28 -->|"Base bound proof admission"| M25
+    M25 -->|"Base persists pending session binding"| M102
+    M102 -->|"stores bound one-use assertion challenge"| M103
+    M103 -->|"accepted assertion records parent proof"| M25
+    M102 -->|"current generation email code delivery"| M104
+    M104 -->|"accepted delivered code records proof"| M25
+    M21 -->|"Base result consumer commits credential"| M105
+    M22 -->|"Base result consumer commits credential"| M106
+    M23 -->|"Base result consumer commits credential"| M32
+    M21 -->|"independent EVP outcome axis on same row"| M81
+    M105 -->|"contact row owns OTP proof and lock"| M83
+    M106 -->|"contact row owns OTP proof and lock"| M84
+    M28 -->|"token owns device binding registration axis"| M29
+    M28 -->|"root usability gates RP authority"| M31
+    M19 -->|"logout logical revocation"| M28
+    M19 -->|"issue/consume logout transport"| M122
+    M31 -->|"RP logout launcher issues ordered boundary"| M114
+    M107 -->|"deactivation revokes root sessions"| M28
+    M118 -->|"apply/end locks or refcount-unlocks actor"| M80
+    M118 -->|"method/principal eligibility query gates proof"| M17
+    M119 -->|"approved decision ends Case; convergence retries"| M118
+    M80 -->|"admin lock revokes sessions"| M28
+    M18 -->|"accepted signup handoff; separate durable sign-in"| M17
+    M18 -->|"terminal cancellation/failure/expiry schedules cleanup"| M53
+    M107 -->|"request/discard/recover/terminate records durable flow"| M93
+    M54 -->|"restricted withdrawal proof authorizes recovery/termination"| M107
+    M55 -->|"verified recovery ends security_lock case"| M118
+    M33 -->|"Auth admits Base-issued local flow"| M36
+    M36 -->|"Auth evidence / generation delivery"| M44
+    M44 -->|"Base commit rechecks flow and finalizes login"| M33
+    M33 -->|"successful root log_in establishes token"| M45
+    M42 -->|"Auth admits Base-issued OIDC transaction"| M36
+    M42 -->|"Base finalize establishes root browser session"| M45
+    M42 -->|"grant claim creates RP session under root lock"| M48
+    M45 -->|"Base bound proof admission"| M41
+    M41 -->|"Base persists pending session binding"| M108
+    M108 -->|"stores bound one-use assertion challenge"| M109
+    M109 -->|"accepted assertion records parent proof"| M41
+    M37 -->|"Base result consumer commits credential"| M110
+    M38 -->|"Base result consumer commits credential"| M111
+    M39 -->|"Base result consumer commits credential"| M49
+    M37 -->|"independent EVP outcome axis on same row"| M88
+    M110 -->|"contact row owns OTP proof and lock"| M90
+    M111 -->|"contact row owns OTP proof and lock"| M91
+    M45 -->|"token owns device binding registration axis"| M46
+    M45 -->|"root usability gates RP authority"| M48
+    M35 -->|"logout logical revocation"| M45
+    M35 -->|"issue/consume logout transport"| M122
+    M48 -->|"RP logout launcher issues ordered boundary"| M114
+    M112 -->|"deactivation revokes root sessions"| M45
+    M120 -->|"apply/end locks or refcount-unlocks actor"| M87
+    M120 -->|"method/principal eligibility query gates proof"| M33
+    M121 -->|"approved decision ends Case; convergence retries"| M120
+    M87 -->|"admin lock revokes sessions"| M45
+    M10 -->|"provider-bound callback creates signed social result"| M57
+    M57 -->|"verified provider candidate transport"| M65
+    M57 -->|"Base social final commit"| M61
+    M60 -->|"verified event updates entitlement and revokes sessions"| M61
+    M60 -->|"applied provider revocation ends sessions"| M12
+    M59 -->|"capacity selection resumes Base finalization"| M9
+    M8 -->|"registration owns enrollment candidate"| M63
+    M63 -->|"Base final commit consumes proof and creates credential"| M62
+    M56 -->|"child transaction candidate binding"| M63
+    M58 -->|"reservation and storage confirmation own candidates"| M71
+    M67 -->|"approved join issues invitation"| M66
+    M67 -->|"withdraw/suspend/terminate/restore facts"| M112
+    M67 -->|"withdraw/suspend/terminate entitlement; restore separate"| M95
+    M95 -->|"Entra resolver requires ACTIVE mapping"| M33
+    M70 -->|"purpose/binding code resolves durable authority"| M3
+    M70 -->|"purpose/binding code resolves durable authority"| M11
+    M70 -->|"purpose/binding code resolves durable authority"| M9
+    M70 -->|"purpose/binding code resolves durable authority"| M8
+    M7 -->|"temporary signed-result candidate"| M64
+    M69 -->|"legacy exchange one-time code then RP creation"| M15
+    M70 -->|"purpose/binding code resolves durable authority"| M20
+    M70 -->|"purpose/binding code resolves durable authority"| M27
+    M70 -->|"purpose/binding code resolves durable authority"| M26
+    M70 -->|"purpose/binding code resolves durable authority"| M25
+    M24 -->|"temporary signed-result candidate"| M64
+    M69 -->|"legacy exchange one-time code then RP creation"| M31
+    M70 -->|"purpose/binding code resolves durable authority"| M36
+    M70 -->|"purpose/binding code resolves durable authority"| M44
+    M70 -->|"purpose/binding code resolves durable authority"| M42
+    M70 -->|"purpose/binding code resolves durable authority"| M41
+    M40 -->|"temporary signed-result candidate"| M64
+    M69 -->|"legacy exchange one-time code then RP creation"| M48
+    M16 -->|"credential after_commit refreshes capability projection"| M123
+    M99 -->|"credential after_commit refreshes capability projection"| M123
+    M100 -->|"credential after_commit refreshes capability projection"| M123
+    M62 -->|"credential after_commit refreshes capability projection"| M123
+    M32 -->|"credential after_commit refreshes capability projection"| M124
+    M105 -->|"credential after_commit refreshes capability projection"| M124
+    M106 -->|"credential after_commit refreshes capability projection"| M124
+    M49 -->|"credential after_commit refreshes capability projection"| M125
+    M110 -->|"credential after_commit refreshes capability projection"| M125
+    M111 -->|"credential after_commit refreshes capability projection"| M125
+    M126["idp-client-email-registration-session"]
+    M126 -->|"OTP success also advances durable sign-up flow; separate authorities"| M1
+    M127["idp-visitor-email-registration-session"]
+    M127 -->|"OTP success also advances durable sign-up flow; separate authorities"| M18

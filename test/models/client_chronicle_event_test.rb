@@ -59,6 +59,9 @@ class ClientChronicleEventTest < ActiveSupport::TestCase
       ClientChronicleEvent::EMAIL_REGISTERED,
       ClientChronicleEvent::TELEPHONE_REGISTERED,
       ClientChronicleEvent::CREDENTIAL_SECURITY_TRANSITION,
+      ClientChronicleEvent::STEP_UP_FAILED,
+      ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
+      ClientChronicleEvent::SIGN_FLOW_HALTED,
     ], ClientChronicleEvent::DEFAULTS.sort
   end
 
@@ -68,16 +71,18 @@ class ClientChronicleEventTest < ActiveSupport::TestCase
 
   test "DEFAULTS array contains all event IDs" do
     assert_kind_of Array, ClientChronicleEvent::DEFAULTS
-    assert_equal 33, ClientChronicleEvent::DEFAULTS.size
+    assert_equal 36, ClientChronicleEvent::DEFAULTS.size
     assert_includes ClientChronicleEvent::DEFAULTS, ClientChronicleEvent::LOGGED_IN
     assert_includes ClientChronicleEvent::DEFAULTS, ClientChronicleEvent::LOGIN_SUCCESS
     assert_includes ClientChronicleEvent::DEFAULTS, ClientChronicleEvent::TOKEN_REFRESHED
+    assert_includes ClientChronicleEvent::DEFAULTS, ClientChronicleEvent::STEP_UP_FAILED
+    assert_includes ClientChronicleEvent::DEFAULTS, ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED
   end
 
   test "ensure_defaults! creates records" do
     ClientChronicle.delete_all
     ClientChronicleEvent.delete_all
-    assert_difference("ClientChronicleEvent.count", 33) do
+    assert_difference("ClientChronicleEvent.count", 36) do
       ClientChronicleEvent.ensure_defaults!
     end
     assert ClientChronicleEvent.exists?(id: ClientChronicleEvent::LOGGED_IN)

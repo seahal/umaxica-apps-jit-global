@@ -1,0 +1,30 @@
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -39,6 +39,27 @@
+           persist-credentials: false
+       - name: Run actionlint
+         uses: devops-actions/actionlint@v0.1.10
++  knowledge:
++    name: Repository Knowledge Structure
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    steps:
++      - uses: actions/checkout@v6.0.1
++        with:
++          persist-credentials: false
++          fetch-depth: 0
++      - uses: ruby/setup-ruby@v1
++        with:
++          bundler-cache: false
++      - name: Check shared guidance and adapters
++        env:
++          KNOWLEDGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
++        run: |
++          if [[ -n "$KNOWLEDGE_BASE" && ! "$KNOWLEDGE_BASE" =~ ^0+$ ]]; then
++            scripts/check-repository-knowledge --base "$KNOWLEDGE_BASE"
++          else
++            scripts/check-repository-knowledge
++          fi
+   build-assets:
+     name: Production Asset Build (Vite)
+     runs-on: ubuntu-slim

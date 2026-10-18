@@ -1,0 +1,35 @@
+# Rows inserted by db/op_base_app_migrate/20261006160000_seed_app_sign_flow_reference_data.rb.
+# Structure loads do not replay that data migration.
+_fixture:
+  model_class: ClientSignUpFlowStatus
+
+started:
+  id: 10
+contact_pending:
+  id: 20
+credential_pending:
+  id: 30
+contact_verified:
+  id: 35
+social_callback_pending:
+  id: 36
+guardrail_pending:
+  id: 38
+checkpoint_pending:
+  id: 40
+finalizing:
+  id: 60
+finalized:
+  id: 70
+sign_in_handoff_pending:
+  id: 80
+completed:
+  id: 100
+failed:
+  id: 900
+expired:
+  id: 910
+cancelled:
+  id: 920
+halted:
+  id: 930

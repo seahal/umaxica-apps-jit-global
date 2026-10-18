@@ -16,7 +16,8 @@ module Base
 
         AUTHENTICATION_MODE = :private
 
-        before_action :authenticate_visitor!
+        step_up only: %i(new create), bootstrap: true
+        step_up only: %i(edit update destroy)
         before_action :set_no_store_for_secret_credential_pages
         before_action :set_secret_credential, only: %i(show edit update destroy)
         before_action :ensure_verified_recovery_identity_for_registration!, only: [:new]
@@ -65,12 +66,11 @@ module Base
           )
           reset_secret_credential_ceremony_session!
 
-          redirect_to(
+          redirect_to_surface_url(
             base_com_identity_secrets_url(
               ri: params[:ri],
               host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
             ),
-            allow_other_host: cross_host_redirect_allowed?,
           )
         rescue ActiveRecord::RecordInvalid => e
           @secret_credential ||= e.record
@@ -81,8 +81,17 @@ module Base
         def update
           authorize!(@secret_credential)
 
-          if disabling_secret_credential?(secret_credential_params) &&
-              AuthMethodGuard.last_method?(current_visitor, excluding: @secret_credential)
+          blocked = false
+          current_visitor.with_lock do
+            @secret_credential = VisitorSecretCredential.lock.find_by!(
+              id: @secret_credential.id, visitor_id: current_visitor.id,
+            )
+            blocked = disabling_secret_credential?(secret_credential_params) &&
+              !AuthMethodGuard.can_remove_secret_credential?(current_visitor, @secret_credential)
+            apply_secret_credential_update! unless blocked
+          end
+
+          if blocked
             redirect_to(
               base_com_identity_secret_path(@secret_credential.public_id, ri: params[:ri]),
               status: :see_other,
@@ -90,7 +99,6 @@ module Base
             return
           end
 
-          apply_secret_credential_update!
           redirect_to(
             base_com_identity_secret_path(@secret_credential.public_id, ri: params[:ri]),
             status: :see_other,
@@ -99,16 +107,21 @@ module Base
 
         def destroy
           authorize!(@secret_credential)
-          unless AuthMethodGuard.can_remove_secret_credential?(current_visitor, @secret_credential)
-            redirect_to(
-              base_com_identity_secrets_path(ri: params[:ri]),
-              status: :see_other,
+          current_visitor.with_lock do
+            @secret_credential = VisitorSecretCredential.lock.find_by!(
+              id: @secret_credential.id, visitor_id: current_visitor.id,
             )
-            return
+            unless AuthMethodGuard.can_remove_secret_credential?(current_visitor, @secret_credential)
+              return redirect_to(
+                base_com_identity_secrets_path(ri: params[:ri]),
+                status: :see_other,
+              )
+            end
+
+            @secret_credential.discard_now!(purge_after: 1.day)
+            @secret_credential.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(:deleted)
+            @secret_credential.save!
           end
-          @secret_credential.discard_now!(purge_after: 1.day)
-          @secret_credential.visitor_secret_credential_status_id = VisitorSecretCredential.status_id_for(:deleted)
-          @secret_credential.save!
           redirect_to(base_com_identity_secrets_path(ri: params[:ri]), status: :see_other)
         end
 

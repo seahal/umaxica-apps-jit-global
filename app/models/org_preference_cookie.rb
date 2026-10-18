@@ -1,4 +1,6 @@
+# frozen_string_literal: true
 # typed: false
+
 # == Schema Information
 #
 # Table name: org_preference_cookies
@@ -24,19 +26,17 @@
 #  fk_rails_...  (preference_id => org_preferences.id)
 #
 
-# frozen_string_literal: true
-
 class OrgPreferenceCookie < OrgSettingRecord
   belongs_to :preference, class_name: "OrgPreference", inverse_of: :org_preference_cookie
 
   validates :preference_id, uniqueness: true
 
-  after_initialize :set_defaults
-
   validates :targetable, inclusion: { in: [true, false] }
   validates :performant, inclusion: { in: [true, false] }
   validates :functional, inclusion: { in: [true, false] }
   validates :consented, inclusion: { in: [true, false] }
+
+  after_initialize :set_defaults
 
   private
 

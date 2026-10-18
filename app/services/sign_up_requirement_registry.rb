@@ -15,7 +15,7 @@ class SignUpRequirementRegistry
       "telephone" => Definition.new(
         surface: :app,
         entry_method: "telephone",
-        requirements: %i(otp passkey passcode birthdate),
+        requirements: %i(otp passkey birthdate),
         social: false,
       ),
       "google" => Definition.new(
@@ -36,7 +36,7 @@ class SignUpRequirementRegistry
       "telephone" => Definition.new(
         surface: :com,
         entry_method: "telephone",
-        requirements: %i(otp passkey passcode birthdate),
+        requirements: %i(otp passkey birthdate),
         social: false,
       ),
     },

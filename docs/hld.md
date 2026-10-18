@@ -1,5 +1,12 @@
 # High-Level Design Document (HLD)
 
+> Current implementation (2026-10-04): parts of this document describe an earlier shape of the
+> application. The controller namespaces it names (`Top`, `Sign`, `Bff`, `Api`) and the help contact
+> form flow are not in the current code. Current controllers live under `Auth`, `Base`, `Core`,
+> `Warp`, `Palm`, `Edit`, `Guid`, and the content surfaces `Docs`, `Help`, `Info`, and `News`, one
+> route file each in `config/routes/`. Use `README.md` ("Routing") and `docs/architecture/` for the
+> current topology.
+
 ## Project: Umaxica App (JIT)
 
 ### Conforms to ISO/IEC/IEEE 42010:2011 and IEEE 1016:2009
@@ -18,10 +25,11 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 
 - Rails application located at `/home/mslo/ghq/github.com/seahal/umaxica-app-jit`
 - Namespaced controllers for `Top`, `Sign`, `Help`, `Docs`, `News`, `Bff`, and `Api` surfaces
-- Turbo/React front-end with pnpm-managed tooling (`src/**`)
-- Multi-database Active Record setup (`app_principal`, `org_ticket`, `com_setting`, etc.)
+- Turbo/React front-end with Bun-managed tooling (`src/**`)
+- Multi-database Active Record setup (`app_principal`, `op_base_org`, `com_setting`, etc.)
 - Supporting infrastructure: PostgreSQL primary/replica pairs, Valkey, Grafana/Loki/Tempo, and an
-  opt-in RustFS object-storage profile
+  opt-in RustFS object-storage profile for local integration checks; Shrine storage is configured
+  per boundary for development, staging, and production
 - CI/CD automation (GitHub Actions, Lefthook) and local workflows (Foreman + Podman Compose)
 
 ### 1.3 References
@@ -42,11 +50,11 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 2. Protect user data by routing each data class to its own PostgreSQL cluster and encrypting
    sensitive columns.
 3. Deliver modern identity experiences (passkeys, OTP, OAuth, JWT) and customer-support tooling
-   while keeping UX cohesive through pnpm-managed JS tooling and Vite-managed CSS.
+   while keeping UX cohesive through Bun-managed JS tooling and Vite-managed CSS.
 4. Operate reliably through strong observability (OpenTelemetry → Tempo, logs → Loki, dashboards →
    Grafana), rate limiting, and bot mitigation (Cloudflare Turnstile).
 5. Keep developer ergonomics high via Compose-based infrastructure, Foreman-managed processes, and
-   pnpm + Tailwind-driven assets.
+   Bun + Tailwind-driven assets.
 
 ### 2.2 Principles
 
@@ -59,16 +67,15 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 - **Observability-first**: All HTTP, rate-limit store, and ActionMailer operations are instrumented;
   `/health` (`text/plain`) and `/api/v0/health.json` exist for every host
   (`docs/reference/health-endpoints.md`).
-- **Composable tooling**: pnpm-managed JavaScript tooling, Vite-backed CSS entrypoints, Foreman +
+- **Composable tooling**: Bun-managed JavaScript tooling, Vite-backed CSS entrypoints, Foreman +
   Docker Compose for orchestration, GitHub Actions for CI.
 
 ### 2.3 Constraints
 
-- Ruby 3.4.7 / Rails 8.x
-- pnpm 12.0.0 / Node 24.19.0 (Active LTS) for JavaScript tooling (Vite-backed)
+- Ruby 4.0.7 / Rails 8.x
+- Bun 1.4.0 / Node 24.20.0 for JavaScript tooling (Vite-backed)
 - PostgreSQL 18 primaries/replicas per logical database
-- Valkey for the application cache and for distributed rate-limit counters, on two separate
-  services
+- Valkey for the application cache and for distributed rate-limit counters, on two separate services
 - Cloudflare/ Fastly handle TLS and CDN duties
 
 ---
@@ -82,7 +89,7 @@ Browsers / Mobile Apps
     │ HTTPS via Fastly / Cloudflare
     ▼
 Rails 8 Monolith (Top / Sign / Help / Docs / News / API / BFF)
-    │ ├─ Postgres clusters (`app_principal`, `org_ticket`, `com_setting`, etc.)
+    │ ├─ Postgres clusters (`app_principal`, `op_base_org`, `com_setting`, etc.)
     │ ├─ Valkey cache (Rails.cache) + Valkey rate limit (counters)
     │ ├─ ActionMailer + SMTP / Outbound::Sms
     │ └─ OpenTelemetry exporter (Tempo) + Loki logging
@@ -113,8 +120,8 @@ concerns scoped.
    Turnstile, rate limiting, redirect sanitization). Models inherit from base records
    (`IdentitiesRecord`, `ComPrincipalRecord`, etc.) to target specific DB clusters. Services (e.g.,
    `Outbound::Sms`, `AccountService`) encapsulate integration logic.
-3. **Integration**: ActionMailer namespaces, Sms providers, OpenTelemetry instrumentation,
-   the Valkey rate-limit store, external CDNs/cloud providers.
+3. **Integration**: ActionMailer namespaces, Sms providers, OpenTelemetry instrumentation, the
+   Valkey rate-limit store, external CDNs/cloud providers.
 
 ---
 
@@ -191,16 +198,16 @@ concerns scoped.
 | -------------------- | ---------------------------------------- | ----------------------------------------------------------------- |
 | `AppPrincipalRecord` | `app_principal`, `app_principal_replica` | `users`, `clients`, app identity and local preference tables      |
 | `AppSettingRecord`   | `app_setting`, `app_setting_replica`     | `app_preferences`, `app_preference_*`                             |
-| `AppTicketRecord`    | `app_ticket`, `app_ticket_replica`       | `user_tokens`, `user_step_up_sessions`, app OIDC tickets          |
+| `OpBaseAppRecord`    | `op_base_app`, `op_base_app_replica`     | `user_tokens`, `user_step_up_sessions`, app OIDC tickets          |
 | `AppRpRecord`        | `app_zenith`, `app_zenith_replica`       | `client_identities`, `client_accounts`, `client_profiles`         |
 | `AppSignalRecord`    | `app_signal`, `app_signal_replica`       | `user_notifications`, `member_notifications`                      |
 | `OrgPrincipalRecord` | `org_principal`, `org_principal_replica` | `staffs`, `operators`, org identity and local preference tables   |
 | `OrgSettingRecord`   | `org_setting`, `org_setting_replica`     | `org_preferences`, `org_preference_*`                             |
-| `OrgTicketRecord`    | `org_ticket`, `org_ticket_replica`       | `staff_tokens`, `staff_step_up_sessions`, org OIDC tickets        |
+| `OpBaseOrgRecord`    | `op_base_org`, `op_base_org_replica`     | `staff_tokens`, `staff_step_up_sessions`, org OIDC tickets        |
 | `OrgRpRecord`        | `org_zenith`, `org_zenith_replica`       | `operator_identities`, `operator_accounts`, workspace projections |
 | `OrgSignalRecord`    | `org_signal`, `org_signal_replica`       | `staff_notifications`, `operator_notifications`                   |
 | `ComPrincipalRecord` | `com_principal`, `com_principal_replica` | `visitors`, visitor credentials, public contact state             |
-| `ComTicketRecord`    | `com_ticket`, `com_ticket_replica`       | `visitor_tokens`, `visitor_step_up_sessions`, com OIDC tickets    |
+| `OpBaseComRecord`    | `op_base_com`, `op_base_com_replica`     | `visitor_tokens`, `visitor_step_up_sessions`, com OIDC tickets    |
 | `ComRpRecord`        | `com_zenith`, `com_zenith_replica`       | `visitor_identities`, `visitor_accounts`                          |
 | `ComSignalRecord`    | `com_signal`, `com_signal_replica`       | `visitor_notifications`                                           |
 | `ComSettingRecord`   | `com_setting`, `com_setting_replica`     | `com_preferences`, `com_preference_*`                             |
@@ -212,15 +219,16 @@ Sensitive columns leverage Active Record encryption.
 
 - `Rails.cache` is an `ActiveSupport::Cache::RedisCacheStore` on Valkey, configured by
   `CACHE_REDIS_URL` in development and production and `:null_store` in test. Solid Cache was
-  removed: a database-backed cache reads at the call site exactly like durable storage, which is
-  how replay-prevention state and one-shot secrets ended up in it. Every cache entry now carries
-  an explicit TTL and is reconstructible from its source.
+  removed: a database-backed cache reads at the call site exactly like durable storage, which is how
+  replay-prevention state and one-shot secrets ended up in it. Every cache entry now carries an
+  explicit TTL and is reconstructible from its source.
 - Rate limiting uses Rails' `rate_limit` DSL against `config.x.rate_limit.store`, a separate
   `ActiveSupport::Cache::RedisCacheStore` on Valkey configured by `RATE_LIMIT_REDIS_URL`. The
   default limit is 1,000 req/hour per client.
-- The two stores stay separate even though both are Valkey: development runs `valkey-cache` and
-  `valkey-rate-limit` as distinct services, so a cache flush cannot reset rate-limit windows.
-  Counters and cache entries are both disposable; neither can lose authoritative state.
+- Cache, rate-limit, and auth-state share one nonprod Valkey with logical DBs 0/1/2 (dev) and 3/4/5
+  (test) via responsibility URLs (`adr/valkey-nonprod-logical-db-topology.md`). Production may still
+  use separate hosts. Counters and cache entries are both disposable; neither can lose authoritative
+  state.
 - Staging and production both use logical DB 0. Staging shares `CACHE_REDIS_URL`; production
   requires both URLs on `/0` (one managed database or two).
 - Runtime URL context is resolved from the Preference JWT projection and request-local context, not
@@ -236,12 +244,12 @@ Sensitive columns leverage Active Record encryption.
   RustFS; its devcontainer override publishes the S3 API and console on loopback ports `9000` and
   `9001` by default.
 - `bin/dev` is the unified local entrypoint; it wraps `foreman start -f Procfile.dev` to orchestrate
-  Rails, Vite, and jobs. JavaScript tooling runs via Vite Plus when linting/formatting.
+  Rails, Vite, and jobs. JavaScript linting and formatting run through Bun scripts (oxlint, oxfmt).
 
 ### 6.2 CI/CD
 
-- GitHub Actions workflow (`integration.yml`) executes bundler install, `bin/rails test`, pnpm-based
-  lint/format (`pnpm run check`), RuboCop, ERB lint, Brakeman, Bundler Audit as configured by
+- GitHub Actions workflow (`ci.yml`) executes bundler install, `bin/rails test`, Bun-based
+  lint/format (`bun run check`), RuboCop, ERB lint, Brakeman, Bundler Audit as configured by
   `lefthook.yml`.
 - Deployment target (Cloud Run/Cloud Build + Fastly/Cloudflare) consumes container images or build
   artifacts; secrets injected per environment.
@@ -270,8 +278,8 @@ Sensitive columns leverage Active Record encryption.
   arguments.
 - **Redirect safety**: `Redirect::ALLOWED_HOSTS` enumerates permitted targets; Base64-encoded jump
   tokens validated before allowing cross-host redirects.
-- **Secrets**: Rails credentials store JWT keys, Cloudflare Turnstile secrets, AWS keys,
-  SMTP secrets. Compose `.env` wiring required for local runs.
+- **Secrets**: Rails credentials store JWT keys, Cloudflare Turnstile secrets, AWS keys, SMTP
+  secrets. Compose `.env` wiring required for local runs.
 - **Logging & auditing**: Rails logs feed Loki; OTEL traces capture request IDs and hostnames for
   auditability.
 
@@ -279,14 +287,14 @@ Sensitive columns leverage Active Record encryption.
 
 ## 8. External Interfaces
 
-| Interface      | Type          | Description                                                                                                                                                 |
-| -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HTTP           | REST          | Host-scoped routes for top/sign/help/docs/news/api/bff, including `/health` (text), `/api/v0/health.json`, `/sign/...`, `/help/...`, `/api/v1/inquiry/...`. |
-| Mail           | SMTP / API    | `Email::App/Com/Org::{Otp,Alert,Promotional}Mailer` deliver surface-scoped mail. OTP job arguments carry encrypted OTP payloads.            |
-| SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                          |
-| Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound. |
-| OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                               |
-| Object storage | S3-compatible | Opt-in RustFS smoke-test integration for local development; production storage is deferred.                                                 |
+| Interface      | Type          | Description                                                                                                                                                                                                                        |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP           | REST          | Host-scoped routes for top/sign/help/docs/news/api/bff, including `/health` (text), `/api/v0/health.json`, `/sign/...`, `/help/...`, `/api/v1/inquiry/...`.                                                                        |
+| Mail           | SMTP / API    | `Email::App/Com/Org::{Otp,Alert,Promotional}Mailer` deliver surface-scoped mail. OTP job arguments carry encrypted OTP payloads.                                                                                                   |
+| SMS            | HTTPS         | `Outbound::Sms` sends OTP codes through the configured provider. SMS job arguments carry encrypted message bodies.                                                                                                                 |
+| Valkey         | RESP          | Two separate services: application cache (`CACHE_REDIS_URL`) and rate-limit counters (`RATE_LIMIT_REDIS_URL`). Non-authoritative, disposable, TTL-bound.                                                                           |
+| OTLP           | HTTP/gRPC     | OpenTelemetry exporter pushes spans to Tempo (`http://tempo:4318/v1/traces`).                                                                                                                                                      |
+| Object storage | S3-compatible | Shrine selects a boundary-specific bucket in development/staging and AWS S3 in production. Objects are private; the Avatar user-facing delivery API/CDN namespace is undefined. RustFS remains an opt-in local integration target. |
 
 ---
 
@@ -306,7 +314,7 @@ Sensitive columns leverage Active Record encryption.
 - **Rails vs. edge micro-apps**: consolidates duplicated auth/contact logic and simplifies
   compliance (single codebase, single observability stack).
 - **Multi-database**: isolates PII domains and supports region-specific scaling (read replicas).
-- **pnpm + Turbo**: keeps JS modern through lightweight tooling and aligns browser CSS with the
+- **Bun + Turbo**: keeps JS modern through lightweight tooling and aligns browser CSS with the
   Vite-backed frontend pipeline.
 - **Compose-based infrastructure**: developers get a self-contained environment (Postgres, Valkey,
   observability) without external services.
@@ -315,7 +323,9 @@ Sensitive columns leverage Active Record encryption.
 
 1. Flesh out staff/admin CRUD for docs/news/help content and owner/customer management.
 2. Continue adding explicit Action Policy checks where object-level authorization is still missing.
-3. Publish OpenAPI docs with Rswag for API namespaces and mount `/api-docs` when ready.
+3. OpenAPI publication is in place for development: `rswag-api` serves the descriptions under
+   `openapi/` at `/openapi` and `rswag-ui` serves Swagger UI on the swagger host
+   (`config/routes/swagger.rb`). There is no `/api-docs` mount.
 4. Automate Fastly cache purges via `fastly` gem upon content updates.
 5. Expand geolocation- or cookie-based personalization once privacy review passes.
 

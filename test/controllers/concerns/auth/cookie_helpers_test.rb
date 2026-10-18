@@ -108,8 +108,4 @@ class AuthCookieHelpersTest < ActiveSupport::TestCase
   test "REFRESH_TOKEN_TTL is 30 days" do
     assert_equal 30.days, AuthenticationBase::REFRESH_TOKEN_TTL
   end
-
-  test "RESTRICTED_SESSION_TTL is 15 minutes" do
-    assert_equal 15.minutes, AuthenticationBase::RESTRICTED_SESSION_TTL
-  end
 end
