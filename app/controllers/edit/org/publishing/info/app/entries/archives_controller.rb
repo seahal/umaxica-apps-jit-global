@@ -14,7 +14,6 @@ module Edit
               declare_authentication_mode! :private
               PUBLISHING_SURFACE = "info"
               PUBLISHING_AUDIENCE = "app"
-              ENTRY_CLASS = ::Publishing::Info::App::Entry
 
               public
 

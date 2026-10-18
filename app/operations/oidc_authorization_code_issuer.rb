@@ -61,8 +61,8 @@ class OidcAuthorizationCodeIssuer < ApplicationService
     raise ArgumentError, "session_token is required" if session_token.blank?
     raise ArgumentError, "session token actor mismatch" unless session_token_actor_matches?
     raise ArgumentError,
-          "session token is inactive" unless session_token.respond_to?(:currently_usable?) &&
-            session_token.currently_usable?
+          "session token is inactive" unless session_token.respond_to?(:active_status?) &&
+            session_token.active_status?
     raise ArgumentError, "session token public_id is required" if session_token.public_id.blank?
   end
 

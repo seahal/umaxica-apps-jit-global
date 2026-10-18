@@ -14,14 +14,14 @@ module Palm
         end
 
         test "GET sign-out shows the shared confirmation without mutating sessions" do
-          before = [ClientToken.count, ClientRpSession.count, AcmeLogoutTransaction.count]
+          before = [ClientToken.count, OpAppGrant.count, AcmeLogoutTransaction.count]
 
           get edit_palm_app_sign_out_url(ri: "jp")
 
           assert_response :success
           assert_equal "palm/app/sign/outs/edit", inertia_component
           assert_equal I18n.t("sign.shared.sign_out.title"), inertia_props.fetch("heading")
-          assert_equal before, [ClientToken.count, ClientRpSession.count, AcmeLogoutTransaction.count]
+          assert_equal before, [ClientToken.count, OpAppGrant.count, AcmeLogoutTransaction.count]
         end
 
         test "POST sign-out without Palm RP credentials is refused before transaction creation" do

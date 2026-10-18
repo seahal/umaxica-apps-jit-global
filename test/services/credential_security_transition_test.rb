@@ -454,7 +454,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       end
 
     ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
-      ComTicketRecord.connected_to(role: :reading, prevent_writes: true) do
+      OpBaseComRecord.connected_to(role: :reading, prevent_writes: true) do
         CredentialSecurityTransition.call(
           actor: actor, current_session: current_token, reason: :email_address_verified, affected_surface: "com",
         )
@@ -481,7 +481,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       end
 
     ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
-      OrgTicketRecord.connected_to(role: :reading, prevent_writes: true) do
+      OpBaseOrgRecord.connected_to(role: :reading, prevent_writes: true) do
         CredentialSecurityTransition.call(
           actor: actor, current_session: current_token, reason: :recovery_codes_rotated, affected_surface: "org",
         )
@@ -507,7 +507,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       end
 
     ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
-      AppTicketRecord.connected_to(role: :reading, prevent_writes: true) do
+      OpBaseAppRecord.connected_to(role: :reading, prevent_writes: true) do
         CredentialSecurityTransition.call(
           actor: actor, current_session: current_token, reason: :mfa_disabled, affected_surface: "app",
         )

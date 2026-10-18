@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_verifications
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id             :bigint           not null, primary key
 #  discard_at   :datetime         default(Infinity), not null
@@ -24,7 +24,7 @@
 #
 #  fk_rails_...  (staff_token_id => operator_tokens.id) ON DELETE => cascade
 #
-class OperatorVerification < OrgTicketRecord
+class OperatorVerification < OpBaseOrgRecord
   include Retainable
   include RefreshTokenShared
   include VerificationCookieable

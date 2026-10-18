@@ -20,6 +20,10 @@ module BaseSignInLimitations
   def update
     return render_invalid_resolution unless resolution_loaded?
 
+    if request.post? && params[:continue].to_s == "1"
+      return continue_pending_resolution
+    end
+
     token = selected_token
     unless token_belongs_to_actor?(token)
       @form_error = I18n.t("session_limit.invalid_session")
@@ -27,17 +31,13 @@ module BaseSignInLimitations
       return render_limitation_page(status: :unprocessable_content)
     end
 
-    unless resolve_selected_session(token)
+    unless select_session(token)
       @form_error = I18n.t("session_limit.invalid_session")
       load_session_inventory
       return render_limitation_page(status: :unprocessable_content)
     end
 
-    if social_resolution?
-      complete_local_resolution
-    else
-      resume_authorization_after_resolution
-    end
+    continue_pending_resolution
   end
 
   def destroy
@@ -51,7 +51,7 @@ module BaseSignInLimitations
 
   private
 
-  def resolve_selected_session(token)
+  def select_session(token)
     return false unless @resolution && @resolution_binding.present?
 
     @resolution.select_session!(
@@ -60,14 +60,17 @@ module BaseSignInLimitations
       session_ref: token.public_id,
       browser_binding_digest: @resolution.class.digest_challenge(@resolution_binding),
     )
-    @resolution.resolve!(
-      actor: @actor,
-      challenge: @resolution_challenge,
-      browser_binding_digest: @resolution.class.digest_challenge(@resolution_binding),
-    )
     true
   rescue FlowInvalidTransition, ActiveRecord::RecordNotFound
     false
+  end
+
+  def continue_pending_resolution
+    if social_resolution?
+      complete_local_resolution
+    else
+      resume_authorization_after_resolution
+    end
   end
 
   def cancel_pending_resolution!
@@ -104,6 +107,9 @@ module BaseSignInLimitations
       cancel_action: limitation_path(resolution_query_parameters),
       submit_label: I18n.t("session_limit.edit.submit"),
       cancel_label: I18n.t("session_limit.edit.cancel_logout"),
+      continue_action: limitation_path,
+      continue_label: I18n.t("session_limit.edit.continue"),
+      can_continue: session_capacity_available?,
       resolution: { field: "resolution_challenge", value: @resolution_challenge },
       sessions: Array(@sessions).map { |session_record| serialize_session(session_record) },
     }
@@ -112,11 +118,16 @@ module BaseSignInLimitations
   def serialize_session(session_record)
     {
       session_ref: SessionLimitResolutionTokenRef.issue(session_record),
-      restriction_label: session_record.restricted? ? "Restricted" : "Normal",
+      restriction_label: "Normal",
       created_label: "Created #{l(session_record.created_at, format: :short)}",
-      last_used_at: session_record.last_used_at.presence && l(session_record.last_used_at, format: :short),
+      last_used_label: session_record.last_used_at.presence &&
+        "Last used #{l(session_record.last_used_at, format: :short)}",
       revoke_label: I18n.t("session_limit.edit.submit"),
     }
+  end
+
+  def session_capacity_available?
+    Array(@sessions).length < max_sessions_for_resource(@actor)
   end
 
   def load_resolution
@@ -217,11 +228,11 @@ module BaseSignInLimitations
 
   def token_belongs_to_actor?(token)
     case token
-    when ClientToken then token.user_id == @actor.id && @actor.is_a?(Client)
-    when VisitorToken then token.visitor_id == @actor.id && @actor.is_a?(Visitor)
-    when OperatorToken then token.staff_id == @actor.id && @actor.is_a?(Operator)
+    when ClientToken then token.user_id == @actor.id && @actor.is_a?(Client) && token.active_status?
+    when VisitorToken then token.visitor_id == @actor.id && @actor.is_a?(Visitor) && token.active_status?
+    when OperatorToken then token.staff_id == @actor.id && @actor.is_a?(Operator) && token.active_status?
     else false
-    end && token.currently_usable?
+    end
   end
 
   def social_resolution?
@@ -229,7 +240,14 @@ module BaseSignInLimitations
   end
 
   def complete_local_resolution
-    return render_invalid_resolution unless promote_current_session_limit_cycle!(@actor)
+    result = promote_current_session_limit_cycle!(
+      @actor,
+      resolution: @resolution,
+      resolution_challenge: @resolution_challenge,
+      resolution_binding: @resolution_binding,
+    )
+    return render_pending_resolution(result) if result[:status] == :session_limit_pending
+    return render_invalid_resolution unless result[:status] == :success
 
     session[:inertia_clear_history] = true
     redirect_to(local_login_success_path, status: :see_other)
@@ -243,7 +261,7 @@ module BaseSignInLimitations
       @actor.class.connection_class_for_self.connected_to(role: :writing) do
         @actor.with_lock do
           @oidc_transaction.finalize_base! do |locked, _finalization_time|
-            next { status: :invalid_request } if locked.base_finalized_at || !@resolution.resolved?
+            next { status: :invalid_request } if locked.base_finalized_at
 
             login_result = promote_oidc_resolution_session!
             next login_result unless login_result[:status] == :success
@@ -253,12 +271,7 @@ module BaseSignInLimitations
         end
       end
     if finalization[:status] == :session_limit_pending
-      @resolution = finalization.fetch(:resolution_transaction)
-      @resolution_challenge = finalization.fetch(:resolution_challenge)
-      @resolution_binding = finalization.fetch(:resolution_binding)
-      @form_notice = I18n.t("base.app.sign.in.limitations.capacity_still_full")
-      load_session_inventory
-      return render_limitation_page(status: :unprocessable_content)
+      return render_pending_resolution(finalization)
     end
     return render_invalid_resolution unless finalization[:status] == :success
 
@@ -280,7 +293,19 @@ module BaseSignInLimitations
       authentication_event_at: @oidc_transaction.authenticated_at,
       established_authentication_method: established_authentication_method_for(@oidc_transaction.auth_method),
       oidc_authorization_transaction: @oidc_transaction,
+      session_limit_resolution: @resolution,
+      session_limit_resolution_challenge: @resolution_challenge,
+      session_limit_resolution_binding: @resolution_binding,
     )
+  end
+
+  def render_pending_resolution(result)
+    @resolution = result.fetch(:resolution_transaction)
+    @resolution_challenge = result.fetch(:resolution_challenge)
+    @resolution_binding = result.fetch(:resolution_binding)
+    @form_notice = I18n.t("base.app.sign.in.limitations.capacity_still_full")
+    load_session_inventory
+    render_limitation_page(status: :unprocessable_content)
   end
 
   def issue_authorization_code!

@@ -8,9 +8,9 @@ require "test_helper"
 # one second before and exactly at the cutoff are removed, one second after is kept.
 class OidcAuthorizationTransactionPurgerTest < ActiveSupport::TestCase
   SURFACES = {
-    "app" => { model: ClientOidcAuthorizationTransaction, client_id: "core-app", realm: "client" },
-    "com" => { model: VisitorOidcAuthorizationTransaction, client_id: "core-com", realm: "visitor" },
-    "org" => { model: OperatorOidcAuthorizationTransaction, client_id: "core-org", realm: "operator" },
+    "app" => { model: ClientOidcAuthorizationTransaction, client_id: "core-app-jp", realm: "client" },
+    "com" => { model: VisitorOidcAuthorizationTransaction, client_id: "core-com-jp", realm: "visitor" },
+    "org" => { model: OperatorOidcAuthorizationTransaction, client_id: "core-org-jp", realm: "operator" },
   }.freeze
 
   test "removes transactions expired at or before the retention cutoff and keeps later ones" do
@@ -48,7 +48,7 @@ class OidcAuthorizationTransactionPurgerTest < ActiveSupport::TestCase
   end
 
   test "keeps a live transaction" do
-    client = OidcClientRegistry.find!("core-app")
+    client = OidcClientRegistry.find!("core-app-jp")
     live = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",
       intent: "sign_in",

@@ -118,7 +118,8 @@ class BranchCoverageBatch37ControllerArmsTest < ActiveSupport::TestCase
   end
 
   test "AppealReviewsController create raises when appeal missing" do
-    controller = Base::Org::Support::EnforcementCases::AppealReviewsController.new
+    # The appeal review logic lives at the Enforcement owner since R5-WU12.
+    controller = Base::Org::Api::V0::Support::EnforcementCases::AppealReviewsController.new
     enforcement_case = Object.new
     enforcement_case.define_singleton_method(:appeal) { nil }
     controller.instance_variable_set(:@enforcement_case, enforcement_case)

@@ -26,7 +26,7 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
     @auth_headers = as_staff_headers(@staff, host: @auth_host, session_public_id: @token.public_id)
     @base_headers = as_staff_headers(@staff, host: @base_host, session_public_id: @token.public_id)
     client = OidcClientRegistry.find!("base-org-ww")
-    rp = OperatorRpSession.create!(
+    rp = OpOrgGrant.create!(
       operator_token: @token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,

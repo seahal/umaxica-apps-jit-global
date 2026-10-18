@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class VisitorSignInFlowState < ComTicketRecord
+class VisitorSignInFlowState < OpBaseComRecord
   include ReferenceRecord
 
   PRIMARY_PENDING = 10

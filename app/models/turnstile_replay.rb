@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: turnstile_replays
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id           :bigint           not null, primary key
 #  action       :string
@@ -22,7 +22,7 @@
 #  index_turnstile_replays_on_expires_at    (expires_at)
 #  index_turnstile_replays_on_token_digest  (token_digest) UNIQUE
 #
-class TurnstileReplay < AppTicketRecord
+class TurnstileReplay < OpBaseAppRecord
   validates :ceremony_id, :token_digest, :expires_at, presence: true
 
   def self.digest_token(token)

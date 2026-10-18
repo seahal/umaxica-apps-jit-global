@@ -910,7 +910,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       pending_resume = allow_incomplete && binding.base_token_id == token&.id &&
         completed_social_sign_in_parent_pending?(binding, commit, parent)
       completed = parent.sign_in_completed? && parent.principal_id == commit.user.id &&
-        token&.id == parent.token_id && token.currently_usable?(token.class.database_now)
+        token&.id == parent.token_id && token.active_status?(token.class.database_now)
       (pending_resume || completed) && !parent.expired?(parent.class.database_now)
     end
 
@@ -1075,7 +1075,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise Denied.new("Base device session is unavailable", code: "session_expired") unless device
 
       validate_step_up_root_context!(binding, token) if binding.parent_kind == :step_up_ceremony_transaction
-      return if token.currently_usable?(token.class.database_now) && device.usable? &&
+      return if token.active_status?(token.class.database_now) && device.usable? &&
         device.current_refresh_token_id == token.id && admission_root_actor(token).login_allowed?
 
       raise Denied.new("Base session is unavailable", code: "session_expired")

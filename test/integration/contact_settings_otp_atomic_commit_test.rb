@@ -30,7 +30,7 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
               root_login_established_at: ClientToken.database_now, discard_at: 1.day.from_now,
             )
             [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-             "client", "base-app-ww", "BASE_APP", principal, root, ClientRpSession, :client_token,
+             "client", "base-app-ww", "BASE_APP", principal, root, OpAppGrant, :client_token,
              (channel == "email") ? ClientEmail : ClientTelephone,
              (channel == "email") ? :user_email_status_id : :user_telephone_status_id, :user_id,
              (channel == "email") ? ClientEmailStatus::VERIFIED : ClientTelephoneStatus::VERIFIED,
@@ -42,7 +42,7 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
               root_login_established_at: VisitorToken.database_now, discard_at: 1.day.from_now,
             )
             [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-             "visitor", "base-com-ww", "BASE_COM", principal, root, VisitorRpSession, :visitor_token,
+             "visitor", "base-com-ww", "BASE_COM", principal, root, OpComGrant, :visitor_token,
              (channel == "email") ? VisitorEmail : VisitorTelephone,
              (channel == "email") ? :visitor_email_status_id : :visitor_telephone_status_id, :visitor_id,
              (channel == "email") ? VisitorEmailStatus::VERIFIED : VisitorTelephoneStatus::VERIFIED,
@@ -81,6 +81,8 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
         client = OidcClientRegistry.find!(client_id)
         rp = rp_model.create!(
           rp_token_key => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
+          :contract_epoch => { OpAppGrant => OpAppProtocolEpoch,
+                               OpComGrant => OpComProtocolEpoch, }.fetch(rp_model).current_contract_epoch,
           :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => Time.current,
           :refresh_token_expires_at => 10.minutes.from_now,
         )

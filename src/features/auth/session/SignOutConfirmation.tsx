@@ -55,7 +55,9 @@ export default function SignOutConfirmation({
 
   const submitCancellation = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (cancel) cancellation.delete(cancel.action);
+    if (cancel) {
+      cancellation.delete(cancel.action);
+    }
   };
 
   return (

@@ -139,7 +139,7 @@ module Authentication
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
           connection_calls = []
-          OrgTicketRecord.stub(
+          OpBaseOrgRecord.stub(
             :connected_to, ->(**options, &block) {
                              connection_calls << options
                              block.call
@@ -171,7 +171,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = AuthenticationCurrentResourceResolver.new(
               access_token: "token",
               request_host: "app.localhost",
@@ -202,7 +202,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
             assert_equal :administrative_access_locked, result.failure_reason
@@ -232,7 +232,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
             assert_equal :administrative_access_token_stale, result.failure_reason
@@ -271,7 +271,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
             assert_equal :actor_mismatch, result.failure_reason
@@ -293,7 +293,7 @@ module Authentication
 
         AuthenticationToken.stub(:decode, payload) do
           AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-            OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+            OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
               result = AuthenticationCurrentResourceResolver.new(
                 access_token: "token",
                 request_host: "#{surface}.localhost",
@@ -322,7 +322,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
             assert_equal :token_session_not_found, result.failure_reason
@@ -344,7 +344,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
             assert_equal :actor_mismatch, result.failure_reason
@@ -369,7 +369,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
             assert_nil result.failure_reason
@@ -392,7 +392,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             [
               session_class.new(123, "session_1", nil, DeviceSessionable::STATUS_REVOKED, nil),
               session_class.new(123, "session_1", nil, DeviceSessionable::STATUS_ACTIVE, Time.current),
@@ -419,7 +419,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             result = resolve_client_resource
 
             assert_equal :idle_timeout, result.failure_reason
@@ -438,7 +438,7 @@ module Authentication
 
       AuthenticationToken.stub(:decode, payload) do
         AuthenticationToken.stub(:resource_type_scope_matches?, true) do
-          OrgTicketRecord.stub(:connected_to, ->(**, &block) { block.call }) do
+          OpBaseOrgRecord.stub(:connected_to, ->(**, &block) { block.call }) do
             # Within the throttle window: no activity write.
             FakeTokenScope.token_last_used_at = 10.seconds.ago
             FakeTokenScope.reset_touches!

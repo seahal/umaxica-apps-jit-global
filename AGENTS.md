@@ -151,6 +151,11 @@ Follow `docs/reference/repository-language-policy.md`.
 - `.agents/skills/` holds skills, each directory with a `SKILL.md` entrypoint.
 - `.agents/harnesses/rules/` is the only harness directory; do not invent other harness locations.
 - Keep task scope in the conversation; do not add `.agents/goals/` files.
+- When a significant implementation cycle closes, keep its working documents (plan, detailed
+  definitions, addenda, acceptance definitions, reports) as a generation-numbered cycle archive
+  under `plans/archive/NNNN-<slug>/`, not as ignored root files. Archives are non-normative, not
+  evidence and deletable; move what must keep holding elsewhere first. See
+  `plans/archive/README.md`.
 
 ## Verification and Reporting
 

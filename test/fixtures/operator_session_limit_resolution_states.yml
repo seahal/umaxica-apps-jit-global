@@ -1,4 +1,4 @@
-# Rows inserted by db/org_tickets_migrate/20261006140002_create_operator_session_limit_resolution_transactions.rb.
+# Rows inserted by db/op_base_org_migrate/20261006140002_create_operator_session_limit_resolution_transactions.rb.
 # Structure loads do not replay that data migration.
 _fixture:
   model_class: OperatorSessionLimitResolutionState

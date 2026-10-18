@@ -33,6 +33,10 @@ module OrgAdministrativeAudit
 
   # Yields only when this operation id has not been recorded before. The block performs the
   # mutation and returns a small changeset describing what it observed. Returns the Chronicle row.
+  # The request whose browser facts (request id, IP, User-Agent) the audit row records. A server-to-
+  # server owner endpoint overrides it with the facts its authenticated RP caller forwarded.
+  def audit_request = request
+
   def audited_administrative_operation(operation_id:, action:, subject:, reason_code:, metadata:, changeset:)
     raise InvalidOperationIdError unless operation_id.is_a?(String) && OPERATION_ID_FORMAT.match?(operation_id)
 
@@ -74,9 +78,9 @@ module OrgAdministrativeAudit
       reason: reason_code,
       metadata: metadata,
       changeset: changeset,
-      request_id: request.request_id,
-      ip_address: request.remote_ip,
-      user_agent: request.user_agent,
+      request_id: audit_request.request_id,
+      ip_address: audit_request.remote_ip,
+      user_agent: audit_request.user_agent,
     )
   rescue ActiveRecord::RecordNotUnique
     nil
@@ -88,7 +92,7 @@ module OrgAdministrativeAudit
     ChronicleFallbackRecorder.call(
       event: "chronicle.intent_write_failed",
       event_uuid: operation_id,
-      request_id: request.request_id,
+      request_id: audit_request.request_id,
       action: action,
       actor: current_operator,
       subject: subject,
@@ -102,7 +106,7 @@ module OrgAdministrativeAudit
       chronicle: chronicle,
       result: result,
       event_uuid: chronicle.event_uuid,
-      request_id: request.request_id,
+      request_id: audit_request.request_id,
       action: action,
       actor: current_operator,
       subject: subject,
@@ -113,7 +117,7 @@ module OrgAdministrativeAudit
       ChronicleInvalidator.call(
         chronicle: chronicle,
         event_uuid: chronicle.event_uuid,
-        request_id: request.request_id,
+        request_id: audit_request.request_id,
         action: action,
         actor: current_operator,
         subject: subject,
@@ -123,7 +127,7 @@ module OrgAdministrativeAudit
       ChronicleFallbackRecorder.call(
         event: "chronicle.manual_recovery_required",
         event_uuid: chronicle.event_uuid,
-        request_id: request.request_id,
+        request_id: audit_request.request_id,
         action: action,
         actor: current_operator,
         subject: subject,

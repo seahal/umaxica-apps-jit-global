@@ -10,8 +10,8 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "status helpers classify active and revoked connections" do
-    active = ClientOidcConnection.create!(user: @user, client_id: "core-app")
-    revoked = ClientOidcConnection.create!(user: @user, client_id: "warp-app", revoked_at: Time.current)
+    active = ClientOidcConnection.create!(user: @user, client_id: "core-app-jp")
+    revoked = ClientOidcConnection.create!(user: @user, client_id: "warp-app-jp", revoked_at: Time.current)
 
     assert_predicate active, :active?
     assert_not_predicate active, :revoked?
@@ -29,10 +29,10 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "rp metadata uses registered client and falls back for unknown client" do
-    registered = ClientOidcConnection.new(client_id: "core-app")
+    registered = ClientOidcConnection.new(client_id: "core-app-jp")
     unknown = ClientOidcConnection.new(client_id: "unknown-client")
 
-    assert_equal OidcClientRegistry.find!("core-app").name, registered.rp_name
+    assert_equal OidcClientRegistry.find!("core-app-jp").name, registered.rp_name
     assert_predicate registered.rp_domains, :any?
     assert_equal registered.rp_domains.join(", "), registered.rp_domain_text
 
@@ -50,8 +50,8 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "active scope excludes revoked connections" do
-    active = ClientOidcConnection.create!(user: @user, client_id: "core-app")
-    revoked = ClientOidcConnection.create!(user: @user, client_id: "warp-app", revoked_at: Time.current)
+    active = ClientOidcConnection.create!(user: @user, client_id: "core-app-jp")
+    revoked = ClientOidcConnection.create!(user: @user, client_id: "warp-app-jp", revoked_at: Time.current)
 
     active_connections = ClientOidcConnection.active.to_a
 
@@ -60,11 +60,11 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
   end
 
   test "active_tokens delegates to the surface token inventory" do
-    client_connection = ClientOidcConnection.create!(user: @user, client_id: "core-app")
+    client_connection = ClientOidcConnection.create!(user: @user, client_id: "core-app-jp")
     operator = Operator.create!
-    operator_connection = OperatorOidcConnection.create!(staff: operator, client_id: "core-org")
+    operator_connection = OperatorOidcConnection.create!(staff: operator, client_id: "core-org-jp")
     visitor = Visitor.create!
-    visitor_connection = VisitorOidcConnection.create!(visitor: visitor, client_id: "core-com")
+    visitor_connection = VisitorOidcConnection.create!(visitor: visitor, client_id: "core-com-jp")
 
     assert_equal client_connection.user_tokens.session_inventory, client_connection.active_tokens
     assert_equal operator_connection.staff_tokens.session_inventory, operator_connection.active_tokens

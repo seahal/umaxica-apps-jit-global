@@ -91,7 +91,7 @@ module Security
                   fv5052 =
                     case fv5054
                     when "base" then "base-#{fv5053}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{fv5054}-#{fv5053}"
                     end
                   fv5049 = VisitorToken.find_by!(public_id: fv5042.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -99,12 +99,12 @@ module Security
                   fv5046 = [fv5048.client_id, fv5049.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[fv5046] && fv5049.currently_usable? &&
-                      !(fv5049.device_session_id && VisitorRpSession.exists?(
+                      !(fv5049.device_session_id && OpComGrant.exists?(
                         device_session_id: fv5049.device_session_id, oidc_client_id: fv5048.client_id, revoked_at: nil,
                       ))
                     fv5049.rotate_refresh_token! unless fv5049.device_session_record.current_refresh_token_id
                     fv5050 = Time.current
-                    fv5047 = VisitorRpSession.create!(
+                    fv5047 = OpComGrant.create!(
                       visitor_token: fv5049, oidc_client_id: fv5048.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5050,
                       refresh_token_expires_at: fv5050 + 10.minutes,
@@ -178,7 +178,7 @@ module Security
                   fv5033 =
                     case fv5035
                     when "base" then "base-#{fv5034}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{fv5035}-#{fv5034}"
                     end
                   fv5030 = VisitorToken.find_by!(public_id: fv5023.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -186,12 +186,12 @@ module Security
                   fv5027 = [fv5029.client_id, fv5030.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[fv5027] && fv5030.currently_usable? &&
-                      !(fv5030.device_session_id && VisitorRpSession.exists?(
+                      !(fv5030.device_session_id && OpComGrant.exists?(
                         device_session_id: fv5030.device_session_id, oidc_client_id: fv5029.client_id, revoked_at: nil,
                       ))
                     fv5030.rotate_refresh_token! unless fv5030.device_session_record.current_refresh_token_id
                     fv5031 = Time.current
-                    fv5028 = VisitorRpSession.create!(
+                    fv5028 = OpComGrant.create!(
                       visitor_token: fv5030, oidc_client_id: fv5029.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5031,
                       refresh_token_expires_at: fv5031 + 10.minutes,
@@ -263,7 +263,7 @@ module Security
                   fv5014 =
                     case fv5016
                     when "base" then "base-#{fv5015}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{fv5016}-#{fv5015}"
                     end
                   fv5011 = VisitorToken.find_by!(public_id: fv5004.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -271,12 +271,12 @@ module Security
                   fv5008 = [fv5010.client_id, fv5011.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[fv5008] && fv5011.currently_usable? &&
-                      !(fv5011.device_session_id && VisitorRpSession.exists?(
+                      !(fv5011.device_session_id && OpComGrant.exists?(
                         device_session_id: fv5011.device_session_id, oidc_client_id: fv5010.client_id, revoked_at: nil,
                       ))
                     fv5011.rotate_refresh_token! unless fv5011.device_session_record.current_refresh_token_id
                     fv5012 = Time.current
-                    fv5009 = VisitorRpSession.create!(
+                    fv5009 = OpComGrant.create!(
                       visitor_token: fv5011, oidc_client_id: fv5010.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5012,
                       refresh_token_expires_at: fv5012 + 10.minutes,
@@ -392,8 +392,8 @@ module Security
         headers = as_user_headers(user, host: @host, session_public_id: token.public_id)
         token.rotate_refresh_token!
         client = OidcClientRegistry.find!("base-app-ww")
-        now = ClientRpSession.database_now
-        rp = ClientRpSession.create!(
+        now = OpAppGrant.database_now
+        rp = OpAppGrant.create!(
           client_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
           refresh_token_expires_at: now + 10.minutes,

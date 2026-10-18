@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: operator_sign_up_flow_statuses
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id :bigint           not null, primary key
 #
-class OperatorSignUpFlowStatus < OrgTicketRecord
+class OperatorSignUpFlowStatus < OpBaseOrgRecord
   include ReferenceRecord
 
   STARTED = 10

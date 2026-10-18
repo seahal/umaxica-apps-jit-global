@@ -10,10 +10,10 @@ class WelcomeAndActivitySeamsTest < ActionController::TestCase
     test "#{surface} authenticated welcome offers its own next step and spends the presentation gate once" do
       actor, token_model, rp_model, root_association, resource_type, host =
         if surface == :com
-          [visitors(:reserved_visitor), VisitorToken, VisitorRpSession, :visitor_token, "visitor",
+          [visitors(:reserved_visitor), VisitorToken, OpComGrant, :visitor_token, "visitor",
            ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),]
         else
-          [operators(:one), OperatorToken, OperatorRpSession, :operator_token, "operator",
+          [operators(:one), OperatorToken, OpOrgGrant, :operator_token, "operator",
            ENV.fetch("PUBLIC_BASE_STAFF_URL"),]
         end
       token = token_model.create!(((surface == :com) ? :visitor : :staff) => actor)

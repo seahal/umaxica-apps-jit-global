@@ -34,13 +34,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
           @base_browser_rp_credentials ||= {}
           if @base_browser_rp_credentials[rp_key] ||
               (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && ClientRpSession.exists?(
+                !(rp_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
-              rp_session = ClientRpSession.create!(
+              rp_session = OpAppGrant.create!(
+                contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -106,13 +107,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
           @base_browser_rp_credentials ||= {}
           if @base_browser_rp_credentials[rp_key] ||
               (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && ClientRpSession.exists?(
+                !(rp_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
-              rp_session = ClientRpSession.create!(
+              rp_session = OpAppGrant.create!(
+                contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -179,13 +181,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
           @base_browser_rp_credentials ||= {}
           if @base_browser_rp_credentials[rp_key] ||
               (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                !(rp_token.device_session_id && OpOrgGrant.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
-              rp_session = OperatorRpSession.create!(
+              rp_session = OpOrgGrant.create!(
+                contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -251,13 +254,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
           @base_browser_rp_credentials ||= {}
           if @base_browser_rp_credentials[rp_key] ||
               (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                !(rp_token.device_session_id && OpOrgGrant.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
-              rp_session = OperatorRpSession.create!(
+              rp_session = OpOrgGrant.create!(
+                contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -308,7 +312,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     token = OperatorToken.create!(
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
-      authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+      authentication_context: AuthenticationContextValue::STANDBY_KEY,
     )
     token.update!(root_login_established_at: OperatorToken.database_now, established_authentication_method: "passkey")
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
@@ -323,13 +327,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
           @base_browser_rp_credentials ||= {}
           if @base_browser_rp_credentials[rp_key] ||
               (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                !(rp_token.device_session_id && OpOrgGrant.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
-              rp_session = OperatorRpSession.create!(
+              rp_session = OpOrgGrant.create!(
+                contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -397,13 +402,14 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
           @base_browser_rp_credentials ||= {}
           if @base_browser_rp_credentials[rp_key] ||
               (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && ClientRpSession.exists?(
+                !(rp_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
-              rp_session = ClientRpSession.create!(
+              rp_session = OpAppGrant.create!(
+                contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

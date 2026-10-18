@@ -19,7 +19,7 @@ module Base
 
           def token_class = OperatorToken
 
-          def ticket_record = OrgTicketRecord
+          def ticket_record = OpBaseOrgRecord
 
           def resolution_transaction_class = OperatorSessionLimitResolutionTransaction
 

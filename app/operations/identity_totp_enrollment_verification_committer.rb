@@ -19,7 +19,7 @@ class IdentityTotpEnrollmentVerificationCommitter
         actor.with_lock do
           return false unless actor.login_allowed?
 
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             token.with_lock do
               record = ClientStepUpSession.lock.find_by!(
                 user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
@@ -58,7 +58,7 @@ class IdentityTotpEnrollmentVerificationCommitter
     end
 
     def validate_permission!(actor, token, transaction, record, now)
-      unless token.currently_usable?(now) && transaction.actor_ref == actor.public_id &&
+      unless token.active_status?(now) && transaction.actor_ref == actor.public_id &&
           transaction.session_ref == token.public_id && enrollment_scope_permitted?(transaction) &&
           %w(bootstrap credential_registration).include?(transaction.purpose) &&
           !transaction.step_up_required && !transaction.phishing_resistant_required &&

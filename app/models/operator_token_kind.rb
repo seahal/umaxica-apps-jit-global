@@ -4,12 +4,12 @@
 # == Schema Information
 #
 # Table name: operator_token_kinds
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id :bigint           not null, primary key
 #
 
-class OperatorTokenKind < OrgTicketRecord
+class OperatorTokenKind < OpBaseOrgRecord
   include ReferenceRecord
 
   self.record_timestamps = false

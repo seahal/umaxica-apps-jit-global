@@ -85,7 +85,7 @@ class TelephoneCredentialRegistrationOtpVerificationCommitter
     now = transaction.class.database_now
     source_now = telephone.class.database_now
     source_owned? && actor.login_allowed? && actor.accessible?(source_now) && source_current?(source_now) &&
-      token.currently_usable?(now) && token_device_session.usable? &&
+      token.active_status?(now) && token_device_session.usable? &&
       token_device_session.current_refresh_token_id == token.id && ticket_current?(now)
   end
 

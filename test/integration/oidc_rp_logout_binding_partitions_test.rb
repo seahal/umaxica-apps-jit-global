@@ -18,7 +18,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    @core_session = create_rp_session("core-app")
+    @core_session = create_rp_session("core-app-jp")
   end
 
   test "a legitimately rotated root of the same Device Session and family is accepted" do
@@ -75,7 +75,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    other_session = create_rp_session("warp-app", root_token: other_root)
+    other_session = create_rp_session("warp-app-jp", root_token: other_root)
 
     confirm_at_authority(
       challenge, origin_cookie,
@@ -198,7 +198,10 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    other_rp_challenge, = start_sign_out(create_rp_session("core-app", root_token: other_root), root_token: other_root)
+    other_rp_challenge, = start_sign_out(
+      create_rp_session("core-app-jp", root_token: other_root),
+      root_token: other_root,
+    )
     reset!
     https!
     other_browser_challenge, = start_sign_out

@@ -44,7 +44,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     authorize_params = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
     @state = authorize_params.fetch("state")
     flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(@state)
-    @client = OidcClientRegistry.find!("tech-org")
+    @client = OidcClientRegistry.find!("tech-org-ww")
     authentication_event_at = 1.minute.ago
     @operator_token = OperatorToken.create!(staff: @operator, authentication_event_at: authentication_event_at)
     code = OidcAuthorizationCodeIssuer.call(
@@ -60,14 +60,14 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
       OidcClientRegistry.stub(
         :authenticate_assertion,
         ->(client_id, assertion, token_url:) {
-          client_id == "tech-org" && assertion.present? && token_url == @token_url
+          client_id == "tech-org-ww" && assertion.present? && token_url == @token_url
         },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code.code,
           redirect_uri: code.redirect_uri,
-          client_id: "tech-org",
+          client_id: "tech-org-ww",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "tech-callback-test-assertion",
           token_endpoint_uri: @token_url,
@@ -80,7 +80,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
 
     @token_response = @exchange_result.token_response
     id_token_payload, = JWT.decode(@token_response.fetch(:id_token), nil, false)
-    @candidate_session = OperatorRpSession.find_by!(public_id: id_token_payload.fetch("sid"))
+    @candidate_session = OpOrgGrant.find_by!(public_id: id_token_payload.fetch("sid"))
     @access_token_authentication = OidcAccessTokenAuthenticator.call(
       access_token: @token_response.fetch(:access_token),
       resource_type: "operator",
@@ -89,14 +89,14 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     )
     @id_token_verification = OidcIdTokenVerifier.call(
       id_token: @token_response.fetch(:id_token),
-      client_id: "tech-org",
+      client_id: "tech-org-ww",
       resource_type: "operator",
       expected_nonce: flow.fetch("nonce"),
       issuer: OidcIssuer.for_resource_type("operator"),
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("operator"),
     )
-    @token_result = OidcRpTokenClient::Result.new(success: true, token_response: @token_response, error: nil)
-    @userinfo_result = OidcRpUserInfoClient::Result.new(
+    @token_result = OidcOpTokenClient::Result.new(outcome: :success, token_response: @token_response, error: nil)
+    @userinfo_result = OidcOpUserInfoClient::Result.new(
       success: true,
       claims: { "sub" => OidcSubject.for(@operator, resource_type: "operator") },
       error: nil,
@@ -112,8 +112,8 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     assert_predicate @access_token_authentication, :success?, @access_token_authentication.error.inspect
     assert_predicate @id_token_verification, :success?, @id_token_verification.error.inspect
 
-    OidcRpTokenClient.stub(:call, @token_result) do
-      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+    OidcOpTokenClient.stub(:authorization_code, @token_result) do
+      OidcOpUserInfoClient.stub(:call, @userinfo_result) do
         get "/oidc/callback",
             params: {
               code: @code.code,
@@ -135,8 +135,8 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
   test "a capability revoked after token exchange refuses the candidate and revokes only its Tech session" do
     @grant.update!(revoked_at: Time.current, revoked_by_operator: operators(:two), revoke_reason_code: "duty_ended")
 
-    OidcRpTokenClient.stub(:call, @token_result) do
-      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+    OidcOpTokenClient.stub(:authorization_code, @token_result) do
+      OidcOpUserInfoClient.stub(:call, @userinfo_result) do
         get "/oidc/callback",
             params: {
               code: @code.code,
@@ -157,8 +157,8 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "revocation after a successful callback refuses the next protected request without ending the parent" do
-    OidcRpTokenClient.stub(:call, @token_result) do
-      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+    OidcOpTokenClient.stub(:authorization_code, @token_result) do
+      OidcOpUserInfoClient.stub(:call, @userinfo_result) do
         get "/oidc/callback", params: {
           code: @code.code,
           state: @state,
@@ -195,8 +195,8 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
         exchange_calls += 1
         @token_result
       }
-    OidcRpTokenClient.stub(:call, token_transport) do
-      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+    OidcOpTokenClient.stub(:authorization_code, token_transport) do
+      OidcOpUserInfoClient.stub(:call, @userinfo_result) do
         get "/oidc/callback", params: {
           code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
         }
@@ -227,7 +227,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
         exchanges += 1
         @token_result
       }
-    OidcRpTokenClient.stub(:call, transport) do
+    OidcOpTokenClient.stub(:authorization_code, transport) do
       get "/oidc/callback", params: {
         code: @code.code, state: "foreign-state", iss: OidcIssuer.for_resource_type("operator"),
       }
@@ -238,7 +238,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
       assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
       assert session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).key?(@state)
 
-      OidcRpUserInfoClient.stub(:call, @userinfo_result) do
+      OidcOpUserInfoClient.stub(:call, @userinfo_result) do
         get "/oidc/callback", params: {
           code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
         }
@@ -256,7 +256,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
         exchanges += 1
         @token_result
       }
-    OidcRpTokenClient.stub(:call, transport) do
+    OidcOpTokenClient.stub(:authorization_code, transport) do
       get "/oidc/callback", params: {
         code: @code.code, state: @state, iss: "https://foreign.invalid",
       }
@@ -278,13 +278,13 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     foreign_nonce_token = SecurityJwtOidcIdTokenCodec.encode(
       payload, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("operator"),
     )
-    token_result = OidcRpTokenClient::Result.new(
-      success: true,
+    token_result = OidcOpTokenClient::Result.new(
+      outcome: :success,
       token_response: @token_response.merge(id_token: foreign_nonce_token),
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, token_result) do
+    OidcOpTokenClient.stub(:authorization_code, token_result) do
       get "/oidc/callback", params: {
         code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
       }
@@ -301,15 +301,15 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
 
   test "a correctly signed Edit audience ID Token cannot establish Tech credentials" do
     payload, = JWT.decode(@token_response.fetch(:id_token), nil, false)
-    payload["aud"] = ["edit-org"]
+    payload["aud"] = ["edit-org-ww"]
     foreign_token = SecurityJwtOidcIdTokenCodec.encode(
       payload, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("operator"),
     )
-    token_result = OidcRpTokenClient::Result.new(
-      success: true, token_response: @token_response.merge(id_token: foreign_token), error: nil,
+    token_result = OidcOpTokenClient::Result.new(
+      outcome: :success, token_response: @token_response.merge(id_token: foreign_token), error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, token_result) do
+    OidcOpTokenClient.stub(:authorization_code, token_result) do
       get "/oidc/callback", params: {
         code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
       }
@@ -328,11 +328,11 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     signature = Base64.urlsafe_decode64(parts.fetch(2))
     signature.setbyte(0, signature.getbyte(0) ^ 1)
     parts[2] = Base64.urlsafe_encode64(signature, padding: false)
-    token_result = OidcRpTokenClient::Result.new(
-      success: true, token_response: @token_response.merge(id_token: parts.join(".")), error: nil,
+    token_result = OidcOpTokenClient::Result.new(
+      outcome: :success, token_response: @token_response.merge(id_token: parts.join(".")), error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, token_result) do
+    OidcOpTokenClient.stub(:authorization_code, token_result) do
       get "/oidc/callback", params: {
         code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
       }

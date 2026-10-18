@@ -41,6 +41,7 @@ class WithdrawalLifecycle
 
   def suspend!
     now = Time.current
+    stop_event = nil
     deactivated = actor.deactivated_at.presence || now
 
     actor.class.transaction do
@@ -56,8 +57,10 @@ class WithdrawalLifecycle
                              deactivated + RECOVERY_PERIOD
                            end,
       )
-      revoke_sessions
+      stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_suspend")
     end
+    # The OP applies the stop only after the Zenith commit (one.md section 7.5).
+    OpIdentityEventInvalidator.deliver(event: stop_event)
 
     notify(
       "suspended", deactivated_at: actor.deactivated_at, discard_at: actor.discard_at,
@@ -92,6 +95,8 @@ class WithdrawalLifecycle
   def terminate!
     raise Sign::InvalidWithdrawalStateError, actor.class.name unless actor.early_terminatable?
 
+    stop_event = nil
+
     actor.class.transaction do
       actor.lock!
       ensure_withdrawal_flow_terminated!(now: Time.current)
@@ -100,8 +105,9 @@ class WithdrawalLifecycle
         actor.save!(validate: false)
       end
       WithdrawalPersonalDataAnonymizer.call(actor:)
-      revoke_sessions
+      stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_terminate")
     end
+    OpIdentityEventInvalidator.deliver(event: stop_event)
 
     notify("terminated", terminated_at: actor.try(:terminated_at))
     record_occurrence!("withdrawal.terminated")
@@ -208,16 +214,6 @@ class WithdrawalLifecycle
       token_public_id: current_session_public_id,
       reason: reason,
     }
-  end
-
-  def revoke_sessions
-    AuthenticationSessionRevoker.tokens_for(actor).find_each do |token|
-      AuthenticationLogoutCurrentSession.call(
-        resource: actor,
-        token: token,
-        reason: "withdrawal_#{actor.class.name.underscore}",
-      )
-    end
   end
 
   def finite_future_time?(value)

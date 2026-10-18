@@ -11,6 +11,7 @@ module SessionLimitResolutionTransactionable
   CANCELLED = 920
   OPEN_STATES = [PENDING, SESSION_SELECTED].freeze
   TERMINAL_STATES = [RESOLVED, EXPIRED, CANCELLED].freeze
+  WAITING_SLOT = 1
   TTL = 15.minutes
 
   TRANSITIONS = {
@@ -22,6 +23,8 @@ module SessionLimitResolutionTransactionable
   }.freeze
 
   Issuance = Data.define(:transaction, :challenge)
+
+  class WaitingSlotOccupied < StandardError; end
 
   def self.model_for(actor)
     case actor
@@ -112,41 +115,48 @@ module SessionLimitResolutionTransactionable
       oidc_authorization_transaction&.reload
       require_persisted_binding!(sign_in_flow, actor, browser_binding_digest, oidc_authorization_transaction)
       challenge = SecureRandom.urlsafe_base64(48)
-      connection_class_for_self.connected_to(role: :writing) do
-        writer_now = database_now
-        transaction do
-          sign_in_flow.with_lock do
-            ensure_parent_open!(sign_in_flow, actor, writer_now)
-            existing = open.where(sign_in_flow_id: sign_in_flow.id).lock.first
-            if existing
-              if existing.expires_at <= writer_now
-                existing.update!(state_id: EXPIRED, expired_at: writer_now)
-                existing.record_resolution_audit!("expired", actor: actor)
-              else
-                existing.update!(
+      actor.class.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          connection_class_for_self.connected_to(role: :writing) do
+            transaction do
+              writer_now = database_now
+              sign_in_flow.with_lock do
+                ensure_parent_open!(sign_in_flow, actor, writer_now)
+                expire_elapsed_for_actor!(actor, writer_now: writer_now)
+
+                existing = open.where(sign_in_flow_id: sign_in_flow.id).lock.first
+                if existing
+                  existing.update!(
+                    challenge_digest: digest_challenge(challenge),
+                    browser_binding_digest: browser_binding_digest,
+                    waiting_slot: WAITING_SLOT,
+                    expires_at: [existing.expires_at, sign_in_flow.expires_at].min,
+                    audit_context: existing.audit_context.to_h.merge(audit_context.to_h.compact),
+                  )
+                  existing.record_resolution_audit!("issued", actor: actor)
+                  next Issuance.new(transaction: existing, challenge: challenge)
+                end
+
+                if open.where(actor_ref: actor.public_id).lock.exists?
+                  raise WaitingSlotOccupied, "actor already owns an open session-limit resolution"
+                end
+
+                record = create!(
                   challenge_digest: digest_challenge(challenge),
+                  state_id: PENDING,
+                  waiting_slot: WAITING_SLOT,
+                  sign_in_flow_id: sign_in_flow.id,
+                  oidc_authorization_transaction: oidc_authorization_transaction,
+                  actor_ref: actor.public_id,
                   browser_binding_digest: browser_binding_digest,
-                  expires_at: [existing.expires_at, sign_in_flow.expires_at].min,
-                  audit_context: existing.audit_context.to_h.merge(audit_context.to_h.compact),
+                  started_at: writer_now,
+                  expires_at: resolution_expiry(sign_in_flow, writer_now),
+                  audit_context: audit_context.to_h.compact,
                 )
-                existing.record_resolution_audit!("issued", actor: actor)
-                next Issuance.new(transaction: existing, challenge: challenge)
+                record.record_resolution_audit!("issued", actor: actor)
+                Issuance.new(transaction: record, challenge: challenge)
               end
             end
-
-            record = create!(
-              challenge_digest: digest_challenge(challenge),
-              state_id: PENDING,
-              sign_in_flow_id: sign_in_flow.id,
-              oidc_authorization_transaction: oidc_authorization_transaction,
-              actor_ref: actor.public_id,
-              browser_binding_digest: browser_binding_digest,
-              started_at: writer_now,
-              expires_at: resolution_expiry(sign_in_flow, writer_now),
-              audit_context: audit_context.to_h.compact,
-            )
-            record.record_resolution_audit!("issued", actor: actor)
-            Issuance.new(transaction: record, challenge: challenge)
           end
         end
       end
@@ -162,6 +172,18 @@ module SessionLimitResolutionTransactionable
 
     def digest_challenge(challenge)
       OpenSSL::Digest::SHA256.hexdigest(challenge.to_s)
+    end
+
+    # The caller owns the canonical actor lock and the resolution writer transaction. This
+    # boundary is deliberately shared by issuance and any bounded expiry caller so a clock-based
+    # expiry releases the lease through the same state/audit writer as an explicit transition.
+    def expire_elapsed_for_actor!(actor, writer_now:)
+      open.where(actor_ref: actor.public_id).order(:id).lock.each do |resolution|
+        next if resolution.expires_at > writer_now
+
+        resolution.update!(state_id: EXPIRED, waiting_slot: nil, expired_at: writer_now)
+        resolution.record_resolution_audit!("expired", actor: actor)
+      end
     end
 
     private
@@ -227,7 +249,8 @@ module SessionLimitResolutionTransactionable
   end
 
   def open?
-    OPEN_STATES.include?(state_id) && expires_at.present? && expires_at > self.class.database_now
+    OPEN_STATES.include?(state_id) && waiting_slot == WAITING_SLOT && expires_at.present? &&
+      expires_at > self.class.database_now
   end
 
   def terminal?
@@ -254,7 +277,8 @@ module SessionLimitResolutionTransactionable
 
         next {}
       end
-      raise FlowInvalidTransition, "selected session is not usable" unless token.currently_usable?
+      raise FlowInvalidTransition, "selected session is not an active session" unless
+        active_token_for_resolution?(token, self.class.database_now)
 
       { selected_session_ref: token.public_id, selected_at: self.class.database_now }
     end
@@ -284,6 +308,70 @@ module SessionLimitResolutionTransactionable
     end
   end
 
+  # Completes the Waiting ceremony at the final root-issuance boundary. The
+  # caller already owns the canonical actor and parent-flow locks and the
+  # surrounding ticket transaction; this method acquires the resolution row
+  # lock, validates the browser/parent/OIDC binding, and owns every resolution
+  # state transition. The block is evaluated only after that lock and must
+  # return the current actor capacity state from the same writer.
+  #
+  # A selected session is revoked only when capacity is still full. If natural
+  # sign-out or expiry has already freed capacity, the selected target is
+  # retained as history and no existing session is touched.
+  def finalize_for_session_issuance!(actor:, parent:, challenge:, browser_binding_digest:,
+                                     authorization_transaction: nil)
+    raise ArgumentError, "capacity state block is required" unless block_given?
+
+    outcome = nil
+    self.class.connection_class_for_self.connected_to(role: :writing) do
+      self.class.transaction(requires_new: true) do
+        lock!
+        writer_now = self.class.database_now
+        ensure_resolution_parent!(parent)
+        ensure_resolution_binding!(actor, challenge, browser_binding_digest, writer_now, parent)
+        ensure_resolution_authorization_binding!(authorization_transaction)
+        capacity_state = yield(writer_now)
+
+        if state_id == RESOLVED
+          outcome = { status: :already_resolved, capacity_state: capacity_state }
+          next
+        end
+
+        unless OPEN_STATES.include?(state_id)
+          outcome = { status: :invalid }
+          next
+        end
+
+        if expires_at <= writer_now
+          update!(state_id: EXPIRED, waiting_slot: nil, expired_at: writer_now)
+          record_resolution_audit!("expired", actor: actor)
+          outcome = { status: :expired }
+          next
+        end
+
+        case capacity_state
+        when :within_limit
+          finalize_resolution_locked!(actor: actor)
+          outcome = { status: :resolved, capacity_state: capacity_state }
+        when :at_limit
+          if pending?
+            outcome = { status: :pending, capacity_state: capacity_state }
+            next
+          end
+
+          revoke_selected_session_for_issuance!(actor:, writer_now:)
+          finalize_resolution_locked!(actor: actor)
+          outcome = { status: :resolved, capacity_state: capacity_state }
+        when :over_limit
+          raise FlowInvalidTransition, "active session count exceeds the configured limit"
+        else
+          raise FlowConfigurationError, "unsupported session capacity state: #{capacity_state.inspect}"
+        end
+      end
+    end
+    outcome
+  end
+
   def cancel!(actor:, challenge:, browser_binding_digest:)
     transition_with_resolution_lock!(CANCELLED, actor:, challenge:, browser_binding_digest:) do
       { cancelled_at: self.class.database_now }
@@ -301,7 +389,7 @@ module SessionLimitResolutionTransactionable
         raise FlowInvalidTransition, "invalid resolution expiry from #{current.inspect}"
       end
 
-      update!(state_id: EXPIRED, expired_at: writer_now)
+      update!(state_id: EXPIRED, waiting_slot: nil, expired_at: writer_now)
       record_resolution_audit!("expired", actor: self.class.resolution_actor_class.find_by!(public_id: actor_ref))
     end
   end
@@ -325,7 +413,7 @@ module SessionLimitResolutionTransactionable
           raise FlowInvalidTransition, "resolution is terminal"
         end
         if expired_at?
-          update!(state_id: EXPIRED, expired_at: writer_now)
+          update!(state_id: EXPIRED, waiting_slot: nil, expired_at: writer_now)
           record_resolution_audit!("expired", actor: actor)
           expired_during_transition = true
           next self
@@ -340,7 +428,7 @@ module SessionLimitResolutionTransactionable
         end
 
         attributes = yield
-        update!(attributes.merge(state_id: next_state))
+        update!(attributes.merge(state_id: next_state, waiting_slot: waiting_slot_for(next_state)))
         record_resolution_audit!(resolution_audit_operation(next_state), actor: actor)
       end
     raise FlowInvalidTransition, "resolution is expired" if expired_during_transition
@@ -376,6 +464,12 @@ module SessionLimitResolutionTransactionable
     end
   end
 
+  def ensure_resolution_parent!(parent)
+    return if parent.is_a?(self.class.resolution_sign_in_flow_class) && parent.id == sign_in_flow_id
+
+    raise FlowInvalidTransition, "resolution parent binding mismatch"
+  end
+
   def ensure_resolution_binding!(actor, challenge, binding_digest, _now, parent)
     raise FlowInvalidTransition, "resolution binding mismatch" unless
       actor.is_a?(self.class.resolution_actor_class) && actor.public_id == actor_ref &&
@@ -389,6 +483,41 @@ module SessionLimitResolutionTransactionable
     return if selected_session_ref.blank?
 
     self.class.resolution_token_class.find_by(public_id: selected_session_ref)
+  end
+
+  def active_token_for_resolution?(token, now)
+    token.present? && token_owned_by_actor?(token, self.class.resolution_actor_class.find_by(public_id: actor_ref)) &&
+      token.public_send(token.class.token_status_foreign_key) == token.class.token_status_model::ACTIVE &&
+      token.active_status?(now)
+  end
+
+  def ensure_resolution_authorization_binding!(authorization_transaction)
+    expected_id = authorization_transaction&.id
+    return if oidc_authorization_transaction_id == expected_id
+
+    raise FlowInvalidTransition, "resolution authorization binding mismatch"
+  end
+
+  def revoke_selected_session_for_issuance!(actor:, writer_now:)
+    token = selected_token
+    unless token_owned_by_actor?(token, actor) && active_token_for_resolution?(token, writer_now)
+      raise FlowInvalidTransition, "selected session is no longer an active session"
+    end
+
+    device = self.class.resolution_device_session_class.find_by(id: token.device_session_id)
+    raise FlowInvalidTransition, "selected session device is missing" unless device
+
+    AuthenticationLogoutCurrentSession.call(
+      resource: actor,
+      token: token,
+      reason: "session_limit_selected_revoke",
+    )
+  end
+
+  def finalize_resolution_locked!(actor:)
+    now = self.class.database_now
+    update!(state_id: RESOLVED, waiting_slot: nil, resolved_at: now, finalized_at: now)
+    record_resolution_audit!("resolved", actor: actor)
   end
 
   def token_owned_by_actor?(token, actor)
@@ -410,6 +539,18 @@ module SessionLimitResolutionTransactionable
     when EXPIRED then "expired"
     else
       raise FlowConfigurationError, "unsupported session-limit resolution audit state: #{next_state.inspect}"
+    end
+  end
+
+  def waiting_slot_for(state)
+    TERMINAL_STATES.include?(state) ? nil : WAITING_SLOT
+  end
+
+  def waiting_slot_matches_state
+    if OPEN_STATES.include?(state_id) && waiting_slot != WAITING_SLOT
+      errors.add(:waiting_slot, "must be 1 for an open resolution")
+    elsif TERMINAL_STATES.include?(state_id) && waiting_slot.present?
+      errors.add(:waiting_slot, "must be empty for a terminal resolution")
     end
   end
 

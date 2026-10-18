@@ -30,7 +30,7 @@ module Auth
           end
 
           current_client.with_lock do
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               device_session = token.device_session_record!
               device_session.with_lock do
                 token.with_lock { commit_link_candidate!(reference, token, device_session) }
@@ -49,7 +49,7 @@ module Auth
 
         def commit_link_candidate!(reference, token, device_session)
           now = token.class.database_now
-          unless current_client.login_allowed? && token.currently_usable?(now) && device_session.usable? &&
+          unless current_client.login_allowed? && token.active_status?(now) && device_session.usable? &&
               device_session.current_refresh_token_id == token.id
             raise SocialAuth::UnauthorizedError.new("errors.social_auth.not_logged_in")
           end

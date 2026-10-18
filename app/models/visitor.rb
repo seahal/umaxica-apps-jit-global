@@ -87,6 +87,8 @@ class Visitor < ComPrincipalRecord
 
   attribute :status_id, default: VisitorStatus::NOTHING
 
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+
   belongs_to :visitor_status,
              class_name: "VisitorStatus",
              foreign_key: :status_id,

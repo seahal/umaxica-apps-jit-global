@@ -15,7 +15,7 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       token_refresh_path: "/api/v0/token/refresh",
       jwt_issuer_id: "surface:CORE_APP",
       resource_type: "client",
-      client_id: "core-app",
+      client_id: "core-app-jp",
     },
     {
       host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL", Rails.configuration.x.boot_config.fetch(:hosts).core_corporate.host),
@@ -23,7 +23,7 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       token_refresh_path: "/api/v0/token/refresh",
       jwt_issuer_id: "surface:CORE_COM",
       resource_type: "visitor",
-      client_id: "core-com",
+      client_id: "core-com-jp",
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL", Rails.configuration.x.boot_config.fetch(:hosts).core_staff.host),
@@ -31,7 +31,7 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       token_refresh_path: "/api/v0/token/refresh",
       jwt_issuer_id: "surface:CORE_ORG",
       resource_type: "operator",
-      client_id: "core-org",
+      client_id: "core-org-jp",
     },
   ].freeze
 
@@ -75,12 +75,15 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
     client = OidcClientRegistry.find!(surface.fetch(:client_id))
     session_class, association =
       case surface.fetch(:resource_type)
-      when "operator" then [OperatorRpSession, :operator_token]
-      when "visitor" then [VisitorRpSession, :visitor_token]
-      else [ClientRpSession, :client_token]
+      when "operator" then [OpOrgGrant, :operator_token]
+      when "visitor" then [OpComGrant, :visitor_token]
+      else [OpAppGrant, :client_token]
       end
     rp_session = session_class.create!(
       association => token,
+      :contract_epoch => { OpAppGrant => OpAppProtocolEpoch,
+                           OpComGrant => OpComProtocolEpoch,
+                           OpOrgGrant => OpOrgProtocolEpoch, }.fetch(session_class).current_contract_epoch,
       :oidc_client_id => client.client_id,
       :oidc_scope => "openid profile",
       :oidc_jti => SecureRandom.uuid,

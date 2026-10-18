@@ -209,7 +209,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
         staff: principal, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
         staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
-        authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+        authentication_context: AuthenticationContextValue::STANDBY_KEY,
       )
       [principal, token, host, "operator"]
     end
@@ -240,9 +240,9 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
     client = OidcClientRegistry.find!("base-#{surface}-ww")
     rp_class, owner_key =
       case surface
-      when :app then [ClientRpSession, :client_token]
-      when :com then [VisitorRpSession, :visitor_token]
-      when :org then [OperatorRpSession, :operator_token]
+      when :app then [OpAppGrant, :client_token]
+      when :com then [OpComGrant, :visitor_token]
+      when :org then [OpOrgGrant, :operator_token]
       end
     now = rp_class.database_now
     rp = rp_class.create!(

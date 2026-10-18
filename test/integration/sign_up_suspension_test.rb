@@ -18,9 +18,9 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
   }.freeze
 
   FIRST_PARTY_CLIENT_IDS = {
-    app: "core-app",
-    com: "core-com",
-    org: "core-org",
+    app: "core-app-jp",
+    com: "core-com-jp",
+    org: "core-org-jp",
   }.freeze
 
   teardown do

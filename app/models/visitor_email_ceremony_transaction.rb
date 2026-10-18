@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: visitor_email_ceremony_transactions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                      :bigint           not null, primary key
 #  actor_ref               :string           not null
@@ -32,7 +32,7 @@
 #  index_visitor_email_ceremony_transactions_on_result_jti      (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  index_visitor_email_ceremony_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class VisitorEmailCeremonyTransaction < ComTicketRecord
+class VisitorEmailCeremonyTransaction < OpBaseComRecord
   include EmailCeremonyTransactionable
   include EmailCeremonyOtp
 

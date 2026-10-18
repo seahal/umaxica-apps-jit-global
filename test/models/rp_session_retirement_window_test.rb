@@ -8,9 +8,9 @@ require "test_helper"
 # bookkeeping of the longest Access JWT expiry that feeds it.
 class RpSessionRetirementWindowTest < ActiveSupport::TestCase
   setup do
-    @session = ClientRpSession.create!(
+    @session = OpAppGrant.create!(
       client_token: ClientToken.create!(user: Client.create!),
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )

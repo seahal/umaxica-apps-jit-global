@@ -13,14 +13,12 @@ class Actor::AuthenticationTest < ActiveSupport::TestCase
       amr: ["passcode"],
       actor_type: :client,
       actor_id: 42,
-      restricted: true,
       active_sign_sequence_id: "sequence-123",
     )
 
     assert_predicate auth, :signed_in?
     assert_equal :aal1, auth.aal
     assert_predicate auth, :aal1?
-    assert_predicate auth, :restricted?
     assert_equal :client, auth.actor_type
     assert_equal 42, auth.actor_id
     assert_equal "sequence-123", auth.active_sign_sequence_id
@@ -28,7 +26,6 @@ class Actor::AuthenticationTest < ActiveSupport::TestCase
 
   test "null authentication is not signed in" do
     assert_not Actor::Authentication::NULL.signed_in?
-    assert_not Actor::Authentication::NULL.restricted?
   end
 
   test "reads an authentication event timestamp from the access claims" do
@@ -53,7 +50,6 @@ class Actor::AuthenticationTest < ActiveSupport::TestCase
       amr: ["passcode"],
       actor_type: :client,
       actor_id: 42,
-      restricted: true,
       active_sign_sequence_id: "sequence-123",
     )
     auth2 = Actor::Authentication.new(
@@ -62,7 +58,6 @@ class Actor::AuthenticationTest < ActiveSupport::TestCase
       amr: ["passcode"],
       actor_type: :client,
       actor_id: 42,
-      restricted: true,
       active_sign_sequence_id: "sequence-123",
     )
 

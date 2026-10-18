@@ -123,7 +123,7 @@ class TelephoneCredentialRegistrationOtpIssuer
         actor.accessible?(source_now) && source_pending?(
           telephone,
           source_now,
-        ) && token.currently_usable?(ticket_now) &&
+        ) && token.active_status?(ticket_now) &&
         device_session.usable? && device_session.current_refresh_token_id == token.id
     end
 

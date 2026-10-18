@@ -14,7 +14,7 @@ class BaseIdentitySessionPresenterTest < ActiveSupport::TestCase
       discard_at: Time.utc(2026, 9, 14, 8, 0),
       public_id: "tok_internal_public",
       refresh_token_family_id: "family-secret",
-      authentication_context_value: Struct.new(:emergency?, :normal?).new(false, true),
+      authentication_context_value: Struct.new(:standby?, :normal?).new(false, true),
     )
     row = Base::Identity::SessionPresenter.new.present(session, current: true, surface: :app)
 
@@ -31,7 +31,7 @@ class BaseIdentitySessionPresenterTest < ActiveSupport::TestCase
       last_used_at: Time.utc(2026, 9, 13, 9, 0),
       created_at: Time.utc(2026, 9, 13, 8, 0),
       discard_at: Time.utc(2026, 9, 14, 8, 0),
-      authentication_context_value: Struct.new(:emergency?, :normal?).new(true, false),
+      authentication_context_value: Struct.new(:standby?, :normal?).new(true, false),
     )
     row = Base::Identity::SessionPresenter.new.present(session, current: false, surface: :org)
 

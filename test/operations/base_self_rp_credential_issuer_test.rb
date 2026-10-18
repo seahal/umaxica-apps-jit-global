@@ -9,7 +9,7 @@ class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
     @client = clients(:one)
     @root_token = ClientToken.create!(user: @client, discard_at: 1.day.from_now)
     @root_token.rotate_refresh_token!
-    @rp_session = ClientRpSession.create!(
+    @rp_session = OpAppGrant.create!(
       client_token: @root_token,
       oidc_client_id: "base-app-ww",
       oidc_scope: "openid profile",
@@ -78,5 +78,28 @@ class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
         resource: @client, rp_session: @rp_session, raw_refresh_token:, client_id: "base-app-ww",
       )
     end
+  end
+
+  test "a committed actor epoch change refuses reissue even when the caller holds a stale actor" do
+    @client.update!(authentication_epoch: 0)
+    @root_token.update!(authentication_epoch: 0)
+    before = @rp_session.attributes.slice("oidc_auth_time", "oidc_acr", "oidc_amr", "refresh_token_generation")
+    Client.find(@client.id).update!(authentication_epoch: 1)
+
+    assert_equal 0, @client.authentication_epoch
+    OidcTokenExchangeCoordinator.stub(:call, ->(**) { flunk("stopped actor must not reach token exchange") }) do
+      assert_raises(BaseSelfRpCredentialIssuer::CredentialUnavailable) do
+        BaseSelfRpCredentialIssuer.call!(
+          resource: @client, rp_session: @rp_session, raw_refresh_token: @refresh_token,
+          client_id: "base-app-ww", authentication_event_at: 1.minute.ago, acr: "aal2", amr: ["otp"],
+        )
+      end
+    end
+
+    assert_equal before, @rp_session.reload.attributes.slice(*before.keys)
+    assert_equal 1, @client.reload.authentication_epoch
+    assert_not BaseSelfRpCredentialIssuer.refreshable?(
+      resource: @client, rp_session: @rp_session, raw_refresh_token: @refresh_token, client_id: "base-app-ww",
+    )
   end
 end

@@ -73,4 +73,22 @@ class StepUpResolverAalTest < ActiveSupport::TestCase
     assert_not result.satisfied
     assert_nil result.required_aal
   end
+
+  test "a historical restricted session cannot satisfy Step-Up even with valid evidence" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token.update!(
+      user_token_status_id: ClientTokenStatus::RESTRICTED,
+      last_step_up_at: Time.current, last_step_up_scope: "settings_email", last_step_up_method: "passkey",
+      last_step_up_session_public_id: token.public_id, last_step_up_purpose: "step_up",
+      last_step_up_audience: "step_up:resolver", last_step_up_credential_ref: SecureRandom.uuid,
+      last_step_up_phishing_resistant: true, last_step_up_user_verified: true,
+      last_step_up_full_reauthentication: false,
+    )
+
+    result = StepUpResolver.call(token: token, scope: "settings_email")
+
+    assert_not result.usable_token
+    assert_not result.satisfied
+  end
 end

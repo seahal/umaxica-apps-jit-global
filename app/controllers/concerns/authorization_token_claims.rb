@@ -8,7 +8,7 @@ module AuthorizationTokenClaims
             oidc_sid: nil, oidc_jti: nil, resource_type:,
             issued_at:, access_token_ttl:, expires_at: nil, scopes: nil, acr: nil, amr: nil, dpop_jkt: nil,
             issuer: nil, audiences: nil, subject: nil, auth_time: nil, step_up_until: nil, client_id: nil,
-            authentication_context: nil)
+            authentication_context: nil, contract_epoch: nil)
     sid = oidc_sid.presence || session_public_id || session_id
     issued_at_seconds = timestamp_value(issued_at)
     expires_at_seconds = timestamp_value(expires_at || (issued_at + access_token_ttl))
@@ -35,13 +35,26 @@ module AuthorizationTokenClaims
       # alone, never by guessing.
       AuthenticationContextValue::CLAIM => context.to_s,
     }
-    payload["amr"] = Array(amr) if amr.present?
-    payload["sid"] = sid if sid.present?
-    payload["umx_base_sid"] = base_session_public_id if base_session_public_id.present?
-    payload["auth_time"] = timestamp_value(auth_time) if auth_time.present?
-    payload["step_up_until"] = timestamp_value(step_up_until) if step_up_until.present?
-    payload["cnf"] = { "jkt" => dpop_jkt } if dpop_jkt.present?
-    payload
+    payload.merge(
+      optional_claims(
+        amr:, sid:, base_session_public_id:, auth_time:, step_up_until:, dpop_jkt:, contract_epoch:,
+      ),
+    )
+  end
+
+  # Claims present only when their source value is present.
+  def optional_claims(amr:, sid:, base_session_public_id:, auth_time:, step_up_until:, dpop_jkt:, contract_epoch:)
+    claims = {}
+    claims["amr"] = Array(amr) if amr.present?
+    claims["sid"] = sid if sid.present?
+    claims["umx_base_sid"] = base_session_public_id if base_session_public_id.present?
+    claims["auth_time"] = timestamp_value(auth_time) if auth_time.present?
+    claims["step_up_until"] = timestamp_value(step_up_until) if step_up_until.present?
+    claims["cnf"] = { "jkt" => dpop_jkt } if dpop_jkt.present?
+    # OP-issued OIDC Access JWTs carry the OP protocol epoch so an RP verifier (R5-WU04) refuses a
+    # token minted under an older release profile. Local non-OIDC tokens do not carry it.
+    claims["umx_contract_epoch"] = ContractEpochValue.coerce(contract_epoch) unless contract_epoch.nil?
+    claims
   end
 
   def normalize_acr(acr)
@@ -100,7 +113,7 @@ module AuthorizationTokenClaims
 
     Integer(value.to_s, 10)
   end
-  private_class_method :timestamp_value
+  private_class_method :timestamp_value, :optional_claims
 
   # Returns default scopes based on resource type
   # @param resource_type [String] 'client', 'operator', or 'visitor'

@@ -30,7 +30,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
                  code_verifier: nil,
                  client_assertion_type: nil, client_assertion: nil,
                  dpop_proof: nil, token_endpoint_uri: nil, request_method: "POST",
-                 expected_resource_type:,
+                 expected_resource_type:, attempt_ref: nil,
                  code_store: Valkey::AuthState::AuthorizationCodeStore.new)
     super()
     @grant_type = grant_type
@@ -46,6 +46,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
     @token_endpoint_uri = token_endpoint_uri
     @request_method = request_method
     @expected_resource_type = expected_resource_type
+    # R5-WU08: an RP's bounded refresh attempt reference, recorded in the delivery receipt.
+    @attempt_ref = attempt_ref
     @code_store = code_store
   end
 
@@ -63,6 +65,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
     end
   rescue OidcConnectionRecorder::StaleAuthorization
     failure("invalid_grant", "authorization code predates OIDC connection revocation")
+  rescue AuthenticationContextValue::UnknownContextError
+    failure("invalid_grant", "session authentication context is invalid")
   rescue Umaxica::Valkey::Unavailable, Umaxica::Valkey::SerializationError, Umaxica::Valkey::OperationError => e
     Rails.logger.error("[OidcTokenExchangeCoordinator] auth-state store failure: #{e.class}: #{e.message}")
     failure("server_error", "authorization code store unavailable")
@@ -192,8 +196,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
       usage.oidc_client_id == client_id
 
     resource_type = resource_type_for_usage(usage)
-    return failure("invalid_grant", "refresh token realm mismatch") unless
-      expected_realm_matches?(resource_type)
+    profile_failure = refresh_profile_failure(usage, resource_type)
+    return profile_failure if profile_failure
 
     client = OidcClientRegistry.find(client_id)
     return failure("invalid_client", "unknown OIDC client") unless client
@@ -203,7 +207,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
     root_token = usage.parent_token
     resource = resource_for_root_token(root_token, resource_type)
     return failure("invalid_grant", "refresh token session is not active") unless
-      root_token&.currently_usable? && resource&.active?
+      root_token&.active_status? && resource&.active?
+
+    root_token.strict_authentication_context_value
 
     capability_failure = required_operator_capability_failure(client, resource)
     return capability_failure if capability_failure
@@ -241,10 +247,14 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   def resource_type_for_usage(usage)
     case usage
-    when ClientRpSession then "client"
-    when OperatorRpSession then "operator"
-    when VisitorRpSession then "visitor"
+    when OpAppGrant then "client"
+    when OpOrgGrant then "operator"
+    when OpComGrant then "visitor"
     end
+  end
+
+  def resource_type_for_usage_class(usage_class)
+    { OpAppGrant => "client", OpOrgGrant => "operator", OpComGrant => "visitor" }.fetch(usage_class)
   end
 
   def resolve_refresh_usage
@@ -259,6 +269,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
       refresh_token: refresh_token,
       client_id: client_id,
       resource_type: resource_type,
+      actor_guard: refresh_actor_guard(resource),
+      attempt_ref: @attempt_ref,
       response_builder: lambda do |usage:, refresh_token:, now:, **_|
         locked_root_token = usage.parent_token
         locked_resource = resource_for_root_token(locked_root_token, resource_type)
@@ -278,6 +290,23 @@ class OidcTokenExchangeCoordinator < ApplicationService
         result.token_response
       end,
     )
+  end
+
+  # Locks the actor on its Zenith writer before the issuer takes OP row locks and refuses rotation
+  # when an identity stop has advanced the actor epoch past this grant's root (one.md section 7.5).
+  def refresh_actor_guard(resource)
+    lambda do |&block|
+      connection_owner_for(resource.class).connected_to(role: :writing) do
+        resource.with_lock do
+          root_token = resolve_refresh_usage&.usage&.parent_token
+          unless root_token && resource.active? && AuthenticationEpochValue.root_current?(root_token:, actor: resource)
+            raise RpSession::IssuanceRejected, "actor stopped or epoch advanced"
+          end
+
+          block.call
+        end
+      end
+    end
   end
 
   def refresh_rotation_failure(rotation)
@@ -394,6 +423,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
     root_token = resolve_root_token(authorization_code)
     return failure("invalid_grant", "Authorization code is unbound") if root_token.blank?
     return failure("invalid_grant", "root session is not active") unless root_browser_session_usable?(root_token)
+
+    root_token.strict_authentication_context_value
     return failure("invalid_grant", "root session actor mismatch") unless root_token_actor_matches?(
       root_token,
       resource,
@@ -610,7 +641,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
   end
 
   def bound_session_usable_after_code_cas?(root_token, resource, device_session: nil)
-    return false unless root_token&.currently_usable?
+    return false unless root_token&.active_status?
     return false unless resource
 
     device_session ||= device_session_for_root_token(root_token)
@@ -627,7 +658,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     device_session = device_session_for_root_token(root_token)
     device_session&.usable? &&
       device_session.current_refresh_token_id == root_token.id &&
-      root_token.currently_usable?
+      root_token.active_status?
   end
 
   def wrap_payload(payload)
@@ -813,9 +844,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   def rp_session_class_for(resource_type)
     case resource_type
-    when "operator" then OperatorRpSession
-    when "visitor" then VisitorRpSession
-    when "client" then ClientRpSession
+    when "operator" then OpOrgGrant
+    when "visitor" then OpComGrant
+    when "client" then OpAppGrant
     end
   end
 
@@ -824,7 +855,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
     owner = connection_owner_for(usage_class)
     device_session = device_session_for_root_token(root_token)
     raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session&.usable?
-    unless device_session.current_refresh_token_id == root_token.id && root_token.currently_usable?
+    unless device_session.current_refresh_token_id == root_token.id && root_token.active_status?
       raise RpSession::IssuanceRejected, "Browser Session current root token is not active"
     end
 
@@ -850,19 +881,11 @@ class OidcTokenExchangeCoordinator < ApplicationService
         last_used_at: now,
         refresh_token_expires_at: refresh_expires_at_for(root_token, now: now),
         device_session_id: device_session.id,
+        # R5-WU06: the grant inherits its root's actor epoch and is minted under the current profile.
+        authentication_epoch: root_token.authentication_epoch,
+        contract_epoch: op_contract_epoch(resource_type_for_usage_class(usage_class)),
       }
-      if usage_class == ClientRpSession
-        attributes[:client_token] = root_token
-        attributes[:client_device_session] = device_session
-      elsif usage_class == VisitorRpSession
-        attributes[:visitor_token] = root_token
-        attributes[:visitor_device_session] = device_session
-      elsif usage_class == OperatorRpSession
-        attributes[:operator_token] = root_token
-        attributes[:operator_device_session] = device_session
-      else
-        raise ArgumentError, "unsupported RP Session class: #{usage_class.name}"
-      end
+      attributes.merge!(grant_parent_attributes(usage_class, root_token, device_session))
       usage = usage_class.create!(**attributes)
 
       usage
@@ -980,6 +1003,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
       subject: subject,
       auth_time: auth_time,
       client_id: client.client_id,
+      authentication_context: root_token.strict_authentication_context_value.to_s,
+      contract_epoch: op_contract_epoch(resource_type),
     )
   end
 
@@ -1037,6 +1062,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
       subject: subject,
       auth_time: auth_time,
       client_id: client.client_id,
+      authentication_context: root_token.strict_authentication_context_value.to_s,
+      contract_epoch: op_contract_epoch(resource_type),
     )
   end
 
@@ -1061,11 +1088,40 @@ class OidcTokenExchangeCoordinator < ApplicationService
     )
   end
 
+  def refresh_profile_failure(usage, resource_type)
+    return failure("invalid_grant", "refresh token realm mismatch") unless expected_realm_matches?(resource_type)
+    # A NULL or older Grant epoch is a pre-cutover family; Refresh must not restamp it current.
+    return if usage.contract_epoch == op_contract_epoch(resource_type)
+
+    failure("invalid_grant", "refresh token predates the contract epoch")
+  end
+
+  # Current OP protocol epoch of the realm that issues this token (single-row table, R5-WU02).
+  def op_contract_epoch(resource_type)
+    model =
+      case resource_type.to_s
+      when "client" then OpAppProtocolEpoch
+      when "visitor" then OpComProtocolEpoch
+      when "operator" then OpOrgProtocolEpoch
+      else raise ArgumentError, "unsupported resource type for OP protocol epoch"
+      end
+    model.current_contract_epoch
+  end
+
+  # The grant's root and device-session associations, named per realm.
+  def grant_parent_attributes(usage_class, root_token, device_session)
+    prefix =
+      { OpAppGrant => "client", OpComGrant => "visitor", OpOrgGrant => "operator" }.fetch(usage_class) do
+        raise ArgumentError, "unsupported RP Session class: #{usage_class.name}"
+      end
+    { "#{prefix}_token": root_token, "#{prefix}_device_session": device_session }
+  end
+
   def usage_class_for_root_token(root_token)
     case root_token
-    when ClientToken then ClientRpSession
-    when OperatorToken then OperatorRpSession
-    when VisitorToken then VisitorRpSession
+    when ClientToken then OpAppGrant
+    when OperatorToken then OpOrgGrant
+    when VisitorToken then OpComGrant
     else
       raise ArgumentError, "unsupported root token class: #{root_token.class.name}"
     end
@@ -1077,7 +1133,28 @@ class OidcTokenExchangeCoordinator < ApplicationService
     owner
   end
 
-  def with_current_root_token_lock(root_token, _resource)
+  # Lock order (one.md section 7.5): canonical actor on its Zenith writer first, then OP rows. The
+  # actor lock is held through the OP commit so a concurrently committing identity stop is either
+  # seen here (and refuses issuance) or serialized after this issuance.
+  def with_current_root_token_lock(root_token, resource)
+    raise RpSession::IssuanceRejected, "actor is missing" unless resource
+
+    connection_owner_for(resource.class).connected_to(role: :writing) do
+      lock_actor_and_root(root_token, resource) { |*args| yield(*args) }
+    end
+  end
+
+  def lock_actor_and_root(root_token, resource)
+    resource.with_lock do
+      unless AuthenticationEpochValue.root_current?(root_token:, actor: resource)
+        raise RpSession::IssuanceRejected, "actor authentication epoch advanced after this root was issued"
+      end
+
+      with_locked_device_session(root_token) { |locked_root, device_session| yield locked_root, device_session }
+    end
+  end
+
+  def with_locked_device_session(root_token)
     device_session = device_session_for_root_token(root_token)
     raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session
 
@@ -1147,9 +1224,9 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   def connection_class_for(resource_type)
     case resource_type
-    when "operator" then OrgTicketRecord
-    when "visitor" then ComTicketRecord
-    when "client" then AppTicketRecord
+    when "operator" then OpBaseOrgRecord
+    when "visitor" then OpBaseComRecord
+    when "client" then OpBaseAppRecord
     else
       raise ArgumentError, "unsupported OIDC resource type: #{resource_type.inspect}"
     end

@@ -31,6 +31,14 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
   # descriptions even after the registration endpoint moved under `/api/v0/preferences`.
   PROTOCOL_EXEMPT_PATHS = ["/api/v0/preferences/dbsc"].freeze
 
+  # Base owner APIs (R5-WU12/14/15) are server-to-server calls from the realm's own Base Self-RP,
+  # not a client-facing JSON contract; their contract is
+  # docs/architecture/avatar-authority-contract-proposal.md and the owner/relay tests. Deferred, not
+  # permanent: adr/owner-api-openapi-description-deferred.md says when to revisit.
+  OWNER_API_PATHS = %r{
+    \A/api/v0/(avatar|membership|iam|support|publishing|identity/(?:standing|selection)|tech-capability-checks)(/|\z)
+  }x
+
   # Surfaces with their own description. `net` and `dev` are internal-only and have none.
   SURFACES = OpenapiContract::SURFACES
   APPLICATION_SERVICE_NAMES = %w(auth base core docs edit help info news palm warp).freeze
@@ -114,6 +122,7 @@ class OpenapiRouteCoverageTest < ActiveSupport::TestCase
       next unless path.match?(DESCRIBED_PREFIXES)
       next if TEXT_ONLY_PATHS.include?(path)
       next if PROTOCOL_EXEMPT_PATHS.include?(path)
+      next if OWNER_API_PATHS.match?(path)
 
       verb = route.verb.to_s
       next if verb.empty?

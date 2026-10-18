@@ -146,7 +146,7 @@ class EmailCredentialRegistrationOtpIssuer
         pending_status,
       ) && actor.login_allowed? && actor.accessible?(source_now) &&
         uncommitted_candidate?(email, source_now) &&
-        token.currently_usable?(ticket_now) && device_session.usable? &&
+        token.active_status?(ticket_now) && device_session.usable? &&
         device_session.current_refresh_token_id == token.id
     end
 

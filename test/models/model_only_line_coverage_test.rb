@@ -217,19 +217,19 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "oidc token usage scope and rotation update the refresh token family" do
-    assert_kind_of ActiveRecord::Relation, ClientRpSession.currently_usable_at(Time.current)
+    assert_kind_of ActiveRecord::Relation, OpAppGrant.currently_usable_at(Time.current)
     actor = Client.create!(status_id: ClientStatus::ACTIVE)
     root = ClientToken.create!(user: actor)
-    usage = ClientRpSession.create!(
+    usage = OpAppGrant.create!(
       client_token: root, oidc_client_id: "base-app-ww", oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
-      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: ClientRpSession.database_now,
-      refresh_token_expires_at: ClientRpSession.database_now + 10.minutes,
+      oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpAppGrant.database_now,
+      refresh_token_expires_at: OpAppGrant.database_now + 10.minutes,
     )
     previous = usage.issue_refresh_token!
     digest = usage.refresh_token_digest
     generation = usage.refresh_generation
     root_generation = root.reload.refresh_token_generation
-    rotated = usage.rotate_refresh_token!(expires_at: ClientRpSession.database_now + 10.minutes)
+    rotated = usage.rotate_refresh_token!(expires_at: OpAppGrant.database_now + 10.minutes)
 
     assert_not_equal previous, rotated
     assert_equal digest, usage.reload.previous_refresh_token_digest
@@ -347,8 +347,8 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     now = Time.zone.parse("2026-07-18 08:00:00")
 
     assert_kind_of ActiveRecord::Relation, ClientStepUpCeremonyTransaction.purgeable_at(now)
-    assert_equal OrgTicketRecord, OperatorStepUpCeremonyTransaction.connection_owner
-    assert_equal ComTicketRecord, VisitorStepUpCeremonyTransaction.connection_owner
+    assert_equal OpBaseOrgRecord, OperatorStepUpCeremonyTransaction.connection_owner
+    assert_equal OpBaseComRecord, VisitorStepUpCeremonyTransaction.connection_owner
   end
 
   test "small public model APIs and reference defaults are covered by model tests" do

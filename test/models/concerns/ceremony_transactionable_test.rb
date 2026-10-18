@@ -492,23 +492,23 @@ class CeremonyTransactionableTest < ActiveSupport::TestCase
   end
 
   test "transaction classes select the correct writing connection owner" do
-    assert_equal AppTicketRecord, ClientTelephoneCeremonyTransaction.connection_owner
-    assert_equal OrgTicketRecord, OperatorTelephoneCeremonyTransaction.connection_owner
-    assert_equal ComTicketRecord, VisitorTelephoneCeremonyTransaction.connection_owner
+    assert_equal OpBaseAppRecord, ClientTelephoneCeremonyTransaction.connection_owner
+    assert_equal OpBaseOrgRecord, OperatorTelephoneCeremonyTransaction.connection_owner
+    assert_equal OpBaseComRecord, VisitorTelephoneCeremonyTransaction.connection_owner
 
-    assert_equal AppTicketRecord, ClientSecretCredentialCeremonyTransaction.connection_owner
-    assert_equal OrgTicketRecord, OperatorSecretCredentialCeremonyTransaction.connection_owner
-    assert_equal ComTicketRecord, VisitorSecretCredentialCeremonyTransaction.connection_owner
+    assert_equal OpBaseAppRecord, ClientSecretCredentialCeremonyTransaction.connection_owner
+    assert_equal OpBaseOrgRecord, OperatorSecretCredentialCeremonyTransaction.connection_owner
+    assert_equal OpBaseComRecord, VisitorSecretCredentialCeremonyTransaction.connection_owner
 
-    assert_equal AppTicketRecord, ClientTotpCeremonyTransaction.connection_owner
+    assert_equal OpBaseAppRecord, ClientTotpCeremonyTransaction.connection_owner
 
-    assert_equal AppTicketRecord, ClientPasskeyCeremonyTransaction.connection_owner
-    assert_equal OrgTicketRecord, OperatorPasskeyCeremonyTransaction.connection_owner
-    assert_equal ComTicketRecord, VisitorPasskeyCeremonyTransaction.connection_owner
+    assert_equal OpBaseAppRecord, ClientPasskeyCeremonyTransaction.connection_owner
+    assert_equal OpBaseOrgRecord, OperatorPasskeyCeremonyTransaction.connection_owner
+    assert_equal OpBaseComRecord, VisitorPasskeyCeremonyTransaction.connection_owner
 
-    assert_equal AppTicketRecord, ClientEmailCeremonyTransaction.connection_owner
-    assert_equal OrgTicketRecord, OperatorEmailCeremonyTransaction.connection_owner
-    assert_equal ComTicketRecord, VisitorEmailCeremonyTransaction.connection_owner
+    assert_equal OpBaseAppRecord, ClientEmailCeremonyTransaction.connection_owner
+    assert_equal OpBaseOrgRecord, OperatorEmailCeremonyTransaction.connection_owner
+    assert_equal OpBaseComRecord, VisitorEmailCeremonyTransaction.connection_owner
 
     [
       TelephoneCeremonyTransactionable,

@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_sign_up_flows
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                              :bigint           not null, primary key
 #  cancelled_at                    :datetime
@@ -56,7 +56,7 @@
 #  fk_rails_...  (status_id => client_sign_up_flow_statuses.id) ON DELETE => restrict
 #  fk_rails_...  (token_id => client_tokens.id) ON DELETE => restrict
 #
-class ClientSignUpFlow < AppTicketRecord
+class ClientSignUpFlow < OpBaseAppRecord
   include SignFlow
   include FlowSignUp
   include SignUpFlowTicket

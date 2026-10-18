@@ -75,10 +75,10 @@ removed. No parallel browser or native entry path exists beside these.
 
 ### RP Session ownership
 
-Tech RP sessions are `OperatorRpSession` rows on the org Ticket database, under the operator's
-parent Browser Session, exactly where Edit's are. Palm RP sessions are `ClientRpSession` rows on the
-app Ticket database. Sharing the storage does not share a session: each row is bound to its own
-client ID, and one active row exists per parent and client.
+Tech RP sessions are `OpOrgGrant` rows on the org Ticket database, under the operator's parent
+Browser Session, exactly where Edit's are. Palm RP sessions are `OpAppGrant` rows on the app Ticket
+database. Sharing the storage does not share a session: each row is bound to its own client ID, and
+one active row exists per parent and client.
 
 ### Access and Refresh Token transport, and cookie boundaries
 

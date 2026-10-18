@@ -339,7 +339,6 @@ module SignUpSequenceControllerSupport
       amr: Actor.authn.amr,
       actor_type: Actor.authn.actor_type,
       actor_id: Actor.authn.actor_id,
-      restricted: Actor.authn.restricted?,
       active_sign_sequence_id: @sign_up_ticket&.public_id,
     )
   end
@@ -678,9 +677,9 @@ module SignUpSequenceControllerSupport
   def sign_up_ticket_record_class
     case @sign_up_ticket
     when ClientSignUpFlow
-      AppTicketRecord
+      OpBaseAppRecord
     when VisitorSignUpFlow
-      ComTicketRecord
+      OpBaseComRecord
     else
       @sign_up_ticket.class
     end

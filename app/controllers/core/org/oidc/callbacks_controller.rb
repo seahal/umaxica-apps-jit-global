@@ -27,7 +27,7 @@ module Core
         end
 
         def oidc_client_id
-          "core-org"
+          RpDeploymentBindingValue.client_id("core-org")
         end
       end
     end

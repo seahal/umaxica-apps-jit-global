@@ -11,7 +11,7 @@ class IdentityTotpEnrollmentQuery
         raise IdentityTotpCeremonyContract::Error, "TOTP display surface mismatch"
       end
 
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         transaction.reload
         token.reload
         child = ClientTotpCeremonyTransaction.find_by(step_up_ceremony_transaction_ref: transaction.transaction_id)
@@ -30,7 +30,7 @@ class IdentityTotpEnrollmentQuery
     def validate_permission!(actor, token, transaction, now)
       scope_permitted = transaction.required_scope == "settings_totp" ||
         (transaction.purpose == "bootstrap" && StepUpScopeCatalog::APP.key?(transaction.required_scope))
-      unless token.user_id == actor.id && token.currently_usable?(now) && actor.login_allowed? &&
+      unless token.user_id == actor.id && token.active_status?(now) && actor.login_allowed? &&
           transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           transaction.surface == "app" && %w(bootstrap credential_registration).include?(transaction.purpose) &&
           transaction.status == "pending" && !transaction.expired?(now: now) && scope_permitted &&

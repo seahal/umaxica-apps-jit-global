@@ -25,6 +25,35 @@ class ActionPolicyUsageTest < ActiveSupport::TestCase
   MUTATION_ACTIONS = %w(create update destroy).freeze
 
   PRIVATE_MUTATION_AUTHORIZATION_EXCEPTIONS = [
+    # R5-WU12/14/15: these Base Self-RP mutations relay to their HTTPS domain owner, which applies
+    # the existing policy (authorize!) itself; the relay records that owner decision via
+    # AvatarRemoteResultPolicy / MembershipRemoteResultPolicy inside its relay helper.
+    "app/controllers/base/app/avatar_ownership_transfers_controller.rb#create",
+    "app/controllers/base/app/avatars_controller.rb#create",
+    "app/controllers/base/app/avatars_controller.rb#update",
+    "app/controllers/base/app/group_avatar_memberships_controller.rb#create",
+    "app/controllers/base/app/group_avatar_memberships_controller.rb#destroy",
+    "app/controllers/base/app/group_avatar_memberships_controller.rb#update",
+    "app/controllers/base/app/groups_controller.rb#create",
+    "app/controllers/base/app/groups_controller.rb#destroy",
+    "app/controllers/base/app/groups_controller.rb#update",
+    "app/controllers/base/app/organizations/memberships_controller.rb#create",
+    "app/controllers/base/app/organizations/memberships_controller.rb#destroy",
+    "app/controllers/base/app/organizations/memberships_controller.rb#update",
+    "app/controllers/base/com/organizations/memberships_controller.rb#create",
+    "app/controllers/base/com/organizations/memberships_controller.rb#destroy",
+    "app/controllers/base/com/organizations/memberships_controller.rb#update",
+    "app/controllers/base/org/avatar_ownership_transfers_controller.rb#create",
+    "app/controllers/base/org/avatars_controller.rb#destroy",
+    "app/controllers/base/org/avatars_controller.rb#update",
+    "app/controllers/base/org/iam/grants/revocations_controller.rb#create",
+    "app/controllers/base/org/iam/grants_controller.rb#create",
+    "app/controllers/base/org/support/clients/revocations_controller.rb#create",
+    "app/controllers/base/org/support/enforcement_cases/appeal_reviews_controller.rb#create",
+    "app/controllers/base/org/support/enforcement_cases/approvals_controller.rb#create",
+    "app/controllers/base/org/support/enforcement_cases/releases_controller.rb#create",
+    "app/controllers/base/org/support/enforcement_cases_controller.rb#create",
+    "app/controllers/base/org/support/visitors/revocations_controller.rb#create",
     # Sign/settings ceremony endpoints are protected by ceremony state, provider ownership,
     # WebAuthn/passkey challenge state, or recovery/removal sequence gates rather than a durable
     # domain record policy at the controller action boundary.

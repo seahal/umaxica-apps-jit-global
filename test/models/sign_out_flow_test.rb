@@ -11,9 +11,9 @@ class SignOutFlowTest < ActiveSupport::TestCase
   ].freeze
 
   test "sign-out cycles inherit from their surface cycle records" do
-    assert_operator ClientSignOutFlow, :<, AppTicketRecord
-    assert_operator VisitorSignOutFlow, :<, ComTicketRecord
-    assert_operator OperatorSignOutFlow, :<, OrgTicketRecord
+    assert_operator ClientSignOutFlow, :<, OpBaseAppRecord
+    assert_operator VisitorSignOutFlow, :<, OpBaseComRecord
+    assert_operator OperatorSignOutFlow, :<, OpBaseOrgRecord
   end
 
   test "sign-out status reference tables include nothing as the zero value" do

@@ -12,7 +12,7 @@ class ClientSecretManualReattemptIssuer
     def call!(actor_context:, token:, predecessor:, purge_after:)
       validate_input!(actor_context, token, predecessor, purge_after)
 
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor_context.subject.with_lock(requires_new: true) do
@@ -91,7 +91,7 @@ class ClientSecretManualReattemptIssuer
         token_binding: current.public_id, require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
-      unless current.currently_usable?(now) && !current.restricted? &&
+      unless current.active_status?(now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret reattempt requires current scoped Step-Up"
       end

@@ -10,9 +10,8 @@
 Refresh token families are Base authority.
 
 Base owns refresh token issuance, rotation, replay detection, family revocation, compromise state,
-DBSC/device binding interaction, explicit refresh endpoints, and audit. Auth
-must not issue, rotate, refresh, revoke, or list refresh tokens. It must not issue access tokens or
-downstream tokens.
+DBSC/device binding interaction, explicit refresh endpoints, and audit. Auth must not issue, rotate,
+refresh, revoke, or list refresh tokens. It must not issue access tokens or downstream tokens.
 
 The OIDC token endpoint accepts both `authorization_code` and `refresh_token` grants. A refresh
 request is bound to the registered client and its RP session, validates the active parent session,
@@ -20,10 +19,10 @@ scope, sender constraint and absolute session ceiling, and rotates the presented
 writing database role. State-changing refresh-token and RP-session lifecycle decisions select one
 uncached writer-database clock value after the required row locks are held, and pass that value
 through the transition so activity, rotation, revocation, and expiry decisions do not mix clocks.
-The RP session stores the original `auth_time`, `acr`, `amr`, and OIDC nonce;
-refresh advances token `iat` but never substitutes the refresh or exchange time for `auth_time`.
-Missing authentication-event time fails closed. Replay and revoke outcomes remain scoped to the
-owning RP session/family, and the project continues to accept the residual risk that already-issued
+The RP session stores the original `auth_time`, `acr`, `amr`, and OIDC nonce; refresh advances token
+`iat` but never substitutes the refresh or exchange time for `auth_time`. Missing
+authentication-event time fails closed. Replay and revoke outcomes remain scoped to the owning RP
+session/family, and the project continues to accept the residual risk that already-issued
 short-lived access JWTs remain usable until their normal expiry after session termination.
 
 The three Base OAuth token controllers bind their expected realm from the controller class
@@ -244,3 +243,36 @@ mutation. Valkey single-flight coalescing is bounded by the fixed encrypted deli
 the database receipt remains the recovery authority. Credential failure clears RP cookies;
 dependency failure preserves them and is observable. Earlier sign/acme authority wording above is
 historical.
+
+## Separated RP local Refresh implementation
+
+`RpRefreshCommitter` resolves the browser's opaque local session public ID in the fixed cell store;
+a database primary key is not a browser session credential. Reservation and installation lock the
+per-sid OP binding before the local session, matching callback and back-channel logout. Both phases
+refuse ended local sessions, revoked bindings, unresolved identity and disabled local principals.
+After the network call, installation also requires the response's exact issuer/client/realm,
+subject, sid and integer contract epoch to match the enrolled identity/session, and uses the
+expected installed generation to prevent a delayed response from overwriting another winner. No row
+lock spans HTTPS. These source guarantees do not establish runtime secret isolation or complete the
+deferred R5 activation prerequisites.
+
+The prior attempt is reused for the same session and input HMAC, retaining its expected generation.
+An in-flight sibling request returns the existing superseded outcome without another rotation. An
+uncertain or dependency/invalid-protocol delivery retains its original attempt reference; a later
+request queries only that exact receipt. An expired pending attempt requires a new Code Flow and
+cannot redispatch the predecessor. The database receipt remains the OP recovery authority; local
+attempt metadata is only dispatch coordination and contains no token vault. If local installation
+committed but its browser response was lost, exact receipt recovery within the original window can
+return the already-installed generation without incrementing it again. A newer generation, changed
+binding or tombstone prevents that recovery. Expiry never permits redispatching the predecessor,
+including after a successful local installation.
+
+The token client bounds the entire HTTP exchange to two seconds, or one second for the receipt
+query, using a monotonic deadline. All socket phases are bounded as well. The committer passes the
+remaining four-second dispatch deadline, capped by the original receipt's fresh writer-clock expiry.
+Assertion preparation consumes the request budget; an exhausted budget prevents sending. Only the
+disposable HTTP exchange is interrupted on timeout: database transactions and local installation
+locks are never interrupted. Installation rechecks the total deadline after its locks are acquired,
+preserving credentials on a dependency timeout. Slow database waits can still exceed the latency
+target, but cannot authorize late installation. Reserved receiving capacity and independent
+admitted-process latency measurements remain necessary acceptance evidence.

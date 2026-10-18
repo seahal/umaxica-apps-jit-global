@@ -101,6 +101,42 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     assert_not_nil issued.root_login_established_at
   end
 
+  test "explicit continue completes without revoking when capacity becomes free" do
+    @existing.first.revoke!
+
+    post :update, params: { ri: "jp", continue: "1" },
+                  session: { SessionLimitGate::GATE_SESSION_KEY => @gate }
+
+    assert_response :see_other
+    assert_predicate @flow.reload, :sign_in_completed?
+    assert_predicate @resolution.reload, :resolved?
+    assert_nil @resolution.selected_session_ref
+    assert_not_predicate @existing.first.reload, :currently_usable?
+    assert_equal ClientToken::MAX_SESSIONS_PER_USER,
+                 ClientToken.active_status.where(user_id: @actor.id).count
+  end
+
+  test "a selected session that expires before continuation keeps the waiting resolution" do
+    ref = SessionLimitResolutionTokenRef.issue(@existing.first)
+    @resolution.select_session!(
+      actor: @actor,
+      challenge: @issuance.challenge,
+      session_ref: @existing.first.public_id,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@binding),
+    )
+    @existing.first.revoke!
+
+    patch :update, params: { ri: "jp", session_ref: ref },
+                   session: { SessionLimitGate::GATE_SESSION_KEY => @gate }
+
+    assert_response :unprocessable_content
+    assert_not_predicate @existing.first.reload, :currently_usable?
+    assert_predicate @resolution.reload, :session_selected?
+    assert_predicate @resolution, :open?
+    assert_nil @flow.reload.token_id
+    assert_equal @existing.length, ClientToken.where(user_id: @actor.id).count
+  end
+
   test "cancelling ends only the waiting flow" do
     begin
       begin
@@ -120,6 +156,11 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
   end
 
   test "an expired authenticated OIDC parent refuses capacity resolution before revoking a selected session" do
+    @resolution.cancel!(
+      actor: @actor,
+      challenge: @issuance.challenge,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@binding),
+    )
     now = ClientOidcAuthorizationTransaction.database_now
     parent = ClientOidcAuthorizationTransaction.create_transaction!(
       surface: "app", intent: "authentication", client_id: "revocation-test",

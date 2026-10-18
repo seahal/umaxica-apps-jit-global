@@ -38,7 +38,7 @@ class SignComUpTelephoneRegistrationFinalizer
   def call
     visitor = nil
 
-    ComTicketRecord.connected_to(role: :writing) do
+    OpBaseComRecord.connected_to(role: :writing) do
       @flow.with_cycle_lock do
         @flow.reload
         Visitor.connection_class_for_self.connected_to(role: :writing) do

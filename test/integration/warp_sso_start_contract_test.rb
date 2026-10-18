@@ -7,17 +7,17 @@ class WarpSsoStartContractTest < ActionDispatch::IntegrationTest
   SURFACES = {
     "app" => {
       host: "PUBLIC_WARP_SERVICE_URL",
-      client_id: "warp-app",
+      client_id: "warp-app-jp",
       issuer: "https://www-jp.umaxica.app",
     },
     "com" => {
       host: "PUBLIC_WARP_CORPORATE_URL",
-      client_id: "warp-com",
+      client_id: "warp-com-jp",
       issuer: "https://www-jp.umaxica.com",
     },
     "org" => {
       host: "PUBLIC_WARP_STAFF_URL",
-      client_id: "warp-org",
+      client_id: "warp-org-jp",
       issuer: "https://www-jp.umaxica.org",
     },
   }.freeze

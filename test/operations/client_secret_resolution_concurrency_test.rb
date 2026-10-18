@@ -22,7 +22,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
         nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.base58(32)), expires_at: now + 1.minute,
       )
       authorization = ClientOidcAuthorizationTransaction.create_transaction!(
-        surface: "app", intent: "sign_in", client_id: "core-app", redirect_uri: "https://example.com/callback",
+        surface: "app", intent: "sign_in", client_id: "core-app-jp", redirect_uri: "https://example.com/callback",
         response_type: "code", scope: "openid", state: "state", nonce: "nonce", code_challenge: "challenge",
         code_challenge_method: "S256", login_challenge: SecureRandom.base58(32),
         login_challenge_expires_at: now + 1.minute, expires_at: now + 1.minute,
@@ -89,7 +89,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
             Thread.pass
           end
         end
-        AppTicketRecord.transaction do
+        OpBaseAppRecord.transaction do
           authorization.lock!
           resolution.lock!
           flow.lock!
@@ -134,7 +134,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
       nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.base58(32)), expires_at: now + 1.minute,
     )
     authorization = ClientOidcAuthorizationTransaction.create_transaction!(
-      surface: "app", intent: "sign_in", client_id: "core-app", redirect_uri: "https://example.com/callback",
+      surface: "app", intent: "sign_in", client_id: "core-app-jp", redirect_uri: "https://example.com/callback",
       response_type: "code", scope: "openid", state: "state", nonce: "nonce", code_challenge: "challenge",
       code_challenge_method: "S256", login_challenge: SecureRandom.base58(32),
       login_challenge_expires_at: now + 1.minute, expires_at: now + 1.minute,
@@ -155,7 +155,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
     future = nil
     source_pids = []
     actor.with_lock do
-      AppTicketRecord.transaction do
+      OpBaseAppRecord.transaction do
         authorization.lock!
         resolution.lock!
         flow.lock!
@@ -167,7 +167,7 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
               ready << connection.select_value("SELECT pg_backend_pid()")
               begin
                 Client.find(actor.id).with_lock do
-                  AppTicketRecord.transaction do
+                  OpBaseAppRecord.transaction do
                     current_authorization = ClientOidcAuthorizationTransaction.find(authorization.id)
                     current_authorization.lock!
                     current_resolution = ClientSessionLimitResolutionTransaction.find(resolution.id)

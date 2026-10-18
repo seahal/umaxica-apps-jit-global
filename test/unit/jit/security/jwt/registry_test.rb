@@ -65,15 +65,15 @@ module Jit
             "OIDC_CLIENT_SIDE_APP_PRIVATE_KEY" => base64_der(@surface_key),
           ) do
             with_env(
-              "OIDC_CLIENT_WARP_APP_ACTIVE_KID" => nil,
-              "OIDC_CLIENT_WARP_APP_PRIVATE_KEY" => nil,
+              "OIDC_CLIENT_WARP_APP_JP_ACTIVE_KID" => nil,
+              "OIDC_CLIENT_WARP_APP_JP_PRIVATE_KEY" => nil,
             ) do
               error =
                 assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
                   JitSecurityJwtRegistry.reload!
                 end
 
-              assert_includes error.message, "OIDC_CLIENT_WARP_APP_ACTIVE_KID"
+              assert_includes error.message, "OIDC_CLIENT_WARP_APP_JP_ACTIVE_KID"
             end
           end
         end
@@ -361,14 +361,14 @@ module Jit
             "PREFERENCE_JWT_ISSUER" => "preference-test-issuer",
             "JWT_AUTH_APP_ACTIVE_KID" => "sign-app-kid",
             "JWT_AUTH_APP_PUBLIC_KEYSET" => JSON.generate([legacy_jwk]),
-            "OIDC_CLIENT_WARP_APP_ACTIVE_KID" => "warp-app-kid",
-            "OIDC_CLIENT_WARP_APP_PRIVATE_KEY" => base64_der(@surface_key),
-            "OIDC_CLIENT_WARP_COM_ACTIVE_KID" => "warp-com-kid",
-            "OIDC_CLIENT_WARP_COM_PRIVATE_KEY" => base64_der(@surface_key),
-            "OIDC_CLIENT_WARP_ORG_ACTIVE_KID" => "warp-org-kid",
-            "OIDC_CLIENT_WARP_ORG_PRIVATE_KEY" => base64_der(@surface_key),
-            "OIDC_CLIENT_TECH_ORG_ACTIVE_KID" => "tech-org-kid",
-            "OIDC_CLIENT_TECH_ORG_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_WARP_APP_JP_ACTIVE_KID" => "warp-app-kid",
+            "OIDC_CLIENT_WARP_APP_JP_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_WARP_COM_JP_ACTIVE_KID" => "warp-com-kid",
+            "OIDC_CLIENT_WARP_COM_JP_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_WARP_ORG_JP_ACTIVE_KID" => "warp-org-kid",
+            "OIDC_CLIENT_WARP_ORG_JP_PRIVATE_KEY" => base64_der(@surface_key),
+            "OIDC_CLIENT_TECH_ORG_WW_ACTIVE_KID" => "tech-org-kid",
+            "OIDC_CLIENT_TECH_ORG_WW_PRIVATE_KEY" => base64_der(@surface_key),
             "OIDC_CLIENT_BASE_RP_APP_WW_ACTIVE_KID" => "base-rp-app-kid",
             "OIDC_CLIENT_BASE_RP_APP_WW_PRIVATE_KEY" => base64_der(@surface_key),
             "OIDC_CLIENT_BASE_RP_COM_WW_ACTIVE_KID" => "base-rp-com-kid",

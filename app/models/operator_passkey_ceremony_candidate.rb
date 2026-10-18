@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class OperatorPasskeyCeremonyCandidate < OrgTicketRecord
+class OperatorPasskeyCeremonyCandidate < OpBaseOrgRecord
   include IdentityCeremonyCandidateRecord
 
   validates :step_up_ceremony_transaction_ref, :webauthn_id, :public_key, :description, presence: true

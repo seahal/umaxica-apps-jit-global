@@ -153,8 +153,8 @@ class Base::Org::SignOutsControllerTest < ActionDispatch::IntegrationTest
         @base_rp_fixture_credentials ||= {}
         fixture_key = [fixture_client.client_id, fixture_root.public_id]
         unless @base_rp_fixture_credentials[fixture_key]
-          fixture_now = OperatorRpSession.database_now
-          fixture_rp = OperatorRpSession.create!(
+          fixture_now = OpOrgGrant.database_now
+          fixture_rp = OpOrgGrant.create!(
             operator_token: fixture_root, oidc_client_id: fixture_client.client_id,
             oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
             oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,

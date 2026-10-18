@@ -44,7 +44,8 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
       BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
       token.rotate_refresh_token!
       client = OidcClientRegistry.find!("base-app-ww")
-      rp = ClientRpSession.create!(
+      rp = OpAppGrant.create!(
+        contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
         client_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
         oidc_jti: SecureRandom.uuid,
         oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current, refresh_token_expires_at: 10.minutes.from_now,

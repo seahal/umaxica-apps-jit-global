@@ -96,7 +96,7 @@ module AppSocialCeremonyEntry
 
   def issue_sign_up_flow!(provider)
     cycle =
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.create!(
           principal_id: nil,
           status_id: ClientSignUpFlowStatus::STARTED,
@@ -110,7 +110,7 @@ module AppSocialCeremonyEntry
         )
       end
     result =
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         SignUpStateMachine.call(
           ticket: cycle,
           event: :start_social_callback,

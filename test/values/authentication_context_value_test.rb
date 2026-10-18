@@ -9,7 +9,7 @@ require "test_helper"
 # reading one out of an already-signed token must fail closed.
 class AuthenticationContextValueTest < ActiveSupport::TestCase
   test "the registry is closed" do
-    assert_equal %w(normal emergency), AuthenticationContextValue::KEYS
+    assert_equal %w(normal standby), AuthenticationContextValue::KEYS
   end
 
   test "issue-time lookup refuses a context this build does not enumerate" do
@@ -27,10 +27,19 @@ class AuthenticationContextValueTest < ActiveSupport::TestCase
     context = AuthenticationContextValue.from_claim("elevated")
 
     assert_not_predicate context, :normal?
-    assert_not_predicate context, :emergency?
+    assert_not_predicate context, :standby?
     assert_empty context.capabilities
     assert_not context.step_up_permitted?
     assert_not context.permits_rule?(:show?)
+  end
+
+  # R5-WU18: the pre-R5 literal of the Org alternative context is not accepted from a credential.
+  test "the retired emergency claim value is unknown, not standby" do
+    context = AuthenticationContextValue.from_claim("emergency")
+
+    assert_same AuthenticationContextValue::UNKNOWN, context
+    assert_not context.permits_rule?(:show?)
+    assert_raises(AuthenticationContextValue::UnknownContextError) { AuthenticationContextValue.for("emergency") }
   end
 
   test "a normal context permits step-up and every policy rule" do
@@ -42,19 +51,19 @@ class AuthenticationContextValueTest < ActiveSupport::TestCase
     end
   end
 
-  # An Emergency session answers to ordinary policy rules; what it loses is Step-Up.
-  test "an emergency context permits every policy rule, and never step-up" do
-    context = AuthenticationContextValue.emergency
+  # A Standby session answers to ordinary policy rules; what it loses is Step-Up.
+  test "a standby context permits every policy rule, and never step-up" do
+    context = AuthenticationContextValue.standby
 
     assert_not context.step_up_permitted?
     %i(index? show? create? update? destroy? retire? approve?).each do |rule|
-      assert context.permits_rule?(rule), "#{rule} must follow the ordinary policy rule in an emergency session"
+      assert context.permits_rule?(rule), "#{rule} must follow the ordinary policy rule in a standby session"
     end
   end
 
-  test "an emergency context narrows authorization scopes and never adds one" do
+  test "a standby context narrows authorization scopes and never adds one" do
     scopes = %w(authenticated domain:operator read:org write:org)
-    constrained = AuthenticationContextValue.emergency.constrain_scopes(scopes)
+    constrained = AuthenticationContextValue.standby.constrain_scopes(scopes)
 
     assert_equal %w(authenticated domain:operator read:org), constrained
     assert_empty constrained - scopes

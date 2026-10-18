@@ -23,7 +23,6 @@ module Auth::App
         apply_localization_preferences
         set_color_theme
         enforce_withdrawal_gate!
-        enforce_restricted_session_guard!
         enforce_verification_if_required
         enforce_access_policy!
       )

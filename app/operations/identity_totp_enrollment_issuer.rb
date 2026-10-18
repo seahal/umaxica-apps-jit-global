@@ -22,7 +22,7 @@ class IdentityTotpEnrollmentIssuer
             raise ClientTotpCredential::SlotLimitExceeded, "TOTP credential limit is reached"
           end
 
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             token.with_lock do
               record = ClientStepUpSession.lock.find_by!(
                 user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
@@ -52,7 +52,7 @@ class IdentityTotpEnrollmentIssuer
     end
 
     def validate_permission!(actor, token, transaction, record, now)
-      unless token.currently_usable?(now) && transaction.actor_ref == actor.public_id &&
+      unless token.active_status?(now) && transaction.actor_ref == actor.public_id &&
           transaction.session_ref == token.public_id &&
           %w(bootstrap credential_registration).include?(transaction.purpose) &&
           enrollment_scope_permitted?(transaction) &&

@@ -52,10 +52,10 @@ module OauthCallbackStateable
     end
 
     def connection_owner
-      if self <= AppTicketRecord
-        AppTicketRecord
-      elsif self <= OrgTicketRecord
-        OrgTicketRecord
+      if self <= OpBaseAppRecord
+        OpBaseAppRecord
+      elsif self <= OpBaseOrgRecord
+        OpBaseOrgRecord
       end
     end
   end

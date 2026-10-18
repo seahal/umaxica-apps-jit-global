@@ -131,7 +131,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
 
-    assert_equal "emergency", @flow.reload.authentication_context
+    assert_equal "standby", @flow.reload.authentication_context
     assert_equal "passkey", @flow.authentication_method
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
     assert_nil response.parsed_body["access_token"]
@@ -182,14 +182,14 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_response :see_other
     token = OperatorToken.find(@flow.reload.token_id)
 
-    assert_equal "emergency", token.authentication_context
-    assert_predicate token, :emergency_authentication_context?
+    assert_equal "standby", token.authentication_context
+    assert_predicate token, :standby_authentication_context?
     claims = AuthenticationToken.decode(
       cookies[AuthenticationBase::ACCESS_COOKIE_KEY], host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
                                                       resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
     )
 
-    assert_equal "emergency", claims.fetch(AuthenticationContextValue::CLAIM)
+    assert_equal "standby", claims.fetch(AuthenticationContextValue::CLAIM)
     scopes = AuthorizationTokenClaims.scopes(claims)
 
     assert_includes scopes, "read:org"

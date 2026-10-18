@@ -20,7 +20,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    @core_session = create_rp_session("core-app")
+    @core_session = create_rp_session("core-app-jp")
   end
 
   test "zero siblings: the parent and the origin row are revoked" do
@@ -31,7 +31,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
   end
 
   test "one sibling is revoked with the parent" do
-    sibling = create_rp_session("warp-app")
+    sibling = create_rp_session("warp-app-jp")
 
     sign_out_globally
 
@@ -39,13 +39,13 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
   end
 
   test "several siblings are revoked with the parent and another parent stays intact" do
-    siblings = %w(warp-app palm-app).map { |client_id| create_rp_session(client_id) }
+    siblings = %w(warp-app-jp palm-app-jp).map { |client_id| create_rp_session(client_id) }
     other_root = ClientToken.create!(
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    other_child = create_rp_session("warp-app", root_token: other_root)
+    other_child = create_rp_session("warp-app-jp", root_token: other_root)
 
     sign_out_globally
 
@@ -55,7 +55,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
   end
 
   test "an already-revoked historical row keeps its original revocation" do
-    historical = create_rp_session("warp-app")
+    historical = create_rp_session("warp-app-jp")
     historical.revoke!(status: "success")
     revoked_at = historical.reload.revoked_at
     status = historical.last_logout_status
@@ -69,7 +69,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
   end
 
   test "a sibling RP refuses and clears its unexpired credentials at the next request" do
-    sibling = create_rp_session("warp-app")
+    sibling = create_rp_session("warp-app-jp")
     access, refresh = warp_credentials(sibling)
 
     sign_out_globally
@@ -94,7 +94,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
   end
 
   test "positive control: the sibling credentials are accepted before the sign-out" do
-    sibling = create_rp_session("warp-app")
+    sibling = create_rp_session("warp-app-jp")
     access, refresh = warp_credentials(sibling)
 
     host!(@warp_host)
@@ -115,7 +115,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
   end
 
   def warp_credentials(rp_session)
-    client = OidcClientRegistry.find!("warp-app")
+    client = OidcClientRegistry.find!("warp-app-jp")
     access = AuthenticationTokenService.encode(
       @user,
       host: @warp_host,

@@ -1,4 +1,4 @@
-# Rows inserted by db/com_tickets_migrate/20261006160001_seed_com_sign_flow_reference_data.rb.
+# Rows inserted by db/op_base_com_migrate/20261006160001_seed_com_sign_flow_reference_data.rb.
 # Structure loads do not replay that data migration.
 _fixture:
   model_class: VisitorSignUpFlowStatus

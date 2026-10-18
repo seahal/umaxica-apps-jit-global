@@ -10,13 +10,13 @@ Supersedes, where they conflict:
   `ClientToken`") and the `bootstrap_actor: true` exemption for sign-up completion and OIDC
   authorization resume. One-shot social ceremony results remain as decided there.
 - The restricted-session approach to the concurrent session limit described in the header comments
-  of the former `Auth::{App,Com,Org}::Sign::In::SessionsController` and in `SignInSessionLimitManager`
-  (removed).
+  of the former `Auth::{App,Com,Org}::Sign::In::SessionsController` and in
+  `SignInSessionLimitManager` (removed).
 
 ## Context
 
-A sign-in attempt that had not satisfied its preconditions could still be treated as an
-established login:
+A sign-in attempt that had not satisfied its preconditions could still be treated as an established
+login:
 
 - At the active-session limit, `AuthenticationBase#log_in` minted a `RESTRICTED` token with a device
   session, access and refresh cookies, `current_resource`, and a `LOGGED_IN` audit, and returned
@@ -48,8 +48,8 @@ surface's ticket database. Rendering a dashboard or storing a cookie is not part
 row lock on the actor (principal database) it opens one ticket-database transaction that:
 
 1. re-checks the cooldown for `establishment: :root_login`,
-2. re-locks and re-validates the sign-in flow when one is passed (surface, actor binding, expiry,
-   no earlier session, waiting state),
+2. re-locks and re-validates the sign-in flow when one is passed (surface, actor binding, expiry, no
+   earlier session, waiting state),
 3. counts ACTIVE sessions against the limit,
 4. creates the token, device session, and refresh family, binds and advances the flow, and writes
    `root_login_established_at`.
@@ -57,8 +57,8 @@ row lock on the actor (principal database) it opens one ticket-database transact
 A refusal returns before any write. Cookies, `current_resource`, and the `LOGGED_IN` audit are
 applied only after the outermost ticket transaction commits (`after_commit`), so a caller that wraps
 the call in its own transaction (OIDC resume, sign-up finalization) never hands a rolled-back
-session to the browser. The Rails session id is rotated immediately after the issuance savepoint;
-it grants nothing by itself.
+session to the browser. The Rails session id is rotated immediately after the issuance savepoint; it
+grants nothing by itself.
 
 `establishment:` has exactly two values:
 
@@ -81,23 +81,23 @@ modifies a success.
 
 The verified `*SignInFlow` in `SESSION_LIMIT_PENDING` is the only pending authority. The browser
 holds it through the flow locator (public id plus nonce digest) in its Rails session. Session-limit
-pages resolve the actor from that flow, never from a principal id in the session or the request.
-The Base OIDC resume keeps its `ClientSessionLimitResolutionTransaction` challenge; the Base social
-path uses the flow locator on the Base host that ran the completion. Cancelling fails only that
-flow. A pending flow does not block other sign-ins of the account.
+pages resolve the actor from that flow, never from a principal id in the session or the request. The
+Base OIDC resume keeps its `ClientSessionLimitResolutionTransaction` challenge; the Base social path
+uses the flow locator on the Base host that ran the completion. Cancelling fails only that flow. A
+pending flow does not block other sign-ins of the account.
 
 ### Local Auth credential results
 
-Base creates the actor-specific sign-in flow and retains its browser nonce before admitting a
-local Auth ceremony. Auth stores the admission purpose, binds the verified principal and records
-the authentication method, original event time and authentication context. Auth does not call the
-root issuance boundary. Its POST handoff returns an opaque result to Base's POST completion.
+Base creates the actor-specific sign-in flow and retains its browser nonce before admitting a local
+Auth ceremony. Auth stores the admission purpose, binds the verified principal and records the
+authentication method, original event time and authentication context. Auth does not call the root
+issuance boundary. Its POST handoff returns an opaque result to Base's POST completion.
 
 Base validates the browser nonce, flow, actor, surface, result digest and generation, delivery
 deadline, and Auth continuity under the existing actor-before-ticket lock order. The existing
 `log_in` boundary remains the issuer. Flow finalization and Auth completion share its outer ticket
-transaction. Emergency evidence on org retains the Emergency context; app/com accept Normal
-evidence through their existing token contracts.
+transaction. Emergency evidence on org retains the Emergency context; app/com accept Normal evidence
+through their existing token contracts.
 
 A result's short transport deadline bounds receipt by Base. If that receipt reaches the session
 limit, the durable `SESSION_LIMIT_PENDING` flow and its existing `expires_at` become the authority
@@ -121,15 +121,16 @@ Consumed or Base-finalized transactions remain unchanged. Existing flags still d
 sessions are retained.
 
 OIDC result transport expires at the earliest of its short delivery deadline, authorization
-transaction deadline and login challenge deadline. Result matching uses the stored generation as
-a positive integer and compares the exact digest; an oversized legacy transport expiry does not
-make an expired parent valid. Re-display and retry preserve the original authentication time.
+transaction deadline and login challenge deadline. Result matching uses the stored generation as a
+positive integer and compares the exact digest; an oversized legacy transport expiry does not make
+an expired parent valid. Re-display and retry preserve the original authentication time.
 
-Base OIDC completion on APP, COM and ORG acquires the actor lock before the authorization transaction
-lock, matching credential transitions and final issuance. APP capacity resolution rejects an
-expired or mismatched parent before selecting a session for revocation. Its root promotion runs
-inside the authorization transaction's finalization, so expiry rejection occurs before issuance.
-This contract does not imply atomicity across principal, ticket, audit and transport databases.
+Base OIDC completion on APP, COM and ORG acquires the actor lock before the authorization
+transaction lock, matching credential transitions and final issuance. APP capacity resolution
+rejects an expired or mismatched parent before selecting a session for revocation. Its root
+promotion runs inside the authorization transaction's finalization, so expiry rejection occurs
+before issuance. This contract does not imply atomicity across principal, ticket, audit and
+transport databases.
 
 `RESTRICTED` tokens are no longer issued. The resolver authenticates only `ACTIVE`, unexpired,
 unrotated tokens, so an existing `RESTRICTED` row and its cookies authenticate nothing and are
@@ -187,36 +188,38 @@ idempotent success only when the session is genuinely absent or already revoked.
 The Unified Implementation Plan partially supersedes the pending-session portion of this ADR.
 `SESSION_LIMIT_PENDING` is no longer a sign-in authority. Capacity is evaluated only while the
 parent is in `SESSION_ISSUANCE_PENDING`; when capacity is full, a realm-local durable
-session-limit-resolution transaction is issued as a child of that parent. The parent remains in
-that state while the child is open or resolved, and the same parent retries root issuance after a
+session-limit-resolution transaction is issued as a child of that parent. The parent remains in that
+state while the child is open or resolved, and the same parent retries root issuance after a
 selected session is revoked.
 
 The child is bound to the parent flow, actor, browser ceremony, realm, and OIDC authorization
 transaction where applicable. It has its own row-locked named transitions, database-clock expiry,
-terminal facts, retention hold, and actor-owned session selection. It is not authentication
-evidence and cannot create a session by itself. The existing establishment point, cooldown,
+terminal facts, retention hold, and actor-owned session selection. It is not authentication evidence
+and cannot create a session by itself. The existing establishment point, cooldown,
 actor-before-ticket lock order, post-commit cookie behavior, and prohibition on restricted root
 sessions are **retained**.
 
 ## Waiting-slot amendment (2026-10-16)
 
-Status: Accepted by the user on 2026-10-16; implementation pending. Recorded in `nine.md` P-8.
+Status: Accepted by the user on 2026-10-16. Source implementation for the waiting-slot amendment is
+delivered in R2-WU01 through R2-WU04; Gate acceptance remains pending and is recorded in `two.md`
+and `evidence/2026-10-16-r2-wu04-6H2Q.md`. The design history is recorded in `nine.md` P-8.
 
-Provenance: this ADR, its "Accepted (2026-10-02)" status and the retirement of `RESTRICTED`
-issuance arrived in checkpoint commit `b74017b51` (2026-10-04); the removal of
-`session_limit_hard_reject` arrived in `c737e51ae` (2026-10-08). Neither carries a recorded user
-decision. The user's intended session-limit design is restored here on the pending-resolution
-mechanism, without reviving the `RESTRICTED` placeholder.
+Provenance: this ADR, its "Accepted (2026-10-02)" status and the retirement of `RESTRICTED` issuance
+arrived in checkpoint commit `b74017b51` (2026-10-04); the removal of `session_limit_hard_reject`
+arrived in `c737e51ae` (2026-10-08). Neither carries a recorded user decision. The user's intended
+session-limit design is restored here on the pending-resolution mechanism, without reviving the
+`RESTRICTED` placeholder.
 
 Decision:
 
 - N is the realm limit of full-access login units: `app` 2, `com` 1, `org` 1.
-- At N, a sign-in becomes the waiting unit: one open session-limit resolution with no token,
-  cookie or RP grant. Its only actions are purging one full-access unit and cancelling.
-- While the actor's waiting unit is open (`PENDING` or `SESSION_SELECTED`, unexpired), every
-  further sign-in of that actor is refused outright: nothing is issued, no resolution is created,
-  no purge choice is offered. This supersedes "A pending flow does not block other sign-ins of the
-  account" in "Pending state".
+- At N, a sign-in becomes the waiting unit: one open session-limit resolution with no token, cookie
+  or RP grant. Its only actions are purging one full-access unit and cancelling.
+- While the actor's waiting unit is open (`PENDING` or `SESSION_SELECTED`, unexpired), every further
+  sign-in of that actor is refused outright: nothing is issued, no resolution is created, no purge
+  choice is offered. This supersedes "A pending flow does not block other sign-ins of the account"
+  in "Pending state".
 - Existing full-access units are unaffected by a waiting unit. Promotion to full access happens only
   when the count drops below N, rechecked under the actor lock.
 - No session below full access, including the waiting unit, may reach MFA reset. The MFA-reset
@@ -225,5 +228,5 @@ Decision:
 
 Correction: the Consequences statement "com and org Base OIDC resume enforce the one-session limit;
 with no Base limitation ceremony on those surfaces, a full limit is refused with `403`" is stale.
-`Base::Com::Sign::In::LimitationsController` and `Base::Org::Sign::In::LimitationsController` provide
-the same ceremony as app.
+`Base::Com::Sign::In::LimitationsController` and `Base::Org::Sign::In::LimitationsController`
+provide the same ceremony as app.

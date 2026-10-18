@@ -105,6 +105,8 @@ node_modules
 /config/master.key
 /config/*.key
 /config/credentials/*.key
+# Per-role keys (lib/runtime_role.rb); each is handed only to that role's process.
+/config/credentials/*/*.key
 /*.key
 
 # The production credentials payload is provisioned out of band and never
@@ -211,6 +213,7 @@ six.md
 seven.md
 eight.md
 nine.md
+zero.md
 # do not remove following lines.
 
 # what is this?

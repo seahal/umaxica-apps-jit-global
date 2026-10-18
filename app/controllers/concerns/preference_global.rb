@@ -110,10 +110,52 @@ module PreferenceGlobal
     normalized_value
   end
 
-  PUBLIC_CONTEXT_KEYS.each do |key|
-    define_method(:"request_context_#{key}") do
-      request_context_value(key)
-    end
+  def request_context_ri
+    request_context_value(:ri)
+  end
+
+  def request_context_pt
+    request_context_value(:pt)
+  end
+
+  def request_context_nt
+    request_context_value(:nt)
+  end
+
+  def request_context_lx
+    request_context_value(:lx)
+  end
+
+  def request_context_ct
+    request_context_value(:ct)
+  end
+
+  def request_context_tz
+    request_context_value(:tz)
+  end
+
+  def request_context_cu
+    request_context_value(:cu)
+  end
+
+  def request_context_df
+    request_context_value(:df)
+  end
+
+  def request_context_tf
+    request_context_value(:tf)
+  end
+
+  def request_context_mo
+    request_context_value(:mo)
+  end
+
+  def request_context_dn
+    request_context_value(:dn)
+  end
+
+  def request_context_ps
+    request_context_value(:ps)
   end
 
   def valid_ri_value?(value)

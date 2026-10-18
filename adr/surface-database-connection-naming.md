@@ -31,15 +31,20 @@ The accepted target mapping is:
 | Current connection | Target connection | Role                                                               |
 | ------------------ | ----------------- | ------------------------------------------------------------------ |
 | `principal`        | `app_principal`   | App authenticated principal, credentials, and principal-side state |
-| `mark`             | `app_ticket`      | App login/session/OIDC ticket state                                |
+| `mark`             | `op_base_app`     | App login/session/OIDC ticket state                                |
 | `resident`         | `app_zenith`      | App Zenith/RP-facing account and subject projection                |
 | `operator`         | `org_principal`   | Org authenticated principal, credentials, and org-side state       |
-| `token`            | `org_ticket`      | Org login/session/OIDC ticket state                                |
+| `token`            | `op_base_org`     | Org login/session/OIDC ticket state                                |
 | `personnel`        | `org_zenith`      | Org Zenith/RP-facing account and subject projection                |
 | `guest`            | `com_principal`   | Com authenticated principal, credentials, and contact/auth state   |
-| `symbol`           | `com_ticket`      | Com login/session/OIDC ticket state                                |
+| `symbol`           | `op_base_com`     | Com login/session/OIDC ticket state                                |
 | `visitor`          | `com_zenith`      | Com Zenith/RP-facing account and subject projection                |
 | `setting`          | `com_setting`     | Com login-independent surface setting and preference state         |
+
+The R3 OP rename in `one.md` section 5.2 supersedes the three `*_ticket` targets for the
+authentication stores. Their current target connection keys are `op_base_app`, `op_base_com`, and
+`op_base_org`, with matching replica keys. The other surface-role mappings in this ADR remain
+unchanged.
 
 The app and org surface preference families also use dedicated setting databases:
 
@@ -56,7 +61,7 @@ The `notification` connection is split by surface instead of renamed one-to-one:
 | `notification`     | `org_signal`      | `staff_notifications`, `operator_notifications` |
 | `notification`     | `com_signal`      | `visitor_notifications`                         |
 
-Each target also has the matching replica connection, for example `app_ticket_replica` and
+Each target also has the matching replica connection, for example `op_base_app_replica` and
 `com_signal_replica`.
 
 ## Vocabulary

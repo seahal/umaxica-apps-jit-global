@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class IdentityTotpCeremonyCandidate < AppTicketRecord
+class IdentityTotpCeremonyCandidate < OpBaseAppRecord
   include IdentityCeremonyCandidateRecord
 
   encrypts :private_key

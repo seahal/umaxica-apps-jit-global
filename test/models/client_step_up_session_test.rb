@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_step_up_sessions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id            :bigint           not null, primary key
 #  attempt_count :integer          default(0), not null

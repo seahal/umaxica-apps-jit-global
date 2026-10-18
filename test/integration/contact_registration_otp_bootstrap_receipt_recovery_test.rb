@@ -25,12 +25,12 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
           when "app"
             [Client, ClientToken, ClientEmail, ClientEmailCeremonyTransaction,
              ClientStepUpCeremonyTransaction, ClientStepUpSession, ClientContactAuditOutbox,
-             ClientRpSession, :user_id, :client_token, :user_token_id, "client", "base-app-ww", "BASE_APP",
+             OpAppGrant, :user_id, :client_token, :user_token_id, "client", "base-app-ww", "BASE_APP",
              ENV.fetch("PUBLIC_BASE_SERVICE_URL"), :client_email,]
           when "com"
             [Visitor, VisitorToken, VisitorEmail, VisitorEmailCeremonyTransaction,
              VisitorStepUpCeremonyTransaction, VisitorStepUpSession, VisitorContactAuditOutbox,
-             VisitorRpSession, :visitor_id, :visitor_token, :visitor_token_id, "visitor", "base-com-ww", "BASE_COM",
+             OpComGrant, :visitor_id, :visitor_token, :visitor_token_id, "visitor", "base-com-ww", "BASE_COM",
              ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), :visitor_email,]
           else
             raise ArgumentError, "unsupported test surface"

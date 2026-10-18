@@ -79,8 +79,31 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
     assert_equal [1, 102, 103, 104], TokenStatusManagement::VALID_STATUSES
   end
 
-  test "defines restricted ttl" do
-    assert_equal 15.minutes, TokenStatusManagement::RESTRICTED_TTL
+  test "strict issuance context maps absent columns and NULL to Normal and rejects corrupt values" do
+    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    visitor_token = VisitorToken.create!(visitor: visitor, skip_session_limit_check: true)
+    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator_token = OperatorToken.create!(staff: operator, authentication_context: nil)
+
+    assert_predicate @token.strict_authentication_context_value, :normal?
+    assert_predicate visitor_token.strict_authentication_context_value, :normal?
+    assert_predicate operator_token.strict_authentication_context_value, :normal?
+
+    operator_token.update!(authentication_context: AuthenticationContextValue::NORMAL_KEY)
+
+    assert_predicate operator_token.strict_authentication_context_value, :normal?
+
+    operator_token.update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
+
+    assert_predicate operator_token.strict_authentication_context_value, :standby?
+
+    ["", "future-context"].each do |stored_value|
+      corrupt_token = OperatorToken.new(staff: operator, authentication_context: stored_value)
+
+      assert_raises(AuthenticationContextValue::UnknownContextError) do
+        corrupt_token.strict_authentication_context_value
+      end
+    end
   end
 
   test "active_status scope returns only active usable tokens" do
@@ -265,41 +288,19 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
     assert_not_predicate @token, :currently_usable?
   end
 
-  test "mark_restricted! updates status to restricted" do
-    @token.update!(user_token_status_id: ClientTokenStatus::ACTIVE)
-    @token.mark_restricted!
-
-    assert_equal ClientTokenStatus::RESTRICTED, @token.reload.user_token_status_id
-  end
-
   test "status transitions use one writer database time for the state and timestamp" do
     database_time = 1.hour.from_now
 
+    @token.update!(user_token_status_id: ClientTokenStatus::RESTRICTED)
     ClientToken.stub(:database_now, database_time) do
-      @token.mark_restricted!
+      @token.revoke!
     end
 
-    restricted = @token.reload
-
-    assert_equal ClientTokenStatus::RESTRICTED, restricted.user_token_status_id
-    assert_equal database_time.to_i, restricted.updated_at.to_i
-
-    ClientToken.stub(:database_now, database_time) do
-      restricted.revoke!
-    end
-
-    revoked = restricted.reload
+    revoked = @token.reload
 
     assert_equal ClientTokenStatus::REVOKED, revoked.user_token_status_id
     assert_equal database_time.to_i, revoked.discard_at.to_i
     assert_equal database_time.to_i, revoked.updated_at.to_i
-  end
-
-  test "promote_to_active! updates status to active" do
-    @token.update!(user_token_status_id: ClientTokenStatus::RESTRICTED)
-    @token.promote_to_active!
-
-    assert_equal ClientTokenStatus::ACTIVE, @token.reload.user_token_status_id
   end
 
   test "expiry_column returns discard_at when present" do
@@ -367,11 +368,11 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
 
     assert_predicate token, :active_status?
 
-    token.mark_restricted!
+    token.update!(staff_token_status_id: OperatorTokenStatus::RESTRICTED)
 
     assert_predicate token, :restricted?
 
-    token.promote_to_active!
+    token.update!(staff_token_status_id: OperatorTokenStatus::ACTIVE)
 
     assert_predicate token, :active_status?
 

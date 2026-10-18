@@ -163,8 +163,8 @@ CREATE TABLE public.avatar_agent_bindings (
     agent_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    public_id character varying(21) NOT NULL,
-    assigned_at timestamp(6) with time zone NOT NULL,
+    public_id character varying(21) CONSTRAINT avatar_agent_bindings_public_id_not_null1 NOT NULL,
+    assigned_at timestamp(6) with time zone CONSTRAINT avatar_agent_bindings_assigned_at_not_null1 NOT NULL,
     revoked_at timestamp(6) with time zone,
     CONSTRAINT chk_avatar_agent_bindings_revoked_after_assigned CHECK (((revoked_at IS NULL) OR (revoked_at >= assigned_at)))
 );
@@ -264,7 +264,7 @@ ALTER SEQUENCE public.avatar_blocks_id_seq OWNED BY public.avatar_blocks.id;
 
 CREATE TABLE public.avatar_bureau_agent_grants (
     id bigint NOT NULL,
-    avatar_bureau_ownership_period_id bigint NOT NULL,
+    avatar_bureau_ownership_period_id bigint CONSTRAINT avatar_bureau_agent_grants_avatar_bureau_ownership_per_not_null NOT NULL,
     public_id character varying(21) NOT NULL,
     agent_public_id character varying(25) NOT NULL,
     capability character varying(50) NOT NULL,
@@ -344,16 +344,16 @@ ALTER SEQUENCE public.avatar_bureau_ownership_periods_id_seq OWNED BY public.ava
 
 CREATE TABLE public.avatar_bureau_to_bureau_transfer_details (
     id bigint NOT NULL,
-    transfer_reservation_id bigint NOT NULL,
-    source_bureau_public_id character varying(255) NOT NULL,
-    destination_bureau_public_id character varying(255) NOT NULL,
-    request_actor_public_id character varying(255) NOT NULL,
+    transfer_reservation_id bigint CONSTRAINT avatar_bureau_to_bureau_transf_transfer_reservation_id_not_null NOT NULL,
+    source_bureau_public_id character varying(255) CONSTRAINT avatar_bureau_to_bureau_transf_source_bureau_public_id_not_null NOT NULL,
+    destination_bureau_public_id character varying(255) CONSTRAINT avatar_bureau_to_bureau_tra_destination_bureau_public__not_null NOT NULL,
+    request_actor_public_id character varying(255) CONSTRAINT avatar_bureau_to_bureau_transf_request_actor_public_id_not_null NOT NULL,
     accept_actor_public_id character varying(255),
     requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     accepted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    source_ownership_period_id bigint NOT NULL,
+    source_ownership_period_id bigint CONSTRAINT avatar_bureau_to_bureau_tra_source_ownership_period_id_not_null NOT NULL,
     CONSTRAINT chk_avatar_bureau_to_bureau_transfer_details_nonblank CHECK (((char_length(btrim((source_bureau_public_id)::text)) > 0) AND (char_length(btrim((destination_bureau_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
 );
 
@@ -383,16 +383,16 @@ ALTER SEQUENCE public.avatar_bureau_to_bureau_transfer_details_id_seq OWNED BY p
 
 CREATE TABLE public.avatar_bureau_to_enterprise_transfer_details (
     id bigint NOT NULL,
-    transfer_reservation_id bigint NOT NULL,
-    source_bureau_public_id character varying(255) NOT NULL,
-    destination_enterprise_public_id character varying(255) NOT NULL,
-    request_actor_public_id character varying(255) NOT NULL,
+    transfer_reservation_id bigint CONSTRAINT avatar_bureau_to_enterprise_tr_transfer_reservation_id_not_null NOT NULL,
+    source_bureau_public_id character varying(255) CONSTRAINT avatar_bureau_to_enterprise_tr_source_bureau_public_id_not_null NOT NULL,
+    destination_enterprise_public_id character varying(255) CONSTRAINT avatar_bureau_to_enterprise_destination_enterprise_pub_not_null NOT NULL,
+    request_actor_public_id character varying(255) CONSTRAINT avatar_bureau_to_enterprise_tr_request_actor_public_id_not_null NOT NULL,
     accept_actor_public_id character varying(255),
-    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT avatar_bureau_to_enterprise_transfer_deta_requested_at_not_null NOT NULL,
     accepted_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    source_ownership_period_id bigint NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT avatar_bureau_to_enterprise_transfer_detail_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT avatar_bureau_to_enterprise_transfer_detail_updated_at_not_null NOT NULL,
+    source_ownership_period_id bigint CONSTRAINT avatar_bureau_to_enterprise_source_ownership_period_id_not_null NOT NULL,
     CONSTRAINT chk_avatar_bureau_to_enterprise_transfer_details_nonblank CHECK (((char_length(btrim((source_bureau_public_id)::text)) > 0) AND (char_length(btrim((destination_enterprise_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
 );
 
@@ -451,7 +451,7 @@ ALTER SEQUENCE public.avatar_capabilities_id_seq OWNED BY public.avatar_capabili
 CREATE TABLE public.avatar_enterprise_ownership_periods (
     id bigint NOT NULL,
     avatar_id bigint NOT NULL,
-    enterprise_public_id character varying(255) NOT NULL,
+    enterprise_public_id character varying(255) CONSTRAINT avatar_enterprise_ownership_perio_enterprise_public_id_not_null NOT NULL,
     transferred_by_actor_public_id character varying(255),
     valid_from timestamp(6) with time zone NOT NULL,
     valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
@@ -488,11 +488,11 @@ ALTER SEQUENCE public.avatar_enterprise_ownership_periods_id_seq OWNED BY public
 
 CREATE TABLE public.avatar_enterprise_persona_grants (
     id bigint NOT NULL,
-    avatar_enterprise_ownership_period_id bigint NOT NULL,
+    avatar_enterprise_ownership_period_id bigint CONSTRAINT avatar_enterprise_persona_g_avatar_enterprise_ownershi_not_null NOT NULL,
     public_id character varying(21) NOT NULL,
     persona_public_id character varying(25) NOT NULL,
     capability character varying(50) NOT NULL,
-    granted_by_actor_public_id character varying(25) NOT NULL,
+    granted_by_actor_public_id character varying(25) CONSTRAINT avatar_enterprise_persona_g_granted_by_actor_public_id_not_null NOT NULL,
     granted_at timestamp(6) with time zone NOT NULL,
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
@@ -530,16 +530,16 @@ ALTER SEQUENCE public.avatar_enterprise_persona_grants_id_seq OWNED BY public.av
 
 CREATE TABLE public.avatar_enterprise_to_bureau_transfer_details (
     id bigint NOT NULL,
-    transfer_reservation_id bigint NOT NULL,
-    source_enterprise_public_id character varying(255) NOT NULL,
-    destination_bureau_public_id character varying(255) NOT NULL,
-    request_actor_public_id character varying(255) NOT NULL,
+    transfer_reservation_id bigint CONSTRAINT avatar_enterprise_to_bureau_tr_transfer_reservation_id_not_null NOT NULL,
+    source_enterprise_public_id character varying(255) CONSTRAINT avatar_enterprise_to_bureau_source_enterprise_public_i_not_null NOT NULL,
+    destination_bureau_public_id character varying(255) CONSTRAINT avatar_enterprise_to_bureau_destination_bureau_public__not_null NOT NULL,
+    request_actor_public_id character varying(255) CONSTRAINT avatar_enterprise_to_bureau_tr_request_actor_public_id_not_null NOT NULL,
     accept_actor_public_id character varying(255),
-    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT avatar_enterprise_to_bureau_transfer_deta_requested_at_not_null NOT NULL,
     accepted_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    source_ownership_period_id bigint NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT avatar_enterprise_to_bureau_transfer_detail_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT avatar_enterprise_to_bureau_transfer_detail_updated_at_not_null NOT NULL,
+    source_ownership_period_id bigint CONSTRAINT avatar_enterprise_to_bureau_source_ownership_period_id_not_null NOT NULL,
     CONSTRAINT chk_avatar_enterprise_to_bureau_transfer_details_nonblank CHECK (((char_length(btrim((source_enterprise_public_id)::text)) > 0) AND (char_length(btrim((destination_bureau_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
 );
 
@@ -569,16 +569,16 @@ ALTER SEQUENCE public.avatar_enterprise_to_bureau_transfer_details_id_seq OWNED 
 
 CREATE TABLE public.avatar_enterprise_to_enterprise_transfer_details (
     id bigint NOT NULL,
-    transfer_reservation_id bigint NOT NULL,
-    source_enterprise_public_id character varying(255) NOT NULL,
-    destination_enterprise_public_id character varying(255) NOT NULL,
-    request_actor_public_id character varying(255) NOT NULL,
+    transfer_reservation_id bigint CONSTRAINT avatar_enterprise_to_enterpris_transfer_reservation_id_not_null NOT NULL,
+    source_enterprise_public_id character varying(255) CONSTRAINT avatar_enterprise_to_enterp_source_enterprise_public_i_not_null NOT NULL,
+    destination_enterprise_public_id character varying(255) CONSTRAINT avatar_enterprise_to_enterp_destination_enterprise_pub_not_null NOT NULL,
+    request_actor_public_id character varying(255) CONSTRAINT avatar_enterprise_to_enterpris_request_actor_public_id_not_null NOT NULL,
     accept_actor_public_id character varying(255),
-    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    requested_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT avatar_enterprise_to_enterprise_transfer__requested_at_not_null NOT NULL,
     accepted_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    source_ownership_period_id bigint NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT avatar_enterprise_to_enterprise_transfer_de_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT avatar_enterprise_to_enterprise_transfer_de_updated_at_not_null NOT NULL,
+    source_ownership_period_id bigint CONSTRAINT avatar_enterprise_to_enterp_source_ownership_period_id_not_null NOT NULL,
     CONSTRAINT chk_avatar_enterprise_to_enterprise_transfer_details_nonblank CHECK (((char_length(btrim((source_enterprise_public_id)::text)) > 0) AND (char_length(btrim((destination_enterprise_public_id)::text)) > 0) AND (char_length(btrim((request_actor_public_id)::text)) > 0)))
 );
 
@@ -641,9 +641,9 @@ ALTER SEQUENCE public.avatar_follows_id_seq OWNED BY public.avatar_follows.id;
 
 CREATE TABLE public.avatar_group_concrete_ownership_periods (
     id bigint NOT NULL,
-    avatar_group_id bigint NOT NULL,
+    avatar_group_id bigint CONSTRAINT avatar_group_concrete_ownership_period_avatar_group_id_not_null NOT NULL,
     owner_surface character varying NOT NULL,
-    owner_collective_public_id character varying(255) NOT NULL,
+    owner_collective_public_id character varying(255) CONSTRAINT avatar_group_concrete_owner_owner_collective_public_id_not_null NOT NULL,
     valid_from timestamp(6) with time zone NOT NULL,
     valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -681,7 +681,7 @@ CREATE TABLE public.avatar_group_ownership_periods (
     id bigint NOT NULL,
     avatar_group_id bigint NOT NULL,
     owner_surface character varying NOT NULL,
-    owner_collective_public_id character varying NOT NULL,
+    owner_collective_public_id character varying CONSTRAINT avatar_group_ownership_peri_owner_collective_public_id_not_null NOT NULL,
     valid_from timestamp(6) with time zone NOT NULL,
     valid_to timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
@@ -762,8 +762,8 @@ CREATE TABLE public.avatar_individual_bindings (
     individual_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    public_id character varying(21) NOT NULL,
-    assigned_at timestamp(6) with time zone NOT NULL,
+    public_id character varying(21) CONSTRAINT avatar_individual_bindings_public_id_not_null1 NOT NULL,
+    assigned_at timestamp(6) with time zone CONSTRAINT avatar_individual_bindings_assigned_at_not_null1 NOT NULL,
     revoked_at timestamp(6) with time zone,
     CONSTRAINT chk_avatar_individual_bindings_revoked_after_assigned CHECK (((revoked_at IS NULL) OR (revoked_at >= assigned_at)))
 );
@@ -1096,9 +1096,9 @@ CREATE TABLE public.avatar_ownership_transfers (
     avatar_id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
     from_owner_surface character varying NOT NULL,
-    from_owner_collective_public_id character varying NOT NULL,
+    from_owner_collective_public_id character varying CONSTRAINT avatar_ownership_transfers_from_owner_collective_publi_not_null NOT NULL,
     to_owner_surface character varying NOT NULL,
-    to_owner_collective_public_id character varying NOT NULL,
+    to_owner_collective_public_id character varying CONSTRAINT avatar_ownership_transfers_to_owner_collective_public__not_null NOT NULL,
     state character varying NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
     expires_at timestamp(6) with time zone NOT NULL,
@@ -1364,8 +1364,8 @@ CREATE TABLE public.avatars (
     public_id character varying NOT NULL,
     representing_organization_id character varying,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT avatars_shreddable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT avatars_discarded_at_not_null NOT NULL,
     lifecycle_state_id bigint NOT NULL,
     ownership_integrity_version bigint DEFAULT 0 NOT NULL,
     CONSTRAINT avatars_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
@@ -4422,7 +4422,7 @@ ALTER TABLE ONLY public.avatars
 --
 
 ALTER TABLE ONLY public.avatar_enterprise_to_bureau_transfer_details
-    ADD CONSTRAINT fk_rails_1452263e0a FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_1452263e0a FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4454,7 +4454,7 @@ ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_23710bcc08 FOREIGN KEY (muter_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -4518,7 +4518,7 @@ ALTER TABLE ONLY public.avatar_bureau_agent_grants
 --
 
 ALTER TABLE ONLY public.avatar_bureau_to_enterprise_transfer_details
-    ADD CONSTRAINT fk_rails_4dfe4d6053 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_4dfe4d6053 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4606,7 +4606,7 @@ ALTER TABLE ONLY public.avatar_lifecycle_events
 --
 
 ALTER TABLE ONLY public.avatar_bureau_to_bureau_transfer_details
-    ADD CONSTRAINT fk_rails_71685bc7cf FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_71685bc7cf FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_bureau_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4646,7 +4646,7 @@ ALTER TABLE ONLY public.member_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_8250386a91 FOREIGN KEY (blocker_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -4678,7 +4678,7 @@ ALTER TABLE ONLY public.client_avatar_accesses
 --
 
 ALTER TABLE ONLY public.avatar_blocks
-    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_903ed2c4c2 FOREIGN KEY (blocked_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --
@@ -4726,7 +4726,7 @@ ALTER TABLE ONLY public.member_avatar_oversights
 --
 
 ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
-    ADD CONSTRAINT fk_rails_bf9c472635 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_bf9c472635 FOREIGN KEY (source_ownership_period_id) REFERENCES public.avatar_enterprise_ownership_periods(id) ON DELETE RESTRICT;
 
 
 --
@@ -4734,7 +4734,7 @@ ALTER TABLE ONLY public.avatar_enterprise_to_enterprise_transfer_details
 --
 
 ALTER TABLE ONLY public.avatar_mutes
-    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_c0a7894e9b FOREIGN KEY (muted_avatar_id) REFERENCES public.avatars(id) ON DELETE CASCADE;
 
 
 --

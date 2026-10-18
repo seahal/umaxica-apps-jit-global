@@ -3,9 +3,9 @@
 > Current implementation (2026-10-04): parts of this document describe an earlier shape of the
 > application. The controller namespaces it names (`Top`, `Sign`, `Bff`, `Api`) and the help contact
 > form flow are not in the current code. Current controllers live under `Auth`, `Base`, `Core`,
-> `Warp`, `Palm`, `Edit`, `Guid`, and the content surfaces `Docs`, `Help`, `Info`, and
-> `News`, one route file each in `config/routes/`. Use `README.md` ("Routing") and
-> `docs/architecture/` for the current topology.
+> `Warp`, `Palm`, `Edit`, `Guid`, and the content surfaces `Docs`, `Help`, `Info`, and `News`, one
+> route file each in `config/routes/`. Use `README.md` ("Routing") and `docs/architecture/` for the
+> current topology.
 
 ## Project: Umaxica App (JIT)
 
@@ -26,7 +26,7 @@ host—marketing, authentication, docs/news, help/support, BFF, and API—consis
 - Rails application located at `/home/mslo/ghq/github.com/seahal/umaxica-app-jit`
 - Namespaced controllers for `Top`, `Sign`, `Help`, `Docs`, `News`, `Bff`, and `Api` surfaces
 - Turbo/React front-end with Bun-managed tooling (`src/**`)
-- Multi-database Active Record setup (`app_principal`, `org_ticket`, `com_setting`, etc.)
+- Multi-database Active Record setup (`app_principal`, `op_base_org`, `com_setting`, etc.)
 - Supporting infrastructure: PostgreSQL primary/replica pairs, Valkey, Grafana/Loki/Tempo, and an
   opt-in RustFS object-storage profile for local integration checks; Shrine storage is configured
   per boundary for development, staging, and production
@@ -89,7 +89,7 @@ Browsers / Mobile Apps
     │ HTTPS via Fastly / Cloudflare
     ▼
 Rails 8 Monolith (Top / Sign / Help / Docs / News / API / BFF)
-    │ ├─ Postgres clusters (`app_principal`, `org_ticket`, `com_setting`, etc.)
+    │ ├─ Postgres clusters (`app_principal`, `op_base_org`, `com_setting`, etc.)
     │ ├─ Valkey cache (Rails.cache) + Valkey rate limit (counters)
     │ ├─ ActionMailer + SMTP / Outbound::Sms
     │ └─ OpenTelemetry exporter (Tempo) + Loki logging
@@ -198,16 +198,16 @@ concerns scoped.
 | -------------------- | ---------------------------------------- | ----------------------------------------------------------------- |
 | `AppPrincipalRecord` | `app_principal`, `app_principal_replica` | `users`, `clients`, app identity and local preference tables      |
 | `AppSettingRecord`   | `app_setting`, `app_setting_replica`     | `app_preferences`, `app_preference_*`                             |
-| `AppTicketRecord`    | `app_ticket`, `app_ticket_replica`       | `user_tokens`, `user_step_up_sessions`, app OIDC tickets          |
+| `OpBaseAppRecord`    | `op_base_app`, `op_base_app_replica`     | `user_tokens`, `user_step_up_sessions`, app OIDC tickets          |
 | `AppRpRecord`        | `app_zenith`, `app_zenith_replica`       | `client_identities`, `client_accounts`, `client_profiles`         |
 | `AppSignalRecord`    | `app_signal`, `app_signal_replica`       | `user_notifications`, `member_notifications`                      |
 | `OrgPrincipalRecord` | `org_principal`, `org_principal_replica` | `staffs`, `operators`, org identity and local preference tables   |
 | `OrgSettingRecord`   | `org_setting`, `org_setting_replica`     | `org_preferences`, `org_preference_*`                             |
-| `OrgTicketRecord`    | `org_ticket`, `org_ticket_replica`       | `staff_tokens`, `staff_step_up_sessions`, org OIDC tickets        |
+| `OpBaseOrgRecord`    | `op_base_org`, `op_base_org_replica`     | `staff_tokens`, `staff_step_up_sessions`, org OIDC tickets        |
 | `OrgRpRecord`        | `org_zenith`, `org_zenith_replica`       | `operator_identities`, `operator_accounts`, workspace projections |
 | `OrgSignalRecord`    | `org_signal`, `org_signal_replica`       | `staff_notifications`, `operator_notifications`                   |
 | `ComPrincipalRecord` | `com_principal`, `com_principal_replica` | `visitors`, visitor credentials, public contact state             |
-| `ComTicketRecord`    | `com_ticket`, `com_ticket_replica`       | `visitor_tokens`, `visitor_step_up_sessions`, com OIDC tickets    |
+| `OpBaseComRecord`    | `op_base_com`, `op_base_com_replica`     | `visitor_tokens`, `visitor_step_up_sessions`, com OIDC tickets    |
 | `ComRpRecord`        | `com_zenith`, `com_zenith_replica`       | `visitor_identities`, `visitor_accounts`                          |
 | `ComSignalRecord`    | `com_signal`, `com_signal_replica`       | `visitor_notifications`                                           |
 | `ComSettingRecord`   | `com_setting`, `com_setting_replica`     | `com_preferences`, `com_preference_*`                             |

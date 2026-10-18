@@ -4,6 +4,13 @@
 
 Accepted (2026-10-13). User decision, confirmed by an escalation ruling on the same day.
 
+Superseded in part (2026-10-16) by
+`adr/first-party-sign-out-op-commit-and-backchannel-logout-for-separated-rp-stores.md`, only for
+first-party RPs activated with their own session store under the OP/RP separation (release R5). For
+those clients it replaces Decisions 1, 2 and 4, the parent-read condition and the related "Do not
+reintroduce" items. For every other client, and for all clients until that activation, this ADR
+stays fully in force.
+
 This is a **target contract with partial local implementation**. At the historical checkpoint
 `4828aeedd141b54163236672890799b9b01128c2` the application still contained a Back-Channel Logout
 (BCL) sender, receivers and declarations, and the missing authority check described below.

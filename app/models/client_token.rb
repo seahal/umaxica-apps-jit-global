@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_tokens
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
@@ -86,7 +86,7 @@
 
 # Refresh tokens are persisted as digests only.
 # OIDC sid/jti are protocol identifiers; public_id remains the token row identifier.
-class ClientToken < AppTicketRecord
+class ClientToken < OpBaseAppRecord
   self.belongs_to_required_by_default = false
 
   include ::PublicId
@@ -126,7 +126,7 @@ class ClientToken < AppTicketRecord
            foreign_key: :token_id,
            inverse_of: :token,
            dependent: :restrict_with_exception
-  has_many :client_rp_sessions, inverse_of: :client_token, dependent: :restrict_with_exception
+  has_many :op_app_grants, inverse_of: :client_token, dependent: :restrict_with_exception
   has_many :client_verifications, dependent: :delete_all, inverse_of: :user_token
   has_one :step_up_session,
           class_name: "ClientStepUpSession",
@@ -135,6 +135,7 @@ class ClientToken < AppTicketRecord
           dependent: :destroy
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
 
   validate :enforce_concurrent_session_limit, on: :create
 
@@ -151,13 +152,13 @@ class ClientToken < AppTicketRecord
   # The primary enforcement of the session limit is done by a database trigger,
   # which is more reliable and avoids race conditions.
   #
-  # Note: We now allow up to 3 total sessions (2 active + 1 restricted),
-  # but the Auth concern handles restricting the 3rd session.
+  # The row ceiling protects the root issuer when active-capacity admission and row creation race.
+  # Historical RESTRICTED rows do not authenticate and therefore do not consume root capacity.
   def enforce_concurrent_session_limit
     return if skip_session_limit_check
     return unless user_id
 
-    operation = -> { self.class.not_revoked.where(user_id: user_id, rotated_at: nil).count }
+    operation = -> { self.class.active_status.where(user_id: user_id, rotated_at: nil).count }
     count = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
 
     return if count < MAX_TOTAL_SESSIONS_PER_USER

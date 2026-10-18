@@ -30,7 +30,7 @@ module Tech
           return continue_browser_rp_logout! if params[:logout_challenge].present?
 
           launch_oidc_rp_logout!(
-            client_id: "tech-org",
+            client_id: "tech-org-ww",
             issuer_resource_type: "operator",
             token_issuer: "operator",
             session_authority: :rp_session,

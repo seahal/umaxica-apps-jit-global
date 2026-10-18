@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_sign_in_flows
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                    :bigint           not null, primary key
 #  completed_at          :datetime
@@ -41,7 +41,7 @@
 #  fk_rails_...  (state_id => visitor_sign_in_flow_states.id)
 #  fk_rails_...  (token_id => visitor_tokens.id) ON DELETE => cascade
 #
-class VisitorSignInFlow < ComTicketRecord
+class VisitorSignInFlow < OpBaseComRecord
   include SignInFlow
   include FlowSignIn
   include LocalAuthenticationResultDelivery

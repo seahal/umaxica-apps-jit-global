@@ -69,20 +69,21 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     rp_client = OidcClientRegistry.find!("base-org-ww")
     rp_root = @token.reload
     rp_root.rotate_refresh_token! unless rp_root.device_session.current_refresh_token_id
-    rp_record = OperatorRpSession.find_by(
+    rp_record = OpOrgGrant.find_by(
       device_session_id: rp_root.device_session_id,
       oidc_client_id: rp_client.client_id,
       revoked_at: nil,
     )
-    rp_record ||= OperatorRpSession.create!(
+    rp_record ||= OpOrgGrant.create!(
+      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OperatorRpSession.database_now,
-      refresh_token_expires_at: OperatorRpSession.database_now + 10.minutes,
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
+      refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
     )
     rp_access = AuthenticationTokenService.encode(
       @operator, host: @base_host, resource_type: "operator", session_public_id: rp_root.public_id,
                  base_session_public_id: rp_root.public_id, oidc_sid: rp_record.public_id, oidc_jti: rp_record.oidc_jti,
-                 expires_at: OperatorRpSession.database_now + 10.minutes, scopes: %w(openid profile),
+                 expires_at: OpOrgGrant.database_now + 10.minutes, scopes: %w(openid profile),
                  issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                  subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: rp_client.client_id,
@@ -292,20 +293,21 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     rp_client = OidcClientRegistry.find!("base-org-ww")
     rp_root = @token.reload
     rp_root.rotate_refresh_token! unless rp_root.device_session.current_refresh_token_id
-    rp_record = OperatorRpSession.find_by(
+    rp_record = OpOrgGrant.find_by(
       device_session_id: rp_root.device_session_id,
       oidc_client_id: rp_client.client_id,
       revoked_at: nil,
     )
-    rp_record ||= OperatorRpSession.create!(
+    rp_record ||= OpOrgGrant.create!(
+      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OperatorRpSession.database_now,
-      refresh_token_expires_at: OperatorRpSession.database_now + 10.minutes,
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
+      refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
     )
     rp_access = AuthenticationTokenService.encode(
       @operator, host: @base_host, resource_type: "operator", session_public_id: rp_root.public_id,
                  base_session_public_id: rp_root.public_id, oidc_sid: rp_record.public_id, oidc_jti: rp_record.oidc_jti,
-                 expires_at: OperatorRpSession.database_now + 10.minutes, scopes: %w(openid profile),
+                 expires_at: OpOrgGrant.database_now + 10.minutes, scopes: %w(openid profile),
                  issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                  subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: rp_client.client_id,
@@ -329,7 +331,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    @token.update!(authentication_context: AuthenticationContextValue::EMERGENCY_KEY)
+    @token.update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
     access = AuthenticationToken.encode(
@@ -340,20 +342,21 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     rp_client = OidcClientRegistry.find!("base-org-ww")
     rp_root = @token.reload
     rp_root.rotate_refresh_token! unless rp_root.device_session.current_refresh_token_id
-    rp_record = OperatorRpSession.find_by(
+    rp_record = OpOrgGrant.find_by(
       device_session_id: rp_root.device_session_id,
       oidc_client_id: rp_client.client_id,
       revoked_at: nil,
     )
-    rp_record ||= OperatorRpSession.create!(
+    rp_record ||= OpOrgGrant.create!(
+      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OperatorRpSession.database_now,
-      refresh_token_expires_at: OperatorRpSession.database_now + 10.minutes,
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
+      refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
     )
     rp_access = AuthenticationTokenService.encode(
       @operator, host: @base_host, resource_type: "operator", session_public_id: rp_root.public_id,
                  base_session_public_id: rp_root.public_id, oidc_sid: rp_record.public_id, oidc_jti: rp_record.oidc_jti,
-                 expires_at: OperatorRpSession.database_now + 10.minutes, scopes: %w(openid profile),
+                 expires_at: OpOrgGrant.database_now + 10.minutes, scopes: %w(openid profile),
                  issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                  subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: rp_client.client_id,
@@ -388,15 +391,16 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       rp_client = OidcClientRegistry.find!("base-org-ww")
       rp_root = @token.reload
       rp_root.rotate_refresh_token! unless rp_root.device_session.current_refresh_token_id
-      rp_record = OperatorRpSession.find_by(
+      rp_record = OpOrgGrant.find_by(
         device_session_id: rp_root.device_session_id,
         oidc_client_id: rp_client.client_id,
         revoked_at: nil,
       )
-      rp_record ||= OperatorRpSession.create!(
+      rp_record ||= OpOrgGrant.create!(
+        contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
         operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OperatorRpSession.database_now,
-        refresh_token_expires_at: OperatorRpSession.database_now + 10.minutes,
+        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
+        refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
       )
       rp_access = AuthenticationTokenService.encode(
         @operator,
@@ -406,7 +410,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         base_session_public_id: rp_root.public_id,
         oidc_sid: rp_record.public_id,
         oidc_jti: rp_record.oidc_jti,
-        expires_at: OperatorRpSession.database_now + 10.minutes,
+        expires_at: OpOrgGrant.database_now + 10.minutes,
         scopes: %w(openid profile),
         issuer: OidcIssuer.for_client(rp_client),
         audiences: [rp_client.aud],
@@ -591,14 +595,15 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         rp_client = OidcClientRegistry.find!("base-org-ww")
         rp_root = @token.reload
         rp_root.rotate_refresh_token! unless rp_root.device_session.current_refresh_token_id
-        rp_record = OperatorRpSession.find_by(
+        rp_record = OpOrgGrant.find_by(
           device_session_id: rp_root.device_session_id,
           oidc_client_id: rp_client.client_id,
           revoked_at: nil,
         )
-        rp_record ||= OperatorRpSession.create!(
+        rp_record ||= OpOrgGrant.create!(
+          contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
           operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-          oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OperatorRpSession.database_now,
+          oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
           refresh_token_expires_at: 10.minutes.from_now,
         )
         rp_access = AuthenticationTokenService.encode(
@@ -655,20 +660,21 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     rp_client = OidcClientRegistry.find!("base-org-ww")
     rp_root = @token.reload
     rp_root.rotate_refresh_token! unless rp_root.device_session.current_refresh_token_id
-    rp_record = OperatorRpSession.find_by(
+    rp_record = OpOrgGrant.find_by(
       device_session_id: rp_root.device_session_id,
       oidc_client_id: rp_client.client_id,
       revoked_at: nil,
     )
-    rp_record ||= OperatorRpSession.create!(
+    rp_record ||= OpOrgGrant.create!(
+      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OperatorRpSession.database_now,
-      refresh_token_expires_at: OperatorRpSession.database_now + 10.minutes,
+      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
+      refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
     )
     rp_access = AuthenticationTokenService.encode(
       @operator, host: @base_host, resource_type: "operator", session_public_id: rp_root.public_id,
                  base_session_public_id: rp_root.public_id, oidc_sid: rp_record.public_id, oidc_jti: rp_record.oidc_jti,
-                 expires_at: OperatorRpSession.database_now + 10.minutes, scopes: %w(openid profile),
+                 expires_at: OpOrgGrant.database_now + 10.minutes, scopes: %w(openid profile),
                  issuer: OidcIssuer.for_client(rp_client), audiences: [rp_client.aud],
                  jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(rp_client),
                  subject: OidcSubject.for(@operator, resource_type: "operator"), client_id: rp_client.client_id,

@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_verifications
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id             :bigint           not null, primary key
 #  discard_at   :datetime         default(Infinity), not null

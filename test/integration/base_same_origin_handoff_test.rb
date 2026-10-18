@@ -8,9 +8,9 @@ require "test_helper"
 # keep using Jump.
 class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
   SURFACES = [
-    { tld: "app", host_env: "PUBLIC_BASE_SERVICE_URL", core_client_id: "core-app" },
-    { tld: "com", host_env: "PUBLIC_BASE_CORPORATE_URL", core_client_id: "core-com" },
-    { tld: "org", host_env: "PUBLIC_BASE_STAFF_URL", core_client_id: "core-org" },
+    { tld: "app", host_env: "PUBLIC_BASE_SERVICE_URL", core_client_id: "core-app-jp" },
+    { tld: "com", host_env: "PUBLIC_BASE_CORPORATE_URL", core_client_id: "core-com-jp" },
+    { tld: "org", host_env: "PUBLIC_BASE_STAFF_URL", core_client_id: "core-org-jp" },
   ].freeze
 
   setup do
@@ -228,7 +228,7 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
 
   test "Base app authorize still hands a cross-origin Core code callback to Jump" do
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    core_callback = OidcClientRegistry.find!("core-app").redirect_uris.first
+    core_callback = OidcClientRegistry.find!("core-app-jp").redirect_uris.first
     host! base_host
     https!
     user = clients(:one)
@@ -243,7 +243,7 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
 
     get "/oauth/authorize", params: {
       response_type: "code",
-      client_id: "core-app",
+      client_id: "core-app-jp",
       redirect_uri: core_callback,
       scope: "openid profile",
       state: SecureRandom.urlsafe_base64(32),

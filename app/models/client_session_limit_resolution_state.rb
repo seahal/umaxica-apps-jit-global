@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class ClientSessionLimitResolutionState < AppTicketRecord
+class ClientSessionLimitResolutionState < OpBaseAppRecord
   include ReferenceRecord
 
   PENDING = 10

@@ -1,0 +1,19 @@
+stateDiagram-v2
+    [*] --> Current: root issued under the current actor epoch
+    Current --> Current: Code / Refresh / reissue / receipt with locked active actor
+    Current --> CutOff: identity stop commits a higher actor epoch and Zenith event
+    CutOff --> CutOff: stale caller / delayed receipt / old root is refused
+    CutOff --> [*]: retain historical root and invalidation facts
+    note right of Current
+        Derived relation between root and canonical actor epochs.
+        Actor writer lock precedes OP device, root and grant locks.
+        Recheck lifecycle and epoch after acquiring locks.
+        Base self-RP claim updates obey the same order.
+        Rotation separately rechecks the actor through OP commit.
+        No actor or OP lock spans outbound HTTPS.
+    end note
+    note right of CutOff
+        OP invalidation is a separately committed idempotent delivery.
+        A recovered actor requires new authority under the current epoch.
+        Recovery does not reactivate this historical root.
+    end note

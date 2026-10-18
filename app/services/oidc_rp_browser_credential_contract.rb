@@ -8,6 +8,7 @@
 module OidcRpBrowserCredentialContract
   ACCESS_COOKIE = OidcRpCookieName.access
   REFRESH_COOKIE = OidcRpCookieName.refresh
+  SESSION_COOKIE = OidcRpCookieName.session
 
   module_function
 
@@ -23,6 +24,17 @@ module OidcRpBrowserCredentialContract
     raise ArgumentError, "RP refresh cookie expiry is required" unless expiry
 
     cookie_options(expires_at: expiry)
+  end
+
+  # The local session cookie lives exactly as long as the local session's absolute lifetime.
+  def session_cookie_options(expires_at:)
+    raise ArgumentError, "RP session cookie expiry is required" unless expires_at
+
+    cookie_options(expires_at:)
+  end
+
+  def session_cookie_deletion_options
+    cookie_options.except(:expires, :httponly)
   end
 
   def access_cookie_deletion_options

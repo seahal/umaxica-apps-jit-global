@@ -1,202 +1,117 @@
 # Acme, Sign, Core, Base, And Palm Architecture
 
-> **Authentication-boundary supersession (2026-09-22):** The component naming and BFF discussion
-> below is retained as historical architecture context. For the current Rails browser OIDC
-> authority, RP registrations, and ceremony ownership, use
-> `adr/base-auth-ceremony-and-seven-rp-boundary.md` and
-> `plans/backlog/2026-09-17-integrated-hardening-plan.md`. Base is the sole physical IdP/AS, Auth is
-> ceremony-only, and `sign-rp`, `base-rails-rp`, and `side-rails-rp` are not current local browser
-> registrations. Do not use the historical client list below to add a new registration.
+This document maps the historical Acme / Sign / Core / Base / Port vocabulary onto the current Rails
+implementation. The historical component model came from `adr/acme-sign-core-base-port-boundary.md`.
+Later ADRs superseded its authority claims, client names, and Palm role. When this document and an
+accepted ADR disagree, the ADR is authoritative. Current owners:
 
-> **Participation update (2026-10-13):** Palm is now a first-party browser RP (`palm-app`); its
-> native RP and bearer API roles have been retired. Tech is an operator browser RP (`tech-org`) and
-> requires `tech.access`. This document's Palm-native component model and flow below are retained as
-> historical context. Use `adr/tech-and-palm-browser-rp-participation.md` for the accepted current
-> contract and implementation status.
+- `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base authority, Auth ceremony, RP model
+- `adr/tech-and-palm-browser-rp-participation.md`: Palm and Tech as browser RPs
+- `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` and
+  `adr/first-party-sign-out-op-commit-and-backchannel-logout-for-separated-rp-stores.md`: sign-out
+- `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md`: Core browser
+  credentials
+- `app/values/auth_boundary_authority_map.rb`: the canonical client ID and RP face map in code
 
-## Current Boundary
+## Vocabulary Mapping
 
-The accepted component model is:
+| Historical name | Current implementation                                              | Rails namespace / routes         |
+| --------------- | ------------------------------------------------------------------- | -------------------------------- |
+| Acme            | Conceptual authority vocabulary; physically implemented by **Base** | `base` (`config/routes/base.rb`) |
+| Sign            | **Auth**, a credential and authentication ceremony service only     | `auth` (`config/routes/auth.rb`) |
+| Core            | Core Rails BFF and first-party browser RP per face                  | `core` (`config/routes/core.rb`) |
+| Base            | Base IdP / AS, control plane, and its own self-RP per face          | `base` (`config/routes/base.rb`) |
+| Port / Palm     | **Palm**, a first-party browser RP (no native or bearer API role)   | `palm` (`config/routes/palm.rb`) |
 
-| Component | Role                                           |
-| --------- | ---------------------------------------------- |
-| Acme      | IdP / Authorization Server                     |
-| Sign      | Special relying party                          |
-| Core      | Next.js web relying party and BFF              |
-| Base      | Rails application foundation and control plane |
-| Palm      | Native bearer-token API Resource Server        |
+Warp, Edit, and Tech are also first-party browser RPs, but the historical model has no name for
+them.
 
-Acme is the only login authority. Sign, Core, Base views, iOS, and Android authenticate through
-Acme. APIs are Resource Servers, not relying parties.
+## Authority And Ceremony
 
-Palm is the canonical name for the native API formerly tracked as Port. New architecture, code,
-configuration, route, and audience vocabulary should use Palm.
+- Base is the only physical OpenID Provider and Authorization Server. It serves
+  `/.well-known/openid-configuration`, `/.well-known/jwks.json`, `/oauth/authorize`, `/oauth/token`,
+  `/oauth/userinfo`, `/oauth/revoke`, `/oauth/refresh-deliveries/query`, and `/oidc/logout` on each
+  of its app, com, and org hosts.
+- Auth is not an issuer and not an RP. It runs the credential ceremonies (sign-in, sign-up, passkey,
+  social federation) and hands the result back to Base through an opaque, short-lived handoff. Auth
+  has no `/oidc/callback`, `/oidc/authorization`, or back-channel logout route.
+- Auth keeps only ceremony-local browser sessions bound to `__Host-auth_sid`. Those sessions do not
+  prove a Base login.
 
-Current Rails implementation namespaces do not always match the target component names. Use this
-mapping when reading routes, controllers, tests, and docs:
+## First-Party Browser RPs
 
-| Target component | Rails route/controller namespace | Route responsibility in this repository                          |
-| ---------------- | -------------------------------- | ---------------------------------------------------------------- |
-| Acme             | `base`                           | OP / Authorization Server protocol routes and identity authority |
-| Sign             | `auth`                           | Credential ceremony and sign-related relying-party UI            |
-| Core             | `core`                           | Rails browser API/BFF boundary for the Core web experience       |
-| Base             | `base`                           | Rails control-plane, identity, preference, and settings views    |
-| Palm             | `palm`                           | Native bearer-token API Resource Server                          |
+Every first-party RP is a confidential client that uses the authorization code flow with PKCE S256,
+`state`, `nonce`, and `private_key_jwt`. The current client IDs in `AuthBoundaryAuthorityMap` are:
 
-The `base` namespace is therefore overloaded during the transition: it contains both Acme authority
-routes and Base Rails control-plane routes. Do not infer credential-gateway ownership from the
-namespace name alone.
+| Surface | Client IDs                                                  | Actor                       |
+| ------- | ----------------------------------------------------------- | --------------------------- |
+| Core    | `core-app-jp`, `core-com-jp`, `core-org-jp` (+ `-us` faces) | client / visitor / operator |
+| Warp    | `warp-app-jp`, `warp-com-jp`, `warp-org-jp` (+ `-us` faces) | client / visitor / operator |
+| Base    | `base-app-ww`, `base-com-ww`, `base-org-ww` (self-RP)       | client / visitor / operator |
+| Edit    | `edit-org-ww`                                               | operator                    |
+| Palm    | `palm-app-jp`                                               | client                      |
+| Tech    | `tech-org-ww` (requires `tech.access`)                      | operator                    |
 
-## Responsibilities
+Each RP host exposes the same route contract:
 
-Acme owns `/authorize`, `/token`, JWKS, ID Token issuance, Access Token issuance, issuer identity,
-and subject identity.
+- `GET /sign` renders a neutral entry page; the CSRF-protected `POST /sign` starts the flow. The RP
+  does not choose sign-in or sign-up; Auth owns that choice.
+- `GET /oidc/callback` is the exact registered `redirect_uri`.
+- `/sign/out/completion?ri=jp|us` is the registered post-logout return URI.
+- `POST /oidc/backchannel-logout` receives back-channel logout for a separated RP cell, and
+  `POST /sign/out/purge` purges the matching RP cookies after OP logout (release R5 work).
 
-Protocol URL contract:
+`sign-rp` and `base-rails-rp` are deprecated shared registrations. `side-rails-rp`, `app-ios-rp`,
+`app-android-rp`, and the `palm-api` audience are retired. Do not add new registrations from those
+names.
 
-- Acme OP / Authorization Server uses `/.well-known/openid-configuration`, `/.well-known/jwks.json`,
-  `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo`, `/oauth/revoke`, and `/oidc/logout`.
-- First-party browser RP flows use `/oidc/authorization` and `/oidc/callback` where the RP consumes
-  Acme login state; first-party RPs have no back-channel logout receiver. Palm is not a browser RP
-  launcher; it retains only an inert native callback compatibility stub until a native client
-  registration and concrete flow are separately approved.
-- Social federation flows use `/social/:provider/sign/in`, `/social/:provider/sign/up`, and
-  `/social/:provider/callback`.
-- `google` and `apple` are canonical social provider names. `google_app` is historical only.
-- `/oauth/jwks`, `/auth/*`, `/oauth/callback`, and `/social/auth/*` are retired route families.
+The `docs`, `news`, and `help` surfaces are content surfaces, not OIDC RPs.
 
-Sign owns sign-related UI or special flows as a relying party. Sign is not an issuer.
+## Session Hierarchy
 
-Core owns the browser-facing web experience, receives the Acme callback, and serves the browser
-credential boundary. `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md`
-supersedes the earlier `__Host-core_sid`-only model: Rails Core may consume `aud=core-browser`
-access JWTs only from HttpOnly cookie transport, and the Next.js origin must receive no `Cookie`
-header at all.
+Identity → Base Browser Session (`ClientToken` / `VisitorToken` / `OperatorToken`) → RP Session per
+registered client. RP surfaces share no cookies or sessions with each other or with Base. Each RP
+cell has its own session store (`config/database.yml` `rp_*` connections), keyed by client ID.
 
-Base owns Rails-suitable foundation behavior: settings, preferences, account, profile, organization,
-administration, complex mutations, audit-sensitive operations, and Rails views where Rails remains
-the safer implementation boundary.
+## Sign-Out
 
-Palm owns native API access for iOS, Android, and other native clients. It accepts only Acme-issued
-bearer access tokens with the Palm audience. Palm is bearer-only; `cnf.jkt`-bound tokens must not be
-accepted as plain Bearer tokens unless a separate boundary change adds full DPoP verification.
+Sign-out commits at the OP. Until a client is activated with its own separated session store,
+`adr/first-party-sign-out-shared-database-without-backchannel-logout.md` applies: one transaction
+revokes the parent and the RP session rows, and no back-channel logout is used. For a separated RP
+cell, the OP commit establishes sign-out, and a worker outside the request delivers a Back-Channel
+Logout Token afterwards. Delivery never decides whether sign-out succeeded.
 
-## Browser Flow
+## Core Browser Credential Transport
 
-```text
-Browser
--> Core / Next.js / jp.example.com
--> Acme /authorize
--> Core callback
--> Rails Core consumes the auth access cookie on /api/v0/*
-```
+`CoreBrowserCredentialContract` and `CoreBrowserApiBoundary` implement the Core browser credential
+contract, gated by `CORE_BROWSER_JWT_COOKIE_ENABLED`:
 
-The browser may hold a Core browser access JWT only through HttpOnly cookie transport. JavaScript
-must not read access or refresh credentials. Next.js must not receive any `Cookie` header, including
-access, refresh, OIDC transaction, preference, flash, analytics, or unrelated cookies.
+| Cookie                                                  | Purpose          | Path | SameSite | Secure | HttpOnly |
+| ------------------------------------------------------- | ---------------- | ---- | -------- | ------ | -------- |
+| `__Host-auth_access` (secure context) / `auth_access`   | Access JWT       | `/`  | `Strict` | `true` | `true`   |
+| `__Host-auth_refresh` (secure context) / `auth_refresh` | Opaque refresh   | `/`  | `Strict` | `true` | `true`   |
+| `_umaxica_session`                                      | OIDC transaction | `/`  | `Lax`    | `true` | `true`   |
 
-Core browser credential cookies use the existing Rails auth cookie concern and names, not a
-Core-only fork:
-
-| Cookie                                                               | Purpose          | Domain                     | Path                       | SameSite                   | Secure                     | HttpOnly                   |
-| -------------------------------------------------------------------- | ---------------- | -------------------------- | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
-| `__Host-auth_access` in secure contexts, `auth_access` in dev/test   | Access JWT       | none                       | `/`                        | `Strict`                   | `true` in secure contexts  | `true`                     |
-| `__Host-auth_refresh` in secure contexts, `auth_refresh` in dev/test | Opaque refresh   | none                       | `/`                        | `Strict`                   | `true` in secure contexts  | `true`                     |
-| existing Rails/OIDC transaction state                                | OIDC transaction | existing ceremony controls | existing ceremony controls | existing ceremony controls | existing ceremony controls | existing ceremony controls |
-
-The access JWT uses the `core-browser` audience and a short TTL. The refresh credential is opaque.
-Do not split the auth ceremony into Core-only cookie concerns or names unless a later ADR accepts
-that drift.
-
-Do not use `Domain=.example.com` for Core browser credentials. Cloudflare strips the entire `Cookie`
-header before forwarding requests to the Next.js origin or the preserved `side.jp.umaxica.app`
-hostname, and strips `Set-Cookie` from Next.js and Warp responses before they reach the browser.
-
-## Session And Cookie Boundary
-
-Core and Base do not share cookies or sessions.
-
-- Core session is not Base session.
-- Core cookie is not Base cookie.
-- Rails session is not Next.js session.
-- Rails APIs must not trust a Next.js cookie.
-- Next.js must not read Rails session cookies.
-
-The shared person key across components is Acme `iss + sub`.
-
-## Native And Palm Flow
-
-```text
-iOS / Android
--> Acme /authorize
--> Acme /token
--> Palm API with Authorization: Bearer
-```
-
-Native apps are public RPs using Authorization Code + PKCE. Palm is a Resource Server. Palm does not
-use Rails sessions, Next.js sessions, or browser cookies.
-
-Palm validates:
-
-- token signature;
-- `iss` equals the Acme issuer;
-- `aud` equals `palm-api`;
-- `exp`, `nbf`, and `iat`;
-- scope;
-- `client_id`;
-- `sub`.
-
-Palm resolves users from Acme `iss + sub`.
+- The access JWT has audience `core-browser` and a TTL of 10 minutes, capped by the session's
+  absolute expiry. Rails Core accepts it only from cookie transport on `/api/v0/*`, and CSRF
+  verification is required for unsafe methods.
+- No cookie sets `Domain`. Cloudflare strips the `Cookie` header before requests reach the Next.js
+  origin, and strips `Set-Cookie` from Next.js and Warp responses. JavaScript never reads access or
+  refresh credentials.
+- The `__Host-` prefix follows `JitSessionCookieConfig.force_secure?`, not only
+  `Rails.env.production?`.
 
 ## Token Boundary
 
-ID Tokens are for RPs to verify login results. Access Tokens are for APIs and Resource Servers to
-authorize API access.
-
-APIs must not use ID Tokens for authorization.
-
-Audience and transport are bound:
-
-- `aud=core-browser` is accepted only from cookie transport.
-- `aud=palm-api` is accepted only from Authorization bearer transport.
-- `aud=side-service` is service-token-only and never user-bound.
-
-`port-api` is legacy vocabulary for the former Palm name and is not the target audience for new
-native API tokens.
-
-Reverse transport must be rejected. Because Core browser uses cookie transport, Rails CSRF
-verification is mandatory for unsafe methods.
-
-## Names And URLs
-
-Initial client and audience names:
-
-- `sign-rp`
-- `core-next-rp`
-- `base-rails-rp`
-- `app-ios-rp`
-- `app-android-rp`
-- `palm-api`
-
-Optional future API audiences for Core-to-Base server-side calls may use names such as `core-api` or
-`base-api`.
-
-URL direction:
-
-- Acme: `acme.example.com` or equivalent.
-- Sign: `sign.example.com` or equivalent.
-- Core: `jp.example.com`.
-- Base: `www.jp.example.com` or equivalent Rails foundation/control-plane subdomain.
-- Palm: `palm.jp.umaxica.app` in current Rails route configuration; final production URL shape
-  remains open.
-
-Palm URL selection remains open. The Palm responsibility and `palm-api` bearer-token audience are
-fixed.
+ID Tokens let RPs verify the login result. Access Tokens authorize API access. APIs must not use an
+ID Token for authorization. Audience and transport are bound: `core-browser` is accepted only from
+cookie transport. The shared person key across surfaces is the Base issuer plus `sub`.
 
 ## Related
 
+- `adr/acme-sign-core-base-port-boundary.md` (historical)
+- `adr/base-auth-ceremony-and-seven-rp-boundary.md`
+- `adr/tech-and-palm-browser-rp-participation.md`
 - `adr/core-browser-jwt-cookie-transport-and-nextjs-zero-cookie-boundary.md`
-- `adr/core-browser-credential-transport.md`
-- `adr/acme-sign-core-base-port-boundary.md`
 - `docs/security/cookie-domain-scope.md`
 - `docs/security/downstream-token-authority.md`

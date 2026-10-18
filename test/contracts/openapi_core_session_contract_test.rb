@@ -109,14 +109,26 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
   end
 
   def oidc_access_token_for(client, audiences: nil)
-    oidc_client = OidcClientRegistry.find!("core-app")
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
+    root_token = client_tokens(:one)
+    rp_grant = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      client_token: root_token,
+      oidc_client_id: oidc_client.client_id,
+      oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid,
+      oidc_nonce: SecureRandom.hex(16),
+      oidc_auth_time: 1.minute.ago,
+      refresh_token_expires_at: 10.minutes.from_now,
+    )
     AuthenticationTokenService.encode(
       client,
       host: OidcIssuer.host_for_resource_type("client"),
       resource_type: "client",
-      session_public_id: "rp-session-public-id",
-      oidc_sid: "rp-session-public-id",
-      oidc_jti: SecureRandom.uuid,
+      session_public_id: rp_grant.public_id,
+      base_session_public_id: root_token.public_id,
+      oidc_sid: rp_grant.public_id,
+      oidc_jti: rp_grant.oidc_jti,
       expires_at: 10.minutes.from_now,
       scopes: %w(openid profile),
       issuer: OidcIssuer.for_resource_type("client"),
@@ -124,13 +136,15 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
       subject: OidcSubject.for(client, resource_type: "client"),
       client_id: oidc_client.client_id,
+      authentication_context: root_token.strict_authentication_context_value.to_s,
     )
   end
 
   def oidc_refresh_token_for_client
-    session = ClientRpSession.create!(
+    session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
       client_token: client_tokens(:one),
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
       oidc_nonce: SecureRandom.hex(16),

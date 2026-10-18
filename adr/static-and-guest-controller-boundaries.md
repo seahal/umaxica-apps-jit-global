@@ -157,8 +157,8 @@ Current exception shapes include:
 
 - social authentication entry controllers that combine an open `continue` action with private unlink
   actions that require step-up verification;
-- session-limit gate controllers that are open at the access-policy level but require either a
-  restricted session or a valid pending session-limit gate;
+- session-limit gate controllers that are open at the access-policy level but require a valid
+  pending session-limit gate;
 - OAuth and OIDC callback controllers that are open but rely on provider state, callback guard, or
   PKCE/session validation;
 - OAuth token exchange endpoints that are unauthenticated browser-session endpoints, use

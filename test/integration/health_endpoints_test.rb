@@ -480,7 +480,7 @@ class HealthEndpointsTest < ActionDispatch::IntegrationTest
   test "app readiness ignores org-only dependencies" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
 
-    assert_readiness_does_not_build(OrgTicketRecord)
+    assert_readiness_does_not_build(OpBaseOrgRecord)
   end
 
   test "sign readiness ignores acme-only dependencies" do

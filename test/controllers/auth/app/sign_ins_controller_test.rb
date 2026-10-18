@@ -2510,8 +2510,8 @@ module Auth
       def authorize_params
         {
           response_type: "code",
-          client_id: "core-app",
-          redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
+          client_id: "core-app-jp",
+          redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
           code_challenge: "challenge",
           code_challenge_method: "S256",
           state: SecureRandom.urlsafe_base64(16),

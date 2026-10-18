@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_step_up_sessions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id               :bigint           not null, primary key
 #  attempt_count    :integer          default(0), not null

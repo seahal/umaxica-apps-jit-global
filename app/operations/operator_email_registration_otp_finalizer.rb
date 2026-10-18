@@ -29,8 +29,8 @@ class OperatorEmailRegistrationOtpFinalizer
       surface: "org", channel: :email, transaction_ref: transaction.transaction_id,
       root_ref: token.public_id, browser_nonce: browser_nonce,
     ).dump
-    OrgTicketRecord.connected_to(role: :writing) do
-      OrgTicketRecord.transaction do
+    OpBaseOrgRecord.connected_to(role: :writing) do
+      OpBaseOrgRecord.transaction do
         committed = finalize_source(session_ref)
         return :unavailable unless committed
 
@@ -78,7 +78,7 @@ class OperatorEmailRegistrationOtpFinalizer
 
   def root_current?
     now = OperatorEmailCeremonyTransaction.database_now
-    token.currently_usable?(now) && token_device_session.usable? &&
+    token.active_status?(now) && token_device_session.usable? &&
       token_device_session.current_refresh_token_id == token.id
   end
 

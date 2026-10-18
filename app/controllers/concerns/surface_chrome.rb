@@ -90,7 +90,7 @@ module SurfaceChrome
   # the server denies the unavailable operations regardless
   # (docs/security/org-emergency-access.md).
   def chrome_restricted_mode
-    return nil unless chrome_authentication_context.emergency?
+    return nil unless chrome_authentication_context.standby?
 
     scope = "layouts.shared.restricted_mode"
     {

@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class ClientAuthAdmissionBinding < AppTicketRecord
+class ClientAuthAdmissionBinding < OpBaseAppRecord
   include AuthAdmissionBinding
 
   belongs_to :sign_in_flow, class_name: "ClientSignInFlow", optional: true
@@ -32,6 +32,6 @@ class ClientAuthAdmissionBinding < AppTicketRecord
 
     def auth_admission_session_class = ClientAuthCeremonySession
 
-    def connection_owner = AppTicketRecord
+    def connection_owner = OpBaseAppRecord
   end
 end

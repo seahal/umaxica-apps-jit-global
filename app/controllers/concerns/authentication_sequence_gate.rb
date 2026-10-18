@@ -447,7 +447,7 @@ module AuthenticationSequenceGate
     raise AuthCeremonySession::InvalidTransition, "Secret OIDC admission missing" unless transaction && ceremony
 
     resource.with_lock do
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         transaction.with_lock do
           flow = ClientSignInFlow.find_by(id: transaction.secret_sign_in_flow_id)
           raise AuthCeremonySession::InvalidTransition, "Secret OIDC flow missing" unless flow
@@ -521,42 +521,45 @@ module AuthenticationSequenceGate
 
   # Session-limit resolution ends in the same final issuance boundary as any
   # root login: log_in re-locks the flow, re-counts the limit, re-checks the
-  # cooldown, and binds the new session to this flow in one transaction. When
-  # the limit is full again by then, the durable resolution remains terminally
-  # resolved and the parent remains pending for a fresh resolution.
-  def promote_current_session_limit_cycle!(actor)
+  # cooldown, and binds the new session to this flow in one transaction. The
+  # resolution stays open until that boundary commits, so a failed issuance
+  # leaves the selected target and Waiting lease available for retry.
+  def promote_current_session_limit_cycle!(actor, resolution: session_limit_resolution,
+                                           resolution_challenge: nil, resolution_binding: nil)
     cycle = current_db_sign_in_flow_for_sequence
-    resolution = session_limit_resolution
-    return false unless cycle && resolution
-    return false unless resolution.actor_ref == actor.public_id && resolution.resolved?
+    return { status: :invalid_request } unless cycle && resolution
+    return { status: :invalid_request } unless resolution.actor_ref == actor.public_id
+
+    resolution_challenge ||= session_limit_resolution_challenge_for_sequence
+    resolution_binding ||= session_limit_resolution_binding
+    return { status: :invalid_request } if resolution_challenge.blank? || resolution_binding.blank?
 
     local_locator = local_sign_in_locator_for_pending_resume(cycle)
     if local_locator
       result = LocalAuthenticationSessionCommitter.resume_pending!(
         controller: self, flow: cycle, actor: actor, nonce: local_locator.fetch(:nonce),
+        session_limit_resolution: resolution,
+        session_limit_resolution_challenge: resolution_challenge,
+        session_limit_resolution_binding: resolution_binding,
       )
-      return false unless result[:status] == :success
+      return result unless result[:status] == :success
 
       session[local_locator.fetch(:session_key)] = local_locator.fetch(:value)
       reset_current_db_sign_in_flow_for_sequence!
-      return true
+      return { status: :success }
     end
 
     authentication_event_at = cycle.authentication_event_at
-    return false if authentication_event_at.blank?
+    return { status: :invalid_request } if authentication_event_at.blank?
 
     session_result = log_in(
-      actor,
-      establishment: :root_login,
-      sign_in_flow: cycle,
-      record_login_audit: true,
-      token_kind_id: "BROWSER_WEB",
-      require_totp_check: false,
-      audit_context: { auth_method: "session_limit_promotion" },
-      established_authentication_method: cycle.authentication_method,
-      authentication_event_at: authentication_event_at,
+      actor, establishment: :root_login, sign_in_flow: cycle, record_login_audit: true, token_kind_id: "BROWSER_WEB",
+             require_totp_check: false, audit_context: { auth_method: "session_limit_promotion" },
+             established_authentication_method: cycle.authentication_method, authentication_event_at:,
+             session_limit_resolution: resolution, session_limit_resolution_challenge: resolution_challenge,
+             session_limit_resolution_binding: resolution_binding,
     )
-    return false unless session_result[:status] == :success
+    return session_result unless session_result[:status] == :success
 
     cycle = cycle.reload
     if cycle.sign_in_guardrail_pending?
@@ -564,11 +567,18 @@ module AuthenticationSequenceGate
         with_sign_in_flow_writing(cycle) do
           SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
         end
-      return false if outcome.is_a?(FlowTransitionResult)
+      return { status: :invalid_request } if outcome.is_a?(FlowTransitionResult)
     end
     sign_in_flow_locator_for(actor: actor, token: current_session).issue!(cycle.reload)
     reset_current_db_sign_in_flow_for_sequence!
-    true
+    { status: :success }
+  end
+
+  def session_limit_resolution_challenge_for_sequence
+    gate = session[SessionLimitGate::GATE_SESSION_KEY]
+    return unless gate.is_a?(Hash)
+
+    gate["resolution_challenge"].presence
   end
 
   def local_sign_in_locator_for_pending_resume(cycle)

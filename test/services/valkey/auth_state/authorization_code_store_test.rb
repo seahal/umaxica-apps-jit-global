@@ -4,7 +4,7 @@
 require "test_helper"
 
 class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
-  CLIENT_ID = "core-app"
+  CLIENT_ID = "core-app-jp"
   REDIRECT_URI = "https://core.umaxica.app/oidc/callback"
 
   setup do

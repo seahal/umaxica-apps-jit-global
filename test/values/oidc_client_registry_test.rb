@@ -8,11 +8,11 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "find returns a first-party client config as visitor account" do
-    client = OidcClientRegistry.find("core-app")
+    client = OidcClientRegistry.find("core-app-jp")
 
     assert_not_nil client
-    assert_equal "core-app", client.client_id
-    assert_equal "core-app", client.aud
+    assert_equal "core-app-jp", client.client_id
+    assert_equal "core-app-jp", client.aud
     assert client.redirect_uris.any? { |uri| uri.end_with?("/oidc/callback") }
   end
 

@@ -114,7 +114,7 @@ class IdentityStepUpEmailDeliveryRecorder
 
     def delivery_pending?(transaction, record, token, actor, credential, generation, now)
       owned = token.is_a?(ClientToken) ? token.user_id == actor.id : token.visitor_id == actor.id
-      owned && token.currently_usable? && token.public_id == transaction.session_ref &&
+      owned && token.active_status? && token.public_id == transaction.session_ref &&
         transaction.purpose == "step_up" && transaction.status == "pending" && !transaction.expired?(now: now) &&
         transaction.allowed_methods_array.include?("email_otp") &&
         record.status == "PENDING" && record.discard_at > now &&

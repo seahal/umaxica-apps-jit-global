@@ -273,7 +273,7 @@ ALTER SEQUENCE public.app_document_behaviors_id_seq OWNED BY public.app_document
 --
 
 CREATE TABLE public.app_preference_chronicle_events (
-    id bigint NOT NULL
+    id bigint CONSTRAINT app_preference_activity_events_id_not_null NOT NULL
 );
 
 
@@ -301,7 +301,7 @@ ALTER SEQUENCE public.app_preference_chronicle_events_id_seq OWNED BY public.app
 --
 
 CREATE TABLE public.app_preference_chronicle_levels (
-    id bigint NOT NULL
+    id bigint CONSTRAINT app_preference_activity_levels_id_not_null NOT NULL
 );
 
 
@@ -329,22 +329,22 @@ ALTER SEQUENCE public.app_preference_chronicle_levels_id_seq OWNED BY public.app
 --
 
 CREATE TABLE public.app_preference_chronicles (
-    id bigint NOT NULL,
-    actor_id bigint DEFAULT 0 NOT NULL,
-    actor_type text DEFAULT ''::text NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    current_value text DEFAULT ''::text NOT NULL,
-    event_id bigint DEFAULT 0 NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) NOT NULL,
-    ip_address inet DEFAULT '0.0.0.0'::inet NOT NULL,
-    level_id bigint DEFAULT 0 NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    previous_value text DEFAULT ''::text NOT NULL,
-    subject_id bigint NOT NULL,
-    subject_type text NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    id bigint CONSTRAINT app_preference_activities_id_not_null NOT NULL,
+    actor_id bigint DEFAULT 0 CONSTRAINT app_preference_activities_actor_id_not_null NOT NULL,
+    actor_type text DEFAULT ''::text CONSTRAINT app_preference_activities_actor_type_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT app_preference_activities_context_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT app_preference_activities_created_at_not_null NOT NULL,
+    current_value text DEFAULT ''::text CONSTRAINT app_preference_activities_current_value_not_null NOT NULL,
+    event_id bigint DEFAULT 0 CONSTRAINT app_preference_activities_event_id_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) CONSTRAINT app_preference_activities_expires_at_not_null NOT NULL,
+    ip_address inet DEFAULT '0.0.0.0'::inet CONSTRAINT app_preference_activities_ip_address_not_null NOT NULL,
+    level_id bigint DEFAULT 0 CONSTRAINT app_preference_activities_level_id_not_null NOT NULL,
+    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT app_preference_activities_occurred_at_not_null NOT NULL,
+    previous_value text DEFAULT ''::text CONSTRAINT app_preference_activities_previous_value_not_null NOT NULL,
+    subject_id bigint CONSTRAINT app_preference_activities_subject_id_not_null NOT NULL,
+    subject_type text CONSTRAINT app_preference_activities_subject_type_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT app_preference_activities_updated_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT app_preference_chronicles_discarded_at_not_null NOT NULL,
     CONSTRAINT app_preference_activities_event_id_non_negative_check CHECK ((event_id >= 0)),
     CONSTRAINT app_preference_activities_level_id_non_negative_check CHECK ((level_id >= 0))
 );
@@ -762,7 +762,7 @@ ALTER SEQUENCE public.chronicles_id_seq OWNED BY public.chronicles.id;
 --
 
 CREATE TABLE public.client_chronicle_events (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_activity_events_id_not_null NOT NULL
 );
 
 
@@ -790,7 +790,7 @@ ALTER SEQUENCE public.client_chronicle_events_id_seq OWNED BY public.client_chro
 --
 
 CREATE TABLE public.client_chronicle_levels (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_activity_levels_id_not_null NOT NULL
 );
 
 
@@ -818,22 +818,22 @@ ALTER SEQUENCE public.client_chronicle_levels_id_seq OWNED BY public.client_chro
 --
 
 CREATE TABLE public.client_chronicles (
-    id bigint NOT NULL,
-    actor_id bigint DEFAULT 0 NOT NULL,
-    actor_type text DEFAULT ''::text NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    current_value text DEFAULT ''::text NOT NULL,
-    event_id bigint DEFAULT 0 NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) NOT NULL,
-    ip_address inet DEFAULT '0.0.0.0'::inet NOT NULL,
-    level_id bigint DEFAULT 0 NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    previous_value text DEFAULT ''::text NOT NULL,
-    subject_id bigint NOT NULL,
-    subject_type text NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    id bigint CONSTRAINT user_activities_id_not_null NOT NULL,
+    actor_id bigint DEFAULT 0 CONSTRAINT user_activities_actor_id_not_null NOT NULL,
+    actor_type text DEFAULT ''::text CONSTRAINT user_activities_actor_type_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT user_activities_context_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_activities_created_at_not_null NOT NULL,
+    current_value text DEFAULT ''::text CONSTRAINT user_activities_current_value_not_null NOT NULL,
+    event_id bigint DEFAULT 0 CONSTRAINT user_activities_event_id_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) CONSTRAINT user_activities_expires_at_not_null NOT NULL,
+    ip_address inet DEFAULT '0.0.0.0'::inet CONSTRAINT user_activities_ip_address_not_null NOT NULL,
+    level_id bigint DEFAULT 0 CONSTRAINT user_activities_level_id_not_null NOT NULL,
+    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT user_activities_occurred_at_not_null NOT NULL,
+    previous_value text DEFAULT ''::text CONSTRAINT user_activities_previous_value_not_null NOT NULL,
+    subject_id bigint CONSTRAINT user_activities_subject_id_not_null NOT NULL,
+    subject_type text CONSTRAINT user_activities_subject_type_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_activities_updated_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT user_chronicles_discarded_at_not_null NOT NULL,
     event_uuid uuid,
     CONSTRAINT user_activities_event_id_non_negative_check CHECK ((event_id >= 0)),
     CONSTRAINT user_activities_level_id_non_negative_check CHECK ((level_id >= 0))
@@ -1058,7 +1058,7 @@ ALTER SEQUENCE public.com_document_behaviors_id_seq OWNED BY public.com_document
 --
 
 CREATE TABLE public.com_preference_chronicle_events (
-    id bigint NOT NULL
+    id bigint CONSTRAINT com_preference_activity_events_id_not_null NOT NULL
 );
 
 
@@ -1086,7 +1086,7 @@ ALTER SEQUENCE public.com_preference_chronicle_events_id_seq OWNED BY public.com
 --
 
 CREATE TABLE public.com_preference_chronicle_levels (
-    id bigint NOT NULL
+    id bigint CONSTRAINT com_preference_activity_levels_id_not_null NOT NULL
 );
 
 
@@ -1114,22 +1114,22 @@ ALTER SEQUENCE public.com_preference_chronicle_levels_id_seq OWNED BY public.com
 --
 
 CREATE TABLE public.com_preference_chronicles (
-    id bigint NOT NULL,
-    actor_id bigint DEFAULT 0 NOT NULL,
-    actor_type text DEFAULT ''::text NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    current_value text DEFAULT ''::text NOT NULL,
-    event_id bigint DEFAULT 0 NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) NOT NULL,
-    ip_address inet DEFAULT '0.0.0.0'::inet NOT NULL,
-    level_id bigint DEFAULT 0 NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    previous_value text DEFAULT ''::text NOT NULL,
-    subject_id bigint NOT NULL,
-    subject_type text NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    id bigint CONSTRAINT com_preference_activities_id_not_null NOT NULL,
+    actor_id bigint DEFAULT 0 CONSTRAINT com_preference_activities_actor_id_not_null NOT NULL,
+    actor_type text DEFAULT ''::text CONSTRAINT com_preference_activities_actor_type_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT com_preference_activities_context_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT com_preference_activities_created_at_not_null NOT NULL,
+    current_value text DEFAULT ''::text CONSTRAINT com_preference_activities_current_value_not_null NOT NULL,
+    event_id bigint DEFAULT 0 CONSTRAINT com_preference_activities_event_id_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) CONSTRAINT com_preference_activities_expires_at_not_null NOT NULL,
+    ip_address inet DEFAULT '0.0.0.0'::inet CONSTRAINT com_preference_activities_ip_address_not_null NOT NULL,
+    level_id bigint DEFAULT 0 CONSTRAINT com_preference_activities_level_id_not_null NOT NULL,
+    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT com_preference_activities_occurred_at_not_null NOT NULL,
+    previous_value text DEFAULT ''::text CONSTRAINT com_preference_activities_previous_value_not_null NOT NULL,
+    subject_id bigint CONSTRAINT com_preference_activities_subject_id_not_null NOT NULL,
+    subject_type text CONSTRAINT com_preference_activities_subject_type_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT com_preference_activities_updated_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT com_preference_chronicles_discarded_at_not_null NOT NULL,
     CONSTRAINT com_preference_activities_event_id_non_negative_check CHECK ((event_id >= 0)),
     CONSTRAINT com_preference_activities_level_id_non_negative_check CHECK ((level_id >= 0))
 );
@@ -1395,7 +1395,7 @@ ALTER SEQUENCE public.enforcement_events_id_seq OWNED BY public.enforcement_even
 --
 
 CREATE TABLE public.operator_chronicle_events (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_activity_events_id_not_null NOT NULL
 );
 
 
@@ -1423,7 +1423,7 @@ ALTER SEQUENCE public.operator_chronicle_events_id_seq OWNED BY public.operator_
 --
 
 CREATE TABLE public.operator_chronicle_levels (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_activity_levels_id_not_null NOT NULL
 );
 
 
@@ -1451,22 +1451,22 @@ ALTER SEQUENCE public.operator_chronicle_levels_id_seq OWNED BY public.operator_
 --
 
 CREATE TABLE public.operator_chronicles (
-    id bigint NOT NULL,
-    actor_id bigint DEFAULT 0 NOT NULL,
-    actor_type text DEFAULT ''::text NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    current_value text DEFAULT ''::text NOT NULL,
-    event_id bigint DEFAULT 0 NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) NOT NULL,
-    ip_address inet DEFAULT '0.0.0.0'::inet NOT NULL,
-    level_id bigint DEFAULT 0 NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    previous_value text DEFAULT ''::text NOT NULL,
-    subject_id bigint NOT NULL,
-    subject_type text NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    id bigint CONSTRAINT staff_activities_id_not_null NOT NULL,
+    actor_id bigint DEFAULT 0 CONSTRAINT staff_activities_actor_id_not_null NOT NULL,
+    actor_type text DEFAULT ''::text CONSTRAINT staff_activities_actor_type_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT staff_activities_context_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_activities_created_at_not_null NOT NULL,
+    current_value text DEFAULT ''::text CONSTRAINT staff_activities_current_value_not_null NOT NULL,
+    event_id bigint DEFAULT 0 CONSTRAINT staff_activities_event_id_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) CONSTRAINT staff_activities_expires_at_not_null NOT NULL,
+    ip_address inet DEFAULT '0.0.0.0'::inet CONSTRAINT staff_activities_ip_address_not_null NOT NULL,
+    level_id bigint DEFAULT 0 CONSTRAINT staff_activities_level_id_not_null NOT NULL,
+    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT staff_activities_occurred_at_not_null NOT NULL,
+    previous_value text DEFAULT ''::text CONSTRAINT staff_activities_previous_value_not_null NOT NULL,
+    subject_id bigint CONSTRAINT staff_activities_subject_id_not_null NOT NULL,
+    subject_type text CONSTRAINT staff_activities_subject_type_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_activities_updated_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_chronicles_discarded_at_not_null NOT NULL,
     CONSTRAINT staff_activities_event_id_non_negative_check CHECK ((event_id >= 0)),
     CONSTRAINT staff_activities_level_id_non_negative_check CHECK ((level_id >= 0))
 );
@@ -1690,7 +1690,7 @@ ALTER SEQUENCE public.org_document_behaviors_id_seq OWNED BY public.org_document
 --
 
 CREATE TABLE public.org_preference_chronicle_events (
-    id bigint NOT NULL
+    id bigint CONSTRAINT org_preference_activity_events_id_not_null NOT NULL
 );
 
 
@@ -1718,7 +1718,7 @@ ALTER SEQUENCE public.org_preference_chronicle_events_id_seq OWNED BY public.org
 --
 
 CREATE TABLE public.org_preference_chronicle_levels (
-    id bigint NOT NULL
+    id bigint CONSTRAINT org_preference_activity_levels_id_not_null NOT NULL
 );
 
 
@@ -1746,22 +1746,22 @@ ALTER SEQUENCE public.org_preference_chronicle_levels_id_seq OWNED BY public.org
 --
 
 CREATE TABLE public.org_preference_chronicles (
-    id bigint NOT NULL,
-    actor_id bigint DEFAULT 0 NOT NULL,
-    actor_type text DEFAULT ''::text NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    current_value text DEFAULT ''::text NOT NULL,
-    event_id bigint DEFAULT 0 NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) NOT NULL,
-    ip_address inet DEFAULT '0.0.0.0'::inet NOT NULL,
-    level_id bigint DEFAULT 0 NOT NULL,
-    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    previous_value text DEFAULT ''::text NOT NULL,
-    subject_id bigint NOT NULL,
-    subject_type text NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    id bigint CONSTRAINT org_preference_activities_id_not_null NOT NULL,
+    actor_id bigint DEFAULT 0 CONSTRAINT org_preference_activities_actor_id_not_null NOT NULL,
+    actor_type text DEFAULT ''::text CONSTRAINT org_preference_activities_actor_type_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT org_preference_activities_context_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT org_preference_activities_created_at_not_null NOT NULL,
+    current_value text DEFAULT ''::text CONSTRAINT org_preference_activities_current_value_not_null NOT NULL,
+    event_id bigint DEFAULT 0 CONSTRAINT org_preference_activities_event_id_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT (CURRENT_TIMESTAMP + '7 years'::interval) CONSTRAINT org_preference_activities_expires_at_not_null NOT NULL,
+    ip_address inet DEFAULT '0.0.0.0'::inet CONSTRAINT org_preference_activities_ip_address_not_null NOT NULL,
+    level_id bigint DEFAULT 0 CONSTRAINT org_preference_activities_level_id_not_null NOT NULL,
+    occurred_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT org_preference_activities_occurred_at_not_null NOT NULL,
+    previous_value text DEFAULT ''::text CONSTRAINT org_preference_activities_previous_value_not_null NOT NULL,
+    subject_id bigint CONSTRAINT org_preference_activities_subject_id_not_null NOT NULL,
+    subject_type text CONSTRAINT org_preference_activities_subject_type_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT org_preference_activities_updated_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT org_preference_chronicles_discarded_at_not_null NOT NULL,
     CONSTRAINT org_preference_activities_event_id_non_negative_check CHECK ((event_id >= 0)),
     CONSTRAINT org_preference_activities_level_id_non_negative_check CHECK ((level_id >= 0))
 );
@@ -3832,7 +3832,7 @@ CREATE INDEX index_user_activities_on_actor ON public.client_chronicles USING bt
 --
 
 ALTER TABLE ONLY public.app_document_audits
-    ADD CONSTRAINT fk_rails_04199ae3cc FOREIGN KEY (event_id) REFERENCES public.app_document_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_04199ae3cc FOREIGN KEY (event_id) REFERENCES public.app_document_audit_events(id);
 
 
 --
@@ -3856,7 +3856,7 @@ ALTER TABLE ONLY public.app_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.org_timeline_audits
-    ADD CONSTRAINT fk_rails_1c8eb96fbb FOREIGN KEY (level_id) REFERENCES public.org_timeline_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_1c8eb96fbb FOREIGN KEY (level_id) REFERENCES public.org_timeline_audit_levels(id);
 
 
 --
@@ -3872,7 +3872,7 @@ ALTER TABLE ONLY public.org_document_behaviors
 --
 
 ALTER TABLE ONLY public.app_timeline_audits
-    ADD CONSTRAINT fk_rails_2babaf0d7d FOREIGN KEY (event_id) REFERENCES public.app_timeline_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_2babaf0d7d FOREIGN KEY (event_id) REFERENCES public.app_timeline_audit_events(id);
 
 
 --
@@ -3888,7 +3888,7 @@ ALTER TABLE ONLY public.com_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.org_preference_chronicles
-    ADD CONSTRAINT fk_rails_3829eb3d72 FOREIGN KEY (event_id) REFERENCES public.org_preference_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3829eb3d72 FOREIGN KEY (event_id) REFERENCES public.org_preference_chronicle_events(id);
 
 
 --
@@ -3904,7 +3904,7 @@ ALTER TABLE ONLY public.chronicle_visibilities
 --
 
 ALTER TABLE ONLY public.com_document_audits
-    ADD CONSTRAINT fk_rails_3f934103f6 FOREIGN KEY (event_id) REFERENCES public.com_document_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3f934103f6 FOREIGN KEY (event_id) REFERENCES public.com_document_audit_events(id);
 
 
 --
@@ -3912,7 +3912,7 @@ ALTER TABLE ONLY public.com_document_audits
 --
 
 ALTER TABLE ONLY public.operator_chronicles
-    ADD CONSTRAINT fk_rails_46a8075569 FOREIGN KEY (level_id) REFERENCES public.operator_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_46a8075569 FOREIGN KEY (level_id) REFERENCES public.operator_chronicle_levels(id);
 
 
 --
@@ -3920,7 +3920,7 @@ ALTER TABLE ONLY public.operator_chronicles
 --
 
 ALTER TABLE ONLY public.org_document_audits
-    ADD CONSTRAINT fk_rails_46d3b866ce FOREIGN KEY (event_id) REFERENCES public.org_document_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_46d3b866ce FOREIGN KEY (event_id) REFERENCES public.org_document_audit_events(id);
 
 
 --
@@ -3936,7 +3936,7 @@ ALTER TABLE ONLY public.chronicle_visibilities
 --
 
 ALTER TABLE ONLY public.com_preference_chronicles
-    ADD CONSTRAINT fk_rails_592279f49b FOREIGN KEY (level_id) REFERENCES public.com_preference_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_592279f49b FOREIGN KEY (level_id) REFERENCES public.com_preference_chronicle_levels(id);
 
 
 --
@@ -3944,7 +3944,7 @@ ALTER TABLE ONLY public.com_preference_chronicles
 --
 
 ALTER TABLE ONLY public.com_timeline_audits
-    ADD CONSTRAINT fk_rails_683656739c FOREIGN KEY (level_id) REFERENCES public.com_timeline_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_683656739c FOREIGN KEY (level_id) REFERENCES public.com_timeline_audit_levels(id);
 
 
 --
@@ -3952,7 +3952,7 @@ ALTER TABLE ONLY public.com_timeline_audits
 --
 
 ALTER TABLE ONLY public.chronicle_outbox_entries
-    ADD CONSTRAINT fk_rails_6a19517853 FOREIGN KEY (chronicle_id) REFERENCES public.chronicles(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_6a19517853 FOREIGN KEY (chronicle_id) REFERENCES public.chronicles(id) ON DELETE SET NULL;
 
 
 --
@@ -3968,7 +3968,7 @@ ALTER TABLE ONLY public.org_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.com_timeline_audits
-    ADD CONSTRAINT fk_rails_7c9a165758 FOREIGN KEY (event_id) REFERENCES public.com_timeline_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_7c9a165758 FOREIGN KEY (event_id) REFERENCES public.com_timeline_audit_events(id);
 
 
 --
@@ -3976,7 +3976,7 @@ ALTER TABLE ONLY public.com_timeline_audits
 --
 
 ALTER TABLE ONLY public.client_chronicles
-    ADD CONSTRAINT fk_rails_829f1830de FOREIGN KEY (event_id) REFERENCES public.client_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_829f1830de FOREIGN KEY (event_id) REFERENCES public.client_chronicle_events(id);
 
 
 --
@@ -3984,7 +3984,7 @@ ALTER TABLE ONLY public.client_chronicles
 --
 
 ALTER TABLE ONLY public.com_document_audits
-    ADD CONSTRAINT fk_rails_851991baee FOREIGN KEY (level_id) REFERENCES public.com_document_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_851991baee FOREIGN KEY (level_id) REFERENCES public.com_document_audit_levels(id);
 
 
 --
@@ -3992,7 +3992,7 @@ ALTER TABLE ONLY public.com_document_audits
 --
 
 ALTER TABLE ONLY public.client_chronicles
-    ADD CONSTRAINT fk_rails_868bedb021 FOREIGN KEY (level_id) REFERENCES public.client_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_868bedb021 FOREIGN KEY (level_id) REFERENCES public.client_chronicle_levels(id);
 
 
 --
@@ -4032,7 +4032,7 @@ ALTER TABLE ONLY public.org_document_behaviors
 --
 
 ALTER TABLE ONLY public.app_document_audits
-    ADD CONSTRAINT fk_rails_a9e9b70220 FOREIGN KEY (level_id) REFERENCES public.app_document_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_a9e9b70220 FOREIGN KEY (level_id) REFERENCES public.app_document_audit_levels(id);
 
 
 --
@@ -4040,7 +4040,7 @@ ALTER TABLE ONLY public.app_document_audits
 --
 
 ALTER TABLE ONLY public.app_timeline_audits
-    ADD CONSTRAINT fk_rails_b95cff528f FOREIGN KEY (level_id) REFERENCES public.app_timeline_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_b95cff528f FOREIGN KEY (level_id) REFERENCES public.app_timeline_audit_levels(id);
 
 
 --
@@ -4048,7 +4048,7 @@ ALTER TABLE ONLY public.app_timeline_audits
 --
 
 ALTER TABLE ONLY public.com_preference_chronicles
-    ADD CONSTRAINT fk_rails_c194bd8de2 FOREIGN KEY (event_id) REFERENCES public.com_preference_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_c194bd8de2 FOREIGN KEY (event_id) REFERENCES public.com_preference_chronicle_events(id);
 
 
 --
@@ -4064,7 +4064,7 @@ ALTER TABLE ONLY public.com_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.app_preference_chronicles
-    ADD CONSTRAINT fk_rails_d693b46c45 FOREIGN KEY (event_id) REFERENCES public.app_preference_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_d693b46c45 FOREIGN KEY (event_id) REFERENCES public.app_preference_chronicle_events(id);
 
 
 --
@@ -4072,7 +4072,7 @@ ALTER TABLE ONLY public.app_preference_chronicles
 --
 
 ALTER TABLE ONLY public.app_preference_chronicles
-    ADD CONSTRAINT fk_rails_da47dd8941 FOREIGN KEY (level_id) REFERENCES public.app_preference_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_da47dd8941 FOREIGN KEY (level_id) REFERENCES public.app_preference_chronicle_levels(id);
 
 
 --
@@ -4096,7 +4096,7 @@ ALTER TABLE ONLY public.app_timeline_behaviors
 --
 
 ALTER TABLE ONLY public.org_timeline_audits
-    ADD CONSTRAINT fk_rails_eae8a241e3 FOREIGN KEY (event_id) REFERENCES public.org_timeline_audit_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_eae8a241e3 FOREIGN KEY (event_id) REFERENCES public.org_timeline_audit_events(id);
 
 
 --
@@ -4104,7 +4104,7 @@ ALTER TABLE ONLY public.org_timeline_audits
 --
 
 ALTER TABLE ONLY public.org_document_audits
-    ADD CONSTRAINT fk_rails_ed52fec6a9 FOREIGN KEY (level_id) REFERENCES public.org_document_audit_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ed52fec6a9 FOREIGN KEY (level_id) REFERENCES public.org_document_audit_levels(id);
 
 
 --
@@ -4112,7 +4112,7 @@ ALTER TABLE ONLY public.org_document_audits
 --
 
 ALTER TABLE ONLY public.operator_chronicles
-    ADD CONSTRAINT fk_rails_f0451c267b FOREIGN KEY (event_id) REFERENCES public.operator_chronicle_events(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f0451c267b FOREIGN KEY (event_id) REFERENCES public.operator_chronicle_events(id);
 
 
 --
@@ -4128,7 +4128,7 @@ ALTER TABLE ONLY public.chronicles
 --
 
 ALTER TABLE ONLY public.org_preference_chronicles
-    ADD CONSTRAINT fk_rails_f932dbadd7 FOREIGN KEY (level_id) REFERENCES public.org_preference_chronicle_levels(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f932dbadd7 FOREIGN KEY (level_id) REFERENCES public.org_preference_chronicle_levels(id);
 
 
 --

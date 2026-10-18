@@ -10,7 +10,7 @@ module Base
       class GrantsController < Base::Org::ApplicationController
         include ::SurfaceInertiaPage
         include ::OrgAdministrationPage
-        include ::OrgAdministrativeAudit
+        include ::OrgAdminRelay
 
         AUTHENTICATION_MODE = :private
         AUDIT_ACTION = "iam.capability.granted"
@@ -19,19 +19,29 @@ module Base
         TICKET_ID_FORMAT = OperatorCapabilityGrant::TICKET_ID_FORMAT
         declare_authentication_mode! :private
 
+        GRANT_STATE_KEYS = {
+          "revoked" => "base.org.admin.grants.states.revoked",
+          "in_force" => "base.org.admin.grants.states.in_force",
+          "pending" => "base.org.admin.grants.states.pending",
+          "expired" => "base.org.admin.grants.states.expired",
+        }.freeze
+
         before_action :no_store
-        before_action :authorize_index!, only: %i(index show)
-        before_action :authorize_grant_screen!, only: :new
-        before_action :require_grant_step_up!, only: :new
 
         public
 
+        # R5-WU12: grants are read, issued and revoked by the IAM owner over HTTPS.
         def index
-          query = admin_query
-          relation = OperatorCapabilityGrant.includes(:operator).order(created_at: :desc, id: :desc)
-          relation = relation.joins(:operator).where(operators: { public_id: query }) if query
-          grants, page, more = admin_paginate(relation)
+          result = org_admin_result!(
+            org_admin_authority.get(
+              "/iam/grants",
+              { q: params[:q], page: params[:page] }.compact,
+            ),
+          )
+          return unless result
 
+          query = params[:q].presence
+          data = result.data
           render inertia: "base/org/iam/grants/index",
                  props: {
                    title: t("base.org.admin.grants.title"),
@@ -40,7 +50,7 @@ module Base
                    columns: [t("base.org.admin.fields.grant_id"), t("base.org.admin.fields.operator"),
                              t("base.org.admin.fields.capability"), t("base.org.admin.fields.state"),
                              t("base.org.admin.fields.expires_at"),],
-                   rows: grants.map { |grant| grant_row(grant) },
+                   rows: data.fetch("grants").map { |grant| grant_row(grant) },
                    empty_message: t("base.org.admin.grants.empty"),
                    search: {
                      action: base_org_iam_grants_path,
@@ -51,85 +61,48 @@ module Base
                      maxlength: OrgAdministrationPage::MAX_QUERY_LENGTH,
                    },
                    pagination: admin_pagination_links(
-                     page: page,
-                     more: more,
-                     path_builder: ->(number) {
-                       base_org_iam_grants_path(q: query, page: number)
-                     },
+                     page: data.fetch("page"), more: data["next_page"].present?,
+                     path_builder: ->(number) { base_org_iam_grants_path(q: query, page: number) },
                    ),
-                   actions: grantable_capabilities.any? ? [{ label: t("base.org.admin.grants.new_action"),
-                                                             href: new_base_org_iam_grant_path, }] : [],
+                   actions: data.fetch("can_grant") ? [{ label: t("base.org.admin.grants.new_action"),
+                                                         href: new_base_org_iam_grant_path, }] : [],
                  }
         end
 
         def show
-          grant = OperatorCapabilityGrant.includes(:operator, :granted_by_operator, :revoked_by_operator)
-            .find_by!(public_id: params.expect(:id))
+          result = org_admin_result!(org_admin_authority.get("/iam/grants/#{ERB::Util.url_encode(params.expect(:id))}"))
+          return unless result
+
+          grant = result.data.fetch("grant")
           render inertia: "base/org/iam/grants/show",
                  props: {
-                   title: t("base.org.admin.grants.show_title", public_id: grant.public_id),
+                   title: t("base.org.admin.grants.show_title", public_id: grant.fetch("public_id")),
                    up_link: { label: t("base.org.admin.grants.title"), href: base_org_iam_grants_path },
                    context: admin_context(realm: nil),
                    fields: grant_fields(grant),
-                   actions: grant_actions(grant),
+                   actions: revoke_actions(grant, result.data.fetch("can_revoke")),
                    sections: [],
                  }
         end
 
         def new
-          render inertia: "base/org/iam/grants/new", props: confirmation_props
+          result = org_admin_result!(org_admin_authority.get("/iam/grant-screen"))
+          return unless result
+
+          render inertia: "base/org/iam/grants/new", props: confirmation_props(result.data)
         end
 
         def create
-          authorize!(OperatorCapabilityGrant, to: :grant_screen?, with: OperatorCapabilityGrantPolicy)
-          return unless require_grant_step_up!
+          keys = %i(operator_public_id capability reason_code duration_days ticket_id operation_id)
+          result = org_admin_result!(org_admin_authority.post("/iam/grants", params.slice(*keys).permit(*keys).to_h))
+          return unless result
 
-          input = grant_input!
-          grant = OperatorCapabilityGrant.new(operator: input.fetch(:operator), capability: input.fetch(:capability))
-          authorize!(grant, to: :create?, with: OperatorCapabilityGrantPolicy)
-
-          chronicle =
-            audited_administrative_operation(
-              operation_id: input.fetch(:operation_id),
-              action: AUDIT_ACTION,
-              subject: input.fetch(:operator),
-              reason_code: input.fetch(:reason_code),
-              metadata: { capability: input.fetch(:capability),
-                          ticket_id: input.fetch(:ticket_id),
-                          subject_public_id: input.fetch(:operator).public_id, },
-              changeset: {},
-            ) do
-              issued = OperatorCapabilityGrant.issue!(
-                operator: input.fetch(:operator),
-                granted_by: current_operator,
-                capability: input.fetch(:capability),
-                reason_code: input.fetch(:reason_code),
-                ticket_id: input.fetch(:ticket_id),
-                duration: input.fetch(:duration),
-              )
-              { grant_public_id: issued.public_id, expires_at: issued.expires_at.iso8601 }
-            end
-          redirect_to(granted_path(chronicle), status: :see_other)
-        rescue InvalidGrantInput => e
-          render inertia: "base/org/iam/grants/new",
-                 props: confirmation_props(errors: e.errors),
-                 status: :unprocessable_content
-        rescue OrgAdministrativeAudit::OperationConflictError
-          render inertia: "base/org/iam/grants/new",
-                 props: confirmation_props(errors: { operation_id: t("base.org.admin.errors.conflict") }),
-                 status: :conflict
-        rescue OrgAdministrativeAudit::IntentUnavailableError
-          render inertia: "base/org/iam/grants/new",
-                 props: confirmation_props(errors: { base: t("base.org.admin.errors.audit_unavailable") }),
-                 status: :service_unavailable
-        end
-
-        class InvalidGrantInput < StandardError
-          attr_reader :errors
-
-          def initialize(errors)
-            @errors = errors
-            super("invalid grant input")
+          if result.ok?
+            redirect_to(granted_path(result.data["grant_public_id"]), status: :see_other)
+          else
+            screen = org_admin_authority.get("/iam/grant-screen").data || {}
+            render inertia: "base/org/iam/grants/new", props: confirmation_props(screen, errors: result.errors),
+                   status: org_admin_status(result)
           end
         end
 
@@ -139,134 +112,58 @@ module Base
           response.headers["Cache-Control"] = "private, no-store"
         end
 
-        def authorize_index!
-          authorize!(OperatorCapabilityGrant, to: :index?, with: OperatorCapabilityGrantPolicy)
-        end
-
-        # The screen itself needs the grant capability; the specific target and capability are
-        # authorized again in `create` once they are known.
-        def authorize_grant_screen!
-          authorize!(OperatorCapabilityGrant, to: :grant_screen?, with: OperatorCapabilityGrantPolicy)
-        end
-
-        # True when Step-Up is satisfied; otherwise the Step-Up response has been rendered.
-        def require_grant_step_up!
-          require_step_up!(scope: STEP_UP_SCOPE)
-          !performed?
-        end
-
-        # The capabilities this operator may delegate: the ones they hold, minus IAM.
-        def grantable_capabilities
-          (OperatorCapabilityGrant::CAPABILITIES - OperatorCapabilityGrant::BOOTSTRAP_ONLY_CAPABILITIES)
-            .select { |capability| current_operator.capability?(capability) }
-        end
-
-        def grant_input!
-          errors = {}
-          operator = grant_target_operator(errors)
-          capability = listed_value(
-            :capability, OperatorCapabilityGrant::CAPABILITIES, errors,
-            t("base.org.admin.errors.capability"),
-          )
-          reason_code = listed_value(
-            :reason_code, OperatorCapabilityGrant::DELEGATED_GRANT_REASON_CODES, errors,
-            t("base.org.admin.errors.reason_code"),
-          )
-          duration_key = listed_value(:duration_days, DURATIONS.keys, errors, t("base.org.admin.errors.duration"))
-          ticket_id = grant_ticket_id(errors)
-          operation_id = params[:operation_id]
-          unless operation_id.is_a?(String) && OrgAdministrativeAudit::OPERATION_ID_FORMAT.match?(operation_id)
-            errors[:operation_id] = t("base.org.admin.errors.operation_id")
-          end
-          raise InvalidGrantInput, errors if errors.any?
-
-          { operator:, capability:, reason_code:, duration: DURATIONS.fetch(duration_key), ticket_id:, operation_id: }
-        end
-
-        # An existing, eligible operator other than the granter, named by a well-formed public id.
-        def grant_target_operator(errors)
-          public_id = params[:operator_public_id]
-          operator = Operator.find_by(public_id: public_id) if public_id.is_a?(String) &&
-            Operator::PUBLIC_ID_FORMAT.match?(public_id)
-          if operator.nil? || !operator.capability_eligible?
-            errors[:operator_public_id] = t("base.org.admin.errors.operator")
-          elsif operator.id == current_operator.id
-            errors[:operator_public_id] = t("base.org.admin.errors.self_grant")
-          end
-          operator
-        end
-
-        # The submitted value when it is exactly one of the listed strings; otherwise records `message`.
-        def listed_value(key, allowed, errors, message)
-          value = params[key]
-          return value if value.is_a?(String) && allowed.include?(value)
-
-          errors[key] = message
-          nil
-        end
-
-        def grant_ticket_id(errors)
-          ticket_id = params[:ticket_id]
-          return nil if ticket_id.nil? || ticket_id == ""
-          return ticket_id if ticket_id.is_a?(String) && TICKET_ID_FORMAT.match?(ticket_id)
-
-          errors[:ticket_id] = t("base.org.admin.errors.ticket_id")
-          nil
-        end
-
-        def granted_path(chronicle)
-          grant_public_id = chronicle.changeset["grant_public_id"]
+        def granted_path(grant_public_id)
           return base_org_iam_grant_path(grant_public_id) if grant_public_id.present?
 
           # The audit row could not record the result; the grant list is the place to verify it.
           base_org_iam_grants_path(q: params[:operator_public_id])
         end
 
-        def grant_state(grant)
-          if grant.revoked? then t("base.org.admin.grants.states.revoked")
-          elsif grant.in_force? then t("base.org.admin.grants.states.in_force")
-          elsif grant.starts_at > Time.current then t("base.org.admin.grants.states.pending")
-          else t("base.org.admin.grants.states.expired")
-          end
+        def grant_state(state)
+          t(GRANT_STATE_KEYS.fetch(state))
+        end
+
+        def revoke_actions(grant, can_revoke)
+          return [] unless can_revoke
+
+          [{ label: t("base.org.admin.grants.revoke_action"),
+             href: new_base_org_iam_grant_revocation_path(grant.fetch("public_id")), }]
+        end
+
+        def owner_time(value)
+          admin_time(value && Time.zone.parse(value))
         end
 
         def grant_row(grant)
           {
-            key: grant.public_id,
-            cells: [grant.public_id, grant.operator.public_id, grant.capability, grant_state(grant),
-                    admin_time(grant.expires_at),],
-            href: base_org_iam_grant_path(grant.public_id),
+            key: grant.fetch("public_id"),
+            cells: [grant.fetch("public_id"), grant.fetch("operator_public_id"), grant.fetch("capability"),
+                    grant_state(grant.fetch("state")), owner_time(grant["expires_at"]),],
+            href: base_org_iam_grant_path(grant.fetch("public_id")),
           }
         end
 
         def grant_fields(grant)
           [
-            { term: t("base.org.admin.fields.grant_id"), description: grant.public_id },
-            { term: t("base.org.admin.fields.operator"), description: grant.operator.public_id },
-            { term: t("base.org.admin.fields.capability"), description: grant.capability },
-            { term: t("base.org.admin.fields.state"), description: grant_state(grant) },
-            { term: t("base.org.admin.fields.origin"), description: grant.origin },
+            { term: t("base.org.admin.fields.grant_id"), description: grant.fetch("public_id") },
+            { term: t("base.org.admin.fields.operator"), description: grant.fetch("operator_public_id") },
+            { term: t("base.org.admin.fields.capability"), description: grant.fetch("capability") },
+            { term: t("base.org.admin.fields.state"), description: grant_state(grant.fetch("state")) },
+            { term: t("base.org.admin.fields.origin"), description: grant["origin"] },
             { term: t("base.org.admin.fields.granted_by"),
-              description: grant.granted_by_operator&.public_id || t("base.org.admin.values.bootstrap"), },
-            { term: t("base.org.admin.fields.reason_code"), description: grant.reason_code },
+              description: grant["granted_by_public_id"] || t("base.org.admin.values.bootstrap"), },
+            { term: t("base.org.admin.fields.reason_code"), description: grant["reason_code"] },
             { term: t("base.org.admin.fields.ticket_id"),
-              description: grant.ticket_id || t("base.org.admin.values.none"), },
-            { term: t("base.org.admin.fields.starts_at"), description: admin_time(grant.starts_at) },
-            { term: t("base.org.admin.fields.expires_at"), description: admin_time(grant.expires_at) },
-            { term: t("base.org.admin.fields.revoked_at"), description: admin_time(grant.revoked_at) },
+              description: grant["ticket_id"] || t("base.org.admin.values.none"), },
+            { term: t("base.org.admin.fields.starts_at"), description: owner_time(grant["starts_at"]) },
+            { term: t("base.org.admin.fields.expires_at"), description: owner_time(grant["expires_at"]) },
+            { term: t("base.org.admin.fields.revoked_at"), description: owner_time(grant["revoked_at"]) },
             { term: t("base.org.admin.fields.revoked_by"),
-              description: grant.revoked_by_operator&.public_id || t("base.org.admin.values.none"), },
+              description: grant["revoked_by_public_id"] || t("base.org.admin.values.none"), },
           ]
         end
 
-        def grant_actions(grant)
-          return [] unless allowed_to?(:revoke?, grant, with: OperatorCapabilityGrantPolicy)
-
-          [{ label: t("base.org.admin.grants.revoke_action"),
-             href: new_base_org_iam_grant_revocation_path(grant.public_id), }]
-        end
-
-        def confirmation_props(errors: {})
+        def confirmation_props(screen, errors: {})
           {
             title: t("base.org.admin.grants.new_title"),
             up_link: { label: t("base.org.admin.grants.title"), href: base_org_iam_grants_path },
@@ -274,48 +171,38 @@ module Base
             target: [],
             effect: t("base.org.admin.grants.effect"),
             action: base_org_iam_grants_path,
-            fields: grant_form_fields,
+            fields: grant_form_fields(screen),
             acknowledgement: t("base.org.admin.grants.acknowledgement"),
             submit_label: t("base.org.admin.grants.submit"),
             errors: errors,
           }
         end
 
-        def grant_form_fields
+        def grant_form_fields(screen)
           [
-            {
-              kind: "text",
+            { kind: "text",
               name: "operator_public_id",
               label: t("base.org.admin.fields.operator"),
               value: params[:operator_public_id].to_s,
               maxlength: Operator::PUBLIC_ID_LENGTH,
-              required: true,
-            },
-            {
-              kind: "select",
+              required: true, },
+            { kind: "select",
               name: "capability",
               label: t("base.org.admin.fields.capability"),
               value: "",
-              options: grantable_capabilities.map { |capability|
+              options: Array(screen["grantable_capabilities"]).map { |capability|
                 { value: capability, label: capability }
-              },
-            },
-            {
-              kind: "select",
+              }, },
+            { kind: "select",
               name: "reason_code",
               label: t("base.org.admin.fields.reason_code"),
               value: "",
-              options: OperatorCapabilityGrant::DELEGATED_GRANT_REASON_CODES.map { |code|
-                { value: code, label: code }
-              },
-            },
-            {
-              kind: "select",
+              options: Array(screen["reason_codes"]).map { |code| { value: code, label: code } }, },
+            { kind: "select",
               name: "duration_days",
               label: t("base.org.admin.fields.duration_days"),
               value: "30",
-              options: DURATIONS.keys.map { |days| { value: days, label: days } },
-            },
+              options: Array(screen["durations"]).map { |days| { value: days, label: days } }, },
             { kind: "text",
               name: "ticket_id",
               label: t("base.org.admin.fields.ticket_id"),

@@ -112,9 +112,9 @@ class OidcTokenRevoker < ApplicationService
 
   def rp_session_context_and_class(resource_type)
     case resource_type
-    when "operator" then [OrgTicketRecord, OperatorRpSession]
-    when "visitor" then [ComTicketRecord, VisitorRpSession]
-    else [AppTicketRecord, ClientRpSession]
+    when "operator" then [OpBaseOrgRecord, OpOrgGrant]
+    when "visitor" then [OpBaseComRecord, OpComGrant]
+    else [OpBaseAppRecord, OpAppGrant]
     end
   end
 

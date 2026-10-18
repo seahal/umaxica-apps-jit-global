@@ -86,7 +86,7 @@ class ClientSecretSignInReceiptTest < ActiveSupport::TestCase
         )
       end
     end
-    [["passkey", "normal"], ["secret", "emergency"]].each do |method, context|
+    [["passkey", "normal"], ["secret", "standby"]].each do |method, context|
       flow.update!(authentication_method: method, authentication_context: context)
       assert_raises(ClientSecretSignInReceipt::InvalidCommit) do
         ClientSecretSignInReceipt.create!(

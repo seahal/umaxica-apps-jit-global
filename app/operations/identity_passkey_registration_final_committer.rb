@@ -7,7 +7,7 @@
 class IdentityPasskeyRegistrationFinalCommitter
   CONFIG = {
     "app" => {
-      ticket_class: AppTicketRecord,
+      ticket_class: OpBaseAppRecord,
       actor_class: Client,
       token_class: ClientToken,
       transaction_class: ClientStepUpCeremonyTransaction,
@@ -21,7 +21,7 @@ class IdentityPasskeyRegistrationFinalCommitter
       surface: "app",
     },
     "com" => {
-      ticket_class: ComTicketRecord,
+      ticket_class: OpBaseComRecord,
       actor_class: Visitor,
       token_class: VisitorToken,
       transaction_class: VisitorStepUpCeremonyTransaction,
@@ -34,7 +34,7 @@ class IdentityPasskeyRegistrationFinalCommitter
       surface: "com",
     },
     "org" => {
-      ticket_class: OrgTicketRecord,
+      ticket_class: OpBaseOrgRecord,
       actor_class: Operator,
       token_class: OperatorToken,
       transaction_class: OperatorStepUpCeremonyTransaction,
@@ -96,7 +96,7 @@ class IdentityPasskeyRegistrationFinalCommitter
           %w(bootstrap credential_registration).include?(transaction.purpose)
         refuse!("passkey registration binding mismatch")
       end
-      return unless token.is_a?(OperatorToken) && token.emergency_authentication_context?
+      return unless token.is_a?(OperatorToken) && token.standby_authentication_context?
 
       refuse!("passkey registration binding mismatch")
 
@@ -212,7 +212,7 @@ class IdentityPasskeyRegistrationFinalCommitter
     end
 
     def validate_ticket!(config, actor, token, transaction, record, digest, payload, now)
-      valid = token.currently_usable?(now) && ticket_binding_matches?(config, actor, token, transaction, now) &&
+      valid = token.active_status?(now) && ticket_binding_matches?(config, actor, token, transaction, now) &&
         ticket_policy_matches?(transaction) && registration_record_matches?(record, transaction, now) &&
         ticket_result_matches?(transaction, digest, payload, now)
       refuse!("passkey registration permission unavailable") unless valid

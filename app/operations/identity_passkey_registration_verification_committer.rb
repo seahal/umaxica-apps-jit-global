@@ -79,7 +79,7 @@ class IdentityPasskeyRegistrationVerificationCommitter
     end
 
     def validate_binding!(binding, actor, token, transaction, session_record)
-      if token.is_a?(OperatorToken) && token.emergency_authentication_context?
+      if token.is_a?(OperatorToken) && token.standby_authentication_context?
         refuse!("passkey registration binding mismatch")
       end
 
@@ -113,7 +113,7 @@ class IdentityPasskeyRegistrationVerificationCommitter
         token.with_lock do
           transaction.with_lock do
             now = transaction.class.database_now
-            unless token.currently_usable?(now) && transaction.actor_ref == actor.public_id &&
+            unless token.active_status?(now) && transaction.actor_ref == actor.public_id &&
                 transaction.session_ref == token.public_id && transaction.surface == binding.fetch(:surface) &&
                 %w(bootstrap credential_registration).include?(transaction.purpose) &&
                 transaction.status == "pending" && !transaction.expired?(now: now) &&

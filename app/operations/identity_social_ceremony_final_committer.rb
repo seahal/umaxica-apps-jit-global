@@ -184,8 +184,8 @@ class IdentitySocialCeremonyFinalCommitter
           ceremony_started_at: transaction.created_at,
         )
         signup.user.with_lock do
-          AppTicketRecord.connected_to(role: :writing) do
-            AppTicketRecord.transaction do
+          OpBaseAppRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.transaction do
               transaction.lock!
               consumption = IdentitySocialCeremonyResultConsumer.new(
                 transaction: transaction,

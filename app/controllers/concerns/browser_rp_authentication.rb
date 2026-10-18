@@ -9,6 +9,7 @@ module BrowserRpAuthentication
   extend ActiveSupport::Concern
 
   include AuthenticationRedirects
+  include RpCellLocalSession
 
   AccessState = Data.define(:status, :resource, :rp_session, :payload, :security_context)
   AccessPolicyContext = Data.define(
@@ -310,10 +311,6 @@ module BrowserRpAuthentication
     browser_rp_access_state.security_context
   end
 
-  def current_session_restricted?
-    current_browser_session_security_context&.restricted? || false
-  end
-
   protected
 
   # Presence flags only: they separate an access credential the browser stopped sending from a
@@ -374,18 +371,18 @@ module BrowserRpAuthentication
 
   def browser_rp_session_class
     case browser_rp_resource_type.to_s
-    when "operator" then OperatorRpSession
-    when "visitor" then VisitorRpSession
-    when "client" then ClientRpSession
+    when "operator" then OpOrgGrant
+    when "visitor" then OpComGrant
+    when "client" then OpAppGrant
     else raise ArgumentError, "unsupported Browser RP resource type"
     end
   end
 
   def browser_rp_connection_owner
     case browser_rp_resource_type.to_s
-    when "operator" then OrgTicketRecord
-    when "visitor" then ComTicketRecord
-    when "client" then AppTicketRecord
+    when "operator" then OpBaseOrgRecord
+    when "visitor" then OpBaseComRecord
+    when "client" then OpBaseAppRecord
     else raise ArgumentError, "unsupported Browser RP resource type"
     end
   end
@@ -465,7 +462,7 @@ module BrowserRpAuthentication
     return @browser_rp_access_state if defined?(@browser_rp_access_state)
 
     @browser_rp_access_state = resolve_browser_rp_access_cookie
-  rescue ActiveRecord::ActiveRecordError
+  rescue ActiveRecord::ActiveRecordError, OidcOpJwksClient::FetchError
     @browser_rp_dependency_failed = true
     render_browser_rp_dependency_failure! unless performed?
     @browser_rp_access_state = AccessState.new(
@@ -505,6 +502,8 @@ module BrowserRpAuthentication
 
   def resolve_browser_rp_access_cookie(access_token: nil)
     access_token ||= BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE)
+    return resolve_rp_cell_access(access_token) if rp_cell_process?
+
     return AccessState.new(status: :missing, resource: nil, rp_session: nil, payload: nil, security_context: nil) if
       access_token.blank?
 
@@ -552,6 +551,48 @@ module BrowserRpAuthentication
     invalid_browser_rp_access
   end
 
+  # R5-WU17 cell process: the resource is the cell's local principal, the session its local session.
+  def resolve_rp_cell_access(access_token)
+    result = authenticate_rp_cell_request(access_token:)
+    return AccessState.new(
+      status: result.status, resource: nil, rp_session: nil, payload: nil,
+      security_context: nil,
+    ) unless
+      result.authenticated?
+
+    @current_access_token_payload = result.payload
+    AccessState.new(
+      status: :valid, resource: result.principal, rp_session: result.session, payload: result.payload,
+      security_context: nil,
+    )
+  end
+
+  # R5-WU17 cell process: the selected context lives on the actor's OP root; the OP answers it
+  # (Base::*::Api::V0::Identity::SelectionsController). Nil outside a cell process.
+  def rp_cell_selected_context
+    return unless rp_cell_process?
+    # Only the Base Self-RP holds the base-*-ww key the OP accepts here; other cells have no
+    # selected account/organization context.
+    return Actor::SelectedContext::NULL unless browser_rp_authenticated? && rp_cell.client_id.start_with?("base-")
+
+    result = OrgAdminAuthorityClient.new(
+      access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+      browser_request: request, surface: rp_cell.realm,
+    ).get("/identity/selection")
+    raise RpCellLocalSession::OwnerUnavailable, "OP selection is unavailable" unless result.ok?
+
+    data = result.data
+    Actor::SelectedContext.new(
+      account_public_id: data["account_public_id"], collective_public_id: data["collective_public_id"],
+      collective_unit_public_id: data["collective_unit_public_id"], avatar_public_id: data["avatar_public_id"],
+      selected_at: data["selected_at"] && Time.zone.parse(data["selected_at"]),
+    )
+  end
+
+  def rp_cell_client_id = browser_rp_client_id
+
+  def rp_cell_resource_type = browser_rp_resource_type
+
   def find_browser_rp_session(public_id)
     return if public_id.blank?
 
@@ -560,11 +601,11 @@ module BrowserRpAuthentication
         relation =
           case browser_rp_resource_type.to_s
           when "operator"
-            OperatorRpSession.includes(:operator_device_session)
+            OpOrgGrant.includes(:operator_device_session)
           when "visitor"
-            VisitorRpSession.includes(:visitor_device_session)
+            OpComGrant.includes(:visitor_device_session)
           when "client"
-            ClientRpSession.includes(:client_device_session)
+            OpAppGrant.includes(:client_device_session)
           else
             raise ArgumentError, "unsupported Browser RP resource type"
           end
@@ -579,9 +620,9 @@ module BrowserRpAuthentication
     resource_class = browser_rp_resource_class
     actor_key =
       case rp_session
-      when OperatorRpSession then :staff_id
-      when VisitorRpSession then :visitor_id
-      when ClientRpSession then :user_id
+      when OpOrgGrant then :staff_id
+      when OpComGrant then :visitor_id
+      when OpAppGrant then :user_id
       else raise ArgumentError, "unsupported Browser RP Session class"
       end
     actor_id = rp_session.parent_device_session&.public_send(actor_key)
@@ -596,7 +637,7 @@ module BrowserRpAuthentication
     return false unless rp_session && resource && browser_session && root_token
     return false unless rp_session.oidc_client_id == browser_rp_client_id
     return false unless browser_session.current_refresh_token_id == root_token.id
-    return false unless browser_session.usable? && root_token.currently_usable?
+    return false unless browser_session.usable? && root_token.active_status?
     return false unless rp_session.active?
     # The actor's withdrawal lifecycle is not a credential fact: a closing, suspended or terminated
     # actor stays identified so AuthenticationWithdrawalGate can confine it to the withdrawal pages
@@ -605,11 +646,18 @@ module BrowserRpAuthentication
     return false unless resource.is_a?(browser_rp_resource_class)
     return false unless AuthorizationTokenClaims.base_session_id(payload).to_s == root_token.public_id.to_s
 
+    authentication_context = payload[AuthenticationContextValue::CLAIM]
+    return false unless authentication_context.is_a?(String) &&
+      AuthenticationContextValue::KEYS.include?(authentication_context)
+    return false unless authentication_context == root_token.strict_authentication_context_value.to_s
+
     expected_subject = OidcSubject.for(resource, resource_type: browser_rp_resource_type)
     actual_subject = AuthorizationTokenClaims.subject(payload).to_s
     return false unless expected_subject.bytesize == actual_subject.bytesize
 
     ActiveSupport::SecurityUtils.secure_compare(expected_subject, actual_subject)
+  rescue AuthenticationContextValue::UnknownContextError
+    false
   end
 
   def invalid_browser_rp_access
@@ -666,6 +714,7 @@ module BrowserRpAuthentication
     # document's Inertia history; the next page must clear it.
     session[:inertia_clear_history] = true
     clear_browser_rp_access_cookie!
+    clear_rp_cell_session_cookie!
     cookies.delete(
       OidcRpBrowserCredentialContract::REFRESH_COOKIE,
       OidcRpBrowserCredentialContract.refresh_cookie_deletion_options,
@@ -682,11 +731,9 @@ module BrowserRpAuthentication
   def install_browser_rp_token_response!(result)
     token_response = result.token_response
     access_token, refresh_token = OidcRpBrowserCredentialContract.require_token_response!(token_response)
-    now = browser_rp_database_now
-    access_expires_at = result.access_expires_at ||
-      OidcRpBrowserCredentialContract.access_expires_at_from_response(token_response, now: now)
-    refresh_expires_at = result.refresh_expires_at ||
-      OidcRpBrowserCredentialContract.refresh_expires_at_from_response(token_response, now: now)
+    now = rp_cell_process? ? Time.current : browser_rp_database_now
+    access_expires_at = OidcRpBrowserCredentialContract.access_expires_at_from_response(token_response, now: now)
+    refresh_expires_at = OidcRpBrowserCredentialContract.refresh_expires_at_from_response(token_response, now: now)
     raise ArgumentError, "RP refresh expiry precedes access expiry" if refresh_expires_at < access_expires_at
 
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
@@ -708,21 +755,13 @@ module BrowserRpAuthentication
   def refresh_browser_rp_credentials!
     refresh_token = BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::REFRESH_COOKIE)
     return :missing if invalid_browser_rp_refresh_value?(refresh_token)
+    return refresh_rp_cell_credentials!(refresh_token) if rp_cell_process?
 
-    token_endpoint_uri = OidcIssuer.token_endpoint(browser_rp_resource_type)
-    client_assertion = OidcClientAssertionJwt.issue(
+    # Public HTTPS to the OP token endpoint (R5-WU05); the RP holds no OP authority in-process.
+    result = OidcOpTokenClient.refresh(
       client_id: browser_rp_client_id,
-      token_url: token_endpoint_uri,
-    )
-    result = OidcTokenExchangeCoordinator.call(
-      grant_type: "refresh_token",
+      token_url: OidcIssuer.token_endpoint(browser_rp_resource_type),
       refresh_token: refresh_token,
-      client_id: browser_rp_client_id,
-      client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-      client_assertion: client_assertion,
-      token_endpoint_uri: token_endpoint_uri,
-      request_method: "POST",
-      expected_resource_type: browser_rp_resource_type,
     )
     handle_browser_rp_refresh_result(result)
   rescue ActiveRecord::ActiveRecordError, Umaxica::Valkey::Unavailable,
@@ -732,13 +771,45 @@ module BrowserRpAuthentication
     :dependency
   end
 
+  # R5-WU17 cell process: reserve/dispatch/install under the local session (RpRefreshCommitter).
+  def refresh_rp_cell_credentials!(refresh_token)
+    cell = rp_cell
+    # The explicit Refresh path reserves and installs on the cell writer.
+    result =
+      "#{cell.record_prefix}Record".constantize.connected_to(role: :writing) do
+        RpRefreshCommitter.call(
+          cell:, local_session_id: cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE].to_s,
+          refresh_token:, issuer: rp_cell_issuer, contract_epoch: rp_cell_contract_epoch,
+          jwks_client: rp_cell_jwks_client, token_url: OidcIssuer.token_endpoint(browser_rp_resource_type),
+          query_url: OidcIssuer.refresh_delivery_query_endpoint(browser_rp_resource_type),
+        )
+      end
+    case result.outcome
+    when :installed
+      install_browser_rp_token_response!(result)
+      :success
+    when :refused, :revoked
+      @browser_rp_refused_access_status = browser_rp_access_state.status
+      clear_browser_rp_cookies!
+      :invalid
+    else
+      # dependency, or superseded by a concurrent attempt: keep the cookies; a retry reads the
+      # generation the other attempt installed.
+      @browser_rp_dependency_failed = true
+      render_browser_rp_dependency_failure!
+      :dependency
+    end
+  end
+
   def handle_browser_rp_refresh_result(result)
     if result.success?
       install_browser_rp_token_response!(result)
       return :success
     end
 
-    if result.error.to_s.in?(%w(server_error temporarily_unavailable))
+    # Only a definitive OAuth refusal clears credentials. Transport failure, an invalid remote
+    # answer and an indeterminate commit keep the cookies so a later attempt can recover.
+    unless result.outcome == :refused
       @browser_rp_dependency_failed = true
       render_browser_rp_dependency_failure!
       return :dependency

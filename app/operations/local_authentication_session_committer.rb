@@ -13,16 +13,20 @@ class LocalAuthenticationSessionCommitter
       )
     end
 
-    def resume_pending!(controller:, flow:, actor:, nonce:)
+    def resume_pending!(controller:, flow:, actor:, nonce:, session_limit_resolution: nil,
+                        session_limit_resolution_challenge: nil, session_limit_resolution_binding: nil)
       commit(
         controller: controller, flow: flow, actor: actor, nonce: nonce, binding: nil,
-        pending_resume: true,
+        pending_resume: true, session_limit_resolution:, session_limit_resolution_challenge:,
+        session_limit_resolution_binding:,
       )
     end
 
     private
 
-    def commit(controller:, flow:, actor:, nonce:, binding:, pending_resume:)
+    def commit(controller:, flow:, actor:, nonce:, binding:, pending_resume:,
+               session_limit_resolution: nil, session_limit_resolution_challenge: nil,
+               session_limit_resolution_binding: nil)
       result =
         actor.class.connection_class_for_self.connected_to(role: :writing) do
           actor.with_lock do
@@ -38,7 +42,8 @@ class LocalAuthenticationSessionCommitter
 
                 commit_locked!(
                   controller: controller, flow: flow, actor: actor, binding: binding,
-                  pending_resume: pending_resume, now: now,
+                  pending_resume: pending_resume, now: now, session_limit_resolution:,
+                  session_limit_resolution_challenge:, session_limit_resolution_binding:,
                 )
               end
             end
@@ -71,7 +76,9 @@ class LocalAuthenticationSessionCommitter
       raise BaseAuthAdmissionCoordinator::Denied, "local result is not ready"
     end
 
-    def commit_locked!(controller:, flow:, actor:, binding:, pending_resume:, now:)
+    def commit_locked!(controller:, flow:, actor:, binding:, pending_resume:, now:,
+                       session_limit_resolution:, session_limit_resolution_challenge:,
+                       session_limit_resolution_binding:)
       surface = LocalAuthenticationResultCoordinator.surface_for(flow)
       ceremony_model = BaseAuthAdmissionCoordinator::CEREMONY_SESSION.fetch(surface)
       ceremony =
@@ -96,6 +103,9 @@ class LocalAuthenticationSessionCommitter
                authentication_event_at: flow.authentication_event_at,
                authentication_context: token_authentication_context(flow),
                audit_context: { auth_method: flow.authentication_method, flow: "local_authentication" },
+               session_limit_resolution:,
+               session_limit_resolution_challenge:,
+               session_limit_resolution_binding:,
       )
       case result.fetch(:status)
       when :success

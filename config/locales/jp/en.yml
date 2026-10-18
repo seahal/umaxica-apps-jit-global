@@ -583,6 +583,30 @@ en:
               accepted: You must check this box.
   activerecord:
     attributes:
+      op_app_client_activation:
+        client_id: Client ID
+        contract_epoch: Contract epoch
+        enabled: Enabled
+        changed_at: Changed at
+        actor_ref: Changed by
+        audit_ref: Audit reference
+        source_manifest_digest: Source manifest digest
+      op_com_client_activation:
+        client_id: Client ID
+        contract_epoch: Contract epoch
+        enabled: Enabled
+        changed_at: Changed at
+        actor_ref: Changed by
+        audit_ref: Audit reference
+        source_manifest_digest: Source manifest digest
+      op_org_client_activation:
+        client_id: Client ID
+        contract_epoch: Contract epoch
+        enabled: Enabled
+        changed_at: Changed at
+        actor_ref: Changed by
+        audit_ref: Audit reference
+        source_manifest_digest: Source manifest digest
       client_secret_credential:
         client: Client
         issuance: Secret issuance
@@ -2058,8 +2082,6 @@ en:
           settings: Settings
         locale_settings: Language settings
   controllers:
-    restricted_session_guard:
-      blocked_message: Restricted session.
     sign:
       app_verification_base:
         code_expired: The verification code has expired.
@@ -3351,6 +3373,7 @@ en:
     edit:
       active_sessions: Active Sessions
       cancel: Cancel
+      continue: Continue sign-in
       created_at: Created
       description:
         You have reached the maximum number of concurrent sessions. To continue logging in, please

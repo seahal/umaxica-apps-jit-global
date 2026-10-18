@@ -86,8 +86,8 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def authenticate_rp!(visitor, token)
-    oidc_client = OidcClientRegistry.find!("warp-com")
-    @rp_session = VisitorRpSession.create!(
+    oidc_client = OidcClientRegistry.find!("warp-com-jp")
+    @rp_session = OpComGrant.create!(
       visitor_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

@@ -27,6 +27,8 @@ module StepUp
       ) do
         def currently_usable?(_now = Time.current) = currently_usable
 
+        def active_status?(_now = Time.current) = currently_usable
+
         def has_attribute?(attribute)
           members.include?(attribute.to_sym)
         end

@@ -5,6 +5,7 @@ module Base
   module Com
     module Oauth
       class AuthorizationsController < Base::Com::AuthorityController
+        include ::OpClientAdmissionGate
         include ::OauthAuthorizeRateLimit
         include ::OauthAuthorizeRequestSizeLimit
         include ::OidcAuthorizationResultPost
@@ -18,6 +19,7 @@ module Base
           return render_oidc_result_continuation! if params[:result_ref].present? || params[:transaction_ref].present?
 
           validate_authorization_request!
+          return render_client_not_admitted unless op_client_admitted?(authorize_params[:client_id].to_s)
 
           if authorization_session_sufficient?
             issue_authorization_code!(current_visitor)

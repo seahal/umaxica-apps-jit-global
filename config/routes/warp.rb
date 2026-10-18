@@ -81,9 +81,13 @@ scope module: :warp, as: :warp do
         post "", to: "sign/entries#create", as: :create
       end
 
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace :oidc do
-        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
         resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
       end
 
       namespace :sign do
@@ -184,9 +188,13 @@ scope module: :warp, as: :warp do
         post "", to: "sign/entries#create", as: :create
       end
 
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace :oidc do
-        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
         resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
       end
 
       namespace :sign do
@@ -286,9 +294,13 @@ scope module: :warp, as: :warp do
         post "", to: "sign/entries#create", as: :create
       end
 
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace :oidc do
-        # Authorization-code callback (redirect_uri); see RegionalRpClientMatrix::CALLBACK_PATH.
+        # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
         resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
       end
 
       namespace :sign do

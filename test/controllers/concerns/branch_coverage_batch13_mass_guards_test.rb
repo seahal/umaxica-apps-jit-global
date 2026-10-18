@@ -100,7 +100,7 @@ class BranchCoverageBatch13MassGuardsTest < ActiveSupport::TestCase
     # RefreshTokenable private helpers via a usage model
     usage =
       begin
-        ClientRpSession.new
+        OpAppGrant.new
       rescue StandardError
         nil
       end

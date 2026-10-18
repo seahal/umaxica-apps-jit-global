@@ -17,9 +17,9 @@ class Palm::App::Sign::Out::CompletionsControllerTest < ActionDispatch::Integrat
     ActionController::Base.allow_forgery_protection = true
 
     client = clients(:one)
-    oidc_client = OidcClientRegistry.find!("palm-app")
+    oidc_client = OidcClientRegistry.find!("palm-app-jp")
     root_token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: root_token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

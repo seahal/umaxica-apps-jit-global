@@ -13,179 +13,61 @@ module Base
 
       public
 
+      # R5-WU14: the Avatar owner re-checks Step-Up under its root lock and runs the transfer
+      # Operations; this Base Self-RP only relays and, when asked, starts the Step-Up ceremony.
       def create
-        authorize!(AvatarOwnershipTransfer, to: :create?)
-        ensure_registry_admission_available! if registry_request?
-        transfer =
-          with_locked_step_up("avatar_transfer_request") do
-            if registry_request?
-              AvatarOwnershipTransfers::RegistryRequestOperation.call(
-                actor: current_operator,
-                surface: "org",
-                subject_public_id: Actor.selection.account_public_id,
-                avatar_public_id: Actor.selection.avatar_public_id,
-                target_surface: transfer_params.fetch(:target_surface, ""),
-                target_collective_public_id: transfer_params.fetch(:target_collective_public_id, ""),
-                idempotency_key: idempotency_key,
-                request_fingerprint: registry_request_fingerprint,
-              )
-            else
-              AvatarOwnershipTransfers::RequestOperation.call(
-                actor: current_operator,
-                surface: "org",
-                subject_public_id: Actor.selection.account_public_id,
-                avatar_public_id: Actor.selection.avatar_public_id,
-                target_surface: transfer_params.fetch(:target_surface, ""),
-                target_collective_public_id: transfer_params.fetch(:target_collective_public_id, ""),
-              )
-            end
-          end
-        return if performed?
-
-        render_transfer(transfer, transfer_kind: (registry_request? ? "registry" : nil))
-      rescue AvatarOwnershipTransfers::Unauthorized
-        head :forbidden
-      rescue AvatarOwnershipTransfers::InvalidTransfer => e
-        render plain: e.message, status: :unprocessable_content
+        relay_transfer(
+          avatar_authority.request_transfer(
+            transfer_params,
+            idempotency_key: request.get_header("HTTP_IDEMPOTENCY_KEY"),
+          ),
+        )
       end
 
       def accept
-        transfer = registry_transfer? ? find_registry_reservation! : find_transfer!
-        authorize!(transfer, to: :accept?, with: AvatarTransferReservationPolicy) if registry_transfer?
-        authorize!(transfer, to: :accept?) unless registry_transfer?
-        ensure_registry_admission_available! if registry_transfer?
-        accepted =
-          with_locked_step_up("avatar_transfer_accept") do
-            if registry_transfer?
-              AvatarOwnershipTransfers::RegistryAcceptOperation.call(
-                actor: current_operator,
-                surface: "org",
-                subject_public_id: Actor.selection.account_public_id,
-                reservation_public_id: params.expect(:id),
-              )
-            else
-              AvatarOwnershipTransfers::AcceptOperation.call(
-                actor: current_operator,
-                surface: "org",
-                subject_public_id: Actor.selection.account_public_id,
-                transfer_public_id: transfer.public_id,
-              )
-            end
-          end
-        return if performed?
-
-        render_transfer(accepted, transfer_kind: (registry_transfer? ? "registry" : nil))
-      rescue AvatarOwnershipTransfers::Unauthorized
-        head :forbidden
-      rescue AvatarOwnershipTransfers::Expired => e
-        render plain: e.message, status: :gone
-      rescue AvatarOwnershipTransfers::InvalidTransfer => e
-        render plain: e.message, status: :unprocessable_content
+        relay_transfer(avatar_authority.accept_transfer(params.expect(:id), transfer_kind: params[:transfer_kind].to_s))
       end
 
       def cancel
-        transfer = registry_transfer? ? find_registry_reservation! : find_transfer!
-        authorize!(transfer, to: :cancel?, with: AvatarTransferReservationPolicy) if registry_transfer?
-        authorize!(transfer, to: :cancel?) unless registry_transfer?
-        ensure_registry_admission_available! if registry_transfer?
-        cancelled =
-          with_locked_step_up("avatar_transfer_cancel") do
-            if registry_transfer?
-              AvatarOwnershipTransfers::RegistryCancelOperation.call(
-                actor: current_operator,
-                surface: "org",
-                subject_public_id: Actor.selection.account_public_id,
-                reservation_public_id: params.expect(:id),
-              )
-            else
-              AvatarOwnershipTransfers::CancelOperation.call(
-                actor: current_operator,
-                surface: "org",
-                subject_public_id: Actor.selection.account_public_id,
-                transfer_public_id: transfer.public_id,
-              )
-            end
-          end
-        return if performed?
-
-        render_transfer(cancelled, transfer_kind: (registry_transfer? ? "registry" : nil))
-      rescue AvatarOwnershipTransfers::Unauthorized
-        head :forbidden
-      rescue AvatarOwnershipTransfers::Expired => e
-        render plain: e.message, status: :gone
-      rescue AvatarOwnershipTransfers::InvalidTransfer => e
-        render plain: e.message, status: :unprocessable_content
+        relay_transfer(avatar_authority.cancel_transfer(params.expect(:id), transfer_kind: params[:transfer_kind].to_s))
       end
 
       private
 
-      def with_locked_step_up(scope)
-        token = current_session_token || raise(AvatarOwnershipTransfers::Unauthorized, "Step-Up session token missing")
-        result = nil
-        token.with_lock do
-          requirement = step_up_requirement(scope: scope)
-          if StepUpResolver.call(token: token, requirement: requirement).satisfied?
-            result = yield
-          else
-            require_step_up!(scope: scope)
-          end
+      def avatar_authority
+        AvatarAuthorityClient.new(
+          surface: "org",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
+        )
+      end
+
+      def relay_transfer(result)
+        error = result.data.to_h["error"]
+        if result.status == :forbidden && %w(owner_denied step_up_required).include?(error)
+          authorize!(result, to: :relay?, with: AvatarRemoteResultPolicy)
+          return require_step_up!(scope: result.data.fetch("scope")) if error == "step_up_required"
+
+          return head(:forbidden)
         end
-        result
-      end
+        authorize!(result, to: :show?, with: AvatarRemoteResultPolicy)
+        raise ActiveRecord::RecordNotFound, "transfer not found" if result.status == :not_found
+        return render(plain: result.data["message"].to_s, status: :gone) if result.status == :gone
+        return render(
+          plain: result.data["message"].to_s,
+          status: :unprocessable_content,
+        ) if result.status == :unprocessable
+        return head(:service_unavailable) unless result.ok?
 
-      def find_transfer!
-        AvatarOwnershipTransfer.find_by(public_id: params.expect(:id)) || raise(ActiveRecord::RecordNotFound)
-      end
-
-      def find_registry_reservation!
-        AvatarTransferReservation.find_by(public_id: params.expect(:id)) || raise(ActiveRecord::RecordNotFound)
+        respond_to do |format|
+          format.json { render json: result.data }
+          format.html { redirect_to(base_org_dashboard_path(ri: params[:ri]), status: :see_other) }
+        end
       end
 
       def transfer_params
         keys = %i(target_surface target_collective_public_id)
         params.slice(*keys).permit(*keys).to_h.symbolize_keys
-      end
-
-      def registry_transfer?
-        params[:transfer_kind].to_s == "registry"
-      end
-
-      def registry_request?
-        !idempotency_key.nil?
-      end
-
-      def ensure_registry_admission_available!
-        return if AvatarOwnershipCutover.established?
-
-        raise AvatarOwnershipTransfers::InvalidTransfer,
-              "registry transfer admission requires the verified Avatar ownership cutover"
-      end
-
-      def idempotency_key
-        request.get_header("HTTP_IDEMPOTENCY_KEY")
-      end
-
-      def registry_request_fingerprint
-        Digest::SHA256.hexdigest(
-          [
-            "avatar_transfer",
-            "org",
-            current_operator.public_id,
-            Actor.selection.account_public_id,
-            Actor.selection.avatar_public_id,
-            transfer_params.fetch(:target_surface, ""),
-            transfer_params.fetch(:target_collective_public_id, ""),
-          ].join("\0"),
-        )
-      end
-
-      def render_transfer(transfer, transfer_kind: nil)
-        body = { status: transfer.state, transfer_public_id: transfer.public_id }
-        body[:transfer_kind] = transfer_kind if transfer_kind
-        respond_to do |format|
-          format.json { render json: body }
-          format.html { redirect_to(base_org_dashboard_path(ri: params[:ri]), status: :see_other) }
-        end
       end
     end
   end

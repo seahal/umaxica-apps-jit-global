@@ -68,7 +68,7 @@ CREATE TABLE public.ar_internal_metadata (
 --
 
 CREATE TABLE public.com_preference_adult_content_gate_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT com_preference_r18_display_stopper_options_id_not_null NOT NULL
 );
 
 
@@ -96,11 +96,11 @@ ALTER SEQUENCE public.com_preference_adult_content_gate_options_id_seq OWNED BY 
 --
 
 CREATE TABLE public.com_preference_adult_content_gates (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT com_preference_r18_display_stoppers_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT com_preference_r18_display_stoppers_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT com_preference_r18_display_stoppers_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT com_preference_r18_display_stoppers_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT com_preference_r18_display_stoppers_updated_at_not_null NOT NULL
 );
 
 
@@ -521,7 +521,7 @@ ALTER SEQUENCE public.com_preference_motions_id_seq OWNED BY public.com_preferen
 --
 
 CREATE TABLE public.com_preference_page_size_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT com_preference_items_per_page_options_id_not_null NOT NULL
 );
 
 
@@ -549,11 +549,11 @@ ALTER SEQUENCE public.com_preference_page_size_options_id_seq OWNED BY public.co
 --
 
 CREATE TABLE public.com_preference_page_sizes (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT com_preference_items_per_pages_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT com_preference_items_per_pages_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT com_preference_items_per_pages_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT com_preference_items_per_pages_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT com_preference_items_per_pages_updated_at_not_null NOT NULL
 );
 
 
@@ -864,8 +864,8 @@ CREATE TABLE public.com_preferences (
     token_digest bytea,
     updated_at timestamp(6) with time zone NOT NULL,
     used_at timestamp(6) with time zone,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT com_preferences_purged_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT com_preferences_discarded_at_not_null NOT NULL,
     explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT com_preferences_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
@@ -1563,7 +1563,7 @@ CREATE TRIGGER com_preferences_public_id_immutability BEFORE UPDATE OF public_id
 --
 
 ALTER TABLE ONLY public.com_preference_languages
-    ADD CONSTRAINT fk_com_preference_languages_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_language_options(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_languages_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_language_options(id);
 
 
 --
@@ -1571,7 +1571,7 @@ ALTER TABLE ONLY public.com_preference_languages
 --
 
 ALTER TABLE ONLY public.com_preference_regions
-    ADD CONSTRAINT fk_com_preference_regions_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_region_options(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_regions_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_region_options(id);
 
 
 --
@@ -1579,7 +1579,7 @@ ALTER TABLE ONLY public.com_preference_regions
 --
 
 ALTER TABLE ONLY public.com_preference_themes
-    ADD CONSTRAINT fk_com_preference_themes_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_theme_options(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_themes_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_theme_options(id);
 
 
 --
@@ -1587,7 +1587,7 @@ ALTER TABLE ONLY public.com_preference_themes
 --
 
 ALTER TABLE ONLY public.com_preference_timezones
-    ADD CONSTRAINT fk_com_preference_timezones_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_timezone_options(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preference_timezones_on_option_id FOREIGN KEY (option_id) REFERENCES public.com_preference_timezone_options(id);
 
 
 --
@@ -1595,7 +1595,7 @@ ALTER TABLE ONLY public.com_preference_timezones
 --
 
 ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_com_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.com_preference_binding_methods(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.com_preference_binding_methods(id);
 
 
 --
@@ -1603,7 +1603,7 @@ ALTER TABLE ONLY public.com_preferences
 --
 
 ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_com_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.com_preference_dbsc_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.com_preference_dbsc_statuses(id);
 
 
 --
@@ -1611,7 +1611,7 @@ ALTER TABLE ONLY public.com_preferences
 --
 
 ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_com_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.com_preference_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_com_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.com_preference_statuses(id);
 
 
 --
@@ -1619,7 +1619,7 @@ ALTER TABLE ONLY public.com_preferences
 --
 
 ALTER TABLE ONLY public.com_preference_languages
-    ADD CONSTRAINT fk_rails_0b04f4dc33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_0b04f4dc33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1635,7 +1635,7 @@ ALTER TABLE ONLY public.com_preference_page_sizes
 --
 
 ALTER TABLE ONLY public.com_preferences
-    ADD CONSTRAINT fk_rails_1c704c910f FOREIGN KEY (replaced_by_id) REFERENCES public.com_preferences(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_1c704c910f FOREIGN KEY (replaced_by_id) REFERENCES public.com_preferences(id) ON DELETE SET NULL;
 
 
 --
@@ -1659,7 +1659,7 @@ ALTER TABLE ONLY public.com_preference_motions
 --
 
 ALTER TABLE ONLY public.com_preference_timezones
-    ADD CONSTRAINT fk_rails_2fe4a93e4f FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_2fe4a93e4f FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1755,7 +1755,7 @@ ALTER TABLE ONLY public.com_preference_densities
 --
 
 ALTER TABLE ONLY public.com_preference_regions
-    ADD CONSTRAINT fk_rails_da840219b9 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_da840219b9 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1763,7 +1763,7 @@ ALTER TABLE ONLY public.com_preference_regions
 --
 
 ALTER TABLE ONLY public.com_preference_cookies
-    ADD CONSTRAINT fk_rails_e59f447fe4 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_e59f447fe4 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --
@@ -1771,7 +1771,7 @@ ALTER TABLE ONLY public.com_preference_cookies
 --
 
 ALTER TABLE ONLY public.com_preference_themes
-    ADD CONSTRAINT fk_rails_ff9fc0eb33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ff9fc0eb33 FOREIGN KEY (preference_id) REFERENCES public.com_preferences(id);
 
 
 --

@@ -48,7 +48,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
               session: fv5394,
             )
             fv5399 = OidcClientRegistry.find!("base-app-ww")
-            fv5397 = ClientRpSession.create!(
+            fv5397 = OpAppGrant.create!(
               client_token: fv5394,
               oidc_client_id: fv5399.client_id,
               oidc_scope: "openid profile",
@@ -609,7 +609,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
               session: fv5280,
             )
             fv5285 = OidcClientRegistry.find!("base-app-ww")
-            fv5283 = ClientRpSession.create!(
+            fv5283 = OpAppGrant.create!(
               client_token: fv5280,
               oidc_client_id: fv5285.client_id,
               oidc_scope: "openid profile",
@@ -1138,7 +1138,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
               session: fv5169,
             )
             fv5174 = OidcClientRegistry.find!("base-app-ww")
-            fv5172 = ClientRpSession.create!(
+            fv5172 = OpAppGrant.create!(
               client_token: fv5169,
               oidc_client_id: fv5174.client_id,
               oidc_scope: "openid profile",
@@ -1950,7 +1950,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
     # Base authenticates only the Browser RP access cookie, so the request carries a real self-RP
     # chain. Both references are well-formed; only the browser marker is absent.
     oidc_client = OidcClientRegistry.find!("base-app-ww")
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: token, oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_auth_time: 1.minute.ago, refresh_token_expires_at: 10.minutes.from_now,
     )

@@ -73,28 +73,21 @@ module Base
         }
       end
 
+      # R5-WU14: persona display name and Avatar image version come from their owner over HTTPS.
       def dashboard_current_identity
-        persona = switcher.find_account(Actor.selection.account_public_id)
-        raise ActiveRecord::RecordNotFound, "selected app Persona is not available to this principal" if persona.blank?
+        result = AvatarAuthorityClient.new(
+          surface: "app",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
+        ).dashboard_identity
+        raise ActiveRecord::RecordNotFound, "selected app Persona is not available to this principal" if
+          result.status == :not_found
+        raise RuntimeError, "Avatar owner is unavailable for the dashboard identity" unless result.ok?
 
-        display_name = persona.moniker
-        raise RuntimeError, "selected app Persona has no display name" if display_name.blank?
-
-        { display_name: display_name, avatar_image: dashboard_avatar_image }
-      end
-
-      # The app surface requires an Avatar; one without a stored image uses the static default.
-      def dashboard_avatar_image
-        avatar = switcher.selected_avatar || raise(RuntimeError, "selected app context has no Avatar")
-        version = avatar.image ? avatar.image_cache_key : "default"
-
-        { src: base_app_dashboard_avatar_image_path(v: version) }
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :app, principal: current_client, session: current_session,
-        )
+        {
+          display_name: result.data.fetch("display_name"),
+          avatar_image: { src: base_app_dashboard_avatar_image_path(v: result.data.fetch("image_version")) },
+        }
       end
 
       def menu_links

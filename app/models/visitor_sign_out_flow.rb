@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_sign_out_flows
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                      :bigint           not null, primary key
 #  access_discarded_at     :datetime
@@ -46,7 +46,7 @@
 #  fk_rails_...  (status_id => visitor_sign_out_flow_statuses.id)
 #  fk_rails_...  (token_id => visitor_tokens.id) ON DELETE => cascade
 #
-class VisitorSignOutFlow < ComTicketRecord
+class VisitorSignOutFlow < OpBaseComRecord
   include SignOutFlow
   include FlowSignOut
 

@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_step_up_sessions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id               :bigint           not null, primary key
 #  attempt_count    :integer          default(0), not null
@@ -27,7 +27,7 @@
 #
 #  fk_rails_...  (visitor_token_id => visitor_tokens.id) ON DELETE => cascade
 #
-class VisitorStepUpSession < ComTicketRecord
+class VisitorStepUpSession < OpBaseComRecord
   include Retainable
   include StepUpSessionConsumable
   include StepUpEmailChallenge

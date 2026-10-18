@@ -16,14 +16,14 @@ class SessionLimitModelRefusalTest < ActiveSupport::TestCase
     @user = clients(:one)
     ClientToken.where(user_id: @user.id).delete_all
     Prosopite.pause do
-      # Below the active limit, but at the model's total-session ceiling because of leftover
-      # restricted rows from the retired session-limit placeholder. The token model's own
-      # validation is the last line, so the attempt is refused instead of over-issuing.
-      token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
-      token.rotate_refresh_token!
-      2.times do
-        restricted = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
-        restricted.rotate_refresh_token!(discard_at: 15.minutes.from_now)
+      # Keep one active device below the admission limit while the ACTIVE token-row ceiling is
+      # full. Historical status-103 rows are preserved but do not consume either boundary.
+      tokens =
+        Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) do
+          ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
+        end
+      tokens.first(ClientToken::MAX_TOTAL_SESSIONS_PER_USER - (ClientToken::MAX_SESSIONS_PER_USER - 1)).each do |token|
+        token.device_session.revoke!(reason: "capacity-test")
       end
     end
 

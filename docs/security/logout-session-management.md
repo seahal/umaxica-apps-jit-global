@@ -63,7 +63,8 @@ tests are recorded in `evidence/2026-10-13-palm-completion-route-followup-J3K7.m
 ## Authority
 
 Logout is session mutation. `acme/www` owns logout, session revoke, revoke-all, session listing,
-restricted session handling, device/session display, token-family revocation, and compromise state.
+historical status-103 handling, device/session display, token-family revocation, and compromise
+state.
 
 `sign/id`, `core`, and `base` must not mutate authoritative acme logout or session state. They may
 host the surface-local browser ceremony (`/sign/out/new`, `/sign/out/edit`, `/sign/out`, and on

@@ -3,8 +3,8 @@
 ## Purpose
 
 Document retry, rollback, and cleanup behavior for unfinished sign-in attempts. This boundary covers
-email OTP, social login, and passkey / WebAuthn sign-in. Permanent-secret sign-in routes are retired.
-This document does not cover sign-up completion or step-up freshness.
+email OTP, social login, and passkey / WebAuthn sign-in. Permanent-secret sign-in routes are
+retired. This document does not cover sign-up completion or step-up freshness.
 
 ## Shared Completion Gate
 
@@ -23,9 +23,9 @@ This document does not cover sign-up completion or step-up freshness.
 - Session-limit completion returns `:session_limit_pending` and the session-management path; it
   issues no token, cookie, or success audit.
 - A sign-in at the limit while the actor's waiting unit is open is refused with a deterministic
-  forbidden response and creates neither a session nor a resolution (decided 2026-10-16,
-  implementation pending; `docs/security/session-limit.md`). The former `session_limit_hard_reject`
-  result was removed in `c737e51ae`.
+  forbidden response and creates neither a session nor a resolution (decided and implemented
+  2026-10-16; `docs/security/session-limit.md`). The former `session_limit_hard_reject` result was
+  removed in `c737e51ae`.
 
 ## Retry Behavior
 

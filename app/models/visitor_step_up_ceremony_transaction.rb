@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: visitor_step_up_ceremony_transactions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id              :bigint           not null, primary key
 #  aal             :string           # @deprecated evidence label; remove after explicit-evidence consumers migrate
@@ -46,7 +46,7 @@
 #  index_visitor_step_up_ceremony_transactions_on_result_jti      (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  index_visitor_step_up_ceremony_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class VisitorStepUpCeremonyTransaction < ComTicketRecord
+class VisitorStepUpCeremonyTransaction < OpBaseComRecord
   include StepUpCeremonyTransactionable
 
   ceremony_surface "com"

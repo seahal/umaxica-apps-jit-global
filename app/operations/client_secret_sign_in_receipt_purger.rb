@@ -25,7 +25,7 @@ class ClientSecretSignInReceiptPurger
     private
 
     def lock_ticket_proofs!(receipt, duration, owner)
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSecretSignInReceipt.transaction do
           authorization = ClientOidcAuthorizationTransaction.find_by(secret_sign_in_flow_id: receipt.sign_in_flow_id)
           if authorization

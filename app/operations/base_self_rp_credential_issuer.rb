@@ -27,7 +27,10 @@ class BaseSelfRpCredentialIssuer
       resolved = resolve!(
         resource:, rp_session:, raw_refresh_token:, client_id:,
       )
-      update_claims!(usage: resolved.usage, verifier: resolved.verifier, authentication_event_at:, acr:, amr:) if
+      update_claims!(
+        resource:, usage: resolved.usage, verifier: resolved.verifier, authentication_event_at:, acr:,
+        amr:,
+      ) if
         current_refresh_credential?(usage: resolved.usage, verifier: resolved.verifier)
 
       resource_type = resource_type_for(rp_session)
@@ -73,7 +76,7 @@ class BaseSelfRpCredentialIssuer
       device_session = usage.parent_device_session
       unless usage.public_id == rp_session.public_id && usage.oidc_client_id == client_id && usage.active? &&
           device_session&.usable? && device_session.current_refresh_token_id == root_token&.id &&
-          root_token&.currently_usable? && resource_matches?(root_token, resource)
+          root_token&.active_status? && actor_current?(root_token:, resource:)
         raise CredentialUnavailable, "Base self-RP authority is unavailable"
       end
       unless current_refresh_credential?(usage:, verifier: resolved.verifier) ||
@@ -92,31 +95,41 @@ class BaseSelfRpCredentialIssuer
       usage.previous_refresh_token_digest_matches?(verifier) && usage.refresh_delivery_receipt_present?
     end
 
-    def update_claims!(usage:, verifier:, authentication_event_at:, acr:, amr:)
+    def update_claims!(resource:, usage:, verifier:, authentication_event_at:, acr:, amr:)
       owner = usage.class.connection_class_for_self
-      owner.connected_to(role: :writing) do
-        usage.class.transaction do
-          locked = usage.class.lock.find(usage.id)
-          unless locked.active? && locked.refresh_token_digest_matches?(verifier)
-            raise CredentialUnavailable, "Base self-RP refresh credential changed"
-          end
+      resource.class.connection_class_for_self.connected_to(role: :writing) do
+        resource.with_lock do
+          owner.connected_to(role: :writing) do
+            usage.with_parent_and_self_lock do
+              root_token = usage.parent_token
+              unless usage.active? && usage.refresh_token_digest_matches?(verifier) &&
+                  actor_current?(root_token:, resource:)
+                raise CredentialUnavailable, "Base self-RP refresh authority changed"
+              end
 
-          locked.update!(
-            oidc_auth_time: authentication_event_at,
-            oidc_acr: acr.to_s.presence,
-            oidc_amr: JSON.generate(Array(amr).map(&:to_s)),
-          )
+              usage.update!(
+                oidc_auth_time: authentication_event_at,
+                oidc_acr: acr.to_s.presence,
+                oidc_amr: JSON.generate(Array(amr).map(&:to_s)),
+              )
+            end
+          end
         end
       end
     end
 
     def resource_type_for(rp_session)
       case rp_session
-      when ClientRpSession then "client"
-      when VisitorRpSession then "visitor"
-      when OperatorRpSession then "operator"
+      when OpAppGrant then "client"
+      when OpComGrant then "visitor"
+      when OpOrgGrant then "operator"
       else raise CredentialUnavailable, "unsupported Base self-RP Session"
       end
+    end
+
+    def actor_current?(root_token:, resource:)
+      resource_matches?(root_token, resource) && resource.active? &&
+        AuthenticationEpochValue.root_current?(root_token:, actor: resource)
     end
 
     def resource_matches?(root_token, resource)

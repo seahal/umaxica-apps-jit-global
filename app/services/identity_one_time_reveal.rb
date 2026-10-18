@@ -108,7 +108,7 @@ class IdentityOneTimeReveal
     return nil unless valid_claims?(payload, actor: actor, session_nonce: session_nonce, purpose: purpose)
 
     encrypted =
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         SecurityOneTimeReveal.consume(
           jti_digest: digest(payload.fetch("jti")),
           actor_type: actor.class.name,

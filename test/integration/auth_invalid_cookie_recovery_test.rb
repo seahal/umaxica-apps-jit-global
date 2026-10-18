@@ -106,9 +106,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             }.fetch(rc8_realm),
           )
           rc8_rp_model = {
-            "client" => ClientRpSession,
-            "visitor" => VisitorRpSession,
-            "operator" => OperatorRpSession,
+            "client" => OpAppGrant,
+            "visitor" => OpComGrant,
+            "operator" => OpOrgGrant,
           }.fetch(rc8_type)
           rc8_fk = {
             "client" => :client_token_id,
@@ -167,9 +167,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             }.fetch(rc7_realm),
           )
           rc7_rp_model = {
-            "client" => ClientRpSession,
-            "visitor" => VisitorRpSession,
-            "operator" => OperatorRpSession,
+            "client" => OpAppGrant,
+            "visitor" => OpComGrant,
+            "operator" => OpOrgGrant,
           }.fetch(rc7_type)
           rc7_fk = {
             "client" => :client_token_id,
@@ -229,9 +229,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             }.fetch(rc6_realm),
           )
           rc6_rp_model = {
-            "client" => ClientRpSession,
-            "visitor" => VisitorRpSession,
-            "operator" => OperatorRpSession,
+            "client" => OpAppGrant,
+            "visitor" => OpComGrant,
+            "operator" => OpOrgGrant,
           }.fetch(rc6_type)
           rc6_fk = {
             "client" => :client_token_id,
@@ -328,9 +328,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
         }.fetch(rc5_realm),
       )
       rc5_rp_model = {
-        "client" => ClientRpSession,
-        "visitor" => VisitorRpSession,
-        "operator" => OperatorRpSession,
+        "client" => OpAppGrant,
+        "visitor" => OpComGrant,
+        "operator" => OpOrgGrant,
       }.fetch(rc5_type)
       rc5_fk = {
         "client" => :client_token_id,
@@ -395,9 +395,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             }.fetch(rc4_realm),
           )
           rc4_rp_model = {
-            "client" => ClientRpSession,
-            "visitor" => VisitorRpSession,
-            "operator" => OperatorRpSession,
+            "client" => OpAppGrant,
+            "visitor" => OpComGrant,
+            "operator" => OpOrgGrant,
           }.fetch(rc4_type)
           rc4_fk = {
             "client" => :client_token_id,
@@ -456,9 +456,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           }.fetch(rc3_realm),
         )
         rc3_rp_model = {
-          "client" => ClientRpSession,
-          "visitor" => VisitorRpSession,
-          "operator" => OperatorRpSession,
+          "client" => OpAppGrant,
+          "visitor" => OpComGrant,
+          "operator" => OpOrgGrant,
         }.fetch(rc3_type)
         rc3_fk = {
           "client" => :client_token_id,
@@ -529,9 +529,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           }.fetch(rc2_realm),
         )
         rc2_rp_model = {
-          "client" => ClientRpSession,
-          "visitor" => VisitorRpSession,
-          "operator" => OperatorRpSession,
+          "client" => OpAppGrant,
+          "visitor" => OpComGrant,
+          "operator" => OpOrgGrant,
         }.fetch(rc2_type)
         rc2_fk = {
           "client" => :client_token_id,
@@ -595,9 +595,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           }.fetch(rc1_realm),
         )
         rc1_rp_model = {
-          "client" => ClientRpSession,
-          "visitor" => VisitorRpSession,
-          "operator" => OperatorRpSession,
+          "client" => OpAppGrant,
+          "visitor" => OpComGrant,
+          "operator" => OpOrgGrant,
         }.fetch(rc1_type)
         rc1_fk = {
           "client" => :client_token_id,
@@ -794,9 +794,9 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           }.fetch(rc0_realm),
         )
         rc0_rp_model = {
-          "client" => ClientRpSession,
-          "visitor" => VisitorRpSession,
-          "operator" => OperatorRpSession,
+          "client" => OpAppGrant,
+          "visitor" => OpComGrant,
+          "operator" => OpOrgGrant,
         }.fetch(rc0_type)
         rc0_fk = {
           "client" => :client_token_id,
@@ -820,7 +820,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
         )
       end
 
-    ClientRpSession.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
+    OpAppGrant.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
       get("/?ri=jp")
 
       assert_response :service_unavailable

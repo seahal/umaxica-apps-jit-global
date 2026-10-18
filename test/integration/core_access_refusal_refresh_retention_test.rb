@@ -9,9 +9,9 @@ class CoreAccessRefusalRefreshRetentionTest < ActionDispatch::IntegrationTest
     ENV["CORE_BROWSER_JWT_COOKIE_ENABLED"] = "1"
     ActionController::Base.allow_forgery_protection = true
     [
-      [ENV.fetch("PUBLIC_CORE_SERVICE_URL"), "client", "core-app", clients(:one)],
-      [ENV.fetch("PUBLIC_CORE_CORPORATE_URL"), "visitor", "core-com", visitors(:reserved_visitor)],
-      [ENV.fetch("PUBLIC_CORE_STAFF_URL"), "operator", "core-org", operators(:one)],
+      [ENV.fetch("PUBLIC_CORE_SERVICE_URL"), "client", "core-app-jp", clients(:one)],
+      [ENV.fetch("PUBLIC_CORE_CORPORATE_URL"), "visitor", "core-com-jp", visitors(:reserved_visitor)],
+      [ENV.fetch("PUBLIC_CORE_STAFF_URL"), "operator", "core-org-jp", operators(:one)],
     ].each do |hostname, resource_type, client_id, resource|
       reset!
       host!(hostname)
@@ -29,14 +29,23 @@ class CoreAccessRefusalRefreshRetentionTest < ActionDispatch::IntegrationTest
         when "client"
           token = client_tokens(:one)
           token.update!(discard_at: deadline)
-          ClientRpSession.create!(client_token: token, oidc_client_id: client_id, **attributes)
+          OpAppGrant.create!(
+            contract_epoch: OpAppProtocolEpoch.current_contract_epoch, client_token: token,
+            oidc_client_id: client_id, **attributes,
+          )
         when "visitor"
           token = VisitorToken.create!(visitor: resource, discard_at: deadline)
-          VisitorRpSession.create!(visitor_token: token, oidc_client_id: client_id, **attributes)
+          OpComGrant.create!(
+            contract_epoch: OpComProtocolEpoch.current_contract_epoch, visitor_token: token,
+            oidc_client_id: client_id, **attributes,
+          )
         when "operator"
           token = operator_tokens(:one)
           token.update!(discard_at: deadline)
-          OperatorRpSession.create!(operator_token: token, oidc_client_id: client_id, **attributes)
+          OpOrgGrant.create!(
+            contract_epoch: OpOrgProtocolEpoch.current_contract_epoch, operator_token: token,
+            oidc_client_id: client_id, **attributes,
+          )
         else
           raise ArgumentError, "unsupported Core test surface"
         end

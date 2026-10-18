@@ -17,7 +17,7 @@ class ClientSecretPasskeyReservationIssuer
 
       AppZenithRecord.connected_to(role: :writing) do
         Client.find(flow.principal_id).with_lock do
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             ClientSignUpFlow.transaction do
               current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
               reason =
@@ -41,7 +41,7 @@ class ClientSecretPasskeyReservationIssuer
       AppZenithRecord.connected_to(role: :writing) do
         actor = Client.find(flow.principal_id)
         actor.with_lock do
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             ClientSignUpFlow.transaction do
               current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id, principal_id: actor.id)
               raise Denied, "Secret activation requires completed signup" unless current.sign_up_completed?
@@ -81,7 +81,7 @@ class ClientSecretPasskeyReservationIssuer
       end
 
       actor = Client.find(issuance.client_id)
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
@@ -118,7 +118,7 @@ class ClientSecretPasskeyReservationIssuer
       end
 
       actor = Client.find(flow.principal_id)
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
@@ -141,7 +141,7 @@ class ClientSecretPasskeyReservationIssuer
       end
 
       actor = Client.find(flow.principal_id)
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
@@ -167,7 +167,7 @@ class ClientSecretPasskeyReservationIssuer
         raise ArgumentError, "Secret delivery requires an explicit finite reservation duration"
       end
 
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor_context.subject.with_lock do
@@ -329,7 +329,7 @@ class ClientSecretPasskeyReservationIssuer
       )
       ticket_now = ClientToken.database_now
       unless actor.login_allowed? && current && registered && registered.status_id == ClientPasskeyStatus::ACTIVE &&
-          current.currently_usable?(ticket_now) && !current.restricted? &&
+          current.active_status?(ticket_now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: ticket_now).satisfied?
         raise Denied, "Secret distribution requires independent scoped registration Step-Up"
       end

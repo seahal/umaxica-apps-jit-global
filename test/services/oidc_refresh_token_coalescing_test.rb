@@ -10,9 +10,9 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
     @coordination_forwarder = Umaxica::Valkey::Connection.new(namespace: namespace)
     @client = clients(:one)
     @root_token = ClientToken.create!(user: @client, discard_at: 1.day.from_now)
-    @usage = ClientRpSession.create!(
+    @usage = OpAppGrant.create!(
       client_token: @root_token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -43,7 +43,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
           fv5072 = 300
           OidcRefreshTokenIssuer.call(
             refresh_token: fv5074,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             resource_type: "client",
             coordination_store: fv5073,
             response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -67,7 +67,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
           fv5069 = 300
           OidcRefreshTokenIssuer.call(
             refresh_token: fv5071,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             resource_type: "client",
             coordination_store: fv5070,
             response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -111,7 +111,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
           fv5066 = 300
           OidcRefreshTokenIssuer.call(
             refresh_token: fv5068,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             resource_type: "client",
             coordination_store: fv5067,
             response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -131,7 +131,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
       end
     end
     assert_equal 0, @usage.reload.refresh_generation
-    assert_equal @usage.refresh_token_digest, ClientRpSession.find(@usage.id).refresh_token_digest
+    assert_equal @usage.refresh_token_digest, OpAppGrant.find(@usage.id).refresh_token_digest
     assert_not_predicate @usage, :revoked?
   end
 
@@ -153,7 +153,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
           fv5063 = 300
           OidcRefreshTokenIssuer.call(
             refresh_token: fv5065,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             resource_type: "client",
             coordination_store: fv5064,
             response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -184,7 +184,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5060 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5062,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5061,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -216,7 +216,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5057 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5059,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5058,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -240,7 +240,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5054 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5056,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5055,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -264,7 +264,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5051 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5053,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5052,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -298,7 +298,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5048 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5050,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5049,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -324,7 +324,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5045 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5047,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5046,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -349,20 +349,20 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
   end
 
   test "a receipt is redelivered just inside the fixed five-second TTL" do
-    issued_at = ClientRpSession.database_now
+    issued_at = OpAppGrant.database_now
     first =
       begin
         fv5043 = OidcRpRefreshCoordinationAdapter.new(connection: @coordination_connection)
         fv5042 = @refresh_token
         fv5044 = issued_at
-        ClientRpSession.stub(:database_now, fv5044) do
+        OpAppGrant.stub(:database_now, fv5044) do
           begin
             fv5040 = fv5043
             fv5041 = fv5042
             fv5039 = 300
             OidcRefreshTokenIssuer.call(
               refresh_token: fv5041,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               resource_type: "client",
               coordination_store: fv5040,
               response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -388,14 +388,14 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5037 = OidcRpRefreshCoordinationAdapter.new(connection: @coordination_connection)
         fv5036 = @refresh_token
         fv5038 = expiry - 0.001.seconds
-        ClientRpSession.stub(:database_now, fv5038) do
+        OpAppGrant.stub(:database_now, fv5038) do
           begin
             fv5034 = fv5037
             fv5035 = fv5036
             fv5033 = 300
             OidcRefreshTokenIssuer.call(
               refresh_token: fv5035,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               resource_type: "client",
               coordination_store: fv5034,
               response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -422,19 +422,19 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
   end
 
   test "a receipt at the exact five-second boundary is a replay" do
-    issued_at = ClientRpSession.database_now
+    issued_at = OpAppGrant.database_now
     begin
       fv5031 = OidcRpRefreshCoordinationAdapter.new(connection: @coordination_connection)
       fv5030 = @refresh_token
       fv5032 = issued_at
-      ClientRpSession.stub(:database_now, fv5032) do
+      OpAppGrant.stub(:database_now, fv5032) do
         begin
           fv5028 = fv5031
           fv5029 = fv5030
           fv5027 = 300
           OidcRefreshTokenIssuer.call(
             refresh_token: fv5029,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             resource_type: "client",
             coordination_store: fv5028,
             response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -460,14 +460,14 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5025 = OidcRpRefreshCoordinationAdapter.new(connection: @coordination_connection)
         fv5024 = @refresh_token
         fv5026 = expiry
-        ClientRpSession.stub(:database_now, fv5026) do
+        OpAppGrant.stub(:database_now, fv5026) do
           begin
             fv5022 = fv5025
             fv5023 = fv5024
             fv5021 = 300
             OidcRefreshTokenIssuer.call(
               refresh_token: fv5023,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               resource_type: "client",
               coordination_store: fv5022,
               response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -493,19 +493,19 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
   end
 
   test "a receipt 5.001 seconds after issuance is a replay" do
-    issued_at = ClientRpSession.database_now
+    issued_at = OpAppGrant.database_now
     begin
       fv5019 = OidcRpRefreshCoordinationAdapter.new(connection: @coordination_connection)
       fv5018 = @refresh_token
       fv5020 = issued_at
-      ClientRpSession.stub(:database_now, fv5020) do
+      OpAppGrant.stub(:database_now, fv5020) do
         begin
           fv5016 = fv5019
           fv5017 = fv5018
           fv5015 = 300
           OidcRefreshTokenIssuer.call(
             refresh_token: fv5017,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             resource_type: "client",
             coordination_store: fv5016,
             response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -531,14 +531,14 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5013 = OidcRpRefreshCoordinationAdapter.new(connection: @coordination_connection)
         fv5012 = @refresh_token
         fv5014 = expiry + 0.001.seconds
-        ClientRpSession.stub(:database_now, fv5014) do
+        OpAppGrant.stub(:database_now, fv5014) do
           begin
             fv5010 = fv5013
             fv5011 = fv5012
             fv5009 = 300
             OidcRefreshTokenIssuer.call(
               refresh_token: fv5011,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               resource_type: "client",
               coordination_store: fv5010,
               response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -571,7 +571,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5006 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5008,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5007,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -597,7 +597,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5003 = 300
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5005,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5004,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -631,7 +631,7 @@ class OidcRefreshTokenCoalescingTest < ActiveSupport::TestCase
         fv5000 = 2.days.to_i
         OidcRefreshTokenIssuer.call(
           refresh_token: fv5002,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           coordination_store: fv5001,
           response_builder: lambda do |usage:, refresh_token:, now:, **_|
@@ -667,9 +667,9 @@ class OidcRefreshTokenCoalescingConcurrencyTest < ActiveSupport::TestCase
     @coordination_forwarder = Umaxica::Valkey::Connection.new(namespace: namespace)
     @client = clients(:one)
     @root_token = ClientToken.create!(user: @client, discard_at: 1.day.from_now)
-    @usage = ClientRpSession.create!(
+    @usage = OpAppGrant.create!(
       client_token: @root_token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -682,8 +682,8 @@ class OidcRefreshTokenCoalescingConcurrencyTest < ActiveSupport::TestCase
     usage_id = @usage&.id
     root_token_id = @root_token&.id
     device_session_id = @root_token&.device_session_id
-    ClientRpSession.where(id: usage_id).delete_all if usage_id
-    ClientRpSession.where(device_session_id: device_session_id).delete_all if device_session_id
+    OpAppGrant.where(id: usage_id).delete_all if usage_id
+    OpAppGrant.where(device_session_id: device_session_id).delete_all if device_session_id
     ClientToken.where(id: root_token_id).delete_all if root_token_id
     ClientDeviceSession.where(id: device_session_id).delete_all if device_session_id
   end
@@ -727,10 +727,10 @@ class OidcRefreshTokenCoalescingConcurrencyTest < ActiveSupport::TestCase
           Thread.new do
             ready << true
             start.pop
-            AppTicketRecord.connection_pool.with_connection do
+            OpBaseAppRecord.connection_pool.with_connection do
               OidcRefreshTokenIssuer.call(
                 refresh_token: @refresh_token,
-                client_id: "core-app",
+                client_id: "core-app-jp",
                 resource_type: "client",
                 coordination_store: store,
                 response_builder: ->(usage:, refresh_token:, now:, **) {

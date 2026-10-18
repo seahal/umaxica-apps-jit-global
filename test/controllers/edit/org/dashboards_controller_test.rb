@@ -13,12 +13,12 @@ class Edit::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
 
   test "shows a link to each publishing cell for a signed-in operator" do
     begin
-      fv5001 = OidcClientRegistry.find!("edit-org")
+      fv5001 = OidcClientRegistry.find!("edit-org-ww")
       fv5002 = OperatorToken.create!(
         staff: @staff,
         staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       )
-      fv5000 = OperatorRpSession.create!(
+      fv5000 = OpOrgGrant.create!(
         operator_token: fv5002,
         oidc_client_id: fv5001.client_id,
         oidc_scope: "openid profile",

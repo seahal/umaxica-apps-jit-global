@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_step_up_sessions
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id             :bigint           not null, primary key
 #  attempt_count  :integer          default(0), not null
@@ -27,7 +27,7 @@
 #
 #  fk_rails_...  (staff_token_id => operator_tokens.id) ON DELETE => cascade
 #
-class OperatorStepUpSession < OrgTicketRecord
+class OperatorStepUpSession < OpBaseOrgRecord
   include Retainable
   include StepUpSessionConsumable
 

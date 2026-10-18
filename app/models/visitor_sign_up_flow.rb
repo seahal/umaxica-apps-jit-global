@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_sign_up_flows
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                              :bigint           not null, primary key
 #  cancelled_at                    :datetime
@@ -56,7 +56,7 @@
 #  fk_rails_...  (status_id => visitor_sign_up_flow_statuses.id) ON DELETE => restrict
 #  fk_rails_...  (token_id => visitor_tokens.id) ON DELETE => restrict
 #
-class VisitorSignUpFlow < ComTicketRecord
+class VisitorSignUpFlow < OpBaseComRecord
   include SignFlow
   include FlowSignUp
   include SignUpFlowTicket

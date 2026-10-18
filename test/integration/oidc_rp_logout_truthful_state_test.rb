@@ -20,8 +20,8 @@ class OidcRpLogoutTruthfulStateTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    @core_session = create_rp_session("core-app")
-    @sibling_session = create_rp_session("warp-app")
+    @core_session = create_rp_session("core-app-jp")
+    @sibling_session = create_rp_session("warp-app-jp")
   end
 
   test "a failed progress write after the parent COMMIT shows the global result with cleanup incomplete" do

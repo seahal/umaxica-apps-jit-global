@@ -85,7 +85,7 @@ class IdentityStepUpEmailVerificationCommitter
     end
 
     def verification_pending?(actor, token, credential, transaction, record, now)
-      token.currently_usable? && token.public_id == transaction.session_ref &&
+      token.active_status? && token.public_id == transaction.session_ref &&
         transaction.actor_ref == actor.public_id &&
         transaction.purpose == "step_up" && transaction.status == "pending" && !transaction.expired?(now: now) &&
         transaction.allowed_methods_array.include?("email_otp") &&

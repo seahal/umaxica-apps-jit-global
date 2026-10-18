@@ -1002,8 +1002,8 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
   def authorize_params
     {
       response_type: "code",
-      client_id: "core-com",
-      redirect_uri: OidcClientRegistry.find!("core-com").redirect_uris.first,
+      client_id: "core-com-jp",
+      redirect_uri: OidcClientRegistry.find!("core-com-jp").redirect_uris.first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: SecureRandom.urlsafe_base64(16),

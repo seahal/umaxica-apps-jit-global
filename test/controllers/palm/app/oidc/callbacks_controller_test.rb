@@ -22,7 +22,7 @@ module Palm
         end
 
         test "callback rejects missing browser state before token exchange" do
-          OidcRpTokenClient.stub(:call, ->(**) { flunk("callback must reject before code exchange") }) do
+          OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("callback must reject before code exchange") }) do
             get palm_app_oidc_callback_url, params: { code: "retired-code" }
           end
 
@@ -51,7 +51,7 @@ module Palm
             status_id: ClientIdentityState::ACTIVE,
           )
           state, flow, authorization_params = start_palm_browser_flow
-          client = OidcClientRegistry.find!("palm-app")
+          client = OidcClientRegistry.find!("palm-app-jp")
           authentication_event_at = 1.minute.ago
           root_token = ClientToken.create!(user: @user, authentication_event_at: authentication_event_at)
           authorization_code = OidcAuthorizationCodeIssuer.call(
@@ -66,14 +66,14 @@ module Palm
             OidcClientRegistry.stub(
               :authenticate_assertion,
               ->(client_id, assertion, token_url:) {
-                client_id == "palm-app" && assertion.present? && token_url == expected_token_url
+                client_id == "palm-app-jp" && assertion.present? && token_url == expected_token_url
               },
             ) do
               OidcTokenExchangeCoordinator.call(
                 grant_type: "authorization_code",
                 code: authorization_code.code,
                 redirect_uri: authorization_code.redirect_uri,
-                client_id: "palm-app",
+                client_id: "palm-app-jp",
                 client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
                 client_assertion: "palm-browser-callback-test-assertion",
                 token_endpoint_uri: expected_token_url,
@@ -86,12 +86,12 @@ module Palm
 
           token_response = exchange_result.token_response
           id_token_payload, = JWT.decode(token_response.fetch(:id_token), nil, false)
-          candidate_session = ClientRpSession.find_by!(public_id: id_token_payload.fetch("sid"))
+          candidate_session = OpAppGrant.find_by!(public_id: id_token_payload.fetch("sid"))
 
           assert_predicate(
             OidcIdTokenVerifier.call(
               id_token: token_response.fetch(:id_token),
-              client_id: "palm-app",
+              client_id: "palm-app-jp",
               resource_type: "client",
               expected_nonce: flow.fetch("nonce"),
               issuer: OidcIssuer.for_resource_type("client"),
@@ -108,28 +108,28 @@ module Palm
             ),
             :success?,
           )
-          token_result = OidcRpTokenClient::Result.new(
-            success: true,
+          token_result = OidcOpTokenClient::Result.new(
+            outcome: :success,
             token_response: token_response,
             error: nil,
           )
-          userinfo_result = OidcRpUserInfoClient::Result.new(
+          userinfo_result = OidcOpUserInfoClient::Result.new(
             success: true,
             claims: { "sub" => OidcSubject.for(@user, resource_type: "client") },
             error: nil,
             dependency_failure: false,
           )
 
-          OidcRpTokenClient.stub(
-            :call,
+          OidcOpTokenClient.stub(
+            :authorization_code,
             ->(**arguments) {
-              assert_equal "palm-app", arguments.fetch(:client_id)
+              assert_equal "palm-app-jp", arguments.fetch(:client_id)
               assert_equal authorization_code.redirect_uri, arguments.fetch(:redirect_uri)
               assert_equal flow.fetch("code_verifier"), arguments.fetch(:code_verifier)
               token_result
             },
           ) do
-            OidcRpUserInfoClient.stub(:call, userinfo_result) do
+            OidcOpUserInfoClient.stub(:call, userinfo_result) do
               get palm_app_oidc_callback_url,
                   params: {
                     code: authorization_code.code,
@@ -150,7 +150,7 @@ module Palm
           binding = ClientOidcIdentityBinding.find_by!(
             issuer: OidcIssuer.for_resource_type("client"),
             subject: OidcSubject.for(@user, resource_type: "client"),
-            audience: "palm-app",
+            audience: "palm-app-jp",
           )
 
           assert_equal identity.id, binding.client_identity_id
@@ -159,12 +159,12 @@ module Palm
 
           assert_response :success
           assert_equal "palm/app/dashboards/show", inertia_component
-          persisted_session = ClientRpSession.find_by!(public_id: candidate_session.public_id)
+          persisted_session = OpAppGrant.find_by!(public_id: candidate_session.public_id)
 
           assert_equal @user.id,
                        ClientToken.find(persisted_session.client_token_id).user_id
 
-          OidcRpTokenClient.stub(:call, ->(**) { flunk("consumed callback must not exchange again") }) do
+          OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("consumed callback must not exchange again") }) do
             get palm_app_oidc_callback_url, params: {
               code: authorization_code.code, state: state, iss: OidcIssuer.for_resource_type("client"),
             }
@@ -177,7 +177,106 @@ module Palm
           assert_predicate root_token.reload, :currently_usable?
         end
 
+        # R5-WU17: as the rp-palm-app-jp cell process the callback commits the verified identity into
+        # the Palm cell store and the protected page authenticates from that local session only.
+        test "as the Palm cell process the callback opens a local session that authenticates the page" do
+          state, flow, authorization_params = start_palm_browser_flow
+          token_response = exchange_palm_code(authorization_params, flow)
+          id_token_payload, = JWT.decode(token_response.fetch(:id_token), nil, false)
+          token_result = OidcOpTokenClient::Result.new(outcome: :success, token_response:, error: nil)
+
+          as_palm_cell do
+            OidcOpTokenClient.stub(:authorization_code, token_result) do
+              get palm_app_oidc_callback_url, params: {
+                code: "cell-code", state:, iss: OidcIssuer.for_resource_type("client"),
+              }
+            end
+
+            assert_response :redirect
+            session_id = cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE]
+            local_session = RpPalmAppSession.includes(op_session_binding: :identity_binding)
+              .find_by!(public_id: session_id)
+
+            assert_equal id_token_payload.fetch("sid"), local_session.op_session_binding.sid
+            assert_equal id_token_payload.fetch("sub"), local_session.op_session_binding.identity_binding.subject
+
+            get palm_app_dashboard_path(ri: "jp")
+
+            assert_response :success
+            assert_equal "palm/app/dashboards/show", inertia_component
+
+            # The Access JWT alone is not enough: without the local session the page is refused.
+            cookies.delete(OidcRpBrowserCredentialContract::SESSION_COOKIE)
+            get palm_app_dashboard_path(ri: "jp")
+
+            assert_not_equal 200, response.status
+          end
+        end
+
+        test "as the Palm cell process a logged-out sid never opens a local session" do
+          state, flow, authorization_params = start_palm_browser_flow
+          token_response = exchange_palm_code(authorization_params, flow)
+          id_token_payload, = JWT.decode(token_response.fetch(:id_token), nil, false)
+          RpPalmAppOpSessionBinding.create!(
+            issuer: id_token_payload.fetch("iss"), realm: "app", client_id: "palm-app-jp",
+            sid: id_token_payload.fetch("sid"), revoked_at: Time.current,
+          )
+          token_result = OidcOpTokenClient::Result.new(outcome: :success, token_response:, error: nil)
+
+          as_palm_cell do
+            OidcOpTokenClient.stub(:authorization_code, token_result) do
+              get palm_app_oidc_callback_url, params: {
+                code: "cell-code", state:, iss: OidcIssuer.for_resource_type("client"),
+              }
+            end
+          end
+
+          assert_response :unprocessable_content
+          assert_nil cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE]
+          assert_equal 0, RpPalmAppSession.count
+        end
+
         private
+
+        def exchange_palm_code(authorization_params, flow)
+          ClientIdentity.create!(
+            issuer: OidcIssuer.for_resource_type("client"),
+            subject: OidcSubject.for(@user, resource_type: "client"),
+            audience: "base-app-ww", source_record_id: @user.id, status_id: ClientIdentityState::ACTIVE,
+          )
+          authentication_event_at = 1.minute.ago
+          root_token = ClientToken.create!(user: @user, authentication_event_at:)
+          code = OidcAuthorizationCodeIssuer.call(
+            client: OidcClientRegistry.find!("palm-app-jp"), params: authorization_params.symbolize_keys,
+            resource: @user, session_token: root_token, authentication_event_at:,
+          )
+          token_url = OidcIssuer.token_endpoint("client")
+          result =
+            OidcClientRegistry.stub(:authenticate_assertion, ->(*, **) { true }) do
+              OidcTokenExchangeCoordinator.call(
+                grant_type: "authorization_code", code: code.code, redirect_uri: code.redirect_uri,
+                client_id: "palm-app-jp", client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+                client_assertion: "palm-cell-test-assertion", token_endpoint_uri: token_url,
+                code_verifier: flow.fetch("code_verifier"), expected_resource_type: "client",
+              )
+            end
+
+          assert_predicate result, :success?
+          result.token_response
+        end
+
+        # The process role and its deployed contract epoch are process configuration.
+        def as_palm_cell
+          names = %w(UMAXICA_RUNTIME_ROLE UMAXICA_RP_CONTRACT_EPOCH UMAXICA_RP_BROWSER_ADMISSION)
+          previous = names.index_with { |name| ENV[name] }
+          ENV["UMAXICA_RUNTIME_ROLE"] = "rp-palm-app-jp"
+          ENV["UMAXICA_RP_CONTRACT_EPOCH"] = OpAppProtocolEpoch.current_contract_epoch.to_s
+          ENV["UMAXICA_RP_BROWSER_ADMISSION"] = "open"
+          RpCellLocalSession::JWKS_CLIENTS.clear
+          yield
+        ensure
+          previous.each { |name, value| value.nil? ? ENV.delete(name) : ENV[name] = value }
+        end
 
         def start_palm_browser_flow
           with_palm_jump_signing do

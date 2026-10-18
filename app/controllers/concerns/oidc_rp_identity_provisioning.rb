@@ -30,7 +30,7 @@ module OidcRpIdentityProvisioning
 
   def verified_userinfo_claims_for_callback(token_response)
     userinfo_url = OidcIssuer.userinfo_endpoint(rp_actor_resource_type)
-    ::OidcRpUserInfoClient.call(
+    ::OidcOpUserInfoClient.call(
       access_token: token_response[:access_token] || token_response["access_token"],
       userinfo_url: userinfo_url,
       require_https: oidc_userinfo_endpoint_requires_https?(userinfo_url),

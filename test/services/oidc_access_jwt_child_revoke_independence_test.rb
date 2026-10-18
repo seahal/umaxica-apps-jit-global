@@ -66,7 +66,7 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
 
   test "revoked RP Session remains inactive while parent Base Browser Session stays usable" do
     root = ClientToken.create!(user: Client.create!)
-    session = ClientRpSession.create!(
+    session = OpAppGrant.create!(
       client_token: root,
       oidc_client_id: "core-app-rp",
       oidc_scope: "openid profile",
@@ -95,7 +95,7 @@ class OidcAccessJwtChildRevokeIndependenceTest < ActiveSupport::TestCase
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    session = ClientRpSession.create!(
+    session = OpAppGrant.create!(
       client_token: root,
       oidc_client_id: rp_client.client_id,
       oidc_scope: "openid",

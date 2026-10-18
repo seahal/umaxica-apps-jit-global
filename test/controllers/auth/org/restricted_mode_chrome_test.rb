@@ -34,13 +34,14 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
           @base_browser_rp_credentials ||= {}
           if @base_browser_rp_credentials[rp_key] ||
               (rp_token.currently_usable? &&
-                !(rp_token.device_session_id && OperatorRpSession.exists?(
+                !(rp_token.device_session_id && OpOrgGrant.exists?(
                   device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                 )))
             unless @base_browser_rp_credentials[rp_key]
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
-              rp_session = OperatorRpSession.create!(
+              rp_session = OpOrgGrant.create!(
+                contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -83,7 +84,7 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
   end
 
   test "an emergency session renders the restricted mode indicator in the shared chrome" do
-    get base_org_identity_url(ri: "jp"), headers: headers_for("emergency")
+    get base_org_identity_url(ri: "jp"), headers: headers_for("standby")
 
     assert_response :success
     restricted = inertia_props.fetch("chrome").fetch("restricted_mode")
@@ -96,7 +97,7 @@ class Auth::Org::RestrictedModeChromeTest < ActionDispatch::IntegrationTest
   # no "leave restricted mode" operation, because there is no in-session
   # transition for such a control to perform.
   test "the indicator offers sign-out and nothing that claims to switch mode in place" do
-    get base_org_identity_url(ri: "jp"), headers: headers_for("emergency")
+    get base_org_identity_url(ri: "jp"), headers: headers_for("standby")
 
     restricted = inertia_props.fetch("chrome").fetch("restricted_mode")
 

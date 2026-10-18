@@ -147,9 +147,9 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
     token = ClientToken.create!(user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     sibling = ClientToken.create!(user: clients(:one), device_session: token.device_session)
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )

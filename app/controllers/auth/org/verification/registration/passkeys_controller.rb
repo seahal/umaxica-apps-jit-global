@@ -16,7 +16,7 @@ class Auth::Org::Verification::Registration::PasskeysController < ::Auth::Org::A
 
   def ceremony_session_token(record) = OperatorToken.find(record.staff_token_id)
 
-  def ceremony_token_owned_by?(token, actor) = token.staff_id == actor.id && !token.emergency_authentication_context?
+  def ceremony_token_owned_by?(token, actor) = token.staff_id == actor.id && !token.standby_authentication_context?
 
   def ceremony_supported_methods = %i(passkey)
 

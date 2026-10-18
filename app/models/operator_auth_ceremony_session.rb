@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class OperatorAuthCeremonySession < OrgTicketRecord
+class OperatorAuthCeremonySession < OpBaseOrgRecord
   include AuthCeremonySession
 
   validates :sid_digest, presence: true, uniqueness: true, length: { is: 64 }

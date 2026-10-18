@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: visitor_token_statuses
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id :bigint           not null, primary key
 #
-class VisitorTokenStatus < ComTicketRecord
+class VisitorTokenStatus < OpBaseComRecord
   include ReferenceRecord
 
   NOTHING = 0

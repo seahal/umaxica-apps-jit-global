@@ -76,8 +76,8 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
         Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
           AppZenithRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |source|
             source.execute("SET lock_timeout = '5000'")
-            AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |ticket|
-              AppTicketRecord.transaction do
+            OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |ticket|
+              OpBaseAppRecord.transaction do
                 ticket.select_value("SELECT set_config('lock_timeout', '5000', true)")
                 ready << source.select_value("SELECT pg_backend_pid()")
                 release.pop
@@ -145,7 +145,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
 
   test "source claim survives Ticket rollback and terminal reconciliation retires the unbound flow" do
     flow, ceremony = @browsers.first
-    AppTicketRecord.transaction do
+    OpBaseAppRecord.transaction do
       assert ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
       raise ActiveRecord::Rollback
     end

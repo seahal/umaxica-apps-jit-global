@@ -149,17 +149,8 @@ module ActorSupport
       amr: token&.dig("amr"),
       actor_type: actor_type,
       actor_id: resource&.id,
-      restricted: resolved_current_restricted_session?,
       active_sign_sequence_id: resolved_active_sign_sequence_id,
     )
-  end
-
-  def resolved_current_restricted_session?
-    return current_session_restricted? if respond_to?(:current_session_restricted?, true)
-
-    false
-  rescue StandardError => e
-    raise_actor_resolution_error!(:restricted_session, e)
   end
 
   def resolved_active_sign_sequence_id
@@ -180,6 +171,10 @@ module ActorSupport
   end
 
   def resolved_current_selection
+    # An RP cell process has no OP root to read; its controller supplies the owner's answer.
+    cell_selection = rp_cell_selected_context if respond_to?(:rp_cell_selected_context, true)
+    return cell_selection if cell_selection
+
     token = current_session if respond_to?(:current_session, true)
     return Actor::SelectedContext::NULL if token.blank?
 

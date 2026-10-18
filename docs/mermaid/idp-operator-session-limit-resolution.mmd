@@ -8,10 +8,10 @@ stateDiagram-v2
 
     [*] --> PENDING: issue!
     PENDING --> SESSION_SELECTED: select_session!
-    PENDING --> RESOLVED: resolve!
+    PENDING --> RESOLVED: explicit POST continue / finalize_for_session_issuance!
     PENDING --> EXPIRED: expiry
     PENDING --> CANCELLED: cancel!
-    SESSION_SELECTED --> RESOLVED: resolve!
+    SESSION_SELECTED --> RESOLVED: explicit POST continue / finalize_for_session_issuance!
     SESSION_SELECTED --> EXPIRED: expiry
     SESSION_SELECTED --> CANCELLED: cancel!
 
@@ -21,16 +21,19 @@ stateDiagram-v2
         are checked under the realm Ticket locks.
     end note
     note left of PENDING
-        DECIDED 2026-10-16, code pending (nine.md P-8):
-        the open child is the org waiting unit (N=1, slot N+1).
-        issue! only when the actor holds no other open child
-        (PENDING or SESSION_SELECTED, unexpired); otherwise the
-        sign-in is refused and no child is created.
-        The waiting unit may only select/resolve (purge) or cancel;
-        it never reaches MFA reset or any full-access page.
+        R2-WU01 implemented (nine.md P-8): the open child is the
+        org waiting unit (N=1, slot N+1). Under the canonical actor
+        lock and OP writer, elapsed open rows become EXPIRED before
+        issue! claims waiting_slot=1. A second live lease raises the
+        named occupied-slot outcome; R2-WU02 maps it at the root
+        admission boundary to the existing generic :session_limit_conflict
+        result with HTTP 403, without changing the existing flow or lease.
+        The waiting unit may only select, explicitly continue the bound flow, or cancel;
+        it never reaches MFA reset or any full-access page. Selection does not revoke.
     end note
     note right of RESOLVED
-        Selected session was revoked before this transition.
-        Parent issuance retries through AuthenticationBase#log_in.
-        Terminal states are immutable.
+        AuthenticationBase#log_in finalizes the parent and child in one OP transaction.
+        If capacity is already free, selected facts are retained and no session is revoked.
+        If capacity is full, the selected target is revalidated and revoked atomically.
+        Terminal states release waiting_slot and are immutable.
     end note

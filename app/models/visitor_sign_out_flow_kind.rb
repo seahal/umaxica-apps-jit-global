@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: visitor_sign_out_flow_kinds
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id :bigint           not null, primary key
 #
-class VisitorSignOutFlowKind < ComTicketRecord
+class VisitorSignOutFlowKind < OpBaseComRecord
   include ReferenceRecord
 
   NOTHING = 0

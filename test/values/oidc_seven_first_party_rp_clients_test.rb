@@ -33,8 +33,8 @@ class OidcSevenFirstPartyRpClientsTest < ActiveSupport::TestCase
 
     assert_equal 12, namespaces.uniq.size
     assert_equal(
-      %w(CORE_APP CORE_COM CORE_ORG WARP_APP WARP_COM WARP_ORG EDIT_ORG BASE_RP_APP_WW BASE_RP_COM_WW
-         BASE_RP_ORG_WW PALM_APP TECH_ORG),
+      %w(CORE_APP_JP CORE_COM_JP CORE_ORG_JP WARP_APP_JP WARP_COM_JP WARP_ORG_JP EDIT_ORG_WW BASE_RP_APP_WW
+         BASE_RP_COM_WW BASE_RP_ORG_WW PALM_APP_JP TECH_ORG_WW),
       namespaces,
     )
     assert_equal 12, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size

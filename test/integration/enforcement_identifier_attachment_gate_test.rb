@@ -67,7 +67,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f0_key] ||
                   (f0_token.currently_usable? &&
-                    !(f0_token.device_session_id && ClientRpSession.exists?(
+                    !(f0_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f0_token.device_session_id,
                       oidc_client_id: f0_client.client_id,
                       revoked_at: nil,
@@ -75,7 +75,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                 unless @base_browser_rp_credentials[f0_key]
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
-                  f0_session = ClientRpSession.create!(
+                  f0_session = OpAppGrant.create!(
                     client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -182,7 +182,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f1_key] ||
                   (f1_token.currently_usable? &&
-                    !(f1_token.device_session_id && ClientRpSession.exists?(
+                    !(f1_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f1_token.device_session_id,
                       oidc_client_id: f1_client.client_id,
                       revoked_at: nil,
@@ -190,7 +190,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                 unless @base_browser_rp_credentials[f1_key]
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
-                  f1_session = ClientRpSession.create!(
+                  f1_session = OpAppGrant.create!(
                     client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -333,7 +333,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f2_key] ||
                   (f2_token.currently_usable? &&
-                    !(f2_token.device_session_id && VisitorRpSession.exists?(
+                    !(f2_token.device_session_id && OpComGrant.exists?(
                       device_session_id: f2_token.device_session_id,
                       oidc_client_id: f2_client.client_id,
                       revoked_at: nil,
@@ -341,7 +341,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                 unless @base_browser_rp_credentials[f2_key]
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
-                  f2_session = VisitorRpSession.create!(
+                  f2_session = OpComGrant.create!(
                     visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -455,7 +455,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f3_key] ||
                   (f3_token.currently_usable? &&
-                    !(f3_token.device_session_id && VisitorRpSession.exists?(
+                    !(f3_token.device_session_id && OpComGrant.exists?(
                       device_session_id: f3_token.device_session_id,
                       oidc_client_id: f3_client.client_id,
                       revoked_at: nil,
@@ -463,7 +463,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                 unless @base_browser_rp_credentials[f3_key]
                   f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
-                  f3_session = VisitorRpSession.create!(
+                  f3_session = OpComGrant.create!(
                     visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                     refresh_token_expires_at: f3_now + 10.minutes,
@@ -577,7 +577,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f4_key] ||
                   (f4_token.currently_usable? &&
-                    !(f4_token.device_session_id && OperatorRpSession.exists?(
+                    !(f4_token.device_session_id && OpOrgGrant.exists?(
                       device_session_id: f4_token.device_session_id,
                       oidc_client_id: f4_client.client_id,
                       revoked_at: nil,
@@ -585,7 +585,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                 unless @base_browser_rp_credentials[f4_key]
                   f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                   f4_now = Time.current
-                  f4_session = OperatorRpSession.create!(
+                  f4_session = OpOrgGrant.create!(
                     operator_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                     refresh_token_expires_at: f4_now + 10.minutes,
@@ -700,7 +700,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f5_key] ||
                   (f5_token.currently_usable? &&
-                    !(f5_token.device_session_id && OperatorRpSession.exists?(
+                    !(f5_token.device_session_id && OpOrgGrant.exists?(
                       device_session_id: f5_token.device_session_id,
                       oidc_client_id: f5_client.client_id,
                       revoked_at: nil,
@@ -708,7 +708,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                 unless @base_browser_rp_credentials[f5_key]
                   f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                   f5_now = Time.current
-                  f5_session = OperatorRpSession.create!(
+                  f5_session = OpOrgGrant.create!(
                     operator_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                     refresh_token_expires_at: f5_now + 10.minutes,

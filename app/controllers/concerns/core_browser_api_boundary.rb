@@ -6,6 +6,7 @@ module CoreBrowserApiBoundary
 
   include ProblemDetailsRendering
   include ApiContentNegotiation
+  include RpCellLocalSession
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
@@ -42,6 +43,7 @@ module CoreBrowserApiBoundary
       install_unauthenticated_actor!
       return false
     end
+    return authenticate_core_cell_session!(token) if rp_cell_process?
 
     payload = OidcRpBrowserCredentialContract.decode_access_token(
       token: token,
@@ -50,6 +52,21 @@ module CoreBrowserApiBoundary
       client_id: core_rp_client_id,
     )
     if payload.blank?
+      reject_core_browser_cookie!(reason: "invalid_access_token")
+      render_problem(:authentication_required)
+      return false
+    end
+
+    authentication = OidcAccessTokenAuthenticator.call(
+      access_token: token,
+      resource_type: core_resource_type,
+      host: request.host,
+      authorization_scheme: request.headers["DPoP"].present? ? "DPoP" : nil,
+      dpop_proof: request.headers["DPoP"],
+      request_method: request.request_method,
+      request_uri: request.original_url,
+    )
+    unless authentication.success?
       reject_core_browser_cookie!(reason: "invalid_access_token")
       render_problem(:authentication_required)
       return false
@@ -66,6 +83,29 @@ module CoreBrowserApiBoundary
     install_authenticated_actor!
     true
   end
+
+  # R5-WU17 cell process: the Access JWT plus this cell's local session; the actor is the local
+  # principal, never the canonical Client/Visitor/Operator.
+  def authenticate_core_cell_session!(token)
+    result = authenticate_rp_cell_request(access_token: token)
+    unless result.authenticated?
+      reject_core_browser_cookie!(reason: "invalid_access_token")
+      render_problem(:authentication_required)
+      return false
+    end
+
+    @current_token_payload = result.payload
+    @current_resource = result.principal
+    install_authenticated_actor!
+    true
+  rescue OidcOpJwksClient::FetchError, ActiveRecord::ActiveRecordError
+    render_problem(:service_unavailable)
+    false
+  end
+
+  def rp_cell_client_id = core_rp_client_id
+
+  def rp_cell_resource_type = core_resource_type
 
   def render_csrf_failure
     render_problem(:csrf_verification_failed)
@@ -108,32 +148,25 @@ module CoreBrowserApiBoundary
       return
     end
 
-    token_endpoint_uri = OidcIssuer.token_endpoint(core_resource_type)
-    client_assertion = OidcClientAssertionJwt.issue(
+    return refresh_core_cell_token!(refresh_plain) if rp_cell_process?
+
+    # Public HTTPS to the OP token endpoint (R5-WU05); no in-process OP coordinator.
+    result = OidcOpTokenClient.refresh(
       client_id: core_rp_client_id,
-      token_url: token_endpoint_uri,
-    )
-    result = OidcTokenExchangeCoordinator.call(
-      grant_type: "refresh_token",
+      token_url: OidcIssuer.token_endpoint(core_resource_type),
       refresh_token: refresh_plain,
-      client_id: core_rp_client_id,
-      client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
-      client_assertion: client_assertion,
-      token_endpoint_uri: token_endpoint_uri,
-      expected_resource_type: core_resource_type,
     )
     unless result.success?
-      render_problem(:token_expired)
+      # A dependency or indeterminate outcome is not an expired credential; keep the cookies.
+      render_problem((result.outcome == :refused) ? :token_expired : :service_unavailable)
       return
     end
 
     access_token = result.token_response.fetch(:access_token)
     new_refresh_token = result.token_response.fetch(:refresh_token)
     expiries = {
-      access_expires_at: result.access_expires_at ||
-        OidcRpBrowserCredentialContract.access_expires_at_from_response(result.token_response),
-      refresh_expires_at: result.refresh_expires_at ||
-        OidcRpBrowserCredentialContract.refresh_expires_at_from_response(result.token_response),
+      access_expires_at: OidcRpBrowserCredentialContract.access_expires_at_from_response(result.token_response),
+      refresh_expires_at: OidcRpBrowserCredentialContract.refresh_expires_at_from_response(result.token_response),
     }
 
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
@@ -152,6 +185,38 @@ module CoreBrowserApiBoundary
     # `seahal/umaxica-apps-edge` on 2026-08-22 found it forwards `/api/v0/*` without parsing it and
     # has no reader for the key. See decision D14 in research/rails-nextjs-openapi-contract-audit.md.
     head :no_content
+  end
+
+  # R5-WU17 cell process: Refresh is reserved/installed under the local session (RpRefreshCommitter).
+  def refresh_core_cell_token!(refresh_plain)
+    cell = rp_cell
+    result =
+      "#{cell.record_prefix}Record".constantize.connected_to(role: :writing) do
+        RpRefreshCommitter.call(
+          cell:, local_session_id: cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE].to_s,
+          refresh_token: refresh_plain, issuer: rp_cell_issuer, contract_epoch: rp_cell_contract_epoch,
+          jwks_client: rp_cell_jwks_client, token_url: OidcIssuer.token_endpoint(core_resource_type),
+          query_url: OidcIssuer.refresh_delivery_query_endpoint(core_resource_type),
+        )
+      end
+    case result.outcome
+    when :installed
+      install_core_refreshed_cookies!(result.token_response)
+      head :no_content
+    when :refused, :revoked then render_problem(:token_expired)
+    else render_problem(:service_unavailable)
+    end
+  end
+
+  def install_core_refreshed_cookies!(token_response)
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
+      OidcRpBrowserCredentialContract.access_cookie_options(
+        expires_at: OidcRpBrowserCredentialContract.access_expires_at_from_response(token_response),
+      ).merge(value: token_response.fetch(:access_token))
+    cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] =
+      OidcRpBrowserCredentialContract.refresh_cookie_options(
+        expires_at: OidcRpBrowserCredentialContract.refresh_expires_at_from_response(token_response),
+      ).merge(value: token_response.fetch(:refresh_token))
   end
 
   def verify_core_browser_api_csrf!
@@ -202,7 +267,6 @@ module CoreBrowserApiBoundary
         amr: current_token_payload["amr"],
         actor_type: core_actor_type,
         actor_id: current_resource.id,
-        restricted: false,
       ),
       authz: Actor::Authz.new(
         policy_user: current_resource,
@@ -230,9 +294,9 @@ module CoreBrowserApiBoundary
 
   def core_rp_client_id
     case core_resource_type.to_s
-    when "operator" then "core-org"
-    when "visitor" then "core-com"
-    else "core-app"
+    when "operator" then RpDeploymentBindingValue.client_id("core-org")
+    when "visitor" then RpDeploymentBindingValue.client_id("core-com")
+    else RpDeploymentBindingValue.client_id("core-app")
     end
   end
 

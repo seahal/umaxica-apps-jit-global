@@ -101,6 +101,8 @@ class Client < AppPrincipalRecord
 
   attribute :status_id, default: ClientStatus::NOTHING
 
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+
   belongs_to :user_status, class_name: "ClientStatus",
                            foreign_key: :status_id,
                            inverse_of: :users

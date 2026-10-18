@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class IdentitySocialCeremonyCandidate < AppTicketRecord
+class IdentitySocialCeremonyCandidate < OpBaseAppRecord
   include IdentityCeremonyCandidateRecord
 
   NANOID_REFERENCE_PATTERN = /\A[A-Za-z0-9_-]{21}\z/.freeze

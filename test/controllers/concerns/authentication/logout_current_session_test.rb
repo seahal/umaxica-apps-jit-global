@@ -76,15 +76,15 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
-    active_session = ClientRpSession.create!(
+    active_session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
-    expired_session = ClientRpSession.create!(
+    expired_session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "warp-app",
+      oidc_client_id: "warp-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.minute.ago,
     )
@@ -107,9 +107,9 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
-    session = ClientRpSession.create!(
+    session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -129,9 +129,9 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   test "a precondition that fails under the parent lock revokes nothing" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -210,9 +210,9 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
-    session = ClientRpSession.create!(
+    session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -649,16 +649,16 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     device_session = token.reload.device_session
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
     flow_count = ClientSignOutFlow.where(token_id: token.id).count
-    original_revoke = ClientRpSession.instance_method(:revoke!)
+    original_revoke = OpAppGrant.instance_method(:revoke!)
 
-    ClientRpSession.define_method(:revoke!) { |**| raise ActiveRecord::RecordInvalid.new(self) }
+    OpAppGrant.define_method(:revoke!) { |**| raise ActiveRecord::RecordInvalid.new(self) }
     assert_raises(ActiveRecord::RecordInvalid) do
       AuthenticationLogoutCurrentSession.call(
         resource: user,
@@ -667,7 +667,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
       )
     end
   ensure
-    ClientRpSession.define_method(:revoke!, original_revoke) if original_revoke
+    OpAppGrant.define_method(:revoke!, original_revoke) if original_revoke
 
     assert_predicate device_session.reload, :usable?
     assert_not_predicate token.reload, :revoked?
@@ -682,7 +682,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     transaction_depth = 0
 
     result =
-      AppTicketRecord.stub(
+      OpBaseAppRecord.stub(
         :transaction,
         lambda do |*, &block|
           transaction_depth += 1
@@ -712,10 +712,10 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
     token.rotate_refresh_token!
     transaction_depth = 0
     read_available = true
-    original_with_connection = AppTicketRecord.connection_pool.method(:with_connection)
+    original_with_connection = OpBaseAppRecord.connection_pool.method(:with_connection)
 
     assert_raises(AuthenticationLogoutCurrentSession::CommitOutcomeUnknown) do
-      AppTicketRecord.stub(
+      OpBaseAppRecord.stub(
         :transaction,
         lambda do |*, &block|
           transaction_depth += 1
@@ -730,7 +730,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
           transaction_depth -= 1
         end,
       ) do
-        AppTicketRecord.connection_pool.stub(
+        OpBaseAppRecord.connection_pool.stub(
           :with_connection,
           lambda do |*args, **kwargs, &block|
             raise ActiveRecord::ConnectionFailed, "writer unavailable" unless read_available

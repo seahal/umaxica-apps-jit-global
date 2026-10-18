@@ -26,9 +26,9 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       starts_at: 1.minute.ago,
       expires_at: 1.day.from_now,
     )
-    client = OidcClientRegistry.find!("tech-org")
+    client = OidcClientRegistry.find!("tech-org-ww")
     root_token = OperatorToken.create!(staff: @operator)
-    rp_session = OperatorRpSession.create!(
+    rp_session = OpOrgGrant.create!(
       operator_token: root_token,
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",

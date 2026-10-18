@@ -51,7 +51,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
                 release.pop
                 owner = Client.find(actor.id)
                 bound = context.with(subject: owner)
-                AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+                OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                   result =
                     case operation
                     when :confirm
@@ -174,7 +174,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
             connection.execute("SET lock_timeout = '5000'")
             ready << connection.select_value("SELECT pg_backend_pid()")
             release.pop
-            AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+            OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
               if operation == :confirm
                 owner = Client.find(actor.id)
                 ClientSecretStorageConfirmationCommitter.call!(
@@ -283,7 +283,7 @@ class ClientSecretStorageConfirmationConcurrencyTest < ActiveSupport::TestCase
                 release.pop
                 owner = Client.find(actor.id)
                 bound = context.with(subject: owner)
-                AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+                OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                   result = ClientSecretStorageConfirmationCommitter.call!(
                     actor_context: bound, token: token, issuance: issuance,
                   )

@@ -40,7 +40,7 @@ class OidcSsoInitiatorTestController < ApplicationController
   end
 
   def oidc_client_id
-    "core-app"
+    "core-app-jp"
   end
 
   def oidc_sign_host
@@ -608,7 +608,7 @@ class OidcSsoInitiatorTestController
     lines.flat_map { |line| line.to_s.split("\n") }.compact_blank
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app-jp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 

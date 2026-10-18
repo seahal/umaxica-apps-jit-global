@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_oauth_callback_states
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id           :bigint           not null, primary key
 #  consumed_at  :datetime
@@ -21,6 +21,6 @@
 #  index_client_oauth_callback_states_on_expires_at    (expires_at)
 #  index_client_oauth_callback_states_on_state_digest  (state_digest) UNIQUE
 #
-class ClientOauthCallbackState < AppTicketRecord
+class ClientOauthCallbackState < OpBaseAppRecord
   include OauthCallbackStateable
 end

@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class VisitorPasskeyCeremonyCandidate < ComTicketRecord
+class VisitorPasskeyCeremonyCandidate < OpBaseComRecord
   include IdentityCeremonyCandidateRecord
 
   validates :step_up_ceremony_transaction_ref, :webauthn_id, :public_key, :description, presence: true

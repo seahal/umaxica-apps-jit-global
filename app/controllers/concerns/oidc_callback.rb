@@ -4,6 +4,8 @@
 module OidcCallback
   extend ActiveSupport::Concern
 
+  include RpCellLocalSession
+
   InvalidCallbackState =
     Class.new(StandardError) do
       attr_reader :reason
@@ -42,7 +44,7 @@ module OidcCallback
         return render_callback_failure(e.reason)
       end
     unless token_result.success?
-      return render_token_exchange_failure(token_result.error)
+      return render_token_exchange_failure(token_result)
     end
 
     token_response = token_result.token_response
@@ -54,6 +56,10 @@ module OidcCallback
     authentication_event_at = authentication_event_at_from_id_token(id_token_result.payload)
     return render_callback_failure("id_token_invalid") if authentication_event_at.blank?
 
+    # R5-WU17 cell process: the verified identity goes into the cell's own store; no canonical
+    # actor, OP grant or userinfo lookup is read from here.
+    return complete_rp_cell_callback!(id_token_result.payload, token_response) if rp_cell_process?
+
     authoritative_resource =
       begin
         verified_access_token_resource_for_callback(token_response)
@@ -63,17 +69,8 @@ module OidcCallback
         return render_callback_failure("dependency_unavailable", status: :service_unavailable)
       end
 
-    userinfo_result = verified_userinfo_claims_for_callback(token_response)
-    if userinfo_result
-      if userinfo_result.dependency_failure?
-        return render_callback_failure("dependency_unavailable", status: :service_unavailable)
-      end
-      return render_callback_failure("userinfo_failed") unless userinfo_result.success?
-      return render_callback_failure("subject_mismatch") unless callback_subject_matches_userinfo?(
-        id_token_result,
-        userinfo_result,
-      )
-    end
+    userinfo_reason, userinfo_status = callback_userinfo_failure(token_response, id_token_result)
+    return render_callback_failure(userinfo_reason, status: userinfo_status) if userinfo_reason
 
     resource =
       begin
@@ -102,7 +99,7 @@ module OidcCallback
                     authentication_event_at: authentication_event_at,
         )
       end
-    # No restricted session is issued at a full limit; the RP refuses.
+    # No session-limit placeholder is issued at a full limit; the RP refuses.
     if %i(session_limit_conflict session_limit_pending).include?(login_result[:status])
       return render_oidc_session_limit_refusal(login_result.reverse_merge(http_status: :forbidden))
     end
@@ -134,10 +131,10 @@ module OidcCallback
     raise InvalidCallbackState.new("OIDC PKCE verifier missing", reason: "state_invalid") if code_verifier.blank?
 
     token_url = oidc_token_url
-    OidcRpTokenClient.call(
-      token_url: token_url,
+    # Every first-party RP authenticates with a private_key_jwt assertion bound to this endpoint.
+    OidcOpTokenClient.authorization_code(
       client_id: oidc_client_id,
-      client_secret: oidc_client_secret,
+      token_url: token_url,
       code: params[:code],
       redirect_uri: oidc_callback_url,
       code_verifier: code_verifier,
@@ -201,6 +198,36 @@ module OidcCallback
     false
   end
 
+  # Same client and resource type as BrowserRpAuthentication's (both name the controller's own cell).
+  def rp_cell_client_id = oidc_client_id
+
+  def rp_cell_resource_type = oidc_resource_type
+
+  def complete_rp_cell_callback!(id_token_payload, token_response)
+    expiries = OidcRpBrowserCredentialContract.cookie_expiries_from_response(token_response)
+    result = commit_rp_cell_callback!(id_token_payload, absolute_expires_at: expiries.fetch(:refresh_expires_at))
+    # A logged-out sid (tombstone), a re-bound identity or a reused callback never signs in.
+    return render_callback_failure("identity_resolution_failed") unless result.success?
+
+    store_oidc_rp_credentials!(token_response)
+    redirect_to(consume_oidc_pt, allow_other_host: false)
+  rescue KeyError, ArgumentError, ContractEpochValue::Invalid
+    render_callback_failure("identity_resolution_failed")
+  rescue ActiveRecord::ActiveRecordError
+    render_callback_failure("dependency_unavailable", status: :service_unavailable)
+  end
+
+  # [reason, status] when the optional UserInfo check refuses, else nil.
+  def callback_userinfo_failure(token_response, id_token_result)
+    userinfo_result = verified_userinfo_claims_for_callback(token_response)
+    return unless userinfo_result
+    return ["dependency_unavailable", :service_unavailable] if userinfo_result.dependency_failure?
+    return ["userinfo_failed", :unprocessable_content] unless userinfo_result.success?
+    return if callback_subject_matches_userinfo?(id_token_result, userinfo_result)
+
+    ["subject_mismatch", :unprocessable_content]
+  end
+
   def store_oidc_rp_credentials!(token_response)
     access_token, refresh_token = OidcRpBrowserCredentialContract.require_token_response!(token_response)
     expiries = OidcRpBrowserCredentialContract.cookie_expiries_from_response(token_response)
@@ -216,6 +243,8 @@ module OidcCallback
   end
 
   def verify_id_token!(id_token)
+    return verify_rp_cell_id_token!(id_token) if rp_cell_process?
+
     OidcIdTokenVerifier.call(
       id_token: id_token,
       client_id: oidc_client_id,
@@ -225,6 +254,18 @@ module OidcCallback
       issuer: OidcIssuer.for_resource_type(oidc_resource_type),
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type(oidc_resource_type),
     )
+  end
+
+  # R5-WU17 cell process: the ID Token is verified against the OP's public JWKS for this exact
+  # client; the cell holds no OP key.
+  def verify_rp_cell_id_token!(id_token)
+    OidcOpIdTokenVerifier.new(
+      id_token:, client_id: oidc_client_id, realm: rp_cell.realm, issuer: rp_cell_issuer,
+      expected_nonce: oidc_flow_value("nonce").to_s, expected_max_age: oidc_flow_value("max_age"),
+      jwks_client: rp_cell_jwks_client,
+    ).call
+  rescue ArgumentError
+    OidcOpIdTokenVerifier::Result.new(success: false, payload: nil, error: "invalid_id_token")
   end
 
   def authentication_event_at_from_id_token(payload)
@@ -238,10 +279,6 @@ module OidcCallback
     authentication_time
   rescue ArgumentError, RangeError, TypeError
     nil
-  end
-
-  def oidc_client_secret
-    oidc_client&.client_secret
   end
 
   def consume_oidc_pt
@@ -274,14 +311,14 @@ module OidcCallback
     render plain: I18n.t("errors.messages.login_required"), content_type: "text/plain", status: status
   end
 
-  def render_token_exchange_failure(error)
-    if error == "access_denied" && oidc_client_id == "tech-org"
+  def render_token_exchange_failure(result)
+    if result.error == "access_denied" && oidc_client_id == "tech-org-ww"
       return render_oidc_access_denied!
     end
 
     render_callback_failure(
-      token_exchange_failure_reason(error),
-      status: token_exchange_failure_status(error),
+      token_exchange_failure_reason(result),
+      status: token_exchange_failure_status(result),
     )
   end
 
@@ -304,21 +341,19 @@ module OidcCallback
   end
 
   def oidc_callback_log_surface
-    case oidc_client_id
-    when "base-app-ww", "core-app", "warp-app", "palm-app" then "app"
-    when "base-com-ww", "core-com", "warp-com" then "com"
-    when "base-org-ww", "core-org", "edit-org", "warp-org", "tech-org" then "org"
-    else "unknown"
-    end
+    oidc_callback_log_realm
   end
 
   def oidc_callback_log_face
-    case oidc_client_id
-    when "base-app-ww", "core-app", "warp-app", "palm-app" then "app"
-    when "base-com-ww", "core-com", "warp-com" then "com"
-    when "base-org-ww", "core-org", "edit-org", "warp-org", "tech-org" then "org"
-    else "unknown"
-    end
+    oidc_callback_log_realm
+  end
+
+  # Log label only: the realm segment of an active exact Client ID (`<family>-<realm>-<scope>`).
+  # Unknown or inactive IDs are labelled "unknown" rather than guessed.
+  def oidc_callback_log_realm
+    return "unknown" unless RpDeploymentBindingValue.active_client_ids.include?(oidc_client_id.to_s)
+
+    oidc_client_id.to_s.split("-").fetch(1)
   end
 
   def token_response_complete?(token_response)
@@ -336,13 +371,14 @@ module OidcCallback
     token_response[key] || token_response[key.to_s]
   end
 
-  def token_exchange_failure_reason(error)
-    %w(token_exchange_failed server_error temporarily_unavailable dependency_unavailable).include?(error.to_s) ?
-      "dependency_unavailable" : "token_exchange_failed"
+  # Only a definitive OAuth refusal is a failed exchange; every other outcome means the OP could not
+  # be relied on (transport, invalid remote answer, indeterminate commit) and is reported as such.
+  def token_exchange_failure_reason(result)
+    (result.outcome == :refused) ? "token_exchange_failed" : "dependency_unavailable"
   end
 
-  def token_exchange_failure_status(error)
-    (token_exchange_failure_reason(error) == "dependency_unavailable") ? :service_unavailable : :unprocessable_content
+  def token_exchange_failure_status(result)
+    (token_exchange_failure_reason(result) == "dependency_unavailable") ? :service_unavailable : :unprocessable_content
   end
 
   def callback_subject_matches_userinfo?(id_token_result, userinfo_result)

@@ -90,12 +90,12 @@ module SecretCredentialCeremonyTransactionable
     end
 
     def connection_owner
-      if self <= AppTicketRecord
-        AppTicketRecord
-      elsif self <= OrgTicketRecord
-        OrgTicketRecord
-      elsif self <= ComTicketRecord
-        ComTicketRecord
+      if self <= OpBaseAppRecord
+        OpBaseAppRecord
+      elsif self <= OpBaseOrgRecord
+        OpBaseOrgRecord
+      elsif self <= OpBaseComRecord
+        OpBaseComRecord
       else
         ActiveRecord::Base
       end

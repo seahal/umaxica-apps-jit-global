@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_tokens
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
@@ -89,10 +89,10 @@ class VisitorTokenTest < ActiveSupport::TestCase
 
   public
 
-  test "inherits from ComTicketRecord" do
-    assert_operator VisitorToken, :<, ComTicketRecord
+  test "inherits from OpBaseComRecord" do
+    assert_operator VisitorToken, :<, OpBaseComRecord
     assert_operator VisitorToken, :<, ApplicationRecord
-    assert_not_operator VisitorToken, :<, OrgTicketRecord
+    assert_not_operator VisitorToken, :<, OpBaseOrgRecord
   end
 
   test "belongs to visitor" do

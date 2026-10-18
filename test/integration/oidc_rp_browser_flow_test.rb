@@ -11,19 +11,19 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   SURFACES = [
     { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-      client_id: "core-app",
+      client_id: "core-app-jp",
       acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       resource: -> {
         clients(:one)
       }, },
     { host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
-      client_id: "core-org",
+      client_id: "core-org-jp",
       acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       resource: -> {
         operators(:one)
       }, },
     { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-      client_id: "core-com",
+      client_id: "core-com-jp",
       acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
       resource: -> {
         create_visitor!
@@ -61,7 +61,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   test "acme app session-limit limitation revokes one session and resumes authorization" do
     with_core_oidc_client_key do
       acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      client = OidcClientRegistry.find!("core-app")
+      client = OidcClientRegistry.find!("core-app-jp")
       code_verifier = SecureRandom.urlsafe_base64(48)
       user = clients(:one)
       ClientToken.where(user_id: user.id).delete_all
@@ -174,13 +174,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_equal 2, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
       token_url = acme_app_oauth_token_url(host: acme_host)
-      client_assertion = OidcClientAssertionJwt.issue(client_id: "core-app", token_url: token_url)
+      client_assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
       post token_url,
            params: {
              grant_type: "authorization_code",
              code: callback_query.fetch("code"),
              redirect_uri: client.redirect_uris.first,
-             client_id: "core-app",
+             client_id: "core-app-jp",
              code_verifier: code_verifier,
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
              client_assertion: client_assertion,
@@ -233,7 +233,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       assert_equal acme_host, authorize_uri.host
       assert_equal "/oauth/authorize", authorize_uri.path
-      assert_equal "core-app", authorize_query.fetch("client_id")
+      assert_equal "core-app-jp", authorize_query.fetch("client_id")
       assert_equal redirect_uri_for_core_app(core_host), authorize_query.fetch("redirect_uri")
       assert_nil authorize_query["screen_hint"]
 
@@ -439,13 +439,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       # in the other callback tests.
       id_token = OidcIdTokenIssuer.call(
         resource: user,
-        client: OidcClientRegistry.find!("core-app"),
+        client: OidcClientRegistry.find!("core-app-jp"),
         nonce: authorize_query.fetch("nonce"),
         auth_time: transaction.authenticated_at,
       )
-      core_client = OidcClientRegistry.find!("core-app")
+      core_client = OidcClientRegistry.find!("core-app-jp")
       rp_root_token = ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).order(created_at: :desc).first
-      rp_session = ClientRpSession.create!(
+      rp_session = OpAppGrant.create!(
         client_token: rp_root_token,
         oidc_client_id: core_client.client_id,
         oidc_scope: "openid profile",
@@ -469,8 +469,8 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         subject: OidcSubject.for(user, resource_type: "client"),
         client_id: core_client.client_id,
       )
-      token_result = OidcRpTokenClient::Result.new(
-        success: true,
+      token_result = OidcOpTokenClient::Result.new(
+        outcome: :success,
         token_response: {
           access_token: rp_access_token,
           refresh_token: rp_session.issue_refresh_token!,
@@ -481,14 +481,14 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
         error: nil,
       )
 
-      userinfo_result = OidcRpUserInfoClient::Result.new(
+      userinfo_result = OidcOpUserInfoClient::Result.new(
         success: true,
         claims: { "sub" => OidcSubject.for(user, resource_type: "client") },
         error: nil,
         dependency_failure: false,
       )
 
-      OidcRpTokenClient.stub(:call, token_result) do
+      OidcOpTokenClient.stub(:authorization_code, token_result) do
         host!(callback_uri.host)
         cookies.delete("session")
         # Rack::Test::CookieJar#merge mutates the jar and has no #merge! form; Lint/Void would
@@ -498,7 +498,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           "session=#{Rack::Utils.escape(core_continuity_cookies.fetch("session"))}",
           URI.parse("https://#{core_host}/"),
         )
-        OidcRpUserInfoClient.stub(:call, userinfo_result) do
+        OidcOpUserInfoClient.stub(:call, userinfo_result) do
           get(callback_uri.request_uri, headers: browser_headers)
         end
       end
@@ -630,7 +630,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_not_predicate issuance.transaction.reload, :consumed?
   end
 
-  test "acme app session-limit limitation stays on page when capacity is still full after revoke" do
+  test "acme app session-limit limitation fails closed when active sessions exceed the limit" do
     acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
@@ -639,7 +639,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
       authentication_event_at: Time.current,
     )
-    Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER - 1) { ClientToken.create!(user: user) }
+    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: user) }
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
     host!(acme_host)
     get("/sign", params: { ri: "jp" })
@@ -722,9 +722,10 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       )
     end
 
-    assert_response :unprocessable_content
-    assert_includes response.body, I18n.t("base.app.sign.in.limitations.capacity_still_full")
-    assert_predicate token.reload, :revoked?
+    assert_response :gone
+    assert_includes response.body, I18n.t("base.app.sign.in.limitations.invalid_or_expired")
+    assert_not_predicate token.reload, :revoked?
+    assert_predicate resolution.transaction.reload, :session_selected?
     assert_not_predicate issuance.transaction.reload, :consumed?
   end
 
@@ -1057,7 +1058,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   def redirect_uri_for_core_app(host)
-    OidcClientRegistry.find!("core-app").redirect_uris.find do |uri|
+    OidcClientRegistry.find!("core-app-jp").redirect_uris.find do |uri|
       URI.parse(uri).host == host
     end
   end
@@ -1086,7 +1087,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "core-app",
+        client_id: "core-app-jp",
         redirect_uri: redirect_uri_for(SURFACES.first),
         scope: "openid profile",
         state: SecureRandom.hex(16),
@@ -1124,23 +1125,23 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   def with_core_oidc_client_key
     original_issuers = JitSecurityJwtRegistry.instance_variable_get(:@issuers)
-    original_active_kid = ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"]
-    original_private_key = ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"]
+    original_active_kid = ENV["OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID"]
+    original_private_key = ENV["OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY"]
     key = OpenSSL::PKey::EC.generate("secp384r1")
-    ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"] = "core-app-oidc-test"
-    ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
+    ENV["OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID"] = "core-app-oidc-test"
+    ENV["OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
     JitSecurityJwtRegistry.reload!
     yield
   ensure
     if original_active_kid.nil?
-      ENV.delete("OIDC_CLIENT_CORE_APP_ACTIVE_KID")
+      ENV.delete("OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID")
     else
-      ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"] = original_active_kid
+      ENV["OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID"] = original_active_kid
     end
     if original_private_key.nil?
-      ENV.delete("OIDC_CLIENT_CORE_APP_PRIVATE_KEY")
+      ENV.delete("OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY")
     else
-      ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"] = original_private_key
+      ENV["OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY"] = original_private_key
     end
     JitSecurityJwtRegistry.instance_variable_set(:@issuers, original_issuers)
   end
@@ -1404,7 +1405,7 @@ class OidcRpBrowserFlowTest
     social_auth_state_from_response
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app-jp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 

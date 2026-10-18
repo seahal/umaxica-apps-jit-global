@@ -90,8 +90,8 @@ module TotpCeremonyTransactionable
     end
 
     def connection_owner
-      if self <= AppTicketRecord
-        AppTicketRecord
+      if self <= OpBaseAppRecord
+        OpBaseAppRecord
       else
         ActiveRecord::Base
       end

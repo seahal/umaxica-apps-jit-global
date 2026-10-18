@@ -38,7 +38,7 @@ module Core
           return continue_browser_rp_logout! if params[:logout_challenge].present?
 
           launch_oidc_rp_logout!(
-            client_id: "core-com",
+            client_id: RpDeploymentBindingValue.client_id("core-com"),
             issuer_resource_type: "visitor",
             token_issuer: "visitor",
             session_authority: :rp_session,

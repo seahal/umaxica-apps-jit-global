@@ -26,7 +26,7 @@ module Palm
         end
 
         def oidc_client_id
-          "palm-app"
+          RpDeploymentBindingValue.client_id("palm-app")
         end
       end
     end

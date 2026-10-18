@@ -8,19 +8,19 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
   SURFACES = [
     {
       host: ENV.fetch("PUBLIC_CORE_SERVICE_URL"),
-      client_id: "core-app",
+      client_id: "core-app-jp",
       acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       resource: -> { clients(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_STAFF_URL"),
-      client_id: "core-org",
+      client_id: "core-org-jp",
       acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       resource: -> { operators(:one) },
     },
     {
       host: ENV.fetch("PUBLIC_CORE_CORPORATE_URL"),
-      client_id: "core-com",
+      client_id: "core-com-jp",
       acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
       resource: -> { create_visitor! },
     },
@@ -108,23 +108,23 @@ class CoreRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   def with_core_oidc_client_key
     original_issuers = JitSecurityJwtRegistry.instance_variable_get(:@issuers)
-    original_active_kid = ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"]
-    original_private_key = ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"]
+    original_active_kid = ENV["OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID"]
+    original_private_key = ENV["OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY"]
     key = OpenSSL::PKey::EC.generate("secp384r1")
-    ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"] = "core-app-oidc-test"
-    ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
+    ENV["OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID"] = "core-app-oidc-test"
+    ENV["OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY"] = Base64.strict_encode64(key.to_der)
     JitSecurityJwtRegistry.reload!
     yield
   ensure
     if original_active_kid.nil?
-      ENV.delete("OIDC_CLIENT_CORE_APP_ACTIVE_KID")
+      ENV.delete("OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID")
     else
-      ENV["OIDC_CLIENT_CORE_APP_ACTIVE_KID"] = original_active_kid
+      ENV["OIDC_CLIENT_CORE_APP_JP_ACTIVE_KID"] = original_active_kid
     end
     if original_private_key.nil?
-      ENV.delete("OIDC_CLIENT_CORE_APP_PRIVATE_KEY")
+      ENV.delete("OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY")
     else
-      ENV["OIDC_CLIENT_CORE_APP_PRIVATE_KEY"] = original_private_key
+      ENV["OIDC_CLIENT_CORE_APP_JP_PRIVATE_KEY"] = original_private_key
     end
     JitSecurityJwtRegistry.instance_variable_set(:@issuers, original_issuers)
   end

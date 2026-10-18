@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_oidc_authorization_transactions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                         :bigint           not null, primary key
 #  acr                        :string
@@ -44,8 +44,10 @@
 #  idx_on_login_challenge_91d464d261                               (login_challenge) UNIQUE
 #  index_client_oidc_authorization_transactions_on_transaction_id  (transaction_id) UNIQUE
 #
-class ClientOidcAuthorizationTransaction < AppTicketRecord
+class ClientOidcAuthorizationTransaction < OpBaseAppRecord
   include OidcAuthorizationTransactionable
+
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
 
   oidc_authorization_surface "app"
 

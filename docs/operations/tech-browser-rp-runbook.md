@@ -2,7 +2,7 @@
 
 Tech is the independent `tech-org` Operator RP on `tech.umaxica.org`, with private origin
 `tech.org.localhost`. Its actor and capability records use `org_zenith`; Device, root and RP session
-records use `org_ticket`. Storage sharing with Edit does not share credentials, client assertions,
+records use `op_base_org`. Storage sharing with Edit does not share credentials, client assertions,
 host cookies or business authorization. See the accepted
 [participation ADR](../../adr/tech-and-palm-browser-rp-participation.md).
 

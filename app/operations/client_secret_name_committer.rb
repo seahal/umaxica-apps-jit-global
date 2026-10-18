@@ -14,7 +14,7 @@ class ClientSecretNameCommitter
 
       # Ticket is read/locked only. Its outer transaction keeps the session lock
       # until the source Zenith mutation and outbox have committed together.
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor_context.subject.with_lock do
@@ -80,7 +80,7 @@ class ClientSecretNameCommitter
         require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
-      unless locked_token.currently_usable?(now) && !locked_token.restricted? &&
+      unless locked_token.active_status?(now) &&
           StepUpResolver.call(token: locked_token, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret rename requires current scoped Step-Up"
       end

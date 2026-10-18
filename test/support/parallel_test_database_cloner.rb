@@ -72,6 +72,11 @@ module ParallelTestDatabaseCloner
     )
   end
 
+  # The standalone browser server verifies and cleans the same owned worker receipt.
+  def isolated_worker_manifest_path(worker)
+    @isolated_worker_manifests.fetch(worker)
+  end
+
   def acquire_test_process_lock!
     return if @test_process_lock
 

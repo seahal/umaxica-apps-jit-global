@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: client_sign_up_flow_statuses
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id :bigint           not null, primary key
 #
-class ClientSignUpFlowStatus < AppTicketRecord
+class ClientSignUpFlowStatus < OpBaseAppRecord
   include ReferenceRecord
 
   STARTED = 10

@@ -50,11 +50,11 @@ class SignUpContractsTest < ActiveSupport::TestCase
   end
 
   test "requirement registry derives surface from ticket class" do
-    app_ticket = build_cycle(ClientSignUpFlow, entry_method: "google")
-    com_ticket = build_cycle(VisitorSignUpFlow, entry_method: "telephone")
+    op_base_app = build_cycle(ClientSignUpFlow, entry_method: "google")
+    op_base_com = build_cycle(VisitorSignUpFlow, entry_method: "telephone")
 
-    assert_equal :app, SignUpRequirementRegistry.for_ticket(app_ticket).surface
-    assert_equal :com, SignUpRequirementRegistry.for_ticket(com_ticket).surface
+    assert_equal :app, SignUpRequirementRegistry.for_ticket(op_base_app).surface
+    assert_equal :com, SignUpRequirementRegistry.for_ticket(op_base_com).surface
   end
 
   test "policy context copies step and entry method from ticket" do

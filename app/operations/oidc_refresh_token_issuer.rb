@@ -23,13 +23,16 @@ class OidcRefreshTokenIssuer
       end
     end
 
-  def self.call(refresh_token:, client_id: nil, resource_type: nil, response_builder: nil, coordination_store: nil)
+  def self.call(refresh_token:, client_id: nil, resource_type: nil, response_builder: nil, coordination_store: nil,
+                actor_guard: nil, attempt_ref: nil)
     new(
       refresh_token,
       client_id: client_id,
       resource_type: resource_type,
       response_builder: response_builder,
       coordination_store: coordination_store,
+      actor_guard: actor_guard,
+      attempt_ref: attempt_ref,
     ).call
   end
 
@@ -39,12 +42,18 @@ class OidcRefreshTokenIssuer
 
   public
 
-  def initialize(refresh_token, client_id: nil, resource_type: nil, response_builder: nil, coordination_store: nil)
+  def initialize(refresh_token, client_id: nil, resource_type: nil, response_builder: nil, coordination_store: nil,
+                 actor_guard: nil, attempt_ref: nil)
     @refresh_token = refresh_token
     @client_id = client_id
     @resource_type = resource_type.to_s
     @response_builder = response_builder
     @coordination_store = coordination_store
+    # R5-WU06: optional caller-supplied block that locks the canonical actor (Zenith) and rechecks
+    # its lifecycle/epoch before any OP row lock, held through the OP commit (one.md section 7.5).
+    @actor_guard = actor_guard || ->(&block) { block.call }
+    # R5-WU08: the RP's bounded refresh attempt reference, bound into the delivery receipt.
+    @attempt_ref = attempt_ref
   end
 
   def resolve
@@ -58,6 +67,36 @@ class OidcRefreshTokenIssuer
     Resolved.new(usage: usage, verifier: verifier)
   end
 
+  # R5-WU08 read-only delivery query (one.md section 7.4). Returns the exact stored response for
+  # the presented predecessor credential and attempt reference while the original five-second
+  # receipt is live, after rechecking the grant and (through actor_guard) the actor. It never
+  # rotates, never extends the receipt window and never answers for another attempt.
+  def query_delivery
+    resolved = resolve
+    return failure(:invalid_format) unless resolved
+    return failure(:delivery_not_found) if attempt_ref.blank?
+
+    usage = resolved.usage
+    predecessor_digest = encoded_refresh_token_digest(usage, resolved.verifier)
+    result = nil
+    actor_guard.call do
+      connection_owner_for(usage.class).connected_to(role: :writing) do
+        usage.with_parent_and_self_lock do
+          usage.class.uncached { usage.reload }
+          return failure(:client_mismatch, token: usage) if client_id.present? && usage.oidc_client_id != client_id
+
+          decision_time = usage.class.database_now
+          lookup = delivery_lookup(usage, predecessor_digest, now: decision_time)
+          return failure(:delivery_not_found, token: usage) unless
+            lookup.status == :ready && lookup.receipt.attempt_matches?(attempt_ref)
+
+          result = replay_delivery_receipt(usage, lookup.receipt, decision_time)
+        end
+      end
+    end
+    result
+  end
+
   def call
     resolved = resolve
     return failure(:invalid_format) unless resolved
@@ -69,7 +108,7 @@ class OidcRefreshTokenIssuer
 
   private
 
-  attr_reader :client_id, :resource_type, :response_builder
+  attr_reader :client_id, :resource_type, :response_builder, :actor_guard, :attempt_ref
 
   def rotate_without_delivery(resolved)
 
@@ -82,34 +121,35 @@ class OidcRefreshTokenIssuer
     # role for exactly this reason.
     result = nil
     owner = connection_owner_for(usage.class)
-    owner.connected_to(role: :writing) do
-      usage.with_parent_and_self_lock do
-        return failure(:client_mismatch, token: usage) if @client_id.present? && usage.oidc_client_id != @client_id
+    actor_guard.call do
+      owner.connected_to(role: :writing) do
+        usage.with_parent_and_self_lock do
+          return failure(:client_mismatch, token: usage) if @client_id.present? && usage.oidc_client_id != @client_id
 
-        # Check replay before activity: an attacker replaying a stolen token
-        # after the legitimate client already rotated it must be detected even
-        # once the usage has been revoked or has expired.
-        if usage.previous_refresh_token_digest_matches?(verifier)
-          handle_refresh_token_reuse(usage)
-          return failure(:refresh_token_reuse_detected, token: usage)
+          # Check replay before activity: an attacker replaying a stolen token
+          # after the legitimate client already rotated it must be detected even
+          # once the usage has been revoked or has expired.
+          if usage.previous_refresh_token_digest_matches?(verifier)
+            handle_refresh_token_reuse(usage)
+            return failure(:refresh_token_reuse_detected, token: usage)
+          end
+
+          decision_time = usage.class.database_now
+          return failure(:inactive_token, token: usage) unless usage.active?(decision_time)
+          return failure(:invalid_digest, token: usage) unless usage.refresh_token_digest_matches?(verifier)
+
+          previous_token = usage.dup
+          refresh_token = usage.rotate_refresh_token!(now: decision_time)
+          touch_oidc_connection!(usage, now: decision_time)
+
+          result = success(
+            token: usage,
+            refresh_token: refresh_token,
+            previous_token: previous_token,
+          )
         end
-
-        decision_time = usage.class.database_now
-        return failure(:inactive_token, token: usage) unless usage.active?(decision_time)
-        return failure(:invalid_digest, token: usage) unless usage.refresh_token_digest_matches?(verifier)
-
-        previous_token = usage.dup
-        refresh_token = usage.rotate_refresh_token!(now: decision_time)
-        touch_oidc_connection!(usage, now: decision_time)
-
-        result = success(
-          token: usage,
-          refresh_token: refresh_token,
-          previous_token: previous_token,
-        )
       end
     end
-
     result
   end
 
@@ -159,18 +199,20 @@ class OidcRefreshTokenIssuer
   def rotate_with_delivery(usage, verifier, predecessor_digest)
     result = nil
     owner = connection_owner_for(usage.class)
-    owner.connected_to(role: :writing) do
-      usage.with_parent_and_self_lock do
-        usage.class.uncached { usage.reload }
-        return failure(:client_mismatch, token: usage) if client_id.present? && usage.oidc_client_id != client_id
+    actor_guard.call do
+      owner.connected_to(role: :writing) do
+        usage.with_parent_and_self_lock do
+          usage.class.uncached { usage.reload }
+          return failure(:client_mismatch, token: usage) if client_id.present? && usage.oidc_client_id != client_id
 
-        decision_time = usage.class.database_now
-        lookup = delivery_lookup(usage, predecessor_digest, now: decision_time)
-        return failure(:delivery_receipt_invalid, token: usage) if lookup.status == :invalid
-        return replay_delivery_receipt(usage, lookup.receipt, decision_time) if lookup.receipt
+          decision_time = usage.class.database_now
+          lookup = delivery_lookup(usage, predecessor_digest, now: decision_time)
+          return failure(:delivery_receipt_invalid, token: usage) if lookup.status == :invalid
+          return replay_delivery_receipt(usage, lookup.receipt, decision_time) if lookup.receipt
 
-        usage.clear_refresh_delivery_receipt! if lookup.status == :expired
-        result = rotate_and_store_delivery!(usage, verifier, predecessor_digest, decision_time)
+          usage.clear_refresh_delivery_receipt! if lookup.status == :expired
+          result = rotate_and_store_delivery!(usage, verifier, predecessor_digest, decision_time)
+        end
       end
     end
     result
@@ -236,6 +278,7 @@ class OidcRefreshTokenIssuer
       access_expires_at: access_expires_at,
       refresh_expires_at: usage.refresh_token_expires_at,
       token_response: token_response,
+      attempt_ref: attempt_ref,
     )
     usage.store_refresh_delivery_receipt!(
       ciphertext: ciphertext,
@@ -388,9 +431,9 @@ class OidcRefreshTokenIssuer
 
   def usage_context_and_class
     case resource_type
-    when "client" then [AppTicketRecord, ClientRpSession]
-    when "operator" then [OrgTicketRecord, OperatorRpSession]
-    when "visitor" then [ComTicketRecord, VisitorRpSession]
+    when "client" then [OpBaseAppRecord, OpAppGrant]
+    when "operator" then [OpBaseOrgRecord, OpOrgGrant]
+    when "visitor" then [OpBaseComRecord, OpComGrant]
     end
   end
 

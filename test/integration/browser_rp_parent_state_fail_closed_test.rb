@@ -18,8 +18,8 @@ class BrowserRpParentStateFailClosedTest < ActionDispatch::IntegrationTest
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
-    @client = OidcClientRegistry.find!("warp-app")
-    @rp_session = ClientRpSession.create!(
+    @client = OidcClientRegistry.find!("warp-app-jp")
+    @rp_session = OpAppGrant.create!(
       client_token: @root_token,
       oidc_client_id: @client.client_id,
       oidc_scope: "openid profile",
@@ -40,7 +40,7 @@ class BrowserRpParentStateFailClosedTest < ActionDispatch::IntegrationTest
   test "an unreadable Ticket writer fails closed without treating the user as authenticated" do
     unreadable = ->(*) { raise ActiveRecord::ConnectionNotEstablished, "app ticket writer unavailable" }
 
-    ClientRpSession.stub(:includes, unreadable) do
+    OpAppGrant.stub(:includes, unreadable) do
       get "/dashboard"
     end
 

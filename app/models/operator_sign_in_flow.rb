@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_sign_in_flows
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                    :bigint           not null, primary key
 #  completed_at          :datetime
@@ -41,7 +41,7 @@
 #  fk_rails_...  (state_id => operator_sign_in_flow_states.id)
 #  fk_rails_...  (token_id => operator_tokens.id) ON DELETE => cascade
 #
-class OperatorSignInFlow < OrgTicketRecord
+class OperatorSignInFlow < OpBaseOrgRecord
   include SignInFlow
   include FlowSignIn
   include LocalAuthenticationResultDelivery

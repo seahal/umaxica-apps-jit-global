@@ -71,11 +71,11 @@ class OidcCallbackTestController < ApplicationController
   private :pending_flow
 
   def oidc_client_id
-    "core-app"
+    "core-app-jp"
   end
 
   def oidc_client_secret
-    OidcClientRegistry.find!("core-app").client_secret
+    OidcClientRegistry.find!("core-app-jp").client_secret
   end
 
   def oidc_token_url
@@ -84,7 +84,7 @@ class OidcCallbackTestController < ApplicationController
   end
 
   def oidc_callback_url
-    OidcClientRegistry.find!("core-app").redirect_uris.first
+    OidcClientRegistry.find!("core-app-jp").redirect_uris.first
   end
 
   def oidc_resource_type
@@ -146,7 +146,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     Rails.application.reload_routes!
   end
 
-  Result = Struct.new(:success?, :token_response, :error, :error_description, keyword_init: true)
+  Result = Struct.new(:success?, :token_response, :error, :error_description, :outcome, keyword_init: true)
 
   test "show redirects to pt on successful exchange" do
     get "/oidc/callback/session",
@@ -164,11 +164,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -193,7 +193,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     get "/oidc/callback/legacy-session",
         params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
 
-    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run for scalar-only state") }) do
+    OidcOpTokenClient.stub(
+      :authorization_code, ->(**) {
+                             flunk("token exchange should not run for scalar-only state")
+                           },
+    ) do
       get "/oidc/callback", params: { code: "abc", state: "state" }
     end
 
@@ -223,11 +227,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -269,11 +273,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -304,7 +308,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
             params: { code_verifier: "verifier", state: state, nonce: "nonce", max_age: "60", pt: "/after" }
         payload = {
           "iss" => OidcIssuer.for_resource_type("client"),
-          "aud" => ["core-app"],
+          "aud" => ["core-app-jp"],
           "sub" => "42",
           "nonce" => "nonce",
           "auth_time" => now.to_i - age,
@@ -325,7 +329,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
                                             id_token: signed, }, error: nil, error_description: nil,
         )
         OidcCallbackTestController.last_login_kwargs = nil
-        OidcRpTokenClient.stub(:call, result) do
+        OidcOpTokenClient.stub(:authorization_code, result) do
           get "/oidc/callback",
               params: { code: "provider-code", state: state, iss: OidcIssuer.for_resource_type("client") }
         end
@@ -353,11 +357,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -404,11 +408,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -462,16 +466,16 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     )
     token_call = nil
 
-    OidcRpTokenClient.stub(
-      :call, ->(**kwargs) {
-               token_call = kwargs
-               result
-             },
+    OidcOpTokenClient.stub(
+      :authorization_code, ->(**kwargs) {
+                             token_call = kwargs
+                             result
+                           },
     ) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -511,7 +515,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
           pending_created_at: 1.minute.ago.to_i,
         }
 
-    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run for expired state") }) do
+    OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("token exchange should not run for expired state") }) do
       get "/oidc/callback", params: { code: "abc", state: "expired-state" }
     end
 
@@ -558,11 +562,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -613,11 +617,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -651,7 +655,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
           pending_created_at: 11.minutes.ago.to_i,
         }
 
-    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run for expired state") }) do
+    OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("token exchange should not run for expired state") }) do
       get "/oidc/callback", params: { code: "abc", state: "expired-state" }
     end
 
@@ -671,10 +675,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       token_response: nil,
       error: "bad",
       error_description: "bad",
+      outcome: :refused,
     )
     logged = []
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       Rails.logger.stub(
         :info, ->(message = nil, &block) {
                  message = block.call if message.nil? && block
@@ -720,11 +725,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     )
     OidcCallbackTestController.login_result_for_test = { status: :session_limit_pending }
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -765,11 +770,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       http_status: :service_unavailable,
     }
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -800,7 +805,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         }
     logged = []
 
-    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run for state mismatch") }) do
+    OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("token exchange should not run for state mismatch") }) do
       Rails.logger.stub(
         :info, ->(message = nil, &block) {
                  message = block.call if message.nil? && block
@@ -831,7 +836,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     get "/oidc/callback/session",
         params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
 
-    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run for issuer mismatch") }) do
+    OidcOpTokenClient.stub(
+      :authorization_code, ->(**) {
+                             flunk("token exchange should not run for issuer mismatch")
+                           },
+    ) do
       get "/oidc/callback",
           params: { code: "abc", state: "state", iss: "https://attacker.example.test" }
     end
@@ -844,7 +853,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     get "/oidc/callback/session",
         params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
 
-    OidcRpTokenClient.stub(:call, ->(**) { flunk("token exchange should not run without an issuer") }) do
+    OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("token exchange should not run without an issuer") }) do
       get "/oidc/callback", params: { code: "abc", state: "state" }
     end
 
@@ -868,11 +877,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
       error: nil,
     )
 
-    OidcRpTokenClient.stub(:call, result) do
+    OidcOpTokenClient.stub(:authorization_code, result) do
       issued_at = Time.current.to_i
       signed_claims = {
         "iss" => OidcIssuer.for_resource_type("client"),
-        "aud" => ["core-app"],
+        "aud" => ["core-app-jp"],
         "iat" => issued_at,
         "nbf" => issued_at,
         "exp" => issued_at + 300,
@@ -1548,12 +1557,12 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
     @subject = OidcSubject.for(@client, resource_type: "client")
     @core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
     @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @rp_client = OidcClientRegistry.find!("core-app")
+    @rp_client = OidcClientRegistry.find!("core-app-jp")
     root = ClientToken.create!(user: @client)
     root.rotate_refresh_token!
-    @rp = ClientRpSession.create!(
-      client_token: root, oidc_client_id: "core-app", oidc_scope: "openid profile",
-      oidc_jti: SecureRandom.uuid, oidc_auth_time: ClientRpSession.database_now,
+    @rp = OpAppGrant.create!(
+      client_token: root, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_auth_time: OpAppGrant.database_now,
       refresh_token_expires_at: 1.hour.from_now,
     )
     host!(@core_host)
@@ -1573,7 +1582,7 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
     @access = AuthenticationTokenService.encode(
       @client, host: @base_host, resource_type: "client", session_public_id: root.public_id,
                base_session_public_id: root.public_id, oidc_sid: @rp.public_id, oidc_jti: @rp.oidc_jti,
-               expires_at: ClientRpSession.database_now + 5.minutes, scopes: %w(openid profile),
+               expires_at: OpAppGrant.database_now + 5.minutes, scopes: %w(openid profile),
                issuer: OidcIssuer.for_client(@rp_client), audiences: [@rp_client.aud],
                jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@rp_client),
                subject: @subject, client_id: @rp_client.client_id,
@@ -1588,7 +1597,7 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
         stub.post(/\/oauth\/token/) do |env|
           params = Rack::Utils.parse_query(env.body)
 
-          assert_equal ["core-app", @verifier], [params["client_id"], params["code_verifier"]]
+          assert_equal ["core-app-jp", @verifier], [params["client_id"], params["code_verifier"]]
           [200, { "Content-Type" => "application/json" }, {
             access_token: @access,
             refresh_token: @refresh,
@@ -1620,7 +1629,7 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to "/after"
     identity = ClientIdentity.find_by!(source_record_id: @client.id)
-    binding = ClientOidcIdentityBinding.find_by!(issuer: @issuer, subject: @subject, audience: "core-app")
+    binding = ClientOidcIdentityBinding.find_by!(issuer: @issuer, subject: @subject, audience: "core-app-jp")
 
     assert_equal [@client.id, ClientIdentityState::ACTIVE, identity.id],
                  [identity.source_record_id, identity.status_id, binding.client_identity_id]
@@ -1652,7 +1661,7 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)
     identity = ClientIdentity.find_by!(source_record_id: other.id)
     binding = ClientOidcIdentityBinding.create!(
-      client_identity: identity, issuer: @issuer, subject: @subject, audience: "core-app",
+      client_identity: identity, issuer: @issuer, subject: @subject, audience: "core-app-jp",
     )
     assert_no_difference(["ClientOidcIdentityBinding.count", "CoreAppClientBridge.count", "ClientToken.count"]) do
       OutboundHttp::Connection.stub(:build, @connection) do
@@ -1671,7 +1680,7 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
   test "public callback reuses an existing identity and bridge for the same verified subject" do
     identity = ClientIdentity.find_by!(source_record_id: @client.id)
     binding = ClientOidcIdentityBinding.create!(
-      client_identity: identity, issuer: @issuer, subject: @subject, audience: "core-app",
+      client_identity: identity, issuer: @issuer, subject: @subject, audience: "core-app-jp",
     )
     bridge = CoreAppClientBridge.create!(client: @client)
     assert_no_difference(["ClientOidcIdentityBinding.count", "CoreAppClientBridge.count", "ClientToken.count"]) do

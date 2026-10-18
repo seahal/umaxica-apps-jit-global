@@ -43,6 +43,31 @@
     end
     value
   end
+
+  # R5 cell stores are fixed deployment bindings. The connection key is selected by the
+  # process configuration before Rails boots; no request, host or token value participates in
+  # this lookup. The current local completion scope provisions the twelve JP/WW cells below.
+  rp_cells = [
+    { connection: "rp_base_app", env_prefix: "RP_BASE_APP", database: "development_rp_base_app_db", client_id: "base-app-ww" },
+    { connection: "rp_core_app", env_prefix: "RP_CORE_APP", database: "development_rp_core_app_jp_db", client_id: "core-app-jp" },
+    { connection: "rp_warp_app", env_prefix: "RP_WARP_APP", database: "development_rp_warp_app_jp_db", client_id: "warp-app-jp" },
+    { connection: "rp_palm_app", env_prefix: "RP_PALM_APP", database: "development_rp_palm_app_jp_db", client_id: "palm-app-jp" },
+    { connection: "rp_base_com", env_prefix: "RP_BASE_COM", database: "development_rp_base_com_db", client_id: "base-com-ww" },
+    { connection: "rp_core_com", env_prefix: "RP_CORE_COM", database: "development_rp_core_com_jp_db", client_id: "core-com-jp" },
+    { connection: "rp_warp_com", env_prefix: "RP_WARP_COM", database: "development_rp_warp_com_jp_db", client_id: "warp-com-jp" },
+    { connection: "rp_base_org", env_prefix: "RP_BASE_ORG", database: "development_rp_base_org_db", client_id: "base-org-ww" },
+    { connection: "rp_core_org", env_prefix: "RP_CORE_ORG", database: "development_rp_core_org_jp_db", client_id: "core-org-jp" },
+    { connection: "rp_warp_org", env_prefix: "RP_WARP_ORG", database: "development_rp_warp_org_jp_db", client_id: "warp-org-jp" },
+    { connection: "rp_edit_org", env_prefix: "RP_EDIT_ORG", database: "development_rp_edit_org_db", client_id: "edit-org-ww" },
+    { connection: "rp_tech_org", env_prefix: "RP_TECH_ORG", database: "development_rp_tech_org_db", client_id: "tech-org-ww" },
+  ].map do |cell|
+    cell.merge(
+      migrations_path: "db/#{cell.fetch(:connection)}_migrate",
+      schema_dump: "#{cell.fetch(:connection)}_structure.sql",
+      test_database: cell.fetch(:database).sub("development_", "test_"),
+      production_database: "production_#{cell.fetch(:connection)}_db",
+    ).freeze
+  end.freeze
 %>
 default: &default
   adapter: postgresql
@@ -50,8 +75,16 @@ default: &default
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 32 } %>
   port: 5432
   timeout: 30000
+<% if Rails.env.development? && !RuntimeRole.shared? %>
+  # A role process (lib/runtime_role.rb) logs in as its own least-privilege PostgreSQL role for
+  # every connection; databases outside RuntimeRole::ROLE_CONNECTIONS refuse that login. The
+  # password lives only in that role's encrypted credentials bundle.
+  username: <%= RuntimeRole.database_login %>
+  password: <%= Rails.app.creds.require(:DATABASE_PASSWORD) %>
+<% else %>
   username: <%= ENV.fetch("POSTGRESQL_USER", "postgres") %>
   password: <%= ENV["POSTGRESQL_PASSWORD"].presence || Rails.application.credentials.dig(:DATABASE, :PASSWORD) %>
+<% end %>
   lock_timeout: 2s
   # Raised from 2s so background jobs (e.g. RetentionPurgeJob batch deletes) are not
   # killed mid-statement. Web requests are additionally bounded by rack-timeout (10s).
@@ -197,39 +230,54 @@ development:
     database: development_search_db
     host: <%= development_host.call("POSTGRESQL_SEARCH_SUB") %>
     migrations_paths: db/searches_migrate
-  org_ticket:
+  op_base_org:
     !!merge <<: *development_default
-    database: development_org_ticket_db
-    host: <%= development_host.call("POSTGRESQL_ORG_TICKET_PUB") %>
-    migrations_paths: db/org_tickets_migrate
-  org_ticket_replica:
-    !!merge <<: *development_default
-    replica: true
-    database: development_org_ticket_db
-    host: <%= development_host.call("POSTGRESQL_ORG_TICKET_SUB") %>
-    migrations_paths: db/org_tickets_migrate
-  com_ticket:
-    !!merge <<: *development_default
-    database: development_com_ticket_db
-    host: <%= development_host.call("POSTGRESQL_COM_TICKET_PUB") %>
-    migrations_paths: db/com_tickets_migrate
-  com_ticket_replica:
+    database: development_op_base_org_db
+    host: <%= development_host.call("POSTGRESQL_OP_BASE_ORG_PUB") %>
+    migrations_paths: db/op_base_org_migrate
+  op_base_org_replica:
     !!merge <<: *development_default
     replica: true
-    database: development_com_ticket_db
-    host: <%= development_host.call("POSTGRESQL_COM_TICKET_SUB") %>
-    migrations_paths: db/com_tickets_migrate
-  app_ticket:
+    database: development_op_base_org_db
+    host: <%= development_host.call("POSTGRESQL_OP_BASE_ORG_SUB") %>
+    migrations_paths: db/op_base_org_migrate
+  op_base_com:
     !!merge <<: *development_default
-    database: development_app_ticket_db
-    host: <%= development_host.call("POSTGRESQL_APP_TICKET_PUB") %>
-    migrations_paths: db/app_tickets_migrate
-  app_ticket_replica:
+    database: development_op_base_com_db
+    host: <%= development_host.call("POSTGRESQL_OP_BASE_COM_PUB") %>
+    migrations_paths: db/op_base_com_migrate
+  op_base_com_replica:
     !!merge <<: *development_default
     replica: true
-    database: development_app_ticket_db
-    host: <%= development_host.call("POSTGRESQL_APP_TICKET_SUB") %>
-    migrations_paths: db/app_tickets_migrate
+    database: development_op_base_com_db
+    host: <%= development_host.call("POSTGRESQL_OP_BASE_COM_SUB") %>
+    migrations_paths: db/op_base_com_migrate
+  op_base_app:
+    !!merge <<: *development_default
+    database: development_op_base_app_db
+    host: <%= development_host.call("POSTGRESQL_OP_BASE_APP_PUB") %>
+    migrations_paths: db/op_base_app_migrate
+  op_base_app_replica:
+    !!merge <<: *development_default
+    replica: true
+    database: development_op_base_app_db
+    host: <%= development_host.call("POSTGRESQL_OP_BASE_APP_SUB") %>
+    migrations_paths: db/op_base_app_migrate
+<% rp_cells.each do |cell| %>
+  <%= cell.fetch(:connection) %>:
+    !!merge <<: *development_default
+    database: <%= cell.fetch(:database) %>
+    host: <%= development_host.call("POSTGRESQL_#{cell.fetch(:env_prefix)}_PUB") %>
+    migrations_paths: <%= cell.fetch(:migrations_path) %>
+    schema_dump: <%= cell.fetch(:schema_dump) %>
+  <%= cell.fetch(:connection) %>_replica:
+    !!merge <<: *development_default
+    replica: true
+    database: <%= cell.fetch(:database) %>
+    host: <%= development_host.call("POSTGRESQL_#{cell.fetch(:env_prefix)}_SUB") %>
+    migrations_paths: <%= cell.fetch(:migrations_path) %>
+    schema_dump: <%= cell.fetch(:schema_dump) %>
+<% end %>
   app_signal:
     !!merge <<: *development_default
     database: development_app_signal_db
@@ -442,42 +490,56 @@ test:
     host: <%= test_host %>
     migrations_paths: db/searches_migrate
     schema_dump: search_structure.sql
-  org_ticket:
+  op_base_org:
     !!merge <<: *test_default
-    database: <%= test_database.call("org_ticket", "test_org_ticket_db") %>
+    database: <%= test_database.call("op_base_org", "test_op_base_org_db") %>
     host: <%= test_host %>
-    migrations_paths: db/org_tickets_migrate
-  org_ticket_replica:
-    !!merge <<: *test_default
-    replica: true
-    database: <%= test_database.call("org_ticket", "test_org_ticket_replica_db") %>
-    host: <%= test_host %>
-    migrations_paths: db/org_tickets_migrate
-    schema_dump: org_ticket_structure.sql
-  com_ticket:
-    !!merge <<: *test_default
-    database: <%= test_database.call("com_ticket", "test_com_ticket_db") %>
-    host: <%= test_host %>
-    migrations_paths: db/com_tickets_migrate
-  com_ticket_replica:
+    migrations_paths: db/op_base_org_migrate
+  op_base_org_replica:
     !!merge <<: *test_default
     replica: true
-    database: <%= test_database.call("com_ticket", "test_com_ticket_replica_db") %>
+    database: <%= test_database.call("op_base_org", "test_op_base_org_replica_db") %>
     host: <%= test_host %>
-    migrations_paths: db/com_tickets_migrate
-    schema_dump: com_ticket_structure.sql
-  app_ticket:
+    migrations_paths: db/op_base_org_migrate
+    schema_dump: op_base_org_structure.sql
+  op_base_com:
     !!merge <<: *test_default
-    database: <%= test_database.call("app_ticket", "test_app_ticket_db") %>
+    database: <%= test_database.call("op_base_com", "test_op_base_com_db") %>
     host: <%= test_host %>
-    migrations_paths: db/app_tickets_migrate
-  app_ticket_replica:
+    migrations_paths: db/op_base_com_migrate
+  op_base_com_replica:
     !!merge <<: *test_default
     replica: true
-    database: <%= test_database.call("app_ticket", "test_app_ticket_replica_db") %>
+    database: <%= test_database.call("op_base_com", "test_op_base_com_replica_db") %>
     host: <%= test_host %>
-    migrations_paths: db/app_tickets_migrate
-    schema_dump: app_ticket_structure.sql
+    migrations_paths: db/op_base_com_migrate
+    schema_dump: op_base_com_structure.sql
+  op_base_app:
+    !!merge <<: *test_default
+    database: <%= test_database.call("op_base_app", "test_op_base_app_db") %>
+    host: <%= test_host %>
+    migrations_paths: db/op_base_app_migrate
+  op_base_app_replica:
+    !!merge <<: *test_default
+    replica: true
+    database: <%= test_database.call("op_base_app", "test_op_base_app_replica_db") %>
+    host: <%= test_host %>
+    migrations_paths: db/op_base_app_migrate
+    schema_dump: op_base_app_structure.sql
+<% rp_cells.each do |cell| %>
+  <%= cell.fetch(:connection) %>:
+    !!merge <<: *test_default
+    database: <%= test_database.call(cell.fetch(:connection), cell.fetch(:test_database)) %>
+    host: <%= test_host %>
+    migrations_paths: <%= cell.fetch(:migrations_path) %>
+  <%= cell.fetch(:connection) %>_replica:
+    !!merge <<: *test_default
+    replica: true
+    database: <%= test_database.call(cell.fetch(:connection), cell.fetch(:test_database).sub("_db", "_replica_db")) %>
+    host: <%= test_host %>
+    migrations_paths: <%= cell.fetch(:migrations_path) %>
+    schema_dump: <%= cell.fetch(:schema_dump) %>
+<% end %>
   app_signal:
     !!merge <<: *test_default
     database: <%= test_database.call("app_signal", "test_app_signal_db") %>
@@ -776,63 +838,86 @@ production:
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
     migrations_paths: db/chronicle_migrate
     schema_dump: chronicle_structure.sql
-  org_ticket:
+  op_base_org:
     !!merge <<: *default
-    database: production_org_ticket_db
+    database: production_op_base_org_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_PGHOST") %>
     username: <%= production_value.call("NEON_PGUSER") %>
     password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths: db/org_tickets_migrate
-  org_ticket_replica:
+    migrations_paths: db/op_base_org_migrate
+  op_base_org_replica:
     !!merge <<: *default
     replica: true
-    database: production_org_ticket_db
+    database: production_op_base_org_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_REPLICA_PGHOST") %>
     username: <%= production_value.call("NEON_REPLICA_PGUSER") %>
     password: <%= production_value.call("NEON_REPLICA_PGPASSWORD") %>
     sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
-    migrations_paths: db/org_tickets_migrate
-  com_ticket:
+    migrations_paths: db/op_base_org_migrate
+  op_base_com:
     !!merge <<: *default
-    database: production_com_ticket_db
+    database: production_op_base_com_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_PGHOST") %>
     username: <%= production_value.call("NEON_PGUSER") %>
     password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths: db/com_tickets_migrate
-  com_ticket_replica:
+    migrations_paths: db/op_base_com_migrate
+  op_base_com_replica:
     !!merge <<: *default
     replica: true
-    database: production_com_ticket_db
+    database: production_op_base_com_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_REPLICA_PGHOST") %>
     username: <%= production_value.call("NEON_REPLICA_PGUSER") %>
     password: <%= production_value.call("NEON_REPLICA_PGPASSWORD") %>
     sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
-    migrations_paths: db/com_tickets_migrate
-  app_ticket:
+    migrations_paths: db/op_base_com_migrate
+  op_base_app:
     !!merge <<: *default
-    database: production_app_ticket_db
+    database: production_op_base_app_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_PGHOST") %>
     username: <%= production_value.call("NEON_PGUSER") %>
     password: <%= production_value.call("NEON_PGPASSWORD") %>
-    migrations_paths: db/app_tickets_migrate
-  app_ticket_replica:
+    migrations_paths: db/op_base_app_migrate
+  op_base_app_replica:
     !!merge <<: *default
     replica: true
-    database: production_app_ticket_db
+    database: production_op_base_app_db
     port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
     host: <%= production_value.call("NEON_REPLICA_PGHOST") %>
     username: <%= production_value.call("NEON_REPLICA_PGUSER") %>
     password: <%= production_value.call("NEON_REPLICA_PGPASSWORD") %>
     sslmode: <%= production_value.call("NEON_REPLICA_PGSSLMODE") %>
     channel_binding: <%= production_value.call("NEON_REPLICA_PGCHANNELBINDING") %>
-    migrations_paths: db/app_tickets_migrate
+    migrations_paths: db/op_base_app_migrate
+<% rp_cells.each do |cell| %>
+  <%= cell.fetch(:connection) %>:
+    !!merge <<: *default
+    database: <%= cell.fetch(:production_database) %>
+    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
+    host: <%= production_value.call("#{cell.fetch(:env_prefix)}_PGHOST") %>
+    username: <%= production_value.call("#{cell.fetch(:env_prefix)}_PGUSER") %>
+    password: <%= production_value.call("#{cell.fetch(:env_prefix)}_PGPASSWORD") %>
+    sslmode: <%= production_value.call("#{cell.fetch(:env_prefix)}_PGSSLMODE") %>
+    channel_binding: <%= production_value.call("#{cell.fetch(:env_prefix)}_PGCHANNELBINDING") %>
+    migrations_paths: <%= cell.fetch(:migrations_path) %>
+  <%= cell.fetch(:connection) %>_replica:
+    !!merge <<: *default
+    replica: true
+    database: <%= cell.fetch(:production_database) %>
+    port: <%= ENV.fetch('POSTGRESQL_PORT', 5432) %>
+    host: <%= production_value.call("#{cell.fetch(:env_prefix)}_REPLICA_PGHOST") %>
+    username: <%= production_value.call("#{cell.fetch(:env_prefix)}_REPLICA_PGUSER") %>
+    password: <%= production_value.call("#{cell.fetch(:env_prefix)}_REPLICA_PGPASSWORD") %>
+    sslmode: <%= production_value.call("#{cell.fetch(:env_prefix)}_REPLICA_PGSSLMODE") %>
+    channel_binding: <%= production_value.call("#{cell.fetch(:env_prefix)}_REPLICA_PGCHANNELBINDING") %>
+    migrations_paths: <%= cell.fetch(:migrations_path) %>
+<% end %>
   app_signal:
     !!merge <<: *default
     database: production_app_signal_db

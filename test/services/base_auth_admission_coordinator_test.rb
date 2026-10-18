@@ -36,9 +36,9 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "handoff retry refuses another browser nonce without adopting its existing parent in every realm" do
     [
-      %w(app core-app client),
-      %w(com core-com visitor),
-      %w(org core-org operator),
+      %w(app core-app-jp client),
+      %w(com core-com-jp visitor),
+      %w(org core-org-jp operator),
     ].each do |surface, client_id, realm|
       transaction = OidcAuthorizationTransactionCoordinator.issue!(
         surface: surface, intent: "sign_in", params: {
@@ -698,8 +698,8 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "core-app",
-        redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
+        client_id: "core-app-jp",
+        redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
         code_challenge: "challenge",
         code_challenge_method: "S256",
         state: SecureRandom.urlsafe_base64(16),

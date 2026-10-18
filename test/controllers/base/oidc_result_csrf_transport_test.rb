@@ -12,13 +12,13 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
         case surface
         when "app"
           [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-           "core-app", "client", Client, ClientToken, :user_id,]
+           "core-app-jp", "client", Client, ClientToken, :user_id,]
         when "com"
           [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-           "core-com", "visitor", Visitor, VisitorToken, :visitor_id,]
+           "core-com-jp", "visitor", Visitor, VisitorToken, :visitor_id,]
         when "org"
           [ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-           "core-org", "operator", Operator, OperatorToken, :staff_id,]
+           "core-org-jp", "operator", Operator, OperatorToken, :staff_id,]
         end
       parameters = {
         response_type: "code",

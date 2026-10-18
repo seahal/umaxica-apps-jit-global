@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_verifications
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id            :bigint           not null, primary key
 #  discard_at  :datetime         default(Infinity), not null
@@ -24,7 +24,7 @@
 #
 #  fk_rails_...  (user_token_id => client_tokens.id) ON DELETE => cascade
 #
-class ClientVerification < AppTicketRecord
+class ClientVerification < OpBaseAppRecord
   include Retainable
   include RefreshTokenShared
   include VerificationCookieable

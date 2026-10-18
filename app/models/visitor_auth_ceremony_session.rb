@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class VisitorAuthCeremonySession < ComTicketRecord
+class VisitorAuthCeremonySession < OpBaseComRecord
   include AuthCeremonySession
   include AuthEmailOtpChallenge
 

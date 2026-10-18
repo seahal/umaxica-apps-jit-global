@@ -39,20 +39,21 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
               rp_client_id =
                 case rp_family
                 when "base" then "base-#{rp_surface}-ww"
-                when "edit" then "edit-org"
-                else "#{rp_family}-#{rp_surface}"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
                 end
               rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               rp_client = OidcClientRegistry.find!(rp_client_id)
               rp_key = [rp_client.client_id, rp_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                  !(rp_token.device_session_id && VisitorRpSession.exists?(
+                  !(rp_token.device_session_id && OpComGrant.exists?(
                     device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                   ))
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
-                rp_session = VisitorRpSession.create!(
+                rp_session = OpComGrant.create!(
                   visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -153,7 +154,7 @@ class RecoverySecretParallelGetTest < ActionDispatch::IntegrationTest
                 client_id: "base-com-ww",
               )
               session_id = AuthorizationTokenClaims.session_id(payload)
-              rp_session = VisitorRpSession.includes(visitor_device_session: :visitor).find_by(
+              rp_session = OpComGrant.includes(visitor_device_session: :visitor).find_by(
                 public_id: session_id, oidc_client_id: "base-com-ww",
               )
               root_token = rp_session&.parent_token

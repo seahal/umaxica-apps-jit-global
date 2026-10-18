@@ -65,17 +65,18 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     RP_ROUTES.each do |route|
       family, surface = route.fetch(:controller).split("/")
       model, owner_class, root_class, owner_key, root_key, resource_type = {
-        "app" => [ClientRpSession, Client, ClientToken, :user, :client_token, "client"],
-        "com" => [VisitorRpSession, Visitor, VisitorToken, :visitor, :visitor_token, "visitor"],
-        "org" => [OperatorRpSession, Operator, OperatorToken, :staff, :operator_token, "operator"],
+        "app" => [OpAppGrant, Client, ClientToken, :user, :client_token, "client"],
+        "com" => [OpComGrant, Visitor, VisitorToken, :visitor, :visitor_token, "visitor"],
+        "org" => [OpOrgGrant, Operator, OperatorToken, :staff, :operator_token, "operator"],
       }.fetch(surface)
       actor = owner_class.create!
       root = root_class.create!(owner_key => actor)
       rp_client_id =
         case family
         when "base" then "base-#{surface}-ww"
-        when "edit" then "edit-org"
-        else "#{family}-#{surface}"
+        when "edit" then "edit-org-ww"
+        when "tech" then "tech-org-ww"
+        else "#{family}-#{surface}-jp"
         end
       registered = OidcClientRegistry.find!(rp_client_id)
       rp_session = model.create!(
@@ -293,20 +294,21 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -359,7 +361,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     host = RP_ROUTES.first.fetch(:host).call
     host!(host)
     client = clients(:one)
-    oidc_client = OidcClientRegistry.find!("core-app")
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
     begin
       ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
       ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
@@ -374,7 +376,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
       authentication_event_at: Time.current,
     )
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: root_token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -414,7 +416,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     host = RP_ROUTES.first.fetch(:host).call
     host!(host)
     visitor = visitors(:reserved_visitor)
-    oidc_client = OidcClientRegistry.find!("core-com")
+    oidc_client = OidcClientRegistry.find!("core-com-jp")
     access_token = AuthenticationTokenService.encode(
       visitor,
       host: host,

@@ -147,7 +147,7 @@ class EmailCredentialRegistrationOtpDeliveryGuard
   def current_ticket?(owner, token, device_session)
     now = transaction.class.database_now
     bound_root = CredentialRegistrationOtpSessionValue.load(session_ref: transaction.session_ref).root_ref
-    return false unless bound_root == token.public_id && token.currently_usable?(now) && device_session.usable? &&
+    return false unless bound_root == token.public_id && token.active_status?(now) && device_session.usable? &&
       device_session.current_refresh_token_id == token.id
     return false unless transaction.operation == "registration" && transaction.purpose == "credential_registration" &&
       transaction.actor_ref == owner.public_id && transaction.email_candidate_ref == email.public_id &&

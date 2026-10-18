@@ -15,7 +15,7 @@ class ClientSecretRevocationCommitter
 
       # Match management's actor-before-session-before-credential lock order.
       # Ticket is read/locked only; lifecycle and source audit commit on Zenith.
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor_context.subject.with_lock(requires_new: true) do
@@ -81,7 +81,7 @@ class ClientSecretRevocationCommitter
         ttl: StepUpRequirement::DEFAULT_TTL,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
-      unless current.currently_usable?(now) && !current.restricted? &&
+      unless current.active_status?(now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret revocation requires current scoped Step-Up"
       end

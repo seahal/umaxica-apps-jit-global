@@ -4,11 +4,11 @@
 # == Schema Information
 #
 # Table name: visitor_sign_up_flow_statuses
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id :bigint           not null, primary key
 #
-class VisitorSignUpFlowStatus < ComTicketRecord
+class VisitorSignUpFlowStatus < OpBaseComRecord
   include ReferenceRecord
 
   STARTED = 10

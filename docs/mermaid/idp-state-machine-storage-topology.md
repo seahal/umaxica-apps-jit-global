@@ -1,147 +1,157 @@
 # Current storage topology
 
-Checked-in PostgreSQL structures and migrations, including pre-existing uncommitted files, at commit `f313b126931cfe3c9ecf64bbb72fb1cd3a0aada5`. Live database application and catalog validation are UNCONFIRMED. `NOT VALID` enforces new writes; historical rows are not yet validated. Omitted ON DELETE means PostgreSQL NO ACTION. CHECKs constrain rows; they are not transition graphs.
+R3 target table names are shown for the OP grant rows. The moved structure dumps remain
+byte-preserved pre-cutover artifacts until the approved development/test rebuild in R3-WU08.
+
+Checked-in PostgreSQL structures and migrations, including pre-existing uncommitted files, at commit
+`f313b126931cfe3c9ecf64bbb72fb1cd3a0aada5`. Live database application and catalog validation are
+UNCONFIRMED. `NOT VALID` enforces new writes; historical rows are not yet validated. Omitted ON
+DELETE means PostgreSQL NO ACTION. CHECKs constrain rows; they are not transition graphs.
 
 ## Ownership index
 
-| Machine | Fact / transaction table | State axis | State reference | SQL source | State FK |
-| --- | --- | --- | --- | --- | --- |
-| idp-client-sign-in | client_sign_in_flows | status_id | client_sign_in_flow_statuses | db/app_ticket_structure.sql | ALTER TABLE ONLY public.client_sign_in_flows     ADD CONSTRAINT fk_rails_4e35f66d42 FOREIGN KEY (status_id) REFERENCES public.client_sign_in_flow_statuses(id) NOT VALID; |
-| idp-client-sign-up | client_sign_up_flows | status_id | client_sign_up_flow_statuses | db/app_ticket_structure.sql | ALTER TABLE ONLY public.client_sign_up_flows     ADD CONSTRAINT fk_rails_533362926d FOREIGN KEY (status_id) REFERENCES public.client_sign_up_flow_statuses(id) ON DELETE RESTRICT NOT VALID; |
-| idp-client-sign-out | client_sign_out_flows | status_id | client_sign_out_flow_statuses | db/app_ticket_structure.sql | ALTER TABLE ONLY public.client_sign_out_flows     ADD CONSTRAINT fk_rails_bbc7001388 FOREIGN KEY (status_id) REFERENCES public.client_sign_out_flow_statuses(id) NOT VALID; |
-| idp-client-auth-ceremony-session | client_auth_ceremony_sessions | admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-email-ceremony | client_email_ceremony_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-telephone-ceremony | client_telephone_ceremony_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-passkey-ceremony | client_passkey_ceremony_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-secret-credential-ceremony | client_secret_credential_ceremony_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-step-up-ceremony | client_step_up_ceremony_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-oidc-authorization | client_oidc_authorization_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-oauth-callback | client_oauth_callback_states | consumed_at / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-local-result-delivery | client_sign_in_flows | result_generation / result_digest / base_finalized_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-token | client_tokens | user_token_status_id | client_token_statuses | db/app_ticket_structure.sql | ALTER TABLE ONLY public.client_tokens     ADD CONSTRAINT fk_rails_c11b41180d FOREIGN KEY (user_token_status_id) REFERENCES public.client_token_statuses(id) ON DELETE RESTRICT NOT VALID; |
-| idp-client-dbsc | client_tokens | user_token_dbsc_status_id | client_token_dbsc_statuses | db/app_ticket_structure.sql | ALTER TABLE ONLY public.client_tokens     ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id) NOT VALID; |
-| idp-client-device-session | client_device_sessions | status_id | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-rp-session | client_rp_sessions | revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-passkey-credential | client_passkeys | status_id | client_passkey_statuses | db/app_zenith_structure.sql | ALTER TABLE ONLY public.client_passkeys     ADD CONSTRAINT fk_rails_f5e90919e8 FOREIGN KEY (status_id) REFERENCES public.client_passkey_statuses(id); |
-| idp-visitor-sign-in | visitor_sign_in_flows | status_id | visitor_sign_in_flow_statuses | db/com_ticket_structure.sql | ALTER TABLE ONLY public.visitor_sign_in_flows     ADD CONSTRAINT fk_rails_75353bbdcf FOREIGN KEY (status_id) REFERENCES public.visitor_sign_in_flow_statuses(id) NOT VALID; |
-| idp-visitor-sign-up | visitor_sign_up_flows | status_id | visitor_sign_up_flow_statuses | db/com_ticket_structure.sql | ALTER TABLE ONLY public.visitor_sign_up_flows     ADD CONSTRAINT fk_rails_8cef237db7 FOREIGN KEY (status_id) REFERENCES public.visitor_sign_up_flow_statuses(id) ON DELETE RESTRICT NOT VALID; |
-| idp-visitor-sign-out | visitor_sign_out_flows | status_id | visitor_sign_out_flow_statuses | db/com_ticket_structure.sql | ALTER TABLE ONLY public.visitor_sign_out_flows     ADD CONSTRAINT fk_rails_0289bc0560 FOREIGN KEY (status_id) REFERENCES public.visitor_sign_out_flow_statuses(id) NOT VALID; |
-| idp-visitor-auth-ceremony-session | visitor_auth_ceremony_sessions | admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-email-ceremony | visitor_email_ceremony_transactions | status | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-telephone-ceremony | visitor_telephone_ceremony_transactions | status | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-passkey-ceremony | visitor_passkey_ceremony_transactions | status | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-secret-credential-ceremony | visitor_secret_credential_ceremony_transactions | status | visitor_secret_credential_statuses | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-step-up-ceremony | visitor_step_up_ceremony_transactions | status | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-oidc-authorization | visitor_oidc_authorization_transactions | status | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-local-result-delivery | visitor_sign_in_flows | result_generation / result_digest / base_finalized_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-token | visitor_tokens | visitor_token_status_id | visitor_token_statuses | db/com_ticket_structure.sql | ALTER TABLE ONLY public.visitor_tokens     ADD CONSTRAINT fk_customer_tokens_on_customer_token_status_id FOREIGN KEY (visitor_token_status_id) REFERENCES public.visitor_token_statuses(id) NOT VALID; |
-| idp-visitor-dbsc | visitor_tokens | visitor_token_dbsc_status_id | visitor_token_dbsc_statuses | db/com_ticket_structure.sql | ALTER TABLE ONLY public.visitor_tokens     ADD CONSTRAINT fk_customer_tokens_on_customer_token_dbsc_status_id FOREIGN KEY (visitor_token_dbsc_status_id) REFERENCES public.visitor_token_dbsc_statuses(id) NOT VALID; |
-| idp-visitor-device-session | visitor_device_sessions | status_id | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-rp-session | visitor_rp_sessions | revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-passkey-credential | visitor_passkeys | status_id | visitor_passkey_statuses | db/com_zenith_structure.sql | ALTER TABLE ONLY public.visitor_passkeys     ADD CONSTRAINT fk_rails_3ced60caec FOREIGN KEY (status_id) REFERENCES public.visitor_passkey_statuses(id); |
-| idp-operator-sign-in | operator_sign_in_flows | status_id | operator_sign_in_flow_statuses | db/org_ticket_structure.sql | ALTER TABLE ONLY public.operator_sign_in_flows     ADD CONSTRAINT fk_rails_6ed9308623 FOREIGN KEY (status_id) REFERENCES public.operator_sign_in_flow_statuses(id) NOT VALID; |
-| idp-operator-sign-up | operator_sign_up_flows | status_id | operator_sign_up_flow_statuses | db/org_ticket_structure.sql | ALTER TABLE ONLY public.operator_sign_up_flows     ADD CONSTRAINT fk_rails_fb3acc316b FOREIGN KEY (status_id) REFERENCES public.operator_sign_up_flow_statuses(id) NOT VALID; |
-| idp-operator-sign-out | operator_sign_out_flows | status_id | operator_sign_out_flow_statuses | db/org_ticket_structure.sql | ALTER TABLE ONLY public.operator_sign_out_flows     ADD CONSTRAINT fk_rails_85024a94ea FOREIGN KEY (status_id) REFERENCES public.operator_sign_out_flow_statuses(id) NOT VALID; |
-| idp-operator-auth-ceremony-session | operator_auth_ceremony_sessions | admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-email-ceremony | operator_email_ceremony_transactions | status | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-telephone-ceremony | operator_telephone_ceremony_transactions | status | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-passkey-ceremony | operator_passkey_ceremony_transactions | status | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-secret-credential-ceremony | operator_secret_credential_ceremony_transactions | status | operator_secret_credential_statuses | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-step-up-ceremony | operator_step_up_ceremony_transactions | status | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-oidc-authorization | operator_oidc_authorization_transactions | status | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-oauth-callback | operator_oauth_callback_states | consumed_at / expires_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-local-result-delivery | operator_sign_in_flows | result_generation / result_digest / base_finalized_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-token | operator_tokens | staff_token_status_id | operator_token_statuses | db/org_ticket_structure.sql | ALTER TABLE ONLY public.operator_tokens     ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT NOT VALID; |
-| idp-operator-dbsc | operator_tokens | staff_token_dbsc_status_id | operator_token_dbsc_statuses | db/org_ticket_structure.sql | ALTER TABLE ONLY public.operator_tokens     ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id) NOT VALID; |
-| idp-operator-device-session | operator_device_sessions | status_id | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-rp-session | operator_rp_sessions | revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-passkey-credential | operator_passkeys | status_id | operator_passkey_statuses | db/org_zenith_structure.sql | ALTER TABLE ONLY public.operator_passkeys     ADD CONSTRAINT fk_rails_b17ae8dc5f FOREIGN KEY (status_id) REFERENCES public.operator_passkey_statuses(id); |
-| idp-client-sign-up-cleanup | client_sign_up_flows | cleanup_status_id | client_sign_up_flow_cleanup_statuses | db/app_ticket_structure.sql | ALTER TABLE ONLY public.client_sign_up_flows     ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id) NOT VALID; |
-| idp-client-withdrawal-ceremony | client_withdrawal_ceremonies | status_id | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-enforcement-recovery-ceremony | client_enforcement_recovery_ceremonies | status_id | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-visitor-sign-up-cleanup | visitor_sign_up_flows | cleanup_status_id | visitor_sign_up_flow_cleanup_statuses | db/com_ticket_structure.sql | ALTER TABLE ONLY public.visitor_sign_up_flows     ADD CONSTRAINT fk_rails_cf6ee54a77 FOREIGN KEY (cleanup_status_id) REFERENCES public.visitor_sign_up_flow_cleanup_statuses(id) NOT VALID; |
-| idp-visitor-withdrawal-ceremony | visitor_withdrawal_ceremonies | status_id | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-visitor-enforcement-recovery-ceremony | visitor_enforcement_recovery_ceremonies | status_id | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-client-totp-ceremony | client_totp_ceremony_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-social-ceremony | client_social_ceremony_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-secret-issuance | client_secret_issuances | presented_at / confirmed_at / canceled_at / expires_at | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-session-limit-resolution | client_session_limit_resolution_transactions | status | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-apple-notification | client_apple_notification_events | status | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-external-identity | client_external_identities | state | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-totp-credential | client_totp_credentials | user_identity_totp_credential_status_id | client_totp_credential_statuses | db/app_zenith_structure.sql | ALTER TABLE ONLY public.client_totp_credentials     ADD CONSTRAINT fk_rails_ee2c1859b3 FOREIGN KEY (user_identity_totp_credential_status_id) REFERENCES public.client_totp_credential_statuses(id); |
-| idp-identity-totp-enrollment | identity_totp_ceremony_candidates | consumed_at / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-identity-secret-credential-candidate | identity_secret_credential_ceremony_candidates | consumed_at / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-identity-social-candidate | identity_social_ceremony_candidates | consumed_at / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-operator-organization-invitation | organization_invitations | consumed_at / expires_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-operator-lifecycle | operator_lifecycle_requests | status | None (state axis has no reference FK) | db/org_zenith_structure.sql | None for this axis |
-| idp-shared-sequence-carrier | None (Rails session) | state / terminal_state | None | None / UNCONFIRMED | None for this axis |
-| idp-shared-authorization-code | None (Valkey) | state | None | None / UNCONFIRMED | None for this axis |
-| idp-shared-opaque-admission | None (Valkey) | state | None | None / UNCONFIRMED | None for this axis |
-| idp-client-secret-credential | client_secret_credentials | confirmed_at / claimed_at / claim_operation_id / revoked_at / discard_at | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-dpop-nonce | client_dpop_proof_states | nonce_used_at / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-administrative-access | clients | access_state | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-email-verification-challenge | client_email_ceremony_transactions | evp_outcome / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-preference-dbsc | app_preferences | dbsc_status_id | app_preference_dbsc_statuses | db/app_setting_structure.sql | ALTER TABLE ONLY public.app_preferences     ADD CONSTRAINT fk_app_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.app_preference_dbsc_statuses(id) NOT VALID; |
-| idp-client-email-otp | client_emails | otp_expires_at / otp_attempts_count / locked_at | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-telephone-otp | client_telephones | otp_expires_at / otp_attempts_count / locked_at | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-visitor-secret-credential | visitor_secret_credentials | visitor_secret_credential_status_id | visitor_secret_credential_statuses | db/com_zenith_structure.sql | ALTER TABLE ONLY public.visitor_secret_credentials     ADD CONSTRAINT fk_rails_2ee7e81748 FOREIGN KEY (visitor_secret_credential_status_id) REFERENCES public.visitor_secret_credential_statuses(id); |
-| idp-visitor-dpop-nonce | visitor_dpop_proof_states | nonce_used_at / expires_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-administrative-access | visitors | access_state | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-visitor-email-verification-challenge | visitor_email_ceremony_transactions | evp_outcome / expires_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-preference-dbsc | com_preferences | dbsc_status_id | com_preference_dbsc_statuses | db/com_setting_structure.sql | ALTER TABLE ONLY public.com_preferences     ADD CONSTRAINT fk_com_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.com_preference_dbsc_statuses(id) NOT VALID; |
-| idp-visitor-email-otp | visitor_emails | otp_expires_at / otp_attempts_count / locked_at | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-visitor-telephone-otp | visitor_telephones | otp_expires_at / otp_attempts_count / locked_at | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-operator-secret-credential | operator_secret_credentials | staff_identity_secret_status_id | operator_secret_credential_statuses | db/org_zenith_structure.sql | ALTER TABLE ONLY public.operator_secret_credentials     ADD CONSTRAINT fk_rails_8f8aed461a FOREIGN KEY (staff_identity_secret_status_id) REFERENCES public.operator_secret_credential_statuses(id); |
-| idp-operator-dpop-nonce | operator_dpop_proof_states | nonce_used_at / expires_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-administrative-access | operators | access_state | None (state axis has no reference FK) | db/org_zenith_structure.sql | None for this axis |
-| idp-operator-email-verification-challenge | operator_email_ceremony_transactions | evp_outcome / expires_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-preference-dbsc | org_preferences | dbsc_status_id | org_preference_dbsc_statuses | db/org_setting_structure.sql | ALTER TABLE ONLY public.org_preferences     ADD CONSTRAINT fk_org_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.org_preference_dbsc_statuses(id) NOT VALID; |
-| idp-operator-email-otp | operator_emails | otp_expires_at / otp_attempts_count / locked_at | None (state axis has no reference FK) | db/org_zenith_structure.sql | None for this axis |
-| idp-operator-telephone-otp | operator_telephones | otp_expires_at / otp_attempts_count / locked_at | None (state axis has no reference FK) | db/org_zenith_structure.sql | None for this axis |
-| idp-client-withdrawal | client_withdrawal_flows | status_id | client_withdrawal_flow_statuses | db/app_zenith_structure.sql | ALTER TABLE ONLY public.client_withdrawal_flows     ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id) NOT VALID; |
-| idp-visitor-withdrawal | visitor_withdrawal_flows | status_id | visitor_withdrawal_flow_statuses | db/com_zenith_structure.sql | ALTER TABLE ONLY public.visitor_withdrawal_flows     ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) NOT VALID; |
-| idp-security-one-time-reveal | security_one_time_reveals | consumed_at / expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-operator-entra-identity | operator_entra_identities | status_id | operator_entra_identity_states | db/org_zenith_structure.sql | ALTER TABLE ONLY public.operator_entra_identities     ADD CONSTRAINT fk_rails_168298cb60 FOREIGN KEY (status_id) REFERENCES public.operator_entra_identity_states(id); |
-| idp-client-step-up-session | client_step_up_sessions | status / discard_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-step-up-passkey-challenge | client_step_up_sessions | passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-step-up-email-challenge | client_step_up_sessions | email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-client-email-credential | client_emails | user_email_status_id | client_email_statuses | db/app_zenith_structure.sql | ALTER TABLE ONLY public.client_emails     ADD CONSTRAINT fk_rails_15a0bdccd5 FOREIGN KEY (user_email_status_id) REFERENCES public.client_email_statuses(id); |
-| idp-client-telephone-credential | client_telephones | user_identity_telephone_status_id | client_telephone_statuses | db/app_zenith_structure.sql | ALTER TABLE ONLY public.client_telephones     ADD CONSTRAINT fk_rails_c81d47bc96 FOREIGN KEY (user_identity_telephone_status_id) REFERENCES public.client_telephone_statuses(id); |
-| idp-client-actor-withdrawal | clients | withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-visitor-step-up-session | visitor_step_up_sessions | status / discard_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-step-up-passkey-challenge | visitor_step_up_sessions | passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-step-up-email-challenge | visitor_step_up_sessions | email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at | None (state axis has no reference FK) | db/com_ticket_structure.sql | None for this axis |
-| idp-visitor-email-credential | visitor_emails | visitor_email_status_id | visitor_email_statuses | db/com_zenith_structure.sql | ALTER TABLE ONLY public.visitor_emails     ADD CONSTRAINT fk_rails_07ea0750f3 FOREIGN KEY (visitor_email_status_id) REFERENCES public.visitor_email_statuses(id); |
-| idp-visitor-telephone-credential | visitor_telephones | visitor_telephone_status_id | visitor_telephone_statuses | db/com_zenith_structure.sql | ALTER TABLE ONLY public.visitor_telephones     ADD CONSTRAINT fk_rails_c534739d95 FOREIGN KEY (visitor_telephone_status_id) REFERENCES public.visitor_telephone_statuses(id); |
-| idp-visitor-actor-withdrawal | visitors | withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-operator-step-up-session | operator_step_up_sessions | status / discard_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-step-up-passkey-challenge | operator_step_up_sessions | passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at | None (state axis has no reference FK) | db/org_ticket_structure.sql | None for this axis |
-| idp-operator-email-credential | operator_emails | staff_identity_email_status_id | operator_email_statuses | db/org_zenith_structure.sql | ALTER TABLE ONLY public.operator_emails     ADD CONSTRAINT fk_rails_b0310624d3 FOREIGN KEY (staff_identity_email_status_id) REFERENCES public.operator_email_statuses(id); |
-| idp-operator-telephone-credential | operator_telephones | staff_identity_telephone_status_id | operator_telephone_statuses | db/org_zenith_structure.sql | ALTER TABLE ONLY public.operator_telephones     ADD CONSTRAINT fk_rails_52c0d3ae3b FOREIGN KEY (staff_identity_telephone_status_id) REFERENCES public.operator_telephone_statuses(id); |
-| idp-operator-actor-withdrawal | operators | withdrawal_started_at / deactivated_at / withdrawn_at / discard_at / purge_eligible_at | None (state axis has no reference FK) | db/org_zenith_structure.sql | None for this axis |
-| idp-client-actor-provisioning | clients | status_id | client_statuses | db/app_zenith_structure.sql | ALTER TABLE ONLY public.clients     ADD CONSTRAINT fk_rails_ce4a327a04 FOREIGN KEY (status_id) REFERENCES public.client_statuses(id); |
-| idp-shared-acme-logout | acme_logout_transactions | status / expected_step / completed_steps | None (state axis has no reference FK) | db/app_ticket_structure.sql | None for this axis |
-| idp-shared-webauthn-challenge | None (Rails session) | passkey_challenges entry / expires_at | None | None / UNCONFIRMED | None for this axis |
-| idp-client-enforcement-case | app_enforcement_cases | state / ended_at | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-client-enforcement-appeal | app_enforcement_appeals | state / resolution_code / reviewed_at | None (state axis has no reference FK) | db/app_zenith_structure.sql | None for this axis |
-| idp-visitor-enforcement-case | com_enforcement_cases | state / ended_at | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-visitor-enforcement-appeal | com_enforcement_appeals | state / resolution_code / reviewed_at | None (state axis has no reference FK) | db/com_zenith_structure.sql | None for this axis |
-| idp-operator-enforcement-case | org_enforcement_cases | state / ended_at | None (state axis has no reference FK) | db/org_zenith_structure.sql | None for this axis |
-| idp-operator-enforcement-appeal | org_enforcement_appeals | state / resolution_code / reviewed_at | None (state axis has no reference FK) | db/org_zenith_structure.sql | None for this axis |
-| idp-shared-sign-out-notice | None (Valkey) | Key presence / payload expiry | None | None / UNCONFIRMED | None for this axis |
-| idp-client-mfa-readiness | clients | mfa_status_id | client_mfa_statuses | db/app_zenith_structure.sql | ALTER TABLE ONLY public.clients     ADD CONSTRAINT fk_rails_67ec2e6839 FOREIGN KEY (mfa_status_id) REFERENCES public.client_mfa_statuses(id); |
-| idp-visitor-mfa-readiness | visitors | mfa_status_id | visitor_mfa_statuses | db/com_zenith_structure.sql | ALTER TABLE ONLY public.visitors     ADD CONSTRAINT fk_rails_6e2a03b63d FOREIGN KEY (mfa_status_id) REFERENCES public.visitor_mfa_statuses(id); |
-| idp-operator-mfa-readiness | operators | mfa_status_id | operator_mfa_statuses | db/org_zenith_structure.sql | ALTER TABLE ONLY public.operators     ADD CONSTRAINT fk_rails_cfd2f37948 FOREIGN KEY (mfa_status_id) REFERENCES public.operator_mfa_statuses(id); |
-| idp-client-email-registration-session | Rails session (no fact table) | session[:sign_up_email_flow_state] | None | Controller/concern session storage | None (no state FK) |
-| idp-visitor-email-registration-session | Rails session (no fact table) | session[:auth_com_up_email_flow_state] | None | Controller/concern session storage | None (no state FK) |
+| Machine                                   | Fact / transaction table                         | State axis                                                                                             | State reference                       | SQL source                         | State FK                                                                                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| idp-client-sign-in                        | client_sign_in_flows                             | status_id                                                                                              | client_sign_in_flow_statuses          | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_sign_in_flows ADD CONSTRAINT fk_rails_4e35f66d42 FOREIGN KEY (status_id) REFERENCES public.client_sign_in_flow_statuses(id) NOT VALID;                                             |
+| idp-client-sign-up                        | client_sign_up_flows                             | status_id                                                                                              | client_sign_up_flow_statuses          | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_sign_up_flows ADD CONSTRAINT fk_rails_533362926d FOREIGN KEY (status_id) REFERENCES public.client_sign_up_flow_statuses(id) ON DELETE RESTRICT NOT VALID;                          |
+| idp-client-sign-out                       | client_sign_out_flows                            | status_id                                                                                              | client_sign_out_flow_statuses         | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_sign_out_flows ADD CONSTRAINT fk_rails_bbc7001388 FOREIGN KEY (status_id) REFERENCES public.client_sign_out_flow_statuses(id) NOT VALID;                                           |
+| idp-client-auth-ceremony-session          | client_auth_ceremony_sessions                    | admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at          | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-email-ceremony                 | client_email_ceremony_transactions               | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-telephone-ceremony             | client_telephone_ceremony_transactions           | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-passkey-ceremony               | client_passkey_ceremony_transactions             | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-secret-credential-ceremony     | client_secret_credential_ceremony_transactions   | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-step-up-ceremony               | client_step_up_ceremony_transactions             | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-oidc-authorization             | client_oidc_authorization_transactions           | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-oauth-callback                 | client_oauth_callback_states                     | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-local-result-delivery          | client_sign_in_flows                             | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-token                          | client_tokens                                    | user_token_status_id                                                                                   | client_token_statuses                 | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_tokens ADD CONSTRAINT fk_rails_c11b41180d FOREIGN KEY (user_token_status_id) REFERENCES public.client_token_statuses(id) ON DELETE RESTRICT NOT VALID;                             |
+| idp-client-dbsc                           | client_tokens                                    | user_token_dbsc_status_id                                                                              | client_token_dbsc_statuses            | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_tokens ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id) NOT VALID;              |
+| idp-client-device-session                 | client_device_sessions                           | status_id                                                                                              | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-rp-session                     | op_app_grants                                    | revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-passkey-credential             | client_passkeys                                  | status_id                                                                                              | client_passkey_statuses               | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.client_passkeys ADD CONSTRAINT fk_rails_f5e90919e8 FOREIGN KEY (status_id) REFERENCES public.client_passkey_statuses(id);                                                                 |
+| idp-visitor-sign-in                       | visitor_sign_in_flows                            | status_id                                                                                              | visitor_sign_in_flow_statuses         | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_sign_in_flows ADD CONSTRAINT fk_rails_75353bbdcf FOREIGN KEY (status_id) REFERENCES public.visitor_sign_in_flow_statuses(id) NOT VALID;                                           |
+| idp-visitor-sign-up                       | visitor_sign_up_flows                            | status_id                                                                                              | visitor_sign_up_flow_statuses         | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_sign_up_flows ADD CONSTRAINT fk_rails_8cef237db7 FOREIGN KEY (status_id) REFERENCES public.visitor_sign_up_flow_statuses(id) ON DELETE RESTRICT NOT VALID;                        |
+| idp-visitor-sign-out                      | visitor_sign_out_flows                           | status_id                                                                                              | visitor_sign_out_flow_statuses        | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_sign_out_flows ADD CONSTRAINT fk_rails_0289bc0560 FOREIGN KEY (status_id) REFERENCES public.visitor_sign_out_flow_statuses(id) NOT VALID;                                         |
+| idp-visitor-auth-ceremony-session         | visitor_auth_ceremony_sessions                   | admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at          | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-email-ceremony                | visitor_email_ceremony_transactions              | status                                                                                                 | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-telephone-ceremony            | visitor_telephone_ceremony_transactions          | status                                                                                                 | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-passkey-ceremony              | visitor_passkey_ceremony_transactions            | status                                                                                                 | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-secret-credential-ceremony    | visitor_secret_credential_ceremony_transactions  | status                                                                                                 | visitor_secret_credential_statuses    | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-step-up-ceremony              | visitor_step_up_ceremony_transactions            | status                                                                                                 | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-oidc-authorization            | visitor_oidc_authorization_transactions          | status                                                                                                 | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-local-result-delivery         | visitor_sign_in_flows                            | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-token                         | visitor_tokens                                   | visitor_token_status_id                                                                                | visitor_token_statuses                | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_tokens ADD CONSTRAINT fk_customer_tokens_on_customer_token_status_id FOREIGN KEY (visitor_token_status_id) REFERENCES public.visitor_token_statuses(id) NOT VALID;                |
+| idp-visitor-dbsc                          | visitor_tokens                                   | visitor_token_dbsc_status_id                                                                           | visitor_token_dbsc_statuses           | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_tokens ADD CONSTRAINT fk_customer_tokens_on_customer_token_dbsc_status_id FOREIGN KEY (visitor_token_dbsc_status_id) REFERENCES public.visitor_token_dbsc_statuses(id) NOT VALID; |
+| idp-visitor-device-session                | visitor_device_sessions                          | status_id                                                                                              | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-rp-session                    | op_com_grants                                    | revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at                               | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-passkey-credential            | visitor_passkeys                                 | status_id                                                                                              | visitor_passkey_statuses              | db/com_zenith_structure.sql        | ALTER TABLE ONLY public.visitor_passkeys ADD CONSTRAINT fk_rails_3ced60caec FOREIGN KEY (status_id) REFERENCES public.visitor_passkey_statuses(id);                                                               |
+| idp-operator-sign-in                      | operator_sign_in_flows                           | status_id                                                                                              | operator_sign_in_flow_statuses        | db/op_base_org_structure.sql       | ALTER TABLE ONLY public.operator_sign_in_flows ADD CONSTRAINT fk_rails_6ed9308623 FOREIGN KEY (status_id) REFERENCES public.operator_sign_in_flow_statuses(id) NOT VALID;                                         |
+| idp-operator-sign-up                      | operator_sign_up_flows                           | status_id                                                                                              | operator_sign_up_flow_statuses        | db/op_base_org_structure.sql       | ALTER TABLE ONLY public.operator_sign_up_flows ADD CONSTRAINT fk_rails_fb3acc316b FOREIGN KEY (status_id) REFERENCES public.operator_sign_up_flow_statuses(id) NOT VALID;                                         |
+| idp-operator-sign-out                     | operator_sign_out_flows                          | status_id                                                                                              | operator_sign_out_flow_statuses       | db/op_base_org_structure.sql       | ALTER TABLE ONLY public.operator_sign_out_flows ADD CONSTRAINT fk_rails_85024a94ea FOREIGN KEY (status_id) REFERENCES public.operator_sign_out_flow_statuses(id) NOT VALID;                                       |
+| idp-operator-auth-ceremony-session        | operator_auth_ceremony_sessions                  | admitted_at / authentication_event_at / completed_at / cancelled_at / revoked_at / expires_at          | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-email-ceremony               | operator_email_ceremony_transactions             | status                                                                                                 | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-telephone-ceremony           | operator_telephone_ceremony_transactions         | status                                                                                                 | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-passkey-ceremony             | operator_passkey_ceremony_transactions           | status                                                                                                 | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-secret-credential-ceremony   | operator_secret_credential_ceremony_transactions | status                                                                                                 | operator_secret_credential_statuses   | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-step-up-ceremony             | operator_step_up_ceremony_transactions           | status                                                                                                 | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-oidc-authorization           | operator_oidc_authorization_transactions         | status                                                                                                 | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-oauth-callback               | operator_oauth_callback_states                   | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-local-result-delivery        | operator_sign_in_flows                           | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-token                        | operator_tokens                                  | staff_token_status_id                                                                                  | operator_token_statuses               | db/op_base_org_structure.sql       | ALTER TABLE ONLY public.operator_tokens ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT NOT VALID;                        |
+| idp-operator-dbsc                         | operator_tokens                                  | staff_token_dbsc_status_id                                                                             | operator_token_dbsc_statuses          | db/op_base_org_structure.sql       | ALTER TABLE ONLY public.operator_tokens ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id) NOT VALID;       |
+| idp-operator-device-session               | operator_device_sessions                         | status_id                                                                                              | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-rp-session                   | op_org_grants                                    | revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at                               | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-passkey-credential           | operator_passkeys                                | status_id                                                                                              | operator_passkey_statuses             | db/org_zenith_structure.sql        | ALTER TABLE ONLY public.operator_passkeys ADD CONSTRAINT fk_rails_b17ae8dc5f FOREIGN KEY (status_id) REFERENCES public.operator_passkey_statuses(id);                                                             |
+| idp-client-sign-up-cleanup                | client_sign_up_flows                             | cleanup_status_id                                                                                      | client_sign_up_flow_cleanup_statuses  | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_sign_up_flows ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id) NOT VALID;                             |
+| idp-client-withdrawal-ceremony            | client_withdrawal_ceremonies                     | status_id                                                                                              | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-enforcement-recovery-ceremony  | client_enforcement_recovery_ceremonies           | status_id                                                                                              | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-sign-up-cleanup               | visitor_sign_up_flows                            | cleanup_status_id                                                                                      | visitor_sign_up_flow_cleanup_statuses | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_sign_up_flows ADD CONSTRAINT fk_rails_cf6ee54a77 FOREIGN KEY (cleanup_status_id) REFERENCES public.visitor_sign_up_flow_cleanup_statuses(id) NOT VALID;                           |
+| idp-visitor-withdrawal-ceremony           | visitor_withdrawal_ceremonies                    | status_id                                                                                              | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-enforcement-recovery-ceremony | visitor_enforcement_recovery_ceremonies          | status_id                                                                                              | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-totp-ceremony                  | client_totp_ceremony_transactions                | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-social-ceremony                | client_social_ceremony_transactions              | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-secret-issuance                | client_secret_issuances                          | presented_at / confirmed_at / canceled_at / expires_at                                                 | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-session-limit-resolution       | client_session_limit_resolution_transactions     | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-apple-notification             | client_apple_notification_events                 | status                                                                                                 | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-external-identity              | client_external_identities                       | state                                                                                                  | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-totp-credential                | client_totp_credentials                          | user_identity_totp_credential_status_id                                                                | client_totp_credential_statuses       | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.client_totp_credentials ADD CONSTRAINT fk_rails_ee2c1859b3 FOREIGN KEY (user_identity_totp_credential_status_id) REFERENCES public.client_totp_credential_statuses(id);                   |
+| idp-identity-totp-enrollment              | identity_totp_ceremony_candidates                | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-identity-secret-credential-candidate  | identity_secret_credential_ceremony_candidates   | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-identity-social-candidate             | identity_social_ceremony_candidates              | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-organization-invitation      | organization_invitations                         | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-operator-lifecycle           | operator_lifecycle_requests                      | status                                                                                                 | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-shared-sequence-carrier               | None (Rails session)                             | state / terminal_state                                                                                 | None                                  | None / UNCONFIRMED                 | None for this axis                                                                                                                                                                                                |
+| idp-shared-authorization-code             | None (Valkey)                                    | state                                                                                                  | None                                  | None / UNCONFIRMED                 | None for this axis                                                                                                                                                                                                |
+| idp-shared-opaque-admission               | None (Valkey)                                    | state                                                                                                  | None                                  | None / UNCONFIRMED                 | None for this axis                                                                                                                                                                                                |
+| idp-client-secret-credential              | client_secret_credentials                        | confirmed_at / claimed_at / claim_operation_id / revoked_at / discard_at                               | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-dpop-nonce                     | client_dpop_proof_states                         | nonce_used_at / expires_at                                                                             | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-administrative-access          | clients                                          | access_state                                                                                           | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-email-verification-challenge   | client_email_ceremony_transactions               | evp_outcome / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-preference-dbsc                | app_preferences                                  | dbsc_status_id                                                                                         | app_preference_dbsc_statuses          | db/app_setting_structure.sql       | ALTER TABLE ONLY public.app_preferences ADD CONSTRAINT fk_app_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.app_preference_dbsc_statuses(id) NOT VALID;                            |
+| idp-client-email-otp                      | client_emails                                    | otp_expires_at / otp_attempts_count / locked_at                                                        | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-telephone-otp                  | client_telephones                                | otp_expires_at / otp_attempts_count / locked_at                                                        | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-secret-credential             | visitor_secret_credentials                       | visitor_secret_credential_status_id                                                                    | visitor_secret_credential_statuses    | db/com_zenith_structure.sql        | ALTER TABLE ONLY public.visitor_secret_credentials ADD CONSTRAINT fk_rails_2ee7e81748 FOREIGN KEY (visitor_secret_credential_status_id) REFERENCES public.visitor_secret_credential_statuses(id);                 |
+| idp-visitor-dpop-nonce                    | visitor_dpop_proof_states                        | nonce_used_at / expires_at                                                                             | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-administrative-access         | visitors                                         | access_state                                                                                           | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-email-verification-challenge  | visitor_email_ceremony_transactions              | evp_outcome / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-preference-dbsc               | com_preferences                                  | dbsc_status_id                                                                                         | com_preference_dbsc_statuses          | db/com_setting_structure.sql       | ALTER TABLE ONLY public.com_preferences ADD CONSTRAINT fk_com_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.com_preference_dbsc_statuses(id) NOT VALID;                            |
+| idp-visitor-email-otp                     | visitor_emails                                   | otp_expires_at / otp_attempts_count / locked_at                                                        | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-telephone-otp                 | visitor_telephones                               | otp_expires_at / otp_attempts_count / locked_at                                                        | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-operator-secret-credential            | operator_secret_credentials                      | staff_identity_secret_status_id                                                                        | operator_secret_credential_statuses   | db/org_zenith_structure.sql        | ALTER TABLE ONLY public.operator_secret_credentials ADD CONSTRAINT fk_rails_8f8aed461a FOREIGN KEY (staff_identity_secret_status_id) REFERENCES public.operator_secret_credential_statuses(id);                   |
+| idp-operator-dpop-nonce                   | operator_dpop_proof_states                       | nonce_used_at / expires_at                                                                             | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-administrative-access        | operators                                        | access_state                                                                                           | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-operator-email-verification-challenge | operator_email_ceremony_transactions             | evp_outcome / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-preference-dbsc              | org_preferences                                  | dbsc_status_id                                                                                         | org_preference_dbsc_statuses          | db/org_setting_structure.sql       | ALTER TABLE ONLY public.org_preferences ADD CONSTRAINT fk_org_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.org_preference_dbsc_statuses(id) NOT VALID;                            |
+| idp-operator-email-otp                    | operator_emails                                  | otp_expires_at / otp_attempts_count / locked_at                                                        | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-operator-telephone-otp                | operator_telephones                              | otp_expires_at / otp_attempts_count / locked_at                                                        | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-withdrawal                     | client_withdrawal_flows                          | status_id                                                                                              | client_withdrawal_flow_statuses       | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.client_withdrawal_flows ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id) NOT VALID;                                       |
+| idp-visitor-withdrawal                    | visitor_withdrawal_flows                         | status_id                                                                                              | visitor_withdrawal_flow_statuses      | db/com_zenith_structure.sql        | ALTER TABLE ONLY public.visitor_withdrawal_flows ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) NOT VALID;                                     |
+| idp-security-one-time-reveal              | security_one_time_reveals                        | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-entra-identity               | operator_entra_identities                        | status_id                                                                                              | operator_entra_identity_states        | db/org_zenith_structure.sql        | ALTER TABLE ONLY public.operator_entra_identities ADD CONSTRAINT fk_rails_168298cb60 FOREIGN KEY (status_id) REFERENCES public.operator_entra_identity_states(id);                                                |
+| idp-client-step-up-session                | client_step_up_sessions                          | status / discard_at                                                                                    | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-step-up-passkey-challenge      | client_step_up_sessions                          | passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at                   | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-step-up-email-challenge        | client_step_up_sessions                          | email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at          | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-email-credential               | client_emails                                    | user_email_status_id                                                                                   | client_email_statuses                 | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.client_emails ADD CONSTRAINT fk_rails_15a0bdccd5 FOREIGN KEY (user_email_status_id) REFERENCES public.client_email_statuses(id);                                                          |
+| idp-client-telephone-credential           | client_telephones                                | user_identity_telephone_status_id                                                                      | client_telephone_statuses             | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.client_telephones ADD CONSTRAINT fk_rails_c81d47bc96 FOREIGN KEY (user_identity_telephone_status_id) REFERENCES public.client_telephone_statuses(id);                                     |
+| idp-client-actor-withdrawal               | clients                                          | withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-step-up-session               | visitor_step_up_sessions                         | status / discard_at                                                                                    | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-step-up-passkey-challenge     | visitor_step_up_sessions                         | passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at                   | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-step-up-email-challenge       | visitor_step_up_sessions                         | email_delivery_state / email_code_generation / email_code_consumed_at / email_code_expires_at          | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-email-credential              | visitor_emails                                   | visitor_email_status_id                                                                                | visitor_email_statuses                | db/com_zenith_structure.sql        | ALTER TABLE ONLY public.visitor_emails ADD CONSTRAINT fk_rails_07ea0750f3 FOREIGN KEY (visitor_email_status_id) REFERENCES public.visitor_email_statuses(id);                                                     |
+| idp-visitor-telephone-credential          | visitor_telephones                               | visitor_telephone_status_id                                                                            | visitor_telephone_statuses            | db/com_zenith_structure.sql        | ALTER TABLE ONLY public.visitor_telephones ADD CONSTRAINT fk_rails_c534739d95 FOREIGN KEY (visitor_telephone_status_id) REFERENCES public.visitor_telephone_statuses(id);                                         |
+| idp-visitor-actor-withdrawal              | visitors                                         | withdrawal_started_at / deactivated_at / withdrawn_at / terminated_at / discard_at / purge_eligible_at | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-operator-step-up-session              | operator_step_up_sessions                        | status / discard_at                                                                                    | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-step-up-passkey-challenge    | operator_step_up_sessions                        | passkey_challenge_ref / passkey_challenge_consumed_at / passkey_challenge_expires_at                   | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-email-credential             | operator_emails                                  | staff_identity_email_status_id                                                                         | operator_email_statuses               | db/org_zenith_structure.sql        | ALTER TABLE ONLY public.operator_emails ADD CONSTRAINT fk_rails_b0310624d3 FOREIGN KEY (staff_identity_email_status_id) REFERENCES public.operator_email_statuses(id);                                            |
+| idp-operator-telephone-credential         | operator_telephones                              | staff_identity_telephone_status_id                                                                     | operator_telephone_statuses           | db/org_zenith_structure.sql        | ALTER TABLE ONLY public.operator_telephones ADD CONSTRAINT fk_rails_52c0d3ae3b FOREIGN KEY (staff_identity_telephone_status_id) REFERENCES public.operator_telephone_statuses(id);                                |
+| idp-operator-actor-withdrawal             | operators                                        | withdrawal_started_at / deactivated_at / withdrawn_at / discard_at / purge_eligible_at                 | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-actor-provisioning             | clients                                          | status_id                                                                                              | client_statuses                       | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.clients ADD CONSTRAINT fk_rails_ce4a327a04 FOREIGN KEY (status_id) REFERENCES public.client_statuses(id);                                                                                 |
+| idp-shared-acme-logout                    | acme_logout_transactions                         | status / expected_step / completed_steps                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-shared-webauthn-challenge             | None (Rails session)                             | passkey_challenges entry / expires_at                                                                  | None                                  | None / UNCONFIRMED                 | None for this axis                                                                                                                                                                                                |
+| idp-client-enforcement-case               | app_enforcement_cases                            | state / ended_at                                                                                       | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-client-enforcement-appeal             | app_enforcement_appeals                          | state / resolution_code / reviewed_at                                                                  | None (state axis has no reference FK) | db/app_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-enforcement-case              | com_enforcement_cases                            | state / ended_at                                                                                       | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-visitor-enforcement-appeal            | com_enforcement_appeals                          | state / resolution_code / reviewed_at                                                                  | None (state axis has no reference FK) | db/com_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-operator-enforcement-case             | org_enforcement_cases                            | state / ended_at                                                                                       | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-operator-enforcement-appeal           | org_enforcement_appeals                          | state / resolution_code / reviewed_at                                                                  | None (state axis has no reference FK) | db/org_zenith_structure.sql        | None for this axis                                                                                                                                                                                                |
+| idp-shared-sign-out-notice                | None (Valkey)                                    | Key presence / payload expiry                                                                          | None                                  | None / UNCONFIRMED                 | None for this axis                                                                                                                                                                                                |
+| idp-client-mfa-readiness                  | clients                                          | mfa_status_id                                                                                          | client_mfa_statuses                   | db/app_zenith_structure.sql        | ALTER TABLE ONLY public.clients ADD CONSTRAINT fk_rails_67ec2e6839 FOREIGN KEY (mfa_status_id) REFERENCES public.client_mfa_statuses(id);                                                                         |
+| idp-visitor-mfa-readiness                 | visitors                                         | mfa_status_id                                                                                          | visitor_mfa_statuses                  | db/com_zenith_structure.sql        | ALTER TABLE ONLY public.visitors ADD CONSTRAINT fk_rails_6e2a03b63d FOREIGN KEY (mfa_status_id) REFERENCES public.visitor_mfa_statuses(id);                                                                       |
+| idp-operator-mfa-readiness                | operators                                        | mfa_status_id                                                                                          | operator_mfa_statuses                 | db/org_zenith_structure.sql        | ALTER TABLE ONLY public.operators ADD CONSTRAINT fk_rails_cfd2f37948 FOREIGN KEY (mfa_status_id) REFERENCES public.operator_mfa_statuses(id);                                                                     |
+| idp-client-email-registration-session     | Rails session (no fact table)                    | session[:sign_up_email_flow_state]                                                                     | None                                  | Controller/concern session storage | None (no state FK)                                                                                                                                                                                                |
+| idp-visitor-email-registration-session    | Rails session (no fact table)                    | session[:auth_com_up_email_flow_state]                                                                 | None                                  | Controller/concern session storage | None (no state FK)                                                                                                                                                                                                |
 
 ## Exact table definitions
 
-The same table may own several indexed machines. Each table is shown once. All columns are retained here so duplicated state/string/step/timestamp authorities and column defaults can be checked against each machine. Primary-key SQL explicitly records the key; column types apply to both flow and reference tables. Each FK lists its actual direction, validation status and deletion rule. No Ruby association is promoted to an FK.
+The same table may own several indexed machines. Each table is shown once. All columns are retained
+here so duplicated state/string/step/timestamp authorities and column defaults can be checked
+against each machine. Primary-key SQL explicitly records the key; column types apply to both flow
+and reference tables. Each FK lists its actual direction, validation status and deletion rule. No
+Ruby association is promoted to an FK.
 
 ### acme_logout_transactions
 
-Source: `db/app_ticket_structure.sql:49`. Machines: `idp-shared-acme-logout`.
+Source: `db/op_base_app_structure.sql:49`. Machines: `idp-shared-acme-logout`.
 
 ```sql
 CREATE TABLE acme_logout_transactions (
@@ -166,7 +176,7 @@ ALTER TABLE ONLY public.acme_logout_transactions
     ADD CONSTRAINT acme_logout_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260621150000_create_acme_logout_transactions.rb`.
+Migration provenance: `db/op_base_app_migrate/20260621150000_create_acme_logout_transactions.rb`.
 
 ### app_enforcement_appeals
 
@@ -223,7 +233,9 @@ ALTER TABLE ONLY public.app_enforcement_authentication_method_effects
     ADD CONSTRAINT fk_rails_123aa7db5e FOREIGN KEY (app_enforcement_case_id) REFERENCES public.app_enforcement_cases(id);
 ```
 
-Migration provenance: `db/app_zenith_migrate/20260727120002_create_app_enforcement_authentication_method_effects.rb`, `db/app_zenith_migrate/20260727140000_create_client_emails_permanent_freeze_trigger.rb`.
+Migration provenance:
+`db/app_zenith_migrate/20260727120002_create_app_enforcement_authentication_method_effects.rb`,
+`db/app_zenith_migrate/20260727140000_create_client_emails_permanent_freeze_trigger.rb`.
 
 ### app_enforcement_cases
 
@@ -276,7 +288,9 @@ ALTER TABLE ONLY public.app_enforcement_cases
     ADD CONSTRAINT app_enforcement_cases_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_zenith_migrate/20260727120000_create_app_enforcement_cases.rb`, `db/app_zenith_migrate/20260830120000_allow_verification_completed_app_enforcement_case_end_reason.rb`, `db/app_zenith_migrate/20260727140001_create_clients_hard_delete_protection_trigger.rb`.
+Migration provenance: `db/app_zenith_migrate/20260727120000_create_app_enforcement_cases.rb`,
+`db/app_zenith_migrate/20260830120000_allow_verification_completed_app_enforcement_case_end_reason.rb`,
+`db/app_zenith_migrate/20260727140001_create_clients_hard_delete_protection_trigger.rb`.
 
 ### app_enforcement_identifier_effects
 
@@ -308,7 +322,8 @@ ALTER TABLE ONLY public.app_enforcement_identifier_effects
     ADD CONSTRAINT fk_rails_948f351e94 FOREIGN KEY (app_enforcement_case_id) REFERENCES public.app_enforcement_cases(id);
 ```
 
-Migration provenance: `db/app_zenith_migrate/20260727120003_create_app_enforcement_identifier_effects.rb`.
+Migration provenance:
+`db/app_zenith_migrate/20260727120003_create_app_enforcement_identifier_effects.rb`.
 
 ### app_enforcement_principal_effects
 
@@ -337,7 +352,9 @@ ALTER TABLE ONLY public.app_enforcement_principal_effects
     ADD CONSTRAINT fk_rails_a7ff4f6c71 FOREIGN KEY (app_enforcement_case_id) REFERENCES public.app_enforcement_cases(id);
 ```
 
-Migration provenance: `db/app_zenith_migrate/20260727120001_create_app_enforcement_principal_effects.rb`, `db/app_zenith_migrate/20260727140001_create_clients_hard_delete_protection_trigger.rb`.
+Migration provenance:
+`db/app_zenith_migrate/20260727120001_create_app_enforcement_principal_effects.rb`,
+`db/app_zenith_migrate/20260727140001_create_clients_hard_delete_protection_trigger.rb`.
 
 ### app_enforcement_principal_links
 
@@ -362,7 +379,8 @@ ALTER TABLE ONLY public.app_enforcement_principal_links
     ADD CONSTRAINT fk_rails_e04b2bda45 FOREIGN KEY (app_enforcement_case_id) REFERENCES public.app_enforcement_cases(id);
 ```
 
-Migration provenance: `db/app_zenith_migrate/20260727120004_create_app_enforcement_principal_links.rb`.
+Migration provenance:
+`db/app_zenith_migrate/20260727120004_create_app_enforcement_principal_links.rb`.
 
 ### app_preference_binding_methods
 
@@ -443,7 +461,15 @@ ALTER TABLE ONLY public.app_preferences
     ADD CONSTRAINT fk_rails_40612c8731 FOREIGN KEY (replaced_by_id) REFERENCES public.app_preferences(id) ON DELETE SET NULL NOT VALID;
 ```
 
-Migration provenance: `db/app_settings_migrate/20260530120000_add_explicit_fields_to_app_preferences.rb`, `db/app_settings_migrate/20260921133000_rename_app_setting_retention_columns_to_semantic_names.rb`, `db/app_settings_migrate/20260702000000_change_app_preferences_status_id_default_to_nothing.rb`, `db/app_settings_migrate/20260518030000_load_initial_app_setting_schema.rb`, `db/app_settings_migrate/20260526120200_remove_device_id_from_app_preferences.rb`, `db/app_settings_migrate/20260526090000_create_app_preference_r18_display_stoppers.rb`, `db/com_principals_migrate/20260508135008_consolidate_retention_on_app_preferences.rb`, `db/app_zenith_migrate/20260721090000_add_explicit_fields_to_client_preferences.rb`.
+Migration provenance:
+`db/app_settings_migrate/20260530120000_add_explicit_fields_to_app_preferences.rb`,
+`db/app_settings_migrate/20260921133000_rename_app_setting_retention_columns_to_semantic_names.rb`,
+`db/app_settings_migrate/20260702000000_change_app_preferences_status_id_default_to_nothing.rb`,
+`db/app_settings_migrate/20260518030000_load_initial_app_setting_schema.rb`,
+`db/app_settings_migrate/20260526120200_remove_device_id_from_app_preferences.rb`,
+`db/app_settings_migrate/20260526090000_create_app_preference_r18_display_stoppers.rb`,
+`db/com_principals_migrate/20260508135008_consolidate_retention_on_app_preferences.rb`,
+`db/app_zenith_migrate/20260721090000_add_explicit_fields_to_client_preferences.rb`.
 
 ### client_apple_notification_events
 
@@ -478,11 +504,21 @@ ALTER TABLE ONLY public.client_apple_notification_events
     ADD CONSTRAINT fk_rails_37bfb38140 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE SET NULL;
 ```
 
-Migration provenance: `db/app_principals_migrate/20260724201400_add_legacy_apple_identity_foreign_key_to_notification_events.rb`, `db/app_principals_migrate/20260724201000_add_client_to_apple_notification_events.rb`, `db/app_principals_migrate/20260731121000_remove_persisted_apple_provider_tokens.rb`, `db/app_principals_migrate/20260724201700_validate_external_authentication_foreign_keys.rb`, `db/app_principals_migrate/20260724201300_add_legacy_apple_identity_to_notification_events.rb`, `db/app_principals_migrate/20260724201100_add_client_foreign_key_to_apple_notification_events.rb`, `db/app_principals_migrate/20260724201500_validate_legacy_apple_identity_foreign_key_on_notification_events.rb`, `db/app_principals_migrate/20260724201600_nullify_notification_event_identity_foreign_keys.rb`, `db/app_principals_migrate/20260724200000_create_client_apple_notification_events.rb`, `db/app_principals_migrate/20260724201200_validate_client_foreign_key_on_apple_notification_events.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260724201400_add_legacy_apple_identity_foreign_key_to_notification_events.rb`,
+`db/app_principals_migrate/20260724201000_add_client_to_apple_notification_events.rb`,
+`db/app_principals_migrate/20260731121000_remove_persisted_apple_provider_tokens.rb`,
+`db/app_principals_migrate/20260724201700_validate_external_authentication_foreign_keys.rb`,
+`db/app_principals_migrate/20260724201300_add_legacy_apple_identity_to_notification_events.rb`,
+`db/app_principals_migrate/20260724201100_add_client_foreign_key_to_apple_notification_events.rb`,
+`db/app_principals_migrate/20260724201500_validate_legacy_apple_identity_foreign_key_on_notification_events.rb`,
+`db/app_principals_migrate/20260724201600_nullify_notification_event_identity_foreign_keys.rb`,
+`db/app_principals_migrate/20260724200000_create_client_apple_notification_events.rb`,
+`db/app_principals_migrate/20260724201200_validate_client_foreign_key_on_apple_notification_events.rb`.
 
 ### client_auth_ceremony_sessions
 
-Source: `db/app_ticket_structure.sql:104`. Machines: `idp-client-auth-ceremony-session`.
+Source: `db/op_base_app_structure.sql:104`. Machines: `idp-client-auth-ceremony-session`.
 
 ```sql
 CREATE TABLE client_auth_ceremony_sessions (
@@ -522,11 +558,19 @@ ALTER TABLE ONLY public.client_auth_ceremony_sessions
     ADD CONSTRAINT fk_rails_694b855234 FOREIGN KEY (local_sign_in_flow_ref) REFERENCES public.client_sign_in_flows(public_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`, `db/app_tickets_migrate/20260913140000_create_client_auth_ceremony_sessions.rb`, `db/app_tickets_migrate/20260920150000_extend_client_auth_ceremony_session_lifecycle.rb`, `db/app_tickets_migrate/20261003175614_bind_client_local_authentication_results.rb`, `db/app_tickets_migrate/20260920151000_validate_client_auth_ceremony_session_lifecycle.rb`, `db/app_tickets_migrate/20260921140100_validate_authentication_evidence_constraints.rb`, `db/app_tickets_migrate/20261003183659_bind_client_opaque_step_up_ceremonies.rb`, `db/app_tickets_migrate/20260921140000_add_authentication_evidence_to_client_auth_ceremony_sessions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_app_migrate/20260913140000_create_client_auth_ceremony_sessions.rb`,
+`db/op_base_app_migrate/20260920150000_extend_client_auth_ceremony_session_lifecycle.rb`,
+`db/op_base_app_migrate/20261003175614_bind_client_local_authentication_results.rb`,
+`db/op_base_app_migrate/20260920151000_validate_client_auth_ceremony_session_lifecycle.rb`,
+`db/op_base_app_migrate/20260921140100_validate_authentication_evidence_constraints.rb`,
+`db/op_base_app_migrate/20261003183659_bind_client_opaque_step_up_ceremonies.rb`,
+`db/op_base_app_migrate/20260921140000_add_authentication_evidence_to_client_auth_ceremony_sessions.rb`.
 
 ### client_device_sessions
 
-Source: `db/app_ticket_structure.sql:156`. Machines: `idp-client-device-session`.
+Source: `db/op_base_app_structure.sql:156`. Machines: `idp-client-device-session`.
 
 ```sql
 CREATE TABLE client_device_sessions (
@@ -553,11 +597,18 @@ ALTER TABLE ONLY public.client_device_sessions
     ADD CONSTRAINT fk_client_device_sessions_on_current_refresh_token_owner FOREIGN KEY (id, current_refresh_token_id) REFERENCES public.client_tokens(device_session_id, id) ON DELETE SET NULL (current_refresh_token_id) DEFERRABLE INITIALLY DEFERRED;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260611100000_add_last_network_hmac_to_client_device_sessions.rb`, `db/app_tickets_migrate/20260924154000_add_client_device_session_actor_reference_index.rb`, `db/app_tickets_migrate/20260924153000_validate_client_current_refresh_token_owner.rb`, `db/app_tickets_migrate/20260520190000_create_device_sessions_for_user_tokens.rb`, `db/app_tickets_migrate/20260526120100_remove_device_id_from_app_tickets.rb`, `db/app_tickets_migrate/20260924155000_add_client_token_device_session_actor_foreign_key.rb`, `db/app_tickets_migrate/20260924151000_add_client_device_session_token_foreign_keys.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260611100000_add_last_network_hmac_to_client_device_sessions.rb`,
+`db/op_base_app_migrate/20260924154000_add_client_device_session_actor_reference_index.rb`,
+`db/op_base_app_migrate/20260924153000_validate_client_current_refresh_token_owner.rb`,
+`db/op_base_app_migrate/20260520190000_create_device_sessions_for_user_tokens.rb`,
+`db/op_base_app_migrate/20260526120100_remove_device_id_from_app_tickets.rb`,
+`db/op_base_app_migrate/20260924155000_add_client_token_device_session_actor_foreign_key.rb`,
+`db/op_base_app_migrate/20260924151000_add_client_device_session_token_foreign_keys.rb`.
 
 ### client_dpop_proof_states
 
-Source: `db/app_ticket_structure.sql:199`. Machines: `idp-client-dpop-nonce`.
+Source: `db/op_base_app_structure.sql:199`. Machines: `idp-client-dpop-nonce`.
 
 ```sql
 CREATE TABLE client_dpop_proof_states (
@@ -577,11 +628,12 @@ ALTER TABLE ONLY public.client_dpop_proof_states
     ADD CONSTRAINT client_dpop_proof_states_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260526120000_create_client_dpop_proof_states.rb`.
+Migration provenance: `db/op_base_app_migrate/20260526120000_create_client_dpop_proof_states.rb`.
 
 ### client_email_ceremony_transactions
 
-Source: `db/app_ticket_structure.sql:237`. Machines: `idp-client-email-ceremony`, `idp-client-email-verification-challenge`.
+Source: `db/op_base_app_structure.sql:237`. Machines: `idp-client-email-ceremony`,
+`idp-client-email-verification-challenge`.
 
 ```sql
 CREATE TABLE client_email_ceremony_transactions (
@@ -615,7 +667,9 @@ ALTER TABLE ONLY public.client_email_ceremony_transactions
     ADD CONSTRAINT client_email_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260710220000_add_evp_state_to_client_email_ceremony_transactions.rb`, `db/app_tickets_migrate/20260603121000_create_client_email_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260710220000_add_evp_state_to_client_email_ceremony_transactions.rb`,
+`db/op_base_app_migrate/20260603121000_create_client_email_ceremony_transactions.rb`.
 
 ### client_email_statuses
 
@@ -629,11 +683,13 @@ ALTER TABLE ONLY public.client_email_statuses
     ADD CONSTRAINT client_email_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
 
 ### client_emails
 
-Source: `db/app_zenith_structure.sql:674`. Machines: `idp-client-email-otp`, `idp-client-email-credential`.
+Source: `db/app_zenith_structure.sql:674`. Machines: `idp-client-email-otp`,
+`idp-client-email-credential`.
 
 ```sql
 CREATE TABLE client_emails (
@@ -671,7 +727,13 @@ ALTER TABLE ONLY public.client_emails
     ADD CONSTRAINT fk_rails_410ac92848 FOREIGN KEY (user_id) REFERENCES public.clients(id);
 ```
 
-Migration provenance: `db/seeds.rb`, `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`, `db/app_principals_migrate/20260525131000_scope_client_contact_identifier_uniqueness_to_active_records.rb`, `db/app_principals_migrate/20260525120000_add_retention_to_client_sign_up_artifacts.rb`, `db/app_principals_migrate/20261003202225_preserve_client_step_up_email_failures.rb`, `db/app_zenith_migrate/20260727140000_create_client_emails_permanent_freeze_trigger.rb`, `db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
+Migration provenance: `db/seeds.rb`,
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`,
+`db/app_principals_migrate/20260525131000_scope_client_contact_identifier_uniqueness_to_active_records.rb`,
+`db/app_principals_migrate/20260525120000_add_retention_to_client_sign_up_artifacts.rb`,
+`db/app_principals_migrate/20261003202225_preserve_client_step_up_email_failures.rb`,
+`db/app_zenith_migrate/20260727140000_create_client_emails_permanent_freeze_trigger.rb`,
+`db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
 
 ### client_enforcement_recovery_ceremonies
 
@@ -698,7 +760,8 @@ ALTER TABLE ONLY public.client_enforcement_recovery_ceremonies
     ADD CONSTRAINT fk_rails_589be2c97e FOREIGN KEY (client_id) REFERENCES public.clients(id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260729130000_create_client_enforcement_recovery_ceremonies.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260729130000_create_client_enforcement_recovery_ceremonies.rb`.
 
 ### client_external_identities
 
@@ -728,7 +791,12 @@ ALTER TABLE ONLY public.client_external_identities
     ADD CONSTRAINT fk_rails_abadb8885a FOREIGN KEY (client_id) REFERENCES public.clients(id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260724190000_create_client_external_identities.rb`, `db/app_principals_migrate/20260911120000_log_client_external_identities.rb`, `db/app_principals_migrate/20260724201700_validate_external_authentication_foreign_keys.rb`, `db/app_principals_migrate/20260724201600_nullify_notification_event_identity_foreign_keys.rb`, `db/app_principals_migrate/20260724200000_create_client_apple_notification_events.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260724190000_create_client_external_identities.rb`,
+`db/app_principals_migrate/20260911120000_log_client_external_identities.rb`,
+`db/app_principals_migrate/20260724201700_validate_external_authentication_foreign_keys.rb`,
+`db/app_principals_migrate/20260724201600_nullify_notification_event_identity_foreign_keys.rb`,
+`db/app_principals_migrate/20260724200000_create_client_apple_notification_events.rb`.
 
 ### client_mfa_levels
 
@@ -742,7 +810,8 @@ ALTER TABLE ONLY public.client_mfa_levels
     ADD CONSTRAINT client_mfa_levels_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`.
 
 ### client_mfa_statuses
 
@@ -756,11 +825,12 @@ ALTER TABLE ONLY public.client_mfa_statuses
     ADD CONSTRAINT client_mfa_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`.
 
 ### client_oauth_callback_states
 
-Source: `db/app_ticket_structure.sql:322`. Machines: `idp-client-oauth-callback`.
+Source: `db/op_base_app_structure.sql:322`. Machines: `idp-client-oauth-callback`.
 
 ```sql
 CREATE TABLE client_oauth_callback_states (
@@ -778,11 +848,11 @@ ALTER TABLE ONLY public.client_oauth_callback_states
     ADD CONSTRAINT client_oauth_callback_states_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
 
 ### client_oidc_authorization_transactions
 
-Source: `db/app_ticket_structure.sql:358`. Machines: `idp-client-oidc-authorization`.
+Source: `db/op_base_app_structure.sql:358`. Machines: `idp-client-oidc-authorization`.
 
 ```sql
 CREATE TABLE client_oidc_authorization_transactions (
@@ -825,11 +895,15 @@ ALTER TABLE ONLY public.client_oidc_authorization_transactions
     ADD CONSTRAINT client_oidc_authorization_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260922120100_validate_cross_store_oidc_finalization_client_transactions.rb`, `db/app_tickets_migrate/20260611150000_create_client_oidc_authorization_transactions.rb`, `db/app_tickets_migrate/20260915180000_add_oidc_freshness_options_to_client_authorization_transactions.rb`, `db/app_tickets_migrate/20260922120000_add_cross_store_oidc_finalization_to_client_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260922120100_validate_cross_store_oidc_finalization_client_transactions.rb`,
+`db/op_base_app_migrate/20260611150000_create_client_oidc_authorization_transactions.rb`,
+`db/op_base_app_migrate/20260915180000_add_oidc_freshness_options_to_client_authorization_transactions.rb`,
+`db/op_base_app_migrate/20260922120000_add_cross_store_oidc_finalization_to_client_transactions.rb`.
 
 ### client_passkey_ceremony_transactions
 
-Source: `db/app_ticket_structure.sql:455`. Machines: `idp-client-passkey-ceremony`.
+Source: `db/op_base_app_structure.sql:455`. Machines: `idp-client-passkey-ceremony`.
 
 ```sql
 CREATE TABLE client_passkey_ceremony_transactions (
@@ -859,7 +933,9 @@ ALTER TABLE ONLY public.client_passkey_ceremony_transactions
     ADD CONSTRAINT fk_rails_aac854f11a FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`, `db/app_tickets_migrate/20260603123000_create_client_passkey_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_app_migrate/20260603123000_create_client_passkey_ceremony_transactions.rb`.
 
 ### client_passkey_statuses
 
@@ -873,7 +949,8 @@ ALTER TABLE ONLY public.client_passkey_statuses
     ADD CONSTRAINT client_passkey_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
 
 ### client_passkeys
 
@@ -912,14 +989,20 @@ ALTER TABLE ONLY public.client_passkeys
     ADD CONSTRAINT fk_rails_f5e90919e8 FOREIGN KEY (status_id) REFERENCES public.client_passkey_statuses(id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260714100000_add_public_id_to_client_passkeys.rb`, `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`, `db/app_principals_migrate/20260525120000_add_retention_to_client_sign_up_artifacts.rb`, `db/app_principals_migrate/20260831064103_add_uv_verified_at_to_client_passkeys.rb`, `db/app_principals_migrate/20260719100000_add_authenticator_metadata_to_client_passkeys.rb`, `db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260714100000_add_public_id_to_client_passkeys.rb`,
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`,
+`db/app_principals_migrate/20260525120000_add_retention_to_client_sign_up_artifacts.rb`,
+`db/app_principals_migrate/20260831064103_add_uv_verified_at_to_client_passkeys.rb`,
+`db/app_principals_migrate/20260719100000_add_authenticator_metadata_to_client_passkeys.rb`,
+`db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
 
-### client_rp_sessions
+### op_app_grants
 
-Source: `db/app_ticket_structure.sql:501`. Machines: `idp-client-rp-session`.
+Source: `db/op_base_app_structure.sql:501`. Machines: `idp-client-rp-session`.
 
 ```sql
-CREATE TABLE client_rp_sessions (
+CREATE TABLE op_app_grants (
     id bigint NOT NULL,
     client_token_id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
@@ -944,13 +1027,16 @@ CREATE TABLE client_rp_sessions (
     oidc_nonce character varying,
     oidc_access_token_max_expires_at timestamp(6) with time zone
 );
-ALTER TABLE ONLY public.client_rp_sessions
-    ADD CONSTRAINT client_rp_sessions_pkey PRIMARY KEY (id);
-ALTER TABLE ONLY public.client_rp_sessions
+ALTER TABLE ONLY public.op_app_grants
+    ADD CONSTRAINT op_app_grants_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.op_app_grants
     ADD CONSTRAINT fk_rails_132e7e72b8 FOREIGN KEY (client_token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260624000000_create_client_rp_sessions_and_bind_authorization_codes.rb`, `db/app_tickets_migrate/20260917130000_add_oidc_access_token_expiry_tracking_to_client_rp_sessions.rb`, `db/app_tickets_migrate/20260915170000_add_oidc_refresh_claims_to_client_rp_sessions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260624000000_create_client_rp_sessions_and_bind_authorization_codes.rb`,
+`db/op_base_app_migrate/20260917130000_add_oidc_access_token_expiry_tracking_to_client_rp_sessions.rb`,
+`db/op_base_app_migrate/20260915170000_add_oidc_refresh_claims_to_client_rp_sessions.rb`.
 
 ### client_secret_audit_outboxes
 
@@ -988,7 +1074,7 @@ Migration provenance: `db/app_principals_migrate/20261003215326_rebuild_app_secr
 
 ### client_secret_credential_ceremony_transactions
 
-Source: `db/app_ticket_structure.sql:551`. Machines: `idp-client-secret-credential-ceremony`.
+Source: `db/op_base_app_structure.sql:551`. Machines: `idp-client-secret-credential-ceremony`.
 
 ```sql
 CREATE TABLE client_secret_credential_ceremony_transactions (
@@ -1013,7 +1099,8 @@ ALTER TABLE ONLY public.client_secret_credential_ceremony_transactions
     ADD CONSTRAINT client_secret_credential_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260603130000_create_client_secret_credential_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260603130000_create_client_secret_credential_ceremony_transactions.rb`.
 
 ### client_secret_credentials
 
@@ -1046,7 +1133,12 @@ ALTER TABLE ONLY public.client_secret_credentials
     ADD CONSTRAINT fk_rails_1f331d9a65 FOREIGN KEY (issuance_id, client_id) REFERENCES public.client_secret_issuances(id, client_id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`, `db/app_principals_migrate/20260612100000_add_new_secret_axis_to_client_secret_credentials.rb`, `db/app_principals_migrate/20261003215326_rebuild_app_secret_credentials.rb`, `db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`, `db/app_zenith_migrate/20260926170000_add_emergency_claim_to_client_secret_credentials.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`,
+`db/app_principals_migrate/20260612100000_add_new_secret_axis_to_client_secret_credentials.rb`,
+`db/app_principals_migrate/20261003215326_rebuild_app_secret_credentials.rb`,
+`db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`,
+`db/app_zenith_migrate/20260926170000_add_emergency_claim_to_client_secret_credentials.rb`.
 
 ### client_secret_issuances
 
@@ -1087,7 +1179,7 @@ Migration provenance: `db/app_principals_migrate/20261003215326_rebuild_app_secr
 
 ### client_secret_sign_in_receipts
 
-Source: `db/app_ticket_structure.sql:594`. Machines: .
+Source: `db/op_base_app_structure.sql:594`. Machines: .
 
 ```sql
 CREATE TABLE client_secret_sign_in_receipts (
@@ -1109,11 +1201,12 @@ ALTER TABLE ONLY public.client_secret_sign_in_receipts
     ADD CONSTRAINT fk_rails_33b6c86074 FOREIGN KEY (sign_in_flow_id) REFERENCES public.client_sign_in_flows(id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003215633_create_client_secret_sign_in_receipts.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003215633_create_client_secret_sign_in_receipts.rb`.
 
 ### client_session_limit_resolution_transactions
 
-Source: `db/app_ticket_structure.sql:632`. Machines: `idp-client-session-limit-resolution`.
+Source: `db/op_base_app_structure.sql:632`. Machines: `idp-client-session-limit-resolution`.
 
 ```sql
 CREATE TABLE client_session_limit_resolution_transactions (
@@ -1138,11 +1231,12 @@ ALTER TABLE ONLY public.client_session_limit_resolution_transactions
     ADD CONSTRAINT client_session_limit_resolution_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260623120000_create_client_session_limit_resolution_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260623120000_create_client_session_limit_resolution_transactions.rb`.
 
 ### client_sign_in_flow_statuses
 
-Source: `db/app_ticket_structure.sql:675`. Machines: .
+Source: `db/op_base_app_structure.sql:675`. Machines: .
 
 ```sql
 CREATE TABLE client_sign_in_flow_statuses (
@@ -1152,11 +1246,12 @@ ALTER TABLE ONLY public.client_sign_in_flow_statuses
     ADD CONSTRAINT client_sign_in_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
 
 ### client_sign_in_flows
 
-Source: `db/app_ticket_structure.sql:703`. Machines: `idp-client-sign-in`, `idp-client-local-result-delivery`.
+Source: `db/op_base_app_structure.sql:703`. Machines: `idp-client-sign-in`,
+`idp-client-local-result-delivery`.
 
 ```sql
 CREATE TABLE client_sign_in_flows (
@@ -1189,7 +1284,7 @@ CREATE TABLE client_sign_in_flows (
     authentication_context character varying,
     CONSTRAINT chk_app_sign_in_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_app_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT client_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
+    CONSTRAINT client_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'standby'::character varying])::text[])))),
     CONSTRAINT client_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT client_sign_in_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT client_sign_in_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
@@ -1205,11 +1300,20 @@ ALTER TABLE ONLY public.client_sign_in_flows
     ADD CONSTRAINT fk_rails_bd772deef1 FOREIGN KEY (token_id) REFERENCES public.client_tokens(id) ON DELETE CASCADE NOT VALID;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003181712_preserve_client_local_authentication_context.rb`, `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`, `db/app_tickets_migrate/20261002120000_add_root_login_established_at_to_client_tokens.rb`, `db/app_tickets_migrate/20260528162100_harden_client_sign_in_cycle_state_constraints.rb`, `db/app_tickets_migrate/20261003175614_bind_client_local_authentication_results.rb`, `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`, `db/app_tickets_migrate/20260525233000_add_selector_activation_to_client_sign_in_cycles.rb`, `db/app_tickets_migrate/20261003215633_create_client_secret_sign_in_receipts.rb`, `db/app_tickets_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003181712_preserve_client_local_authentication_context.rb`,
+`db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`,
+`db/op_base_app_migrate/20261002120000_add_root_login_established_at_to_client_tokens.rb`,
+`db/op_base_app_migrate/20260528162100_harden_client_sign_in_cycle_state_constraints.rb`,
+`db/op_base_app_migrate/20261003175614_bind_client_local_authentication_results.rb`,
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`,
+`db/op_base_app_migrate/20260525233000_add_selector_activation_to_client_sign_in_cycles.rb`,
+`db/op_base_app_migrate/20261003215633_create_client_secret_sign_in_receipts.rb`,
+`db/op_base_app_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`.
 
 ### client_sign_out_flow_kinds
 
-Source: `db/app_ticket_structure.sql:766`. Machines: .
+Source: `db/op_base_app_structure.sql:766`. Machines: .
 
 ```sql
 CREATE TABLE client_sign_out_flow_kinds (
@@ -1219,11 +1323,11 @@ ALTER TABLE ONLY public.client_sign_out_flow_kinds
     ADD CONSTRAINT client_sign_out_flow_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
 
 ### client_sign_out_flow_statuses
 
-Source: `db/app_ticket_structure.sql:794`. Machines: .
+Source: `db/op_base_app_structure.sql:794`. Machines: .
 
 ```sql
 CREATE TABLE client_sign_out_flow_statuses (
@@ -1233,11 +1337,11 @@ ALTER TABLE ONLY public.client_sign_out_flow_statuses
     ADD CONSTRAINT client_sign_out_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
 
 ### client_sign_out_flows
 
-Source: `db/app_ticket_structure.sql:822`. Machines: `idp-client-sign-out`.
+Source: `db/op_base_app_structure.sql:822`. Machines: `idp-client-sign-out`.
 
 ```sql
 CREATE TABLE client_sign_out_flows (
@@ -1274,11 +1378,13 @@ ALTER TABLE ONLY public.client_sign_out_flows
     ADD CONSTRAINT fk_rails_bbc7001388 FOREIGN KEY (status_id) REFERENCES public.client_sign_out_flow_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`, `db/app_tickets_migrate/20260519092000_create_client_sign_out_cycles.rb`, `db/app_tickets_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`.
+Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`,
+`db/op_base_app_migrate/20260519092000_create_client_sign_out_cycles.rb`,
+`db/op_base_app_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`.
 
 ### client_sign_up_flow_cleanup_statuses
 
-Source: `db/app_ticket_structure.sql:871`. Machines: .
+Source: `db/op_base_app_structure.sql:871`. Machines: .
 
 ```sql
 CREATE TABLE client_sign_up_flow_cleanup_statuses (
@@ -1288,11 +1394,11 @@ ALTER TABLE ONLY public.client_sign_up_flow_cleanup_statuses
     ADD CONSTRAINT client_sign_up_flow_cleanup_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`.
 
 ### client_sign_up_flow_statuses
 
-Source: `db/app_ticket_structure.sql:899`. Machines: .
+Source: `db/op_base_app_structure.sql:899`. Machines: .
 
 ```sql
 CREATE TABLE client_sign_up_flow_statuses (
@@ -1302,11 +1408,13 @@ ALTER TABLE ONLY public.client_sign_up_flow_statuses
     ADD CONSTRAINT client_sign_up_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`, `db/app_tickets_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`.
+Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`,
+`db/op_base_app_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`.
 
 ### client_sign_up_flows
 
-Source: `db/app_ticket_structure.sql:927`. Machines: `idp-client-sign-up`, `idp-client-sign-up-cleanup`.
+Source: `db/op_base_app_structure.sql:927`. Machines: `idp-client-sign-up`,
+`idp-client-sign-up-cleanup`.
 
 ```sql
 CREATE TABLE client_sign_up_flows (
@@ -1365,11 +1473,28 @@ ALTER TABLE ONLY public.client_sign_up_flows
     ADD CONSTRAINT fk_rails_9b0b63a0c6 FOREIGN KEY (cleanup_status_id) REFERENCES public.client_sign_up_flow_cleanup_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003181712_preserve_client_local_authentication_context.rb`, `db/app_tickets_migrate/20260525200000_drop_cleanup_token_from_client_sign_up_cycles.rb`, `db/app_tickets_migrate/20260530130100_rename_app_ticket_model_terms.rb`, `db/app_tickets_migrate/20260525124500_add_cleanup_state_to_client_sign_up_cycles.rb`, `db/app_tickets_migrate/20260920152001_validate_restrict_client_sign_up_flow_token_delete.rb`, `db/app_tickets_migrate/20261003175614_bind_client_local_authentication_results.rb`, `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`, `db/app_tickets_migrate/20260525200500_add_cleanup_attempts_count_to_client_sign_up_cycles.rb`, `db/app_tickets_migrate/20260920152000_restrict_client_sign_up_flow_token_delete.rb`, `db/app_tickets_migrate/20260616150020_remove_redundant_app_ticket_indexes.rb`, `db/app_tickets_migrate/20260525123000_add_checkpoint_version_to_client_sign_up_cycles.rb`, `db/app_tickets_migrate/20260616150000_add_entry_method_not_null_to_client_sign_up_flows.rb`, `db/app_tickets_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`, `db/app_tickets_migrate/20260525131500_restrict_client_sign_up_cycle_token_delete.rb`, `db/app_tickets_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`, `db/app_tickets_migrate/20260616150005_validate_add_entry_method_not_null_to_client_sign_up_flows.rb`, `db/app_tickets_migrate/20260525210000_create_client_sign_up_cycle_cleanup_statuses.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003181712_preserve_client_local_authentication_context.rb`,
+`db/op_base_app_migrate/20260525200000_drop_cleanup_token_from_client_sign_up_cycles.rb`,
+`db/op_base_app_migrate/20260530130100_rename_app_ticket_model_terms.rb`,
+`db/op_base_app_migrate/20260525124500_add_cleanup_state_to_client_sign_up_cycles.rb`,
+`db/op_base_app_migrate/20260920152001_validate_restrict_client_sign_up_flow_token_delete.rb`,
+`db/op_base_app_migrate/20261003175614_bind_client_local_authentication_results.rb`,
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`,
+`db/op_base_app_migrate/20260525200500_add_cleanup_attempts_count_to_client_sign_up_cycles.rb`,
+`db/op_base_app_migrate/20260920152000_restrict_client_sign_up_flow_token_delete.rb`,
+`db/op_base_app_migrate/20260616150020_remove_redundant_app_ticket_indexes.rb`,
+`db/op_base_app_migrate/20260525123000_add_checkpoint_version_to_client_sign_up_cycles.rb`,
+`db/op_base_app_migrate/20260616150000_add_entry_method_not_null_to_client_sign_up_flows.rb`,
+`db/op_base_app_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_app_migrate/20260525131500_restrict_client_sign_up_cycle_token_delete.rb`,
+`db/op_base_app_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`,
+`db/op_base_app_migrate/20260616150005_validate_add_entry_method_not_null_to_client_sign_up_flows.rb`,
+`db/op_base_app_migrate/20260525210000_create_client_sign_up_cycle_cleanup_statuses.rb`.
 
 ### client_social_ceremony_transactions
 
-Source: `db/app_ticket_structure.sql:998`. Machines: `idp-client-social-ceremony`.
+Source: `db/op_base_app_structure.sql:998`. Machines: `idp-client-social-ceremony`.
 
 ```sql
 CREATE TABLE client_social_ceremony_transactions (
@@ -1397,7 +1522,8 @@ ALTER TABLE ONLY public.client_social_ceremony_transactions
     ADD CONSTRAINT client_social_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260603140000_create_client_social_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260603140000_create_client_social_ceremony_transactions.rb`.
 
 ### client_statuses
 
@@ -1411,11 +1537,24 @@ ALTER TABLE ONLY public.client_statuses
     ADD CONSTRAINT client_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260202200000_fix_clients_status_relations.rb`, `db/app_principals_migrate/20260204150845_seed_principal_status_tables.rb`, `db/app_principals_migrate/20260108100600_rename_principal_tables.rb`, `db/app_principals_migrate/20260202250001_replace_code_with_fixed_ids_principal.rb`, `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`, `db/app_principals_migrate/20260201214420_convert_all_principal_pks_to_bigint.rb`, `db/app_principals_migrate/20260201190008_convert_principal_pks.rb`, `db/app_principals_migrate/20260131140000_convert_client_statuses_to_smallint.rb`, `db/app_principals_migrate/20260202210000_add_lower_code_unique_indexes_principal.rb`, `db/app_principals_migrate/20260131149000_cleanup_principal_reference_tables.rb`, `db/app_principals_migrate/20260202160000_fix_consistency_users.rb`, `db/app_principals_migrate/20260130130002_principal_reference_table_timestamps_removal.rb`, `db/app_principals_migrate/20260212000001_ensure_seed_reference_data_in_principals.rb`, `db/app_principals_migrate/20260202185000_fix_principal_consistency.rb`.
+Migration provenance: `db/app_principals_migrate/20260202200000_fix_clients_status_relations.rb`,
+`db/app_principals_migrate/20260204150845_seed_principal_status_tables.rb`,
+`db/app_principals_migrate/20260108100600_rename_principal_tables.rb`,
+`db/app_principals_migrate/20260202250001_replace_code_with_fixed_ids_principal.rb`,
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`,
+`db/app_principals_migrate/20260201214420_convert_all_principal_pks_to_bigint.rb`,
+`db/app_principals_migrate/20260201190008_convert_principal_pks.rb`,
+`db/app_principals_migrate/20260131140000_convert_client_statuses_to_smallint.rb`,
+`db/app_principals_migrate/20260202210000_add_lower_code_unique_indexes_principal.rb`,
+`db/app_principals_migrate/20260131149000_cleanup_principal_reference_tables.rb`,
+`db/app_principals_migrate/20260202160000_fix_consistency_users.rb`,
+`db/app_principals_migrate/20260130130002_principal_reference_table_timestamps_removal.rb`,
+`db/app_principals_migrate/20260212000001_ensure_seed_reference_data_in_principals.rb`,
+`db/app_principals_migrate/20260202185000_fix_principal_consistency.rb`.
 
 ### client_step_up_ceremony_transactions
 
-Source: `db/app_ticket_structure.sql:1044`. Machines: `idp-client-step-up-ceremony`.
+Source: `db/op_base_app_structure.sql:1044`. Machines: `idp-client-step-up-ceremony`.
 
 ```sql
 CREATE TABLE client_step_up_ceremony_transactions (
@@ -1459,11 +1598,18 @@ ALTER TABLE ONLY public.client_step_up_ceremony_transactions
     ADD CONSTRAINT client_step_up_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`, `db/app_tickets_migrate/20261003221628_separate_client_registration_evidence_from_step_up_credential.rb`, `db/app_tickets_migrate/20261003185506_bind_client_verified_step_up_credential.rb`, `db/app_tickets_migrate/20260603122000_create_client_step_up_ceremony_transactions.rb`, `db/app_tickets_migrate/20260831064102_add_phishing_resistance_to_client_step_up_ceremony_transactions.rb`, `db/app_tickets_migrate/20261003183659_bind_client_opaque_step_up_ceremonies.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_app_migrate/20261003221628_separate_client_registration_evidence_from_step_up_credential.rb`,
+`db/op_base_app_migrate/20261003185506_bind_client_verified_step_up_credential.rb`,
+`db/op_base_app_migrate/20260603122000_create_client_step_up_ceremony_transactions.rb`,
+`db/op_base_app_migrate/20260831064102_add_phishing_resistance_to_client_step_up_ceremony_transactions.rb`,
+`db/op_base_app_migrate/20261003183659_bind_client_opaque_step_up_ceremonies.rb`.
 
 ### client_step_up_sessions
 
-Source: `db/app_ticket_structure.sql:1106`. Machines: `idp-client-step-up-session`, `idp-client-step-up-passkey-challenge`, `idp-client-step-up-email-challenge`.
+Source: `db/op_base_app_structure.sql:1106`. Machines: `idp-client-step-up-session`,
+`idp-client-step-up-passkey-challenge`, `idp-client-step-up-email-challenge`.
 
 ```sql
 CREATE TABLE client_step_up_sessions (
@@ -1504,11 +1650,15 @@ ALTER TABLE ONLY public.client_step_up_sessions
     ADD CONSTRAINT fk_rails_96e42d5326 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`, `db/app_tickets_migrate/20261003202100_bind_client_step_up_email_challenge.rb`, `db/app_tickets_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`, `db/app_tickets_migrate/20261003183659_bind_client_opaque_step_up_ceremonies.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`,
+`db/op_base_app_migrate/20261003202100_bind_client_step_up_email_challenge.rb`,
+`db/op_base_app_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_app_migrate/20261003183659_bind_client_opaque_step_up_ceremonies.rb`.
 
 ### client_telephone_ceremony_transactions
 
-Source: `db/app_ticket_structure.sql:1161`. Machines: `idp-client-telephone-ceremony`.
+Source: `db/op_base_app_structure.sql:1161`. Machines: `idp-client-telephone-ceremony`.
 
 ```sql
 CREATE TABLE client_telephone_ceremony_transactions (
@@ -1533,7 +1683,8 @@ ALTER TABLE ONLY public.client_telephone_ceremony_transactions
     ADD CONSTRAINT client_telephone_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260603120000_create_client_telephone_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260603120000_create_client_telephone_ceremony_transactions.rb`.
 
 ### client_telephone_statuses
 
@@ -1547,11 +1698,13 @@ ALTER TABLE ONLY public.client_telephone_statuses
     ADD CONSTRAINT client_telephone_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
 
 ### client_telephones
 
-Source: `db/app_zenith_structure.sql:2787`. Machines: `idp-client-telephone-otp`, `idp-client-telephone-credential`.
+Source: `db/app_zenith_structure.sql:2787`. Machines: `idp-client-telephone-otp`,
+`idp-client-telephone-credential`.
 
 ```sql
 CREATE TABLE client_telephones (
@@ -1579,11 +1732,15 @@ ALTER TABLE ONLY public.client_telephones
     ADD CONSTRAINT fk_rails_c81d47bc96 FOREIGN KEY (user_identity_telephone_status_id) REFERENCES public.client_telephone_statuses(id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`, `db/app_principals_migrate/20260525131000_scope_client_contact_identifier_uniqueness_to_active_records.rb`, `db/app_principals_migrate/20260525120000_add_retention_to_client_sign_up_artifacts.rb`, `db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`,
+`db/app_principals_migrate/20260525131000_scope_client_contact_identifier_uniqueness_to_active_records.rb`,
+`db/app_principals_migrate/20260525120000_add_retention_to_client_sign_up_artifacts.rb`,
+`db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
 
 ### client_token_binding_methods
 
-Source: `db/app_ticket_structure.sql:1204`. Machines: .
+Source: `db/op_base_app_structure.sql:1204`. Machines: .
 
 ```sql
 CREATE TABLE client_token_binding_methods (
@@ -1593,11 +1750,12 @@ ALTER TABLE ONLY public.client_token_binding_methods
     ADD CONSTRAINT client_token_binding_methods_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`.
 
 ### client_token_dbsc_statuses
 
-Source: `db/app_ticket_structure.sql:1232`. Machines: .
+Source: `db/op_base_app_structure.sql:1232`. Machines: .
 
 ```sql
 CREATE TABLE client_token_dbsc_statuses (
@@ -1607,11 +1765,12 @@ ALTER TABLE ONLY public.client_token_dbsc_statuses
     ADD CONSTRAINT client_token_dbsc_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`.
 
 ### client_token_kinds
 
-Source: `db/app_ticket_structure.sql:1260`. Machines: .
+Source: `db/op_base_app_structure.sql:1260`. Machines: .
 
 ```sql
 CREATE TABLE client_token_kinds (
@@ -1621,11 +1780,13 @@ ALTER TABLE ONLY public.client_token_kinds
     ADD CONSTRAINT client_token_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`, `db/app_tickets_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`,
+`db/op_base_app_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`.
 
 ### client_token_statuses
 
-Source: `db/app_ticket_structure.sql:1288`. Machines: .
+Source: `db/op_base_app_structure.sql:1288`. Machines: .
 
 ```sql
 CREATE TABLE client_token_statuses (
@@ -1635,11 +1796,13 @@ ALTER TABLE ONLY public.client_token_statuses
     ADD CONSTRAINT client_token_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`, `db/app_tickets_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`,
+`db/op_base_app_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`.
 
 ### client_tokens
 
-Source: `db/app_ticket_structure.sql:1316`. Machines: `idp-client-token`, `idp-client-dbsc`.
+Source: `db/op_base_app_structure.sql:1316`. Machines: `idp-client-token`, `idp-client-dbsc`.
 
 ```sql
 CREATE TABLE client_tokens (
@@ -1706,11 +1869,31 @@ ALTER TABLE ONLY public.client_tokens
     ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260915160000_add_authentication_event_at_to_client_tokens.rb`, `db/app_tickets_migrate/20261002120000_add_root_login_established_at_to_client_tokens.rb`, `db/app_tickets_migrate/20260727100000_add_established_authentication_method_to_client_tokens.rb`, `db/app_tickets_migrate/20260924152000_validate_client_token_device_session_reference.rb`, `db/app_tickets_migrate/20260924156000_validate_client_token_device_session_actor_foreign_key.rb`, `db/app_tickets_migrate/20260727100001_validate_established_authentication_method_on_client_tokens.rb`, `db/app_tickets_migrate/20260920152001_validate_restrict_client_sign_up_flow_token_delete.rb`, `db/app_tickets_migrate/20260520190000_create_device_sessions_for_user_tokens.rb`, `db/app_tickets_migrate/20260924150000_add_client_token_device_session_reference_index.rb`, `db/app_tickets_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`, `db/app_tickets_migrate/20260606120000_add_selected_context_to_client_tokens.rb`, `db/app_tickets_migrate/20260526120100_remove_device_id_from_app_tickets.rb`, `db/app_tickets_migrate/20260920152000_restrict_client_sign_up_flow_token_delete.rb`, `db/app_tickets_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`, `db/app_tickets_migrate/20260924155000_add_client_token_device_session_actor_foreign_key.rb`, `db/app_tickets_migrate/20260525131500_restrict_client_sign_up_cycle_token_delete.rb`, `db/app_tickets_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`, `db/app_tickets_migrate/20260924151000_add_client_device_session_token_foreign_keys.rb`, `db/app_tickets_migrate/20260831064124_add_last_step_up_phishing_resistant_to_client_tokens.rb`, `db/app_tickets_migrate/20260528183000_add_strict_step_up_state_to_client_tokens.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260915160000_add_authentication_event_at_to_client_tokens.rb`,
+`db/op_base_app_migrate/20261002120000_add_root_login_established_at_to_client_tokens.rb`,
+`db/op_base_app_migrate/20260727100000_add_established_authentication_method_to_client_tokens.rb`,
+`db/op_base_app_migrate/20260924152000_validate_client_token_device_session_reference.rb`,
+`db/op_base_app_migrate/20260924156000_validate_client_token_device_session_actor_foreign_key.rb`,
+`db/op_base_app_migrate/20260727100001_validate_established_authentication_method_on_client_tokens.rb`,
+`db/op_base_app_migrate/20260920152001_validate_restrict_client_sign_up_flow_token_delete.rb`,
+`db/op_base_app_migrate/20260520190000_create_device_sessions_for_user_tokens.rb`,
+`db/op_base_app_migrate/20260924150000_add_client_token_device_session_reference_index.rb`,
+`db/op_base_app_migrate/20260520143002_rename_app_ticket_tables_to_model_conventions.rb`,
+`db/op_base_app_migrate/20260606120000_add_selected_context_to_client_tokens.rb`,
+`db/op_base_app_migrate/20260526120100_remove_device_id_from_app_tickets.rb`,
+`db/op_base_app_migrate/20260920152000_restrict_client_sign_up_flow_token_delete.rb`,
+`db/op_base_app_migrate/20260921133000_rename_app_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_app_migrate/20260924155000_add_client_token_device_session_actor_foreign_key.rb`,
+`db/op_base_app_migrate/20260525131500_restrict_client_sign_up_cycle_token_delete.rb`,
+`db/op_base_app_migrate/20260616150010_add_on_delete_actions_to_client_ticket_foreign_keys.rb`,
+`db/op_base_app_migrate/20260924151000_add_client_device_session_token_foreign_keys.rb`,
+`db/op_base_app_migrate/20260831064124_add_last_step_up_phishing_resistant_to_client_tokens.rb`,
+`db/op_base_app_migrate/20260528183000_add_strict_step_up_state_to_client_tokens.rb`.
 
 ### client_totp_ceremony_transactions
 
-Source: `db/app_ticket_structure.sql:1389`. Machines: `idp-client-totp-ceremony`.
+Source: `db/op_base_app_structure.sql:1389`. Machines: `idp-client-totp-ceremony`.
 
 ```sql
 CREATE TABLE client_totp_ceremony_transactions (
@@ -1738,7 +1921,9 @@ ALTER TABLE ONLY public.client_totp_ceremony_transactions
     ADD CONSTRAINT fk_rails_23f495015b FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`, `db/app_tickets_migrate/20260603124000_create_client_totp_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_app_migrate/20260603124000_create_client_totp_ceremony_transactions.rb`.
 
 ### client_totp_credential_statuses
 
@@ -1752,7 +1937,8 @@ ALTER TABLE ONLY public.client_totp_credential_statuses
     ADD CONSTRAINT client_totp_credential_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`.
 
 ### client_totp_credentials
 
@@ -1780,7 +1966,13 @@ ALTER TABLE ONLY public.client_totp_credentials
     ADD CONSTRAINT fk_rails_ee2c1859b3 FOREIGN KEY (user_identity_totp_credential_status_id) REFERENCES public.client_totp_credential_statuses(id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`, `db/app_principals_migrate/20260920110000_make_totp_failures_terminal.rb`, `db/app_principals_migrate/20260922130000_allow_null_for_client_totp_last_otp_at.rb`, `db/app_principals_migrate/20260920110001_validate_totp_failure_count.rb`, `db/app_principals_migrate/20260530032000_rename_client_totp_credential_status_column.rb`, `db/app_principals_migrate/20260919120000_add_totp_attempt_lock_to_client_totp_credentials.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530031000_rename_app_principal_model_terms.rb`,
+`db/app_principals_migrate/20260920110000_make_totp_failures_terminal.rb`,
+`db/app_principals_migrate/20260922130000_allow_null_for_client_totp_last_otp_at.rb`,
+`db/app_principals_migrate/20260920110001_validate_totp_failure_count.rb`,
+`db/app_principals_migrate/20260530032000_rename_client_totp_credential_status_column.rb`,
+`db/app_principals_migrate/20260919120000_add_totp_attempt_lock_to_client_totp_credentials.rb`.
 
 ### client_visibilities
 
@@ -1794,7 +1986,8 @@ ALTER TABLE ONLY public.client_visibilities
     ADD CONSTRAINT client_visibilities_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`.
 
 ### client_withdrawal_ceremonies
 
@@ -1823,7 +2016,8 @@ ALTER TABLE ONLY public.client_withdrawal_ceremonies
     ADD CONSTRAINT fk_rails_9386315187 FOREIGN KEY (client_id) REFERENCES public.clients(id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260703010000_create_client_withdrawal_ceremonies.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260703010000_create_client_withdrawal_ceremonies.rb`.
 
 ### client_withdrawal_flow_events
 
@@ -1855,7 +2049,10 @@ ALTER TABLE ONLY public.client_withdrawal_flow_events
     ADD CONSTRAINT fk_rails_f24d4919a7 FOREIGN KEY (from_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530032300_rename_client_withdrawal_flow_tables.rb`, `db/app_principals_migrate/20260616150010_add_on_delete_actions_to_client_principal_foreign_keys.rb`, `db/app_principals_migrate/20260530032500_rename_client_withdrawal_flow_event_column.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530032300_rename_client_withdrawal_flow_tables.rb`,
+`db/app_principals_migrate/20260616150010_add_on_delete_actions_to_client_principal_foreign_keys.rb`,
+`db/app_principals_migrate/20260530032500_rename_client_withdrawal_flow_event_column.rb`.
 
 ### client_withdrawal_flow_statuses
 
@@ -1869,7 +2066,9 @@ ALTER TABLE ONLY public.client_withdrawal_flow_statuses
     ADD CONSTRAINT client_withdrawal_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530032300_rename_client_withdrawal_flow_tables.rb`, `db/app_principals_migrate/20260616150010_add_on_delete_actions_to_client_principal_foreign_keys.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530032300_rename_client_withdrawal_flow_tables.rb`,
+`db/app_principals_migrate/20260616150010_add_on_delete_actions_to_client_principal_foreign_keys.rb`.
 
 ### client_withdrawal_flows
 
@@ -1898,11 +2097,15 @@ ALTER TABLE ONLY public.client_withdrawal_flows
     ADD CONSTRAINT fk_rails_e5e99fd372 FOREIGN KEY (client_id) REFERENCES public.clients(id) NOT VALID;
 ```
 
-Migration provenance: `db/app_principals_migrate/20260530032300_rename_client_withdrawal_flow_tables.rb`, `db/app_principals_migrate/20260519094000_create_client_withdrawal_cycles.rb`, `db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
+Migration provenance:
+`db/app_principals_migrate/20260530032300_rename_client_withdrawal_flow_tables.rb`,
+`db/app_principals_migrate/20260519094000_create_client_withdrawal_cycles.rb`,
+`db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`.
 
 ### clients
 
-Source: `db/app_zenith_structure.sql:3069`. Machines: `idp-client-administrative-access`, `idp-client-actor-withdrawal`, `idp-client-actor-provisioning`, `idp-client-mfa-readiness`.
+Source: `db/app_zenith_structure.sql:3069`. Machines: `idp-client-administrative-access`,
+`idp-client-actor-withdrawal`, `idp-client-actor-provisioning`, `idp-client-mfa-readiness`.
 
 ```sql
 CREATE TABLE clients (
@@ -1949,7 +2152,56 @@ ALTER TABLE ONLY public.clients
     ADD CONSTRAINT fk_rails_ce4a327a04 FOREIGN KEY (status_id) REFERENCES public.client_statuses(id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260103133001_validate_fix_database_consistency_identity_relations.rb`, `db/org_principals_migrate/20260103120000_add_division_fk_to_clients.rb`, `db/org_principals_migrate/20260102034808_remove_redundant_identity_indexes.rb`, `db/org_principals_migrate/20260102100036_add_division_to_clients.rb`, `db/org_principals_migrate/20260103122221_add_foreign_keys_to_workspace_organization_division.rb`, `db/org_principals_migrate/20260103133000_fix_database_consistency_identity_relations.rb`, `db/org_principals_migrate/20260102035351_fix_database_consistency_identity.rb`, `db/app_principals_migrate/20260202200000_fix_clients_status_relations.rb`, `db/app_principals_migrate/20260518170001_validate_clients_birthdate_length.rb`, `db/app_principals_migrate/20260525200000_drop_deletable_at_from_clients.rb`, `db/app_principals_migrate/20260518181000_validate_remaining_app_principal_foreign_keys.rb`, `db/app_principals_migrate/20260528162000_harden_client_lifecycle_and_mfa_constraints.rb`, `db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`, `db/app_principals_migrate/20260518170000_add_birthdate_to_clients.rb`, `db/app_principals_migrate/20260201210004_remove_redundant_principal_indexes.rb`, `db/app_principals_migrate/20251230150021_validate_user_client_foreign_keys.rb`, `db/app_principals_migrate/20260201190008_convert_principal_pks.rb`, `db/app_principals_migrate/20260616150005_add_client_fk_to_client_preferences.rb`, `db/app_principals_migrate/20260530032400_rename_client_mfa_enabled_column.rb`, `db/app_principals_migrate/20251230150010_create_user_clients.rb`, `db/app_principals_migrate/20260131140000_convert_client_statuses_to_smallint.rb`, `db/app_principals_migrate/20260114120221_add_lock_version_to_users_and_clients.rb`, `db/app_principals_migrate/20251230170005_add_user_id_to_clients.rb`, `db/app_principals_migrate/20260724190000_create_client_external_identities.rb`, `db/app_principals_migrate/20260102035038_fix_client_fk_behaviors.rb`, `db/app_principals_migrate/20260507000006_create_client_banners.rb`, `db/app_principals_migrate/20260110194100_remove_redundant_indexes_principal_user_clients.rb`, `db/app_principals_migrate/20260614090000_add_administrative_access_lock_to_clients.rb`, `db/app_principals_migrate/20260911120000_log_client_external_identities.rb`, `db/app_principals_migrate/20260109141212_add_id_format_constraints_to_principal_tables.rb`, `db/app_principals_migrate/20260202160000_fix_consistency_users.rb`, `db/app_principals_migrate/20260719100001_add_webauthn_user_handle_to_clients.rb`, `db/app_principals_migrate/20260102035039_validate_client_fk_behaviors.rb`, `db/app_principals_migrate/20260616150010_add_on_delete_actions_to_client_principal_foreign_keys.rb`, `db/app_principals_migrate/20260724201700_validate_external_authentication_foreign_keys.rb`, `db/app_principals_migrate/20260519172001_remove_client_banner_client_foreign_key.rb`, `db/app_principals_migrate/20251230140819_create_clients.rb`, `db/app_principals_migrate/20260724201100_add_client_foreign_key_to_apple_notification_events.rb`, `db/app_principals_migrate/20251230145346_add_status_id_to_clients.rb`, `db/app_principals_migrate/20260105150000_add_division_to_clients_identity.rb`, `db/app_principals_migrate/20260724201600_nullify_notification_event_identity_foreign_keys.rb`, `db/app_principals_migrate/20260614090001_validate_administrative_access_lock_on_clients.rb`, `db/app_principals_migrate/20260530032100_rename_client_mfa_columns.rb`, `db/app_principals_migrate/20260724201200_validate_client_foreign_key_on_apple_notification_events.rb`, `db/app_principals_migrate/20260202185000_fix_principal_consistency.rb`, `db/app_zenith_migrate/20260917120000_create_app_authority_relations.rb`, `db/app_zenith_migrate/20260727140000_create_client_emails_permanent_freeze_trigger.rb`, `db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`, `db/app_zenith_migrate/20260727140001_create_clients_hard_delete_protection_trigger.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260103133001_validate_fix_database_consistency_identity_relations.rb`,
+`db/org_principals_migrate/20260103120000_add_division_fk_to_clients.rb`,
+`db/org_principals_migrate/20260102034808_remove_redundant_identity_indexes.rb`,
+`db/org_principals_migrate/20260102100036_add_division_to_clients.rb`,
+`db/org_principals_migrate/20260103122221_add_foreign_keys_to_workspace_organization_division.rb`,
+`db/org_principals_migrate/20260103133000_fix_database_consistency_identity_relations.rb`,
+`db/org_principals_migrate/20260102035351_fix_database_consistency_identity.rb`,
+`db/app_principals_migrate/20260202200000_fix_clients_status_relations.rb`,
+`db/app_principals_migrate/20260518170001_validate_clients_birthdate_length.rb`,
+`db/app_principals_migrate/20260525200000_drop_deletable_at_from_clients.rb`,
+`db/app_principals_migrate/20260518181000_validate_remaining_app_principal_foreign_keys.rb`,
+`db/app_principals_migrate/20260528162000_harden_client_lifecycle_and_mfa_constraints.rb`,
+`db/app_principals_migrate/20260520143000_rename_app_principal_tables_to_model_conventions.rb`,
+`db/app_principals_migrate/20260518170000_add_birthdate_to_clients.rb`,
+`db/app_principals_migrate/20260201210004_remove_redundant_principal_indexes.rb`,
+`db/app_principals_migrate/20251230150021_validate_user_client_foreign_keys.rb`,
+`db/app_principals_migrate/20260201190008_convert_principal_pks.rb`,
+`db/app_principals_migrate/20260616150005_add_client_fk_to_client_preferences.rb`,
+`db/app_principals_migrate/20260530032400_rename_client_mfa_enabled_column.rb`,
+`db/app_principals_migrate/20251230150010_create_user_clients.rb`,
+`db/app_principals_migrate/20260131140000_convert_client_statuses_to_smallint.rb`,
+`db/app_principals_migrate/20260114120221_add_lock_version_to_users_and_clients.rb`,
+`db/app_principals_migrate/20251230170005_add_user_id_to_clients.rb`,
+`db/app_principals_migrate/20260724190000_create_client_external_identities.rb`,
+`db/app_principals_migrate/20260102035038_fix_client_fk_behaviors.rb`,
+`db/app_principals_migrate/20260507000006_create_client_banners.rb`,
+`db/app_principals_migrate/20260110194100_remove_redundant_indexes_principal_user_clients.rb`,
+`db/app_principals_migrate/20260614090000_add_administrative_access_lock_to_clients.rb`,
+`db/app_principals_migrate/20260911120000_log_client_external_identities.rb`,
+`db/app_principals_migrate/20260109141212_add_id_format_constraints_to_principal_tables.rb`,
+`db/app_principals_migrate/20260202160000_fix_consistency_users.rb`,
+`db/app_principals_migrate/20260719100001_add_webauthn_user_handle_to_clients.rb`,
+`db/app_principals_migrate/20260102035039_validate_client_fk_behaviors.rb`,
+`db/app_principals_migrate/20260616150010_add_on_delete_actions_to_client_principal_foreign_keys.rb`,
+`db/app_principals_migrate/20260724201700_validate_external_authentication_foreign_keys.rb`,
+`db/app_principals_migrate/20260519172001_remove_client_banner_client_foreign_key.rb`,
+`db/app_principals_migrate/20251230140819_create_clients.rb`,
+`db/app_principals_migrate/20260724201100_add_client_foreign_key_to_apple_notification_events.rb`,
+`db/app_principals_migrate/20251230145346_add_status_id_to_clients.rb`,
+`db/app_principals_migrate/20260105150000_add_division_to_clients_identity.rb`,
+`db/app_principals_migrate/20260724201600_nullify_notification_event_identity_foreign_keys.rb`,
+`db/app_principals_migrate/20260614090001_validate_administrative_access_lock_on_clients.rb`,
+`db/app_principals_migrate/20260530032100_rename_client_mfa_columns.rb`,
+`db/app_principals_migrate/20260724201200_validate_client_foreign_key_on_apple_notification_events.rb`,
+`db/app_principals_migrate/20260202185000_fix_principal_consistency.rb`,
+`db/app_zenith_migrate/20260917120000_create_app_authority_relations.rb`,
+`db/app_zenith_migrate/20260727140000_create_client_emails_permanent_freeze_trigger.rb`,
+`db/app_zenith_migrate/20260921133000_rename_app_zenith_retention_columns_to_semantic_names.rb`,
+`db/app_zenith_migrate/20260727140001_create_clients_hard_delete_protection_trigger.rb`.
 
 ### com_enforcement_appeals
 
@@ -2005,7 +2257,8 @@ ALTER TABLE ONLY public.com_enforcement_authentication_method_effects
     ADD CONSTRAINT fk_rails_0e70aae130 FOREIGN KEY (com_enforcement_case_id) REFERENCES public.com_enforcement_cases(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260727120002_create_com_enforcement_authentication_method_effects.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260727120002_create_com_enforcement_authentication_method_effects.rb`.
 
 ### com_enforcement_cases
 
@@ -2058,7 +2311,9 @@ ALTER TABLE ONLY public.com_enforcement_cases
     ADD CONSTRAINT com_enforcement_cases_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260830120000_allow_verification_completed_com_enforcement_case_end_reason.rb`, `db/com_zenith_migrate/20260727120000_create_com_enforcement_cases.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260830120000_allow_verification_completed_com_enforcement_case_end_reason.rb`,
+`db/com_zenith_migrate/20260727120000_create_com_enforcement_cases.rb`.
 
 ### com_enforcement_identifier_effects
 
@@ -2090,7 +2345,8 @@ ALTER TABLE ONLY public.com_enforcement_identifier_effects
     ADD CONSTRAINT fk_rails_25cb89edf0 FOREIGN KEY (com_enforcement_case_id) REFERENCES public.com_enforcement_cases(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260727120003_create_com_enforcement_identifier_effects.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260727120003_create_com_enforcement_identifier_effects.rb`.
 
 ### com_enforcement_principal_effects
 
@@ -2119,7 +2375,8 @@ ALTER TABLE ONLY public.com_enforcement_principal_effects
     ADD CONSTRAINT fk_rails_36c24dea97 FOREIGN KEY (com_enforcement_case_id) REFERENCES public.com_enforcement_cases(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260727120001_create_com_enforcement_principal_effects.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260727120001_create_com_enforcement_principal_effects.rb`.
 
 ### com_enforcement_principal_links
 
@@ -2144,7 +2401,8 @@ ALTER TABLE ONLY public.com_enforcement_principal_links
     ADD CONSTRAINT fk_rails_b1a1063626 FOREIGN KEY (com_enforcement_case_id) REFERENCES public.com_enforcement_cases(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260727120004_create_com_enforcement_principal_links.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260727120004_create_com_enforcement_principal_links.rb`.
 
 ### com_preference_binding_methods
 
@@ -2225,11 +2483,17 @@ ALTER TABLE ONLY public.com_preferences
     ADD CONSTRAINT fk_rails_1c704c910f FOREIGN KEY (replaced_by_id) REFERENCES public.com_preferences(id) ON DELETE SET NULL NOT VALID;
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260721090000_add_explicit_fields_to_visitor_preferences.rb`, `db/com_settings_migrate/20260530120000_add_explicit_fields_to_com_preferences.rb`, `db/com_settings_migrate/20260526090000_create_com_preference_r18_display_stoppers.rb`, `db/com_settings_migrate/20260526120202_remove_device_id_from_com_preferences.rb`, `db/com_settings_migrate/20260518030000_load_initial_com_setting_schema.rb`, `db/com_settings_migrate/20260921133000_rename_com_setting_retention_columns_to_semantic_names.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260721090000_add_explicit_fields_to_visitor_preferences.rb`,
+`db/com_settings_migrate/20260530120000_add_explicit_fields_to_com_preferences.rb`,
+`db/com_settings_migrate/20260526090000_create_com_preference_r18_display_stoppers.rb`,
+`db/com_settings_migrate/20260526120202_remove_device_id_from_com_preferences.rb`,
+`db/com_settings_migrate/20260518030000_load_initial_com_setting_schema.rb`,
+`db/com_settings_migrate/20260921133000_rename_com_setting_retention_columns_to_semantic_names.rb`.
 
 ### identity_secret_credential_ceremony_candidates
 
-Source: `db/app_ticket_structure.sql:1469`. Machines: `idp-identity-secret-credential-candidate`.
+Source: `db/op_base_app_structure.sql:1469`. Machines: `idp-identity-secret-credential-candidate`.
 
 ```sql
 CREATE TABLE identity_secret_credential_ceremony_candidates (
@@ -2254,11 +2518,12 @@ ALTER TABLE ONLY public.identity_secret_credential_ceremony_candidates
     ADD CONSTRAINT identity_secret_credential_ceremony_candidates_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260618120000_create_identity_ceremony_candidates.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260618120000_create_identity_ceremony_candidates.rb`.
 
 ### identity_social_ceremony_candidates
 
-Source: `db/app_ticket_structure.sql:1512`. Machines: `idp-identity-social-candidate`.
+Source: `db/op_base_app_structure.sql:1512`. Machines: `idp-identity-social-candidate`.
 
 ```sql
 CREATE TABLE identity_social_ceremony_candidates (
@@ -2282,11 +2547,12 @@ ALTER TABLE ONLY public.identity_social_ceremony_candidates
     ADD CONSTRAINT identity_social_ceremony_candidates_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260618120000_create_identity_ceremony_candidates.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20260618120000_create_identity_ceremony_candidates.rb`.
 
 ### identity_totp_ceremony_candidates
 
-Source: `db/app_ticket_structure.sql:1554`. Machines: `idp-identity-totp-enrollment`.
+Source: `db/op_base_app_structure.sql:1554`. Machines: `idp-identity-totp-enrollment`.
 
 ```sql
 CREATE TABLE identity_totp_ceremony_candidates (
@@ -2313,11 +2579,13 @@ ALTER TABLE ONLY public.identity_totp_ceremony_candidates
     ADD CONSTRAINT fk_rails_5e9f08645d FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/app_tickets_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`, `db/app_tickets_migrate/20260618120000_create_identity_ceremony_candidates.rb`.
+Migration provenance:
+`db/op_base_app_migrate/20261003215004_bind_client_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_app_migrate/20260618120000_create_identity_ceremony_candidates.rb`.
 
 ### operator_auth_ceremony_sessions
 
-Source: `db/org_ticket_structure.sql:61`. Machines: `idp-operator-auth-ceremony-session`.
+Source: `db/op_base_org_structure.sql:61`. Machines: `idp-operator-auth-ceremony-session`.
 
 ```sql
 CREATE TABLE operator_auth_ceremony_sessions (
@@ -2357,11 +2625,19 @@ ALTER TABLE ONLY public.operator_auth_ceremony_sessions
     ADD CONSTRAINT fk_rails_ed41a3bf04 FOREIGN KEY (local_sign_in_flow_ref) REFERENCES public.operator_sign_in_flows(public_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260921140100_validate_authentication_evidence_constraints.rb`, `db/org_tickets_migrate/20261003183915_bind_operator_opaque_step_up_ceremonies.rb`, `db/org_tickets_migrate/20261003175658_bind_operator_local_authentication_results.rb`, `db/org_tickets_migrate/20260921140000_add_authentication_evidence_to_operator_auth_ceremony_sessions.rb`, `db/org_tickets_migrate/20260920150000_extend_operator_auth_ceremony_session_lifecycle.rb`, `db/org_tickets_migrate/20260913140000_create_operator_auth_ceremony_sessions.rb`, `db/org_tickets_migrate/20261003215031_bind_operator_credential_ceremonies_to_base_authority.rb`, `db/org_tickets_migrate/20260920151000_validate_operator_auth_ceremony_session_lifecycle.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260921140100_validate_authentication_evidence_constraints.rb`,
+`db/op_base_org_migrate/20261003183915_bind_operator_opaque_step_up_ceremonies.rb`,
+`db/op_base_org_migrate/20261003175658_bind_operator_local_authentication_results.rb`,
+`db/op_base_org_migrate/20260921140000_add_authentication_evidence_to_operator_auth_ceremony_sessions.rb`,
+`db/op_base_org_migrate/20260920150000_extend_operator_auth_ceremony_session_lifecycle.rb`,
+`db/op_base_org_migrate/20260913140000_create_operator_auth_ceremony_sessions.rb`,
+`db/op_base_org_migrate/20261003215031_bind_operator_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_org_migrate/20260920151000_validate_operator_auth_ceremony_session_lifecycle.rb`.
 
 ### operator_device_sessions
 
-Source: `db/org_ticket_structure.sql:113`. Machines: `idp-operator-device-session`.
+Source: `db/op_base_org_structure.sql:113`. Machines: `idp-operator-device-session`.
 
 ```sql
 CREATE TABLE operator_device_sessions (
@@ -2388,11 +2664,18 @@ ALTER TABLE ONLY public.operator_device_sessions
     ADD CONSTRAINT fk_operator_device_sessions_on_current_refresh_token_owner FOREIGN KEY (id, current_refresh_token_id) REFERENCES public.operator_tokens(device_session_id, id) ON DELETE SET NULL (current_refresh_token_id) DEFERRABLE INITIALLY DEFERRED;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260611100100_add_last_network_hmac_to_operator_device_sessions.rb`, `db/org_tickets_migrate/20260520190001_create_device_sessions_for_staff_tokens.rb`, `db/org_tickets_migrate/20260924154000_add_operator_device_session_actor_reference_index.rb`, `db/org_tickets_migrate/20260924155000_add_operator_token_device_session_actor_foreign_key.rb`, `db/org_tickets_migrate/20260924151000_add_operator_device_session_token_foreign_keys.rb`, `db/org_tickets_migrate/20260526120101_remove_device_id_from_org_tickets.rb`, `db/org_tickets_migrate/20260924153000_validate_operator_current_refresh_token_owner.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260611100100_add_last_network_hmac_to_operator_device_sessions.rb`,
+`db/op_base_org_migrate/20260520190001_create_device_sessions_for_staff_tokens.rb`,
+`db/op_base_org_migrate/20260924154000_add_operator_device_session_actor_reference_index.rb`,
+`db/op_base_org_migrate/20260924155000_add_operator_token_device_session_actor_foreign_key.rb`,
+`db/op_base_org_migrate/20260924151000_add_operator_device_session_token_foreign_keys.rb`,
+`db/op_base_org_migrate/20260526120101_remove_device_id_from_org_tickets.rb`,
+`db/op_base_org_migrate/20260924153000_validate_operator_current_refresh_token_owner.rb`.
 
 ### operator_dpop_proof_states
 
-Source: `db/org_ticket_structure.sql:156`. Machines: `idp-operator-dpop-nonce`.
+Source: `db/op_base_org_structure.sql:156`. Machines: `idp-operator-dpop-nonce`.
 
 ```sql
 CREATE TABLE operator_dpop_proof_states (
@@ -2412,11 +2695,12 @@ ALTER TABLE ONLY public.operator_dpop_proof_states
     ADD CONSTRAINT operator_dpop_proof_states_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260526120001_create_operator_dpop_proof_states.rb`.
+Migration provenance: `db/op_base_org_migrate/20260526120001_create_operator_dpop_proof_states.rb`.
 
 ### operator_email_ceremony_transactions
 
-Source: `db/org_ticket_structure.sql:194`. Machines: `idp-operator-email-ceremony`, `idp-operator-email-verification-challenge`.
+Source: `db/op_base_org_structure.sql:194`. Machines: `idp-operator-email-ceremony`,
+`idp-operator-email-verification-challenge`.
 
 ```sql
 CREATE TABLE operator_email_ceremony_transactions (
@@ -2450,7 +2734,9 @@ ALTER TABLE ONLY public.operator_email_ceremony_transactions
     ADD CONSTRAINT operator_email_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260710220002_add_evp_state_to_operator_email_ceremony_transactions.rb`, `db/org_tickets_migrate/20260603121001_create_operator_email_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260710220002_add_evp_state_to_operator_email_ceremony_transactions.rb`,
+`db/op_base_org_migrate/20260603121001_create_operator_email_ceremony_transactions.rb`.
 
 ### operator_email_statuses
 
@@ -2464,11 +2750,13 @@ ALTER TABLE ONLY public.operator_email_statuses
     ADD CONSTRAINT operator_email_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
 
 ### operator_emails
 
-Source: `db/org_zenith_structure.sql:1315`. Machines: `idp-operator-email-otp`, `idp-operator-email-credential`.
+Source: `db/org_zenith_structure.sql:1315`. Machines: `idp-operator-email-otp`,
+`idp-operator-email-credential`.
 
 ```sql
 CREATE TABLE operator_emails (
@@ -2499,7 +2787,8 @@ ALTER TABLE ONLY public.operator_emails
     ADD CONSTRAINT fk_rails_cceb4b91db FOREIGN KEY (staff_id) REFERENCES public.operators(id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
 
 ### operator_entra_identities
 
@@ -2526,7 +2815,9 @@ ALTER TABLE ONLY public.operator_entra_identities
     ADD CONSTRAINT fk_rails_168298cb60 FOREIGN KEY (status_id) REFERENCES public.operator_entra_identity_states(id);
 ```
 
-Migration provenance: `db/org_zenith_migrate/20260630000005_validate_entra_foreign_keys.rb`, `db/org_zenith_migrate/20260630000004_create_operator_entra_identities.rb`, `db/org_zenith_migrate/20260811190000_detach_operator_entra_identities_from_connections.rb`.
+Migration provenance: `db/org_zenith_migrate/20260630000005_validate_entra_foreign_keys.rb`,
+`db/org_zenith_migrate/20260630000004_create_operator_entra_identities.rb`,
+`db/org_zenith_migrate/20260811190000_detach_operator_entra_identities_from_connections.rb`.
 
 ### operator_entra_identity_states
 
@@ -2540,7 +2831,10 @@ ALTER TABLE ONLY public.operator_entra_identity_states
     ADD CONSTRAINT operator_entra_identity_states_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_zenith_migrate/20260630000002_create_operator_entra_identity_states.rb`, `db/org_zenith_migrate/20260630000005_validate_entra_foreign_keys.rb`, `db/org_zenith_migrate/20260630000004_create_operator_entra_identities.rb`.
+Migration provenance:
+`db/org_zenith_migrate/20260630000002_create_operator_entra_identity_states.rb`,
+`db/org_zenith_migrate/20260630000005_validate_entra_foreign_keys.rb`,
+`db/org_zenith_migrate/20260630000004_create_operator_entra_identities.rb`.
 
 ### operator_lifecycle_requests
 
@@ -2576,7 +2870,10 @@ ALTER TABLE ONLY public.operator_lifecycle_requests
     ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT NOT VALID;
 ```
 
-Migration provenance: `db/org_principals_migrate/20260518130000_create_operator_lifecycle_requests.rb`, `db/org_principals_migrate/20260616150003_add_missing_indexes_to_operator_lifecycle_requests.rb`, `db/org_principals_migrate/20260616150005_add_requested_by_operator_fk_to_operator_lifecycle_requests.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260518130000_create_operator_lifecycle_requests.rb`,
+`db/org_principals_migrate/20260616150003_add_missing_indexes_to_operator_lifecycle_requests.rb`,
+`db/org_principals_migrate/20260616150005_add_requested_by_operator_fk_to_operator_lifecycle_requests.rb`.
 
 ### operator_mfa_levels
 
@@ -2590,7 +2887,8 @@ ALTER TABLE ONLY public.operator_mfa_levels
     ADD CONSTRAINT operator_mfa_levels_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
 
 ### operator_mfa_statuses
 
@@ -2604,11 +2902,12 @@ ALTER TABLE ONLY public.operator_mfa_statuses
     ADD CONSTRAINT operator_mfa_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
 
 ### operator_oauth_callback_states
 
-Source: `db/org_ticket_structure.sql:246`. Machines: `idp-operator-oauth-callback`.
+Source: `db/op_base_org_structure.sql:246`. Machines: `idp-operator-oauth-callback`.
 
 ```sql
 CREATE TABLE operator_oauth_callback_states (
@@ -2626,11 +2925,11 @@ ALTER TABLE ONLY public.operator_oauth_callback_states
     ADD CONSTRAINT operator_oauth_callback_states_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
 
 ### operator_oidc_authorization_transactions
 
-Source: `db/org_ticket_structure.sql:282`. Machines: `idp-operator-oidc-authorization`.
+Source: `db/op_base_org_structure.sql:282`. Machines: `idp-operator-oidc-authorization`.
 
 ```sql
 CREATE TABLE operator_oidc_authorization_transactions (
@@ -2673,11 +2972,15 @@ ALTER TABLE ONLY public.operator_oidc_authorization_transactions
     ADD CONSTRAINT operator_oidc_authorization_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260922120100_validate_cross_store_oidc_finalization_operator_transactions.rb`, `db/org_tickets_migrate/20260922120000_add_cross_store_oidc_finalization_to_operator_transactions.rb`, `db/org_tickets_migrate/20260611150002_create_operator_oidc_authorization_transactions.rb`, `db/org_tickets_migrate/20260915180000_add_oidc_freshness_options_to_operator_authorization_transactions.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260922120100_validate_cross_store_oidc_finalization_operator_transactions.rb`,
+`db/op_base_org_migrate/20260922120000_add_cross_store_oidc_finalization_to_operator_transactions.rb`,
+`db/op_base_org_migrate/20260611150002_create_operator_oidc_authorization_transactions.rb`,
+`db/op_base_org_migrate/20260915180000_add_oidc_freshness_options_to_operator_authorization_transactions.rb`.
 
 ### operator_passkey_ceremony_transactions
 
-Source: `db/org_ticket_structure.sql:379`. Machines: `idp-operator-passkey-ceremony`.
+Source: `db/op_base_org_structure.sql:379`. Machines: `idp-operator-passkey-ceremony`.
 
 ```sql
 CREATE TABLE operator_passkey_ceremony_transactions (
@@ -2707,7 +3010,9 @@ ALTER TABLE ONLY public.operator_passkey_ceremony_transactions
     ADD CONSTRAINT fk_rails_c78dc3cda8 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.operator_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260603123001_create_operator_passkey_ceremony_transactions.rb`, `db/org_tickets_migrate/20261003215031_bind_operator_credential_ceremonies_to_base_authority.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260603123001_create_operator_passkey_ceremony_transactions.rb`,
+`db/op_base_org_migrate/20261003215031_bind_operator_credential_ceremonies_to_base_authority.rb`.
 
 ### operator_passkey_statuses
 
@@ -2721,7 +3026,8 @@ ALTER TABLE ONLY public.operator_passkey_statuses
     ADD CONSTRAINT operator_passkey_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
 
 ### operator_passkeys
 
@@ -2757,14 +3063,17 @@ ALTER TABLE ONLY public.operator_passkeys
     ADD CONSTRAINT fk_rails_b17ae8dc5f FOREIGN KEY (status_id) REFERENCES public.operator_passkey_statuses(id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260719100000_align_operator_passkeys_with_client_passkeys.rb`, `db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`, `db/org_principals_migrate/20260831064103_add_uv_verified_at_to_operator_passkeys.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260719100000_align_operator_passkeys_with_client_passkeys.rb`,
+`db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`,
+`db/org_principals_migrate/20260831064103_add_uv_verified_at_to_operator_passkeys.rb`.
 
-### operator_rp_sessions
+### op_org_grants
 
-Source: `db/org_ticket_structure.sql:425`. Machines: `idp-operator-rp-session`.
+Source: `db/op_base_org_structure.sql:425`. Machines: `idp-operator-rp-session`.
 
 ```sql
-CREATE TABLE operator_rp_sessions (
+CREATE TABLE op_org_grants (
     id bigint NOT NULL,
     operator_token_id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
@@ -2789,17 +3098,20 @@ CREATE TABLE operator_rp_sessions (
     oidc_nonce character varying,
     oidc_access_token_max_expires_at timestamp(6) with time zone
 );
-ALTER TABLE ONLY public.operator_rp_sessions
-    ADD CONSTRAINT operator_rp_sessions_pkey PRIMARY KEY (id);
-ALTER TABLE ONLY public.operator_rp_sessions
+ALTER TABLE ONLY public.op_org_grants
+    ADD CONSTRAINT op_org_grants_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.op_org_grants
     ADD CONSTRAINT fk_rails_c004babbad FOREIGN KEY (operator_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260917130002_add_oidc_access_token_expiry_tracking_to_operator_rp_sessions.rb`, `db/org_tickets_migrate/20260624000000_create_operator_rp_sessions_and_bind_authorization_codes.rb`, `db/org_tickets_migrate/20260915170000_add_oidc_refresh_claims_to_operator_rp_sessions.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260917130002_add_oidc_access_token_expiry_tracking_to_operator_rp_sessions.rb`,
+`db/op_base_org_migrate/20260624000000_create_operator_rp_sessions_and_bind_authorization_codes.rb`,
+`db/op_base_org_migrate/20260915170000_add_oidc_refresh_claims_to_operator_rp_sessions.rb`.
 
 ### operator_secret_credential_ceremony_transactions
 
-Source: `db/org_ticket_structure.sql:475`. Machines: `idp-operator-secret-credential-ceremony`.
+Source: `db/op_base_org_structure.sql:475`. Machines: `idp-operator-secret-credential-ceremony`.
 
 ```sql
 CREATE TABLE operator_secret_credential_ceremony_transactions (
@@ -2824,7 +3136,8 @@ ALTER TABLE ONLY public.operator_secret_credential_ceremony_transactions
     ADD CONSTRAINT operator_secret_credential_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260603130001_create_operator_secret_credential_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260603130001_create_operator_secret_credential_ceremony_transactions.rb`.
 
 ### operator_secret_credential_kinds
 
@@ -2838,7 +3151,8 @@ ALTER TABLE ONLY public.operator_secret_credential_kinds
     ADD CONSTRAINT operator_secret_credential_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
 
 ### operator_secret_credential_statuses
 
@@ -2852,7 +3166,8 @@ ALTER TABLE ONLY public.operator_secret_credential_statuses
     ADD CONSTRAINT operator_secret_credential_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`.
 
 ### operator_secret_credentials
 
@@ -2903,11 +3218,14 @@ ALTER TABLE ONLY public.operator_secret_credentials
     ADD CONSTRAINT fk_staff_secrets_on_staff_secret_kind_id FOREIGN KEY (staff_secret_kind_id) REFERENCES public.operator_secret_credential_kinds(id);
 ```
 
-Migration provenance: `db/seeds.rb`, `db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`, `db/org_principals_migrate/20260612100000_add_new_secret_axis_to_operator_secret_credentials.rb`, `db/org_zenith_migrate/20260921133000_rename_org_zenith_retention_columns_to_semantic_names.rb`.
+Migration provenance: `db/seeds.rb`,
+`db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`,
+`db/org_principals_migrate/20260612100000_add_new_secret_axis_to_operator_secret_credentials.rb`,
+`db/org_zenith_migrate/20260921133000_rename_org_zenith_retention_columns_to_semantic_names.rb`.
 
 ### operator_sign_in_flow_statuses
 
-Source: `db/org_ticket_structure.sql:518`. Machines: .
+Source: `db/op_base_org_structure.sql:518`. Machines: .
 
 ```sql
 CREATE TABLE operator_sign_in_flow_statuses (
@@ -2917,11 +3235,12 @@ ALTER TABLE ONLY public.operator_sign_in_flow_statuses
     ADD CONSTRAINT operator_sign_in_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
 
 ### operator_sign_in_flows
 
-Source: `db/org_ticket_structure.sql:546`. Machines: `idp-operator-sign-in`, `idp-operator-local-result-delivery`.
+Source: `db/op_base_org_structure.sql:546`. Machines: `idp-operator-sign-in`,
+`idp-operator-local-result-delivery`.
 
 ```sql
 CREATE TABLE operator_sign_in_flows (
@@ -2954,7 +3273,7 @@ CREATE TABLE operator_sign_in_flows (
     authentication_context character varying,
     CONSTRAINT chk_org_sign_in_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_org_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT operator_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
+    CONSTRAINT operator_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'standby'::character varying])::text[])))),
     CONSTRAINT operator_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT operator_sign_in_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT operator_sign_in_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
@@ -2970,11 +3289,19 @@ ALTER TABLE ONLY public.operator_sign_in_flows
     ADD CONSTRAINT fk_rails_6ed9308623 FOREIGN KEY (status_id) REFERENCES public.operator_sign_in_flow_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`, `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`, `db/org_tickets_migrate/20261003181725_preserve_operator_local_authentication_context.rb`, `db/org_tickets_migrate/20260525233000_add_selector_activation_to_operator_sign_in_cycles.rb`, `db/org_tickets_migrate/20260528162101_harden_operator_sign_in_cycle_state_constraints.rb`, `db/org_tickets_migrate/20261002120000_add_root_login_established_at_to_operator_tokens.rb`, `db/org_tickets_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`, `db/org_tickets_migrate/20261003175658_bind_operator_local_authentication_results.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`,
+`db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`,
+`db/op_base_org_migrate/20261003181725_preserve_operator_local_authentication_context.rb`,
+`db/op_base_org_migrate/20260525233000_add_selector_activation_to_operator_sign_in_cycles.rb`,
+`db/op_base_org_migrate/20260528162101_harden_operator_sign_in_cycle_state_constraints.rb`,
+`db/op_base_org_migrate/20261002120000_add_root_login_established_at_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_org_migrate/20261003175658_bind_operator_local_authentication_results.rb`.
 
 ### operator_sign_out_flow_kinds
 
-Source: `db/org_ticket_structure.sql:609`. Machines: .
+Source: `db/op_base_org_structure.sql:609`. Machines: .
 
 ```sql
 CREATE TABLE operator_sign_out_flow_kinds (
@@ -2984,11 +3311,11 @@ ALTER TABLE ONLY public.operator_sign_out_flow_kinds
     ADD CONSTRAINT operator_sign_out_flow_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
 
 ### operator_sign_out_flow_statuses
 
-Source: `db/org_ticket_structure.sql:637`. Machines: .
+Source: `db/op_base_org_structure.sql:637`. Machines: .
 
 ```sql
 CREATE TABLE operator_sign_out_flow_statuses (
@@ -2998,11 +3325,11 @@ ALTER TABLE ONLY public.operator_sign_out_flow_statuses
     ADD CONSTRAINT operator_sign_out_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
 
 ### operator_sign_out_flows
 
-Source: `db/org_ticket_structure.sql:665`. Machines: `idp-operator-sign-out`.
+Source: `db/op_base_org_structure.sql:665`. Machines: `idp-operator-sign-out`.
 
 ```sql
 CREATE TABLE operator_sign_out_flows (
@@ -3039,11 +3366,13 @@ ALTER TABLE ONLY public.operator_sign_out_flows
     ADD CONSTRAINT fk_rails_caa3cf1c6d FOREIGN KEY (token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`, `db/org_tickets_migrate/20260519092002_create_operator_sign_out_cycles.rb`, `db/org_tickets_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`.
+Migration provenance: `db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`,
+`db/op_base_org_migrate/20260519092002_create_operator_sign_out_cycles.rb`,
+`db/op_base_org_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`.
 
 ### operator_sign_up_flow_statuses
 
-Source: `db/org_ticket_structure.sql:714`. Machines: .
+Source: `db/op_base_org_structure.sql:714`. Machines: .
 
 ```sql
 CREATE TABLE operator_sign_up_flow_statuses (
@@ -3053,11 +3382,11 @@ ALTER TABLE ONLY public.operator_sign_up_flow_statuses
     ADD CONSTRAINT operator_sign_up_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`.
 
 ### operator_sign_up_flows
 
-Source: `db/org_ticket_structure.sql:742`. Machines: `idp-operator-sign-up`.
+Source: `db/op_base_org_structure.sql:742`. Machines: `idp-operator-sign-up`.
 
 ```sql
 CREATE TABLE operator_sign_up_flows (
@@ -3100,7 +3429,12 @@ ALTER TABLE ONLY public.operator_sign_up_flows
     ADD CONSTRAINT fk_rails_fb3acc316b FOREIGN KEY (status_id) REFERENCES public.operator_sign_up_flow_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`, `db/org_tickets_migrate/20260530130101_rename_org_ticket_model_terms.rb`, `db/org_tickets_migrate/20261003181725_preserve_operator_local_authentication_context.rb`, `db/org_tickets_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`, `db/org_tickets_migrate/20261003175658_bind_operator_local_authentication_results.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`,
+`db/op_base_org_migrate/20260530130101_rename_org_ticket_model_terms.rb`,
+`db/op_base_org_migrate/20261003181725_preserve_operator_local_authentication_context.rb`,
+`db/op_base_org_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_org_migrate/20261003175658_bind_operator_local_authentication_results.rb`.
 
 ### operator_statuses
 
@@ -3114,11 +3448,19 @@ ALTER TABLE ONLY public.operator_statuses
     ADD CONSTRAINT operator_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260108100600_rename_operator_tables.rb`, `db/org_principals_migrate/20260212000003_ensure_seed_reference_data_in_operators.rb`, `db/org_principals_migrate/20260109141212_add_id_format_constraints_to_operator_tables.rb`, `db/org_principals_migrate/20260202260000_replace_code_with_fixed_ids.rb`, `db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`, `db/org_principals_migrate/20260202210000_add_lower_code_unique_indexes_operator.rb`, `db/org_principals_migrate/20260202170000_fix_consistency_operators.rb`, `db/org_principals_migrate/20260201214320_convert_all_operator_pks_to_bigint.rb`, `db/org_principals_migrate/20260201190010_convert_operator_pks.rb`.
+Migration provenance: `db/org_principals_migrate/20260108100600_rename_operator_tables.rb`,
+`db/org_principals_migrate/20260212000003_ensure_seed_reference_data_in_operators.rb`,
+`db/org_principals_migrate/20260109141212_add_id_format_constraints_to_operator_tables.rb`,
+`db/org_principals_migrate/20260202260000_replace_code_with_fixed_ids.rb`,
+`db/org_principals_migrate/20260530031000_rename_org_principal_model_terms.rb`,
+`db/org_principals_migrate/20260202210000_add_lower_code_unique_indexes_operator.rb`,
+`db/org_principals_migrate/20260202170000_fix_consistency_operators.rb`,
+`db/org_principals_migrate/20260201214320_convert_all_operator_pks_to_bigint.rb`,
+`db/org_principals_migrate/20260201190010_convert_operator_pks.rb`.
 
 ### operator_step_up_ceremony_transactions
 
-Source: `db/org_ticket_structure.sql:799`. Machines: `idp-operator-step-up-ceremony`.
+Source: `db/op_base_org_structure.sql:799`. Machines: `idp-operator-step-up-ceremony`.
 
 ```sql
 CREATE TABLE operator_step_up_ceremony_transactions (
@@ -3162,11 +3504,18 @@ ALTER TABLE ONLY public.operator_step_up_ceremony_transactions
     ADD CONSTRAINT operator_step_up_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260831064102_add_phishing_resistance_to_operator_step_up_ceremony_transactions.rb`, `db/org_tickets_migrate/20261003221725_separate_operator_registration_evidence_from_step_up_credential.rb`, `db/org_tickets_migrate/20260603122001_create_operator_step_up_ceremony_transactions.rb`, `db/org_tickets_migrate/20261003185508_bind_operator_verified_step_up_credential.rb`, `db/org_tickets_migrate/20261003183915_bind_operator_opaque_step_up_ceremonies.rb`, `db/org_tickets_migrate/20261003215031_bind_operator_credential_ceremonies_to_base_authority.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260831064102_add_phishing_resistance_to_operator_step_up_ceremony_transactions.rb`,
+`db/op_base_org_migrate/20261003221725_separate_operator_registration_evidence_from_step_up_credential.rb`,
+`db/op_base_org_migrate/20260603122001_create_operator_step_up_ceremony_transactions.rb`,
+`db/op_base_org_migrate/20261003185508_bind_operator_verified_step_up_credential.rb`,
+`db/op_base_org_migrate/20261003183915_bind_operator_opaque_step_up_ceremonies.rb`,
+`db/op_base_org_migrate/20261003215031_bind_operator_credential_ceremonies_to_base_authority.rb`.
 
 ### operator_step_up_sessions
 
-Source: `db/org_ticket_structure.sql:861`. Machines: `idp-operator-step-up-session`, `idp-operator-step-up-passkey-challenge`.
+Source: `db/op_base_org_structure.sql:861`. Machines: `idp-operator-step-up-session`,
+`idp-operator-step-up-passkey-challenge`.
 
 ```sql
 CREATE TABLE operator_step_up_sessions (
@@ -3199,11 +3548,14 @@ ALTER TABLE ONLY public.operator_step_up_sessions
     ADD CONSTRAINT fk_rails_6daa6fb880 FOREIGN KEY (staff_token_id) REFERENCES public.operator_tokens(id) ON DELETE CASCADE NOT VALID;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`, `db/org_tickets_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`, `db/org_tickets_migrate/20261003183915_bind_operator_opaque_step_up_ceremonies.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`,
+`db/op_base_org_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_org_migrate/20261003183915_bind_operator_opaque_step_up_ceremonies.rb`.
 
 ### operator_telephone_ceremony_transactions
 
-Source: `db/org_ticket_structure.sql:908`. Machines: `idp-operator-telephone-ceremony`.
+Source: `db/op_base_org_structure.sql:908`. Machines: `idp-operator-telephone-ceremony`.
 
 ```sql
 CREATE TABLE operator_telephone_ceremony_transactions (
@@ -3228,7 +3580,8 @@ ALTER TABLE ONLY public.operator_telephone_ceremony_transactions
     ADD CONSTRAINT operator_telephone_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260603120001_create_operator_telephone_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260603120001_create_operator_telephone_ceremony_transactions.rb`.
 
 ### operator_telephone_statuses
 
@@ -3242,11 +3595,13 @@ ALTER TABLE ONLY public.operator_telephone_statuses
     ADD CONSTRAINT operator_telephone_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
 
 ### operator_telephones
 
-Source: `db/org_zenith_structure.sql:2617`. Machines: `idp-operator-telephone-otp`, `idp-operator-telephone-credential`.
+Source: `db/org_zenith_structure.sql:2617`. Machines: `idp-operator-telephone-otp`,
+`idp-operator-telephone-credential`.
 
 ```sql
 CREATE TABLE operator_telephones (
@@ -3271,11 +3626,12 @@ ALTER TABLE ONLY public.operator_telephones
     ADD CONSTRAINT fk_rails_e5ae4ba106 FOREIGN KEY (staff_id) REFERENCES public.operators(id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
 
 ### operator_token_binding_methods
 
-Source: `db/org_ticket_structure.sql:951`. Machines: .
+Source: `db/op_base_org_structure.sql:951`. Machines: .
 
 ```sql
 CREATE TABLE operator_token_binding_methods (
@@ -3285,11 +3641,12 @@ ALTER TABLE ONLY public.operator_token_binding_methods
     ADD CONSTRAINT operator_token_binding_methods_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`.
 
 ### operator_token_dbsc_statuses
 
-Source: `db/org_ticket_structure.sql:979`. Machines: .
+Source: `db/op_base_org_structure.sql:979`. Machines: .
 
 ```sql
 CREATE TABLE operator_token_dbsc_statuses (
@@ -3299,11 +3656,12 @@ ALTER TABLE ONLY public.operator_token_dbsc_statuses
     ADD CONSTRAINT operator_token_dbsc_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`.
 
 ### operator_token_kinds
 
-Source: `db/org_ticket_structure.sql:1007`. Machines: .
+Source: `db/op_base_org_structure.sql:1007`. Machines: .
 
 ```sql
 CREATE TABLE operator_token_kinds (
@@ -3313,11 +3671,13 @@ ALTER TABLE ONLY public.operator_token_kinds
     ADD CONSTRAINT operator_token_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`, `db/org_tickets_migrate/20260616150010_add_on_delete_actions_to_operator_ticket_foreign_keys.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`,
+`db/op_base_org_migrate/20260616150010_add_on_delete_actions_to_operator_ticket_foreign_keys.rb`.
 
 ### operator_token_statuses
 
-Source: `db/org_ticket_structure.sql:1035`. Machines: .
+Source: `db/op_base_org_structure.sql:1035`. Machines: .
 
 ```sql
 CREATE TABLE operator_token_statuses (
@@ -3327,11 +3687,13 @@ ALTER TABLE ONLY public.operator_token_statuses
     ADD CONSTRAINT operator_token_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`, `db/org_tickets_migrate/20260616150010_add_on_delete_actions_to_operator_ticket_foreign_keys.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`,
+`db/op_base_org_migrate/20260616150010_add_on_delete_actions_to_operator_ticket_foreign_keys.rb`.
 
 ### operator_tokens
 
-Source: `db/org_ticket_structure.sql:1063`. Machines: `idp-operator-token`, `idp-operator-dbsc`.
+Source: `db/op_base_org_structure.sql:1063`. Machines: `idp-operator-token`, `idp-operator-dbsc`.
 
 ```sql
 CREATE TABLE operator_tokens (
@@ -3379,7 +3741,7 @@ CREATE TABLE operator_tokens (
     authentication_event_at timestamp(6) with time zone,
     selected_avatar_public_id character varying,
     root_login_established_at timestamp with time zone,
-    CONSTRAINT chk_operator_tokens_authentication_context CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
+    CONSTRAINT chk_operator_tokens_authentication_context CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'standby'::character varying])::text[])))),
     CONSTRAINT chk_operator_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT chk_staff_tokens_kind_id_positive CHECK ((staff_token_kind_id >= 0)),
     CONSTRAINT chk_staff_tokens_status_id_positive CHECK ((staff_token_status_id >= 0))
@@ -3400,7 +3762,27 @@ ALTER TABLE ONLY public.operator_tokens
     ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`, `db/org_tickets_migrate/20260924156000_validate_operator_token_device_session_actor_foreign_key.rb`, `db/org_tickets_migrate/20260909100001_validate_authentication_context_on_operator_tokens.rb`, `db/org_tickets_migrate/20260520190001_create_device_sessions_for_staff_tokens.rb`, `db/org_tickets_migrate/20260831064140_add_last_step_up_phishing_resistant_to_operator_tokens.rb`, `db/org_tickets_migrate/20260924177000_add_selected_avatar_public_id_to_operator_tokens.rb`, `db/org_tickets_migrate/20260924155000_add_operator_token_device_session_actor_foreign_key.rb`, `db/org_tickets_migrate/20260606120002_add_selected_context_to_operator_tokens.rb`, `db/org_tickets_migrate/20260924152000_validate_operator_token_device_session_reference.rb`, `db/org_tickets_migrate/20260924150000_add_operator_token_device_session_reference_index.rb`, `db/org_tickets_migrate/20261002120000_add_root_login_established_at_to_operator_tokens.rb`, `db/org_tickets_migrate/20260909100000_add_authentication_context_to_operator_tokens.rb`, `db/org_tickets_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`, `db/org_tickets_migrate/20260528183001_add_strict_step_up_state_to_operator_tokens.rb`, `db/org_tickets_migrate/20260727100000_add_established_authentication_method_to_operator_tokens.rb`, `db/org_tickets_migrate/20260915160000_add_authentication_event_at_to_operator_tokens.rb`, `db/org_tickets_migrate/20260616150010_add_on_delete_actions_to_operator_ticket_foreign_keys.rb`, `db/org_tickets_migrate/20260924151000_add_operator_device_session_token_foreign_keys.rb`, `db/org_tickets_migrate/20260526120101_remove_device_id_from_org_tickets.rb`, `db/org_tickets_migrate/20260727100001_validate_established_authentication_method_on_operator_tokens.rb`.
+Migration provenance:
+`db/op_base_org_migrate/20260520143010_rename_org_ticket_tables_to_model_conventions.rb`,
+`db/op_base_org_migrate/20260924156000_validate_operator_token_device_session_actor_foreign_key.rb`,
+`db/op_base_org_migrate/20260909100001_validate_authentication_context_on_operator_tokens.rb`,
+`db/op_base_org_migrate/20260520190001_create_device_sessions_for_staff_tokens.rb`,
+`db/op_base_org_migrate/20260831064140_add_last_step_up_phishing_resistant_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260924177000_add_selected_avatar_public_id_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260924155000_add_operator_token_device_session_actor_foreign_key.rb`,
+`db/op_base_org_migrate/20260606120002_add_selected_context_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260924152000_validate_operator_token_device_session_reference.rb`,
+`db/op_base_org_migrate/20260924150000_add_operator_token_device_session_reference_index.rb`,
+`db/op_base_org_migrate/20261002120000_add_root_login_established_at_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260909100000_add_authentication_context_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260921133000_rename_org_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_org_migrate/20260528183001_add_strict_step_up_state_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260727100000_add_established_authentication_method_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260915160000_add_authentication_event_at_to_operator_tokens.rb`,
+`db/op_base_org_migrate/20260616150010_add_on_delete_actions_to_operator_ticket_foreign_keys.rb`,
+`db/op_base_org_migrate/20260924151000_add_operator_device_session_token_foreign_keys.rb`,
+`db/op_base_org_migrate/20260526120101_remove_device_id_from_org_tickets.rb`,
+`db/op_base_org_migrate/20260727100001_validate_established_authentication_method_on_operator_tokens.rb`.
 
 ### operator_visibilities
 
@@ -3414,11 +3796,13 @@ ALTER TABLE ONLY public.operator_visibilities
     ADD CONSTRAINT operator_visibilities_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260520143008_rename_org_principal_tables_to_model_conventions.rb`.
 
 ### operators
 
-Source: `db/org_zenith_structure.sql:2780`. Machines: `idp-operator-administrative-access`, `idp-operator-actor-withdrawal`, `idp-operator-mfa-readiness`.
+Source: `db/org_zenith_structure.sql:2780`. Machines: `idp-operator-administrative-access`,
+`idp-operator-actor-withdrawal`, `idp-operator-mfa-readiness`.
 
 ```sql
 CREATE TABLE operators (
@@ -3466,7 +3850,49 @@ ALTER TABLE ONLY public.operators
     ADD CONSTRAINT fk_rails_cfd2f37948 FOREIGN KEY (mfa_status_id) REFERENCES public.operator_mfa_statuses(id);
 ```
 
-Migration provenance: `db/org_principals_migrate/20260102034859_validate_not_null_admin_staff_id.rb`, `db/org_principals_migrate/20260114120236_add_lock_version_to_admins_and_staffs.rb`, `db/org_principals_migrate/20251230145339_add_status_id_to_admins.rb`, `db/org_principals_migrate/20260530032100_rename_operator_mfa_columns.rb`, `db/org_principals_migrate/20260508160000_drop_legacy_retention_columns_from_operators.rb`, `db/org_principals_migrate/20260614090001_validate_administrative_access_lock_on_operators.rb`, `db/org_principals_migrate/20251230150000_create_staff_admins.rb`, `db/org_principals_migrate/20260514153000_add_withdrawal_state_to_operators.rb`, `db/org_principals_migrate/20260103050110_add_department_to_admins.rb`, `db/org_principals_migrate/20260103133001_validate_fix_database_consistency_identity_relations.rb`, `db/org_principals_migrate/20260202200000_fix_operator_fks_and_pks.rb`, `db/org_principals_migrate/20260614090000_add_administrative_access_lock_to_operators.rb`, `db/org_principals_migrate/20260102034808_remove_redundant_identity_indexes.rb`, `db/org_principals_migrate/20260507000003_add_shreddable_at_to_operators.rb`, `db/org_principals_migrate/20251230170004_move_admin_reference_to_admins.rb`, `db/org_principals_migrate/20260518180000_add_discarded_at_index_to_operators.rb`, `db/org_principals_migrate/20260305000000_rename_admin_to_operator.rb`, `db/org_principals_migrate/20260518181000_validate_remaining_org_principal_foreign_keys.rb`, `db/org_principals_migrate/20260103122221_add_foreign_keys_to_workspace_organization_division.rb`, `db/org_principals_migrate/20260518170000_add_birthdate_to_operators.rb`, `db/org_principals_migrate/20260103133000_fix_database_consistency_identity_relations.rb`, `db/org_principals_migrate/20260518170001_validate_operators_birthdate_length.rb`, `db/org_principals_migrate/20260514113000_align_operator_model_table_names.rb`, `db/org_principals_migrate/20251230140828_create_admins.rb`, `db/org_principals_migrate/20260719100001_add_webauthn_user_handle_to_operators.rb`, `db/org_principals_migrate/20260102035351_fix_database_consistency_identity.rb`, `db/org_principals_migrate/20260514143000_default_operator_multi_factor_status_to_unconfigured.rb`, `db/org_principals_migrate/20260616150005_add_requested_by_operator_fk_to_operator_lifecycle_requests.rb`, `db/org_principals_migrate/20260202170000_fix_consistency_operators.rb`, `db/org_principals_migrate/20260530032400_rename_operator_mfa_enabled_column.rb`, `db/org_principals_migrate/20260103050111_validate_department_foreign_key_on_admins.rb`, `db/org_principals_migrate/20251230150020_validate_staff_admin_foreign_keys.rb`, `db/org_principals_migrate/20260514140000_add_multi_factor_status_reference_to_staffs.rb`, `db/org_principals_migrate/20260521120000_create_operator_social_googles.rb`, `db/org_principals_migrate/20260528162001_harden_operator_lifecycle_and_mfa_constraints.rb`, `db/org_principals_migrate/20260102025200_validate_admin_staff_foreign_key.rb`, `db/org_principals_migrate/20260102034858_add_not_null_to_admin_staff_id.rb`, `db/org_principals_migrate/20260201190010_convert_operator_pks.rb`, `db/org_zenith_migrate/20260926120000_create_operator_capability_grants.rb`, `db/org_zenith_migrate/20260921133000_rename_org_zenith_retention_columns_to_semantic_names.rb`, `db/org_zenith_migrate/20260917120002_create_org_authority_relations.rb`, `db/app_principals_migrate/20260518180001_backfill_and_default_users_purged_at.rb`.
+Migration provenance:
+`db/org_principals_migrate/20260102034859_validate_not_null_admin_staff_id.rb`,
+`db/org_principals_migrate/20260114120236_add_lock_version_to_admins_and_staffs.rb`,
+`db/org_principals_migrate/20251230145339_add_status_id_to_admins.rb`,
+`db/org_principals_migrate/20260530032100_rename_operator_mfa_columns.rb`,
+`db/org_principals_migrate/20260508160000_drop_legacy_retention_columns_from_operators.rb`,
+`db/org_principals_migrate/20260614090001_validate_administrative_access_lock_on_operators.rb`,
+`db/org_principals_migrate/20251230150000_create_staff_admins.rb`,
+`db/org_principals_migrate/20260514153000_add_withdrawal_state_to_operators.rb`,
+`db/org_principals_migrate/20260103050110_add_department_to_admins.rb`,
+`db/org_principals_migrate/20260103133001_validate_fix_database_consistency_identity_relations.rb`,
+`db/org_principals_migrate/20260202200000_fix_operator_fks_and_pks.rb`,
+`db/org_principals_migrate/20260614090000_add_administrative_access_lock_to_operators.rb`,
+`db/org_principals_migrate/20260102034808_remove_redundant_identity_indexes.rb`,
+`db/org_principals_migrate/20260507000003_add_shreddable_at_to_operators.rb`,
+`db/org_principals_migrate/20251230170004_move_admin_reference_to_admins.rb`,
+`db/org_principals_migrate/20260518180000_add_discarded_at_index_to_operators.rb`,
+`db/org_principals_migrate/20260305000000_rename_admin_to_operator.rb`,
+`db/org_principals_migrate/20260518181000_validate_remaining_org_principal_foreign_keys.rb`,
+`db/org_principals_migrate/20260103122221_add_foreign_keys_to_workspace_organization_division.rb`,
+`db/org_principals_migrate/20260518170000_add_birthdate_to_operators.rb`,
+`db/org_principals_migrate/20260103133000_fix_database_consistency_identity_relations.rb`,
+`db/org_principals_migrate/20260518170001_validate_operators_birthdate_length.rb`,
+`db/org_principals_migrate/20260514113000_align_operator_model_table_names.rb`,
+`db/org_principals_migrate/20251230140828_create_admins.rb`,
+`db/org_principals_migrate/20260719100001_add_webauthn_user_handle_to_operators.rb`,
+`db/org_principals_migrate/20260102035351_fix_database_consistency_identity.rb`,
+`db/org_principals_migrate/20260514143000_default_operator_multi_factor_status_to_unconfigured.rb`,
+`db/org_principals_migrate/20260616150005_add_requested_by_operator_fk_to_operator_lifecycle_requests.rb`,
+`db/org_principals_migrate/20260202170000_fix_consistency_operators.rb`,
+`db/org_principals_migrate/20260530032400_rename_operator_mfa_enabled_column.rb`,
+`db/org_principals_migrate/20260103050111_validate_department_foreign_key_on_admins.rb`,
+`db/org_principals_migrate/20251230150020_validate_staff_admin_foreign_keys.rb`,
+`db/org_principals_migrate/20260514140000_add_multi_factor_status_reference_to_staffs.rb`,
+`db/org_principals_migrate/20260521120000_create_operator_social_googles.rb`,
+`db/org_principals_migrate/20260528162001_harden_operator_lifecycle_and_mfa_constraints.rb`,
+`db/org_principals_migrate/20260102025200_validate_admin_staff_foreign_key.rb`,
+`db/org_principals_migrate/20260102034858_add_not_null_to_admin_staff_id.rb`,
+`db/org_principals_migrate/20260201190010_convert_operator_pks.rb`,
+`db/org_zenith_migrate/20260926120000_create_operator_capability_grants.rb`,
+`db/org_zenith_migrate/20260921133000_rename_org_zenith_retention_columns_to_semantic_names.rb`,
+`db/org_zenith_migrate/20260917120002_create_org_authority_relations.rb`,
+`db/app_principals_migrate/20260518180001_backfill_and_default_users_purged_at.rb`.
 
 ### org_enforcement_appeals
 
@@ -3522,7 +3948,8 @@ ALTER TABLE ONLY public.org_enforcement_authentication_method_effects
     ADD CONSTRAINT fk_rails_46912ae025 FOREIGN KEY (org_enforcement_case_id) REFERENCES public.org_enforcement_cases(id);
 ```
 
-Migration provenance: `db/org_zenith_migrate/20260727120002_create_org_enforcement_authentication_method_effects.rb`.
+Migration provenance:
+`db/org_zenith_migrate/20260727120002_create_org_enforcement_authentication_method_effects.rb`.
 
 ### org_enforcement_cases
 
@@ -3575,7 +4002,8 @@ ALTER TABLE ONLY public.org_enforcement_cases
     ADD CONSTRAINT org_enforcement_cases_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_zenith_migrate/20260727120000_create_org_enforcement_cases.rb`, `db/org_zenith_migrate/20260830120000_allow_verification_completed_org_enforcement_case_end_reason.rb`.
+Migration provenance: `db/org_zenith_migrate/20260727120000_create_org_enforcement_cases.rb`,
+`db/org_zenith_migrate/20260830120000_allow_verification_completed_org_enforcement_case_end_reason.rb`.
 
 ### org_enforcement_identifier_effects
 
@@ -3607,7 +4035,8 @@ ALTER TABLE ONLY public.org_enforcement_identifier_effects
     ADD CONSTRAINT fk_rails_09a3dd541d FOREIGN KEY (org_enforcement_case_id) REFERENCES public.org_enforcement_cases(id);
 ```
 
-Migration provenance: `db/org_zenith_migrate/20260727120003_create_org_enforcement_identifier_effects.rb`.
+Migration provenance:
+`db/org_zenith_migrate/20260727120003_create_org_enforcement_identifier_effects.rb`.
 
 ### org_enforcement_principal_effects
 
@@ -3636,7 +4065,8 @@ ALTER TABLE ONLY public.org_enforcement_principal_effects
     ADD CONSTRAINT fk_rails_facb871ecd FOREIGN KEY (org_enforcement_case_id) REFERENCES public.org_enforcement_cases(id);
 ```
 
-Migration provenance: `db/org_zenith_migrate/20260727120001_create_org_enforcement_principal_effects.rb`.
+Migration provenance:
+`db/org_zenith_migrate/20260727120001_create_org_enforcement_principal_effects.rb`.
 
 ### org_enforcement_principal_links
 
@@ -3661,7 +4091,8 @@ ALTER TABLE ONLY public.org_enforcement_principal_links
     ADD CONSTRAINT fk_rails_522f837e23 FOREIGN KEY (org_enforcement_case_id) REFERENCES public.org_enforcement_cases(id);
 ```
 
-Migration provenance: `db/org_zenith_migrate/20260727120004_create_org_enforcement_principal_links.rb`.
+Migration provenance:
+`db/org_zenith_migrate/20260727120004_create_org_enforcement_principal_links.rb`.
 
 ### org_preference_binding_methods
 
@@ -3742,11 +4173,18 @@ ALTER TABLE ONLY public.org_preferences
     ADD CONSTRAINT fk_rails_981b4c7c84 FOREIGN KEY (replaced_by_id) REFERENCES public.org_preferences(id) ON DELETE SET NULL NOT VALID;
 ```
 
-Migration provenance: `db/org_settings_migrate/20260921133000_rename_org_setting_retention_columns_to_semantic_names.rb`, `db/org_settings_migrate/20260530120000_add_explicit_fields_to_org_preferences.rb`, `db/org_settings_migrate/20260526090000_create_org_preference_r18_display_stoppers.rb`, `db/org_settings_migrate/20260518030000_load_initial_org_setting_schema.rb`, `db/org_settings_migrate/20260526120201_remove_device_id_from_org_preferences.rb`, `db/app_settings_migrate/20260702000000_change_app_preferences_status_id_default_to_nothing.rb`, `db/org_zenith_migrate/20260721090000_add_explicit_fields_to_operator_preferences.rb`.
+Migration provenance:
+`db/org_settings_migrate/20260921133000_rename_org_setting_retention_columns_to_semantic_names.rb`,
+`db/org_settings_migrate/20260530120000_add_explicit_fields_to_org_preferences.rb`,
+`db/org_settings_migrate/20260526090000_create_org_preference_r18_display_stoppers.rb`,
+`db/org_settings_migrate/20260518030000_load_initial_org_setting_schema.rb`,
+`db/org_settings_migrate/20260526120201_remove_device_id_from_org_preferences.rb`,
+`db/app_settings_migrate/20260702000000_change_app_preferences_status_id_default_to_nothing.rb`,
+`db/org_zenith_migrate/20260721090000_add_explicit_fields_to_operator_preferences.rb`.
 
 ### organization_invitations
 
-Source: `db/org_ticket_structure.sql:1174`. Machines: `idp-operator-organization-invitation`.
+Source: `db/op_base_org_structure.sql:1174`. Machines: `idp-operator-organization-invitation`.
 
 ```sql
 CREATE TABLE organization_invitations (
@@ -3765,11 +4203,11 @@ ALTER TABLE ONLY public.organization_invitations
     ADD CONSTRAINT organization_invitations_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/org_tickets_migrate/20260501000000_load_initial_org_ticket_schema.rb`.
+Migration provenance: `db/op_base_org_migrate/20260501000000_load_initial_org_ticket_schema.rb`.
 
 ### security_one_time_reveals
 
-Source: `db/app_ticket_structure.sql:1681`. Machines: `idp-security-one-time-reveal`.
+Source: `db/op_base_app_structure.sql:1681`. Machines: `idp-security-one-time-reveal`.
 
 ```sql
 CREATE TABLE security_one_time_reveals (
@@ -3789,11 +4227,11 @@ ALTER TABLE ONLY public.security_one_time_reveals
     ADD CONSTRAINT security_one_time_reveals_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/app_tickets_migrate/20260905000000_create_security_one_time_reveals.rb`.
+Migration provenance: `db/op_base_app_migrate/20260905000000_create_security_one_time_reveals.rb`.
 
 ### visitor_auth_ceremony_sessions
 
-Source: `db/com_ticket_structure.sql:106`. Machines: `idp-visitor-auth-ceremony-session`.
+Source: `db/op_base_com_structure.sql:106`. Machines: `idp-visitor-auth-ceremony-session`.
 
 ```sql
 CREATE TABLE visitor_auth_ceremony_sessions (
@@ -3833,11 +4271,19 @@ ALTER TABLE ONLY public.visitor_auth_ceremony_sessions
     ADD CONSTRAINT fk_rails_d67de11b1e FOREIGN KEY (local_sign_up_flow_ref) REFERENCES public.visitor_sign_up_flows(public_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260913140000_create_visitor_auth_ceremony_sessions.rb`, `db/com_tickets_migrate/20261003183734_bind_visitor_opaque_step_up_ceremonies.rb`, `db/com_tickets_migrate/20261003175643_bind_visitor_local_authentication_results.rb`, `db/com_tickets_migrate/20261003215022_bind_visitor_credential_ceremonies_to_base_authority.rb`, `db/com_tickets_migrate/20260920151000_validate_visitor_auth_ceremony_session_lifecycle.rb`, `db/com_tickets_migrate/20260921140100_validate_authentication_evidence_constraints.rb`, `db/com_tickets_migrate/20260921140000_add_authentication_evidence_to_visitor_auth_ceremony_sessions.rb`, `db/com_tickets_migrate/20260920150000_extend_visitor_auth_ceremony_session_lifecycle.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260913140000_create_visitor_auth_ceremony_sessions.rb`,
+`db/op_base_com_migrate/20261003183734_bind_visitor_opaque_step_up_ceremonies.rb`,
+`db/op_base_com_migrate/20261003175643_bind_visitor_local_authentication_results.rb`,
+`db/op_base_com_migrate/20261003215022_bind_visitor_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_com_migrate/20260920151000_validate_visitor_auth_ceremony_session_lifecycle.rb`,
+`db/op_base_com_migrate/20260921140100_validate_authentication_evidence_constraints.rb`,
+`db/op_base_com_migrate/20260921140000_add_authentication_evidence_to_visitor_auth_ceremony_sessions.rb`,
+`db/op_base_com_migrate/20260920150000_extend_visitor_auth_ceremony_session_lifecycle.rb`.
 
 ### visitor_device_sessions
 
-Source: `db/com_ticket_structure.sql:158`. Machines: `idp-visitor-device-session`.
+Source: `db/op_base_com_structure.sql:158`. Machines: `idp-visitor-device-session`.
 
 ```sql
 CREATE TABLE visitor_device_sessions (
@@ -3864,11 +4310,18 @@ ALTER TABLE ONLY public.visitor_device_sessions
     ADD CONSTRAINT fk_visitor_device_sessions_on_current_refresh_token_owner FOREIGN KEY (id, current_refresh_token_id) REFERENCES public.visitor_tokens(device_session_id, id) ON DELETE SET NULL (current_refresh_token_id) DEFERRABLE INITIALLY DEFERRED;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260924151000_add_visitor_device_session_token_foreign_keys.rb`, `db/com_tickets_migrate/20260924155000_add_visitor_token_device_session_actor_foreign_key.rb`, `db/com_tickets_migrate/20260924153000_validate_visitor_current_refresh_token_owner.rb`, `db/com_tickets_migrate/20260924154000_add_visitor_device_session_actor_reference_index.rb`, `db/com_tickets_migrate/20260520190002_create_device_sessions_for_visitor_tokens.rb`, `db/com_tickets_migrate/20260611100200_add_last_network_hmac_to_visitor_device_sessions.rb`, `db/com_tickets_migrate/20260526120102_remove_device_id_from_com_tickets.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260924151000_add_visitor_device_session_token_foreign_keys.rb`,
+`db/op_base_com_migrate/20260924155000_add_visitor_token_device_session_actor_foreign_key.rb`,
+`db/op_base_com_migrate/20260924153000_validate_visitor_current_refresh_token_owner.rb`,
+`db/op_base_com_migrate/20260924154000_add_visitor_device_session_actor_reference_index.rb`,
+`db/op_base_com_migrate/20260520190002_create_device_sessions_for_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260611100200_add_last_network_hmac_to_visitor_device_sessions.rb`,
+`db/op_base_com_migrate/20260526120102_remove_device_id_from_com_tickets.rb`.
 
 ### visitor_dpop_proof_states
 
-Source: `db/com_ticket_structure.sql:201`. Machines: `idp-visitor-dpop-nonce`.
+Source: `db/op_base_com_structure.sql:201`. Machines: `idp-visitor-dpop-nonce`.
 
 ```sql
 CREATE TABLE visitor_dpop_proof_states (
@@ -3888,11 +4341,12 @@ ALTER TABLE ONLY public.visitor_dpop_proof_states
     ADD CONSTRAINT visitor_dpop_proof_states_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260526120002_create_visitor_dpop_proof_states.rb`.
+Migration provenance: `db/op_base_com_migrate/20260526120002_create_visitor_dpop_proof_states.rb`.
 
 ### visitor_email_ceremony_transactions
 
-Source: `db/com_ticket_structure.sql:239`. Machines: `idp-visitor-email-ceremony`, `idp-visitor-email-verification-challenge`.
+Source: `db/op_base_com_structure.sql:239`. Machines: `idp-visitor-email-ceremony`,
+`idp-visitor-email-verification-challenge`.
 
 ```sql
 CREATE TABLE visitor_email_ceremony_transactions (
@@ -3926,7 +4380,9 @@ ALTER TABLE ONLY public.visitor_email_ceremony_transactions
     ADD CONSTRAINT visitor_email_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260710220001_add_evp_state_to_visitor_email_ceremony_transactions.rb`, `db/com_tickets_migrate/20260603121002_create_visitor_email_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260710220001_add_evp_state_to_visitor_email_ceremony_transactions.rb`,
+`db/op_base_com_migrate/20260603121002_create_visitor_email_ceremony_transactions.rb`.
 
 ### visitor_email_statuses
 
@@ -3940,11 +4396,13 @@ ALTER TABLE ONLY public.visitor_email_statuses
     ADD CONSTRAINT visitor_email_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
 
 ### visitor_emails
 
-Source: `db/com_zenith_structure.sql:1344`. Machines: `idp-visitor-email-otp`, `idp-visitor-email-credential`.
+Source: `db/com_zenith_structure.sql:1344`. Machines: `idp-visitor-email-otp`,
+`idp-visitor-email-credential`.
 
 ```sql
 CREATE TABLE visitor_emails (
@@ -3982,7 +4440,13 @@ ALTER TABLE ONLY public.visitor_emails
     ADD CONSTRAINT fk_rails_9525e3bd11 FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`, `db/com_principals_migrate/20260525131000_scope_visitor_contact_identifier_uniqueness_to_active_records.rb`, `db/com_principals_migrate/20261003202301_preserve_visitor_step_up_email_failures.rb`, `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`, `db/com_principals_migrate/20260518163000_remove_encrypted_identifier_lookup_indexes_from_visitor_identities.rb`, `db/com_principals_migrate/20260525120000_add_retention_to_visitor_sign_up_artifacts.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`,
+`db/com_principals_migrate/20260525131000_scope_visitor_contact_identifier_uniqueness_to_active_records.rb`,
+`db/com_principals_migrate/20261003202301_preserve_visitor_step_up_email_failures.rb`,
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`,
+`db/com_principals_migrate/20260518163000_remove_encrypted_identifier_lookup_indexes_from_visitor_identities.rb`,
+`db/com_principals_migrate/20260525120000_add_retention_to_visitor_sign_up_artifacts.rb`.
 
 ### visitor_enforcement_recovery_ceremonies
 
@@ -4009,7 +4473,8 @@ ALTER TABLE ONLY public.visitor_enforcement_recovery_ceremonies
     ADD CONSTRAINT fk_rails_f886bbbdce FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260729130000_create_visitor_enforcement_recovery_ceremonies.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260729130000_create_visitor_enforcement_recovery_ceremonies.rb`.
 
 ### visitor_mfa_levels
 
@@ -4023,7 +4488,8 @@ ALTER TABLE ONLY public.visitor_mfa_levels
     ADD CONSTRAINT visitor_mfa_levels_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
 
 ### visitor_mfa_statuses
 
@@ -4037,11 +4503,12 @@ ALTER TABLE ONLY public.visitor_mfa_statuses
     ADD CONSTRAINT visitor_mfa_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
 
 ### visitor_oidc_authorization_transactions
 
-Source: `db/com_ticket_structure.sql:291`. Machines: `idp-visitor-oidc-authorization`.
+Source: `db/op_base_com_structure.sql:291`. Machines: `idp-visitor-oidc-authorization`.
 
 ```sql
 CREATE TABLE visitor_oidc_authorization_transactions (
@@ -4084,11 +4551,15 @@ ALTER TABLE ONLY public.visitor_oidc_authorization_transactions
     ADD CONSTRAINT visitor_oidc_authorization_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260922120100_validate_cross_store_oidc_finalization_visitor_transactions.rb`, `db/com_tickets_migrate/20260611150001_create_visitor_oidc_authorization_transactions.rb`, `db/com_tickets_migrate/20260922120000_add_cross_store_oidc_finalization_to_visitor_transactions.rb`, `db/com_tickets_migrate/20260915180000_add_oidc_freshness_options_to_visitor_authorization_transactions.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260922120100_validate_cross_store_oidc_finalization_visitor_transactions.rb`,
+`db/op_base_com_migrate/20260611150001_create_visitor_oidc_authorization_transactions.rb`,
+`db/op_base_com_migrate/20260922120000_add_cross_store_oidc_finalization_to_visitor_transactions.rb`,
+`db/op_base_com_migrate/20260915180000_add_oidc_freshness_options_to_visitor_authorization_transactions.rb`.
 
 ### visitor_passkey_ceremony_transactions
 
-Source: `db/com_ticket_structure.sql:388`. Machines: `idp-visitor-passkey-ceremony`.
+Source: `db/op_base_com_structure.sql:388`. Machines: `idp-visitor-passkey-ceremony`.
 
 ```sql
 CREATE TABLE visitor_passkey_ceremony_transactions (
@@ -4118,7 +4589,9 @@ ALTER TABLE ONLY public.visitor_passkey_ceremony_transactions
     ADD CONSTRAINT fk_rails_ebaeb32aa4 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.visitor_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20261003215022_bind_visitor_credential_ceremonies_to_base_authority.rb`, `db/com_tickets_migrate/20260603123002_create_visitor_passkey_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20261003215022_bind_visitor_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_com_migrate/20260603123002_create_visitor_passkey_ceremony_transactions.rb`.
 
 ### visitor_passkey_statuses
 
@@ -4132,7 +4605,8 @@ ALTER TABLE ONLY public.visitor_passkey_statuses
     ADD CONSTRAINT visitor_passkey_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
 
 ### visitor_passkeys
 
@@ -4171,14 +4645,19 @@ ALTER TABLE ONLY public.visitor_passkeys
     ADD CONSTRAINT fk_rails_cb59e99a6f FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`, `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`, `db/com_principals_migrate/20260719100000_add_authenticator_metadata_to_visitor_passkeys.rb`, `db/com_principals_migrate/20260831064102_add_uv_verified_at_to_visitor_passkeys.rb`, `db/com_principals_migrate/20260525120000_add_retention_to_visitor_sign_up_artifacts.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`,
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`,
+`db/com_principals_migrate/20260719100000_add_authenticator_metadata_to_visitor_passkeys.rb`,
+`db/com_principals_migrate/20260831064102_add_uv_verified_at_to_visitor_passkeys.rb`,
+`db/com_principals_migrate/20260525120000_add_retention_to_visitor_sign_up_artifacts.rb`.
 
-### visitor_rp_sessions
+### op_com_grants
 
-Source: `db/com_ticket_structure.sql:434`. Machines: `idp-visitor-rp-session`.
+Source: `db/op_base_com_structure.sql:434`. Machines: `idp-visitor-rp-session`.
 
 ```sql
-CREATE TABLE visitor_rp_sessions (
+CREATE TABLE op_com_grants (
     id bigint NOT NULL,
     visitor_token_id bigint NOT NULL,
     public_id character varying(21) NOT NULL,
@@ -4203,17 +4682,20 @@ CREATE TABLE visitor_rp_sessions (
     oidc_nonce character varying,
     oidc_access_token_max_expires_at timestamp(6) with time zone
 );
-ALTER TABLE ONLY public.visitor_rp_sessions
-    ADD CONSTRAINT visitor_rp_sessions_pkey PRIMARY KEY (id);
-ALTER TABLE ONLY public.visitor_rp_sessions
+ALTER TABLE ONLY public.op_com_grants
+    ADD CONSTRAINT op_com_grants_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.op_com_grants
     ADD CONSTRAINT fk_rails_367c8ed0a4 FOREIGN KEY (visitor_token_id) REFERENCES public.visitor_tokens(id) ON DELETE CASCADE;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260917130001_add_oidc_access_token_expiry_tracking_to_visitor_rp_sessions.rb`, `db/com_tickets_migrate/20260915170000_add_oidc_refresh_claims_to_visitor_rp_sessions.rb`, `db/com_tickets_migrate/20260624000000_create_visitor_rp_sessions_and_bind_authorization_codes.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260917130001_add_oidc_access_token_expiry_tracking_to_visitor_rp_sessions.rb`,
+`db/op_base_com_migrate/20260915170000_add_oidc_refresh_claims_to_visitor_rp_sessions.rb`,
+`db/op_base_com_migrate/20260624000000_create_visitor_rp_sessions_and_bind_authorization_codes.rb`.
 
 ### visitor_secret_credential_ceremony_transactions
 
-Source: `db/com_ticket_structure.sql:484`. Machines: `idp-visitor-secret-credential-ceremony`.
+Source: `db/op_base_com_structure.sql:484`. Machines: `idp-visitor-secret-credential-ceremony`.
 
 ```sql
 CREATE TABLE visitor_secret_credential_ceremony_transactions (
@@ -4238,7 +4720,8 @@ ALTER TABLE ONLY public.visitor_secret_credential_ceremony_transactions
     ADD CONSTRAINT visitor_secret_credential_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260603130002_create_visitor_secret_credential_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260603130002_create_visitor_secret_credential_ceremony_transactions.rb`.
 
 ### visitor_secret_credential_kinds
 
@@ -4252,7 +4735,8 @@ ALTER TABLE ONLY public.visitor_secret_credential_kinds
     ADD CONSTRAINT visitor_secret_credential_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
 
 ### visitor_secret_credential_statuses
 
@@ -4266,7 +4750,8 @@ ALTER TABLE ONLY public.visitor_secret_credential_statuses
     ADD CONSTRAINT visitor_secret_credential_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`.
 
 ### visitor_secret_credentials
 
@@ -4318,11 +4803,15 @@ ALTER TABLE ONLY public.visitor_secret_credentials
     ADD CONSTRAINT fk_rails_e1dad63cb9 FOREIGN KEY (visitor_secret_credential_kind_id) REFERENCES public.visitor_secret_credential_kinds(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`, `db/com_principals_migrate/20260530032200_rename_visitor_secret_credential_columns.rb`, `db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`, `db/com_principals_migrate/20260612100000_add_new_secret_axis_to_visitor_secret_credentials.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`,
+`db/com_principals_migrate/20260530032200_rename_visitor_secret_credential_columns.rb`,
+`db/com_principals_migrate/20260530031000_rename_com_principal_model_terms.rb`,
+`db/com_principals_migrate/20260612100000_add_new_secret_axis_to_visitor_secret_credentials.rb`.
 
 ### visitor_sign_in_flow_statuses
 
-Source: `db/com_ticket_structure.sql:527`. Machines: .
+Source: `db/op_base_com_structure.sql:527`. Machines: .
 
 ```sql
 CREATE TABLE visitor_sign_in_flow_statuses (
@@ -4332,11 +4821,12 @@ ALTER TABLE ONLY public.visitor_sign_in_flow_statuses
     ADD CONSTRAINT visitor_sign_in_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
 
 ### visitor_sign_in_flows
 
-Source: `db/com_ticket_structure.sql:555`. Machines: `idp-visitor-sign-in`, `idp-visitor-local-result-delivery`.
+Source: `db/op_base_com_structure.sql:555`. Machines: `idp-visitor-sign-in`,
+`idp-visitor-local-result-delivery`.
 
 ```sql
 CREATE TABLE visitor_sign_in_flows (
@@ -4369,7 +4859,7 @@ CREATE TABLE visitor_sign_in_flows (
     authentication_context character varying,
     CONSTRAINT chk_com_sign_in_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_com_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT visitor_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'emergency'::character varying])::text[])))),
+    CONSTRAINT visitor_local_authentication_context_valid CHECK (((authentication_context IS NULL) OR ((authentication_context)::text = ANY ((ARRAY['normal'::character varying, 'standby'::character varying])::text[])))),
     CONSTRAINT visitor_sign_in_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
     CONSTRAINT visitor_sign_in_flows_base_finalization_valid CHECK (((base_finalized_at IS NULL) OR ((token_id IS NOT NULL) AND (result_digest IS NOT NULL)))),
     CONSTRAINT visitor_sign_in_flows_evidence_complete CHECK (((authentication_event_at IS NULL) OR (authentication_method IS NOT NULL))),
@@ -4385,11 +4875,19 @@ ALTER TABLE ONLY public.visitor_sign_in_flows
     ADD CONSTRAINT fk_rails_9797ae40cc FOREIGN KEY (token_id) REFERENCES public.visitor_tokens(id) ON DELETE CASCADE NOT VALID;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20261003175643_bind_visitor_local_authentication_results.rb`, `db/com_tickets_migrate/20260520143006_rename_com_ticket_tables_to_model_conventions.rb`, `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`, `db/com_tickets_migrate/20260525233000_add_selector_activation_to_visitor_sign_in_cycles.rb`, `db/com_tickets_migrate/20260528162102_harden_visitor_sign_in_cycle_state_constraints.rb`, `db/com_tickets_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`, `db/com_tickets_migrate/20261003181718_preserve_visitor_local_authentication_context.rb`, `db/com_tickets_migrate/20261002120000_add_root_login_established_at_to_visitor_tokens.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20261003175643_bind_visitor_local_authentication_results.rb`,
+`db/op_base_com_migrate/20260520143006_rename_com_ticket_tables_to_model_conventions.rb`,
+`db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`,
+`db/op_base_com_migrate/20260525233000_add_selector_activation_to_visitor_sign_in_cycles.rb`,
+`db/op_base_com_migrate/20260528162102_harden_visitor_sign_in_cycle_state_constraints.rb`,
+`db/op_base_com_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_com_migrate/20261003181718_preserve_visitor_local_authentication_context.rb`,
+`db/op_base_com_migrate/20261002120000_add_root_login_established_at_to_visitor_tokens.rb`.
 
 ### visitor_sign_out_flow_kinds
 
-Source: `db/com_ticket_structure.sql:618`. Machines: .
+Source: `db/op_base_com_structure.sql:618`. Machines: .
 
 ```sql
 CREATE TABLE visitor_sign_out_flow_kinds (
@@ -4399,11 +4897,11 @@ ALTER TABLE ONLY public.visitor_sign_out_flow_kinds
     ADD CONSTRAINT visitor_sign_out_flow_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
 
 ### visitor_sign_out_flow_statuses
 
-Source: `db/com_ticket_structure.sql:646`. Machines: .
+Source: `db/op_base_com_structure.sql:646`. Machines: .
 
 ```sql
 CREATE TABLE visitor_sign_out_flow_statuses (
@@ -4413,11 +4911,11 @@ ALTER TABLE ONLY public.visitor_sign_out_flow_statuses
     ADD CONSTRAINT visitor_sign_out_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
 
 ### visitor_sign_out_flows
 
-Source: `db/com_ticket_structure.sql:674`. Machines: `idp-visitor-sign-out`.
+Source: `db/op_base_com_structure.sql:674`. Machines: `idp-visitor-sign-out`.
 
 ```sql
 CREATE TABLE visitor_sign_out_flows (
@@ -4454,11 +4952,13 @@ ALTER TABLE ONLY public.visitor_sign_out_flows
     ADD CONSTRAINT fk_rails_8ef47d5e3c FOREIGN KEY (kind_id) REFERENCES public.visitor_sign_out_flow_kinds(id) NOT VALID;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260519092001_create_visitor_sign_out_cycles.rb`, `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`, `db/com_tickets_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`.
+Migration provenance: `db/op_base_com_migrate/20260519092001_create_visitor_sign_out_cycles.rb`,
+`db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`,
+`db/op_base_com_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`.
 
 ### visitor_sign_up_flow_cleanup_statuses
 
-Source: `db/com_ticket_structure.sql:723`. Machines: .
+Source: `db/op_base_com_structure.sql:723`. Machines: .
 
 ```sql
 CREATE TABLE visitor_sign_up_flow_cleanup_statuses (
@@ -4468,11 +4968,11 @@ ALTER TABLE ONLY public.visitor_sign_up_flow_cleanup_statuses
     ADD CONSTRAINT visitor_sign_up_flow_cleanup_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
+Migration provenance: `db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`.
 
 ### visitor_sign_up_flow_statuses
 
-Source: `db/com_ticket_structure.sql:751`. Machines: .
+Source: `db/op_base_com_structure.sql:751`. Machines: .
 
 ```sql
 CREATE TABLE visitor_sign_up_flow_statuses (
@@ -4482,11 +4982,13 @@ ALTER TABLE ONLY public.visitor_sign_up_flow_statuses
     ADD CONSTRAINT visitor_sign_up_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`, `db/com_tickets_migrate/20260616150010_add_on_delete_actions_to_visitor_ticket_foreign_keys.rb`.
+Migration provenance: `db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`,
+`db/op_base_com_migrate/20260616150010_add_on_delete_actions_to_visitor_ticket_foreign_keys.rb`.
 
 ### visitor_sign_up_flows
 
-Source: `db/com_ticket_structure.sql:779`. Machines: `idp-visitor-sign-up`, `idp-visitor-sign-up-cleanup`.
+Source: `db/op_base_com_structure.sql:779`. Machines: `idp-visitor-sign-up`,
+`idp-visitor-sign-up-cleanup`.
 
 ```sql
 CREATE TABLE visitor_sign_up_flows (
@@ -4545,7 +5047,24 @@ ALTER TABLE ONLY public.visitor_sign_up_flows
     ADD CONSTRAINT fk_rails_cf6ee54a77 FOREIGN KEY (cleanup_status_id) REFERENCES public.visitor_sign_up_flow_cleanup_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260616150006_validate_add_entry_method_not_null_to_visitor_sign_up_flows.rb`, `db/com_tickets_migrate/20260525200000_drop_cleanup_token_from_visitor_sign_up_cycles.rb`, `db/com_tickets_migrate/20261003175643_bind_visitor_local_authentication_results.rb`, `db/com_tickets_migrate/20260520143006_rename_com_ticket_tables_to_model_conventions.rb`, `db/com_tickets_migrate/20260920152000_restrict_visitor_sign_up_flow_token_delete.rb`, `db/com_tickets_migrate/20260530031000_rename_com_ticket_model_terms.rb`, `db/com_tickets_migrate/20260525210000_create_visitor_sign_up_cycle_cleanup_statuses.rb`, `db/com_tickets_migrate/20260525131500_restrict_visitor_sign_up_cycle_token_delete.rb`, `db/com_tickets_migrate/20260920152001_validate_restrict_visitor_sign_up_flow_token_delete.rb`, `db/com_tickets_migrate/20260616150001_add_entry_method_not_null_to_visitor_sign_up_flows.rb`, `db/com_tickets_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`, `db/com_tickets_migrate/20260525123000_add_checkpoint_version_to_visitor_sign_up_cycles.rb`, `db/com_tickets_migrate/20260616150010_add_on_delete_actions_to_visitor_ticket_foreign_keys.rb`, `db/com_tickets_migrate/20260525124500_add_cleanup_state_to_visitor_sign_up_cycles.rb`, `db/com_tickets_migrate/20260616150020_remove_redundant_com_ticket_indexes.rb`, `db/com_tickets_migrate/20261003181718_preserve_visitor_local_authentication_context.rb`, `db/com_tickets_migrate/20260525200500_add_cleanup_attempts_count_to_visitor_sign_up_cycles.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260616150006_validate_add_entry_method_not_null_to_visitor_sign_up_flows.rb`,
+`db/op_base_com_migrate/20260525200000_drop_cleanup_token_from_visitor_sign_up_cycles.rb`,
+`db/op_base_com_migrate/20261003175643_bind_visitor_local_authentication_results.rb`,
+`db/op_base_com_migrate/20260520143006_rename_com_ticket_tables_to_model_conventions.rb`,
+`db/op_base_com_migrate/20260920152000_restrict_visitor_sign_up_flow_token_delete.rb`,
+`db/op_base_com_migrate/20260530031000_rename_com_ticket_model_terms.rb`,
+`db/op_base_com_migrate/20260525210000_create_visitor_sign_up_cycle_cleanup_statuses.rb`,
+`db/op_base_com_migrate/20260525131500_restrict_visitor_sign_up_cycle_token_delete.rb`,
+`db/op_base_com_migrate/20260920152001_validate_restrict_visitor_sign_up_flow_token_delete.rb`,
+`db/op_base_com_migrate/20260616150001_add_entry_method_not_null_to_visitor_sign_up_flows.rb`,
+`db/op_base_com_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_com_migrate/20260525123000_add_checkpoint_version_to_visitor_sign_up_cycles.rb`,
+`db/op_base_com_migrate/20260616150010_add_on_delete_actions_to_visitor_ticket_foreign_keys.rb`,
+`db/op_base_com_migrate/20260525124500_add_cleanup_state_to_visitor_sign_up_cycles.rb`,
+`db/op_base_com_migrate/20260616150020_remove_redundant_com_ticket_indexes.rb`,
+`db/op_base_com_migrate/20261003181718_preserve_visitor_local_authentication_context.rb`,
+`db/op_base_com_migrate/20260525200500_add_cleanup_attempts_count_to_visitor_sign_up_cycles.rb`.
 
 ### visitor_statuses
 
@@ -4559,11 +5078,16 @@ ALTER TABLE ONLY public.visitor_statuses
     ADD CONSTRAINT visitor_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260511223458_create_client_visitors.rb`, `db/com_zenith_migrate/20260519161002_rename_com_rp_tables.rb`, `db/com_zenith_migrate/20260511223500_seed_client_visitor_statuses.rb`, `db/com_zenith_migrate/20260511223457_create_client_visitor_statuses.rb`, `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`, `db/com_principals_migrate/20260518181000_validate_remaining_com_principal_foreign_keys.rb`.
+Migration provenance: `db/com_zenith_migrate/20260511223458_create_client_visitors.rb`,
+`db/com_zenith_migrate/20260519161002_rename_com_rp_tables.rb`,
+`db/com_zenith_migrate/20260511223500_seed_client_visitor_statuses.rb`,
+`db/com_zenith_migrate/20260511223457_create_client_visitor_statuses.rb`,
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`,
+`db/com_principals_migrate/20260518181000_validate_remaining_com_principal_foreign_keys.rb`.
 
 ### visitor_step_up_ceremony_transactions
 
-Source: `db/com_ticket_structure.sql:850`. Machines: `idp-visitor-step-up-ceremony`.
+Source: `db/op_base_com_structure.sql:850`. Machines: `idp-visitor-step-up-ceremony`.
 
 ```sql
 CREATE TABLE visitor_step_up_ceremony_transactions (
@@ -4607,11 +5131,18 @@ ALTER TABLE ONLY public.visitor_step_up_ceremony_transactions
     ADD CONSTRAINT visitor_step_up_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260603122002_create_visitor_step_up_ceremony_transactions.rb`, `db/com_tickets_migrate/20261003183734_bind_visitor_opaque_step_up_ceremonies.rb`, `db/com_tickets_migrate/20261003215022_bind_visitor_credential_ceremonies_to_base_authority.rb`, `db/com_tickets_migrate/20261003185507_bind_visitor_verified_step_up_credential.rb`, `db/com_tickets_migrate/20261003221639_separate_visitor_registration_evidence_from_step_up_credential.rb`, `db/com_tickets_migrate/20260831064103_add_phishing_resistance_to_visitor_step_up_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260603122002_create_visitor_step_up_ceremony_transactions.rb`,
+`db/op_base_com_migrate/20261003183734_bind_visitor_opaque_step_up_ceremonies.rb`,
+`db/op_base_com_migrate/20261003215022_bind_visitor_credential_ceremonies_to_base_authority.rb`,
+`db/op_base_com_migrate/20261003185507_bind_visitor_verified_step_up_credential.rb`,
+`db/op_base_com_migrate/20261003221639_separate_visitor_registration_evidence_from_step_up_credential.rb`,
+`db/op_base_com_migrate/20260831064103_add_phishing_resistance_to_visitor_step_up_ceremony_transactions.rb`.
 
 ### visitor_step_up_sessions
 
-Source: `db/com_ticket_structure.sql:912`. Machines: `idp-visitor-step-up-session`, `idp-visitor-step-up-passkey-challenge`, `idp-visitor-step-up-email-challenge`.
+Source: `db/op_base_com_structure.sql:912`. Machines: `idp-visitor-step-up-session`,
+`idp-visitor-step-up-passkey-challenge`, `idp-visitor-step-up-email-challenge`.
 
 ```sql
 CREATE TABLE visitor_step_up_sessions (
@@ -4652,11 +5183,15 @@ ALTER TABLE ONLY public.visitor_step_up_sessions
     ADD CONSTRAINT fk_rails_cd1cdc6b2d FOREIGN KEY (visitor_token_id) REFERENCES public.visitor_tokens(id) ON DELETE CASCADE NOT VALID;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20261003183734_bind_visitor_opaque_step_up_ceremonies.rb`, `db/com_tickets_migrate/20260518085549_rename_visitor_reauth_sessions_to_step_up_sessions.rb`, `db/com_tickets_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`, `db/com_tickets_migrate/20261003202134_bind_visitor_step_up_email_challenge.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20261003183734_bind_visitor_opaque_step_up_ceremonies.rb`,
+`db/op_base_com_migrate/20260518085549_rename_visitor_reauth_sessions_to_step_up_sessions.rb`,
+`db/op_base_com_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_com_migrate/20261003202134_bind_visitor_step_up_email_challenge.rb`.
 
 ### visitor_telephone_ceremony_transactions
 
-Source: `db/com_ticket_structure.sql:967`. Machines: `idp-visitor-telephone-ceremony`.
+Source: `db/op_base_com_structure.sql:967`. Machines: `idp-visitor-telephone-ceremony`.
 
 ```sql
 CREATE TABLE visitor_telephone_ceremony_transactions (
@@ -4681,7 +5216,8 @@ ALTER TABLE ONLY public.visitor_telephone_ceremony_transactions
     ADD CONSTRAINT visitor_telephone_ceremony_transactions_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260603120002_create_visitor_telephone_ceremony_transactions.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260603120002_create_visitor_telephone_ceremony_transactions.rb`.
 
 ### visitor_telephone_statuses
 
@@ -4695,11 +5231,13 @@ ALTER TABLE ONLY public.visitor_telephone_statuses
     ADD CONSTRAINT visitor_telephone_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
 
 ### visitor_telephones
 
-Source: `db/com_zenith_structure.sql:2793`. Machines: `idp-visitor-telephone-otp`, `idp-visitor-telephone-credential`.
+Source: `db/com_zenith_structure.sql:2793`. Machines: `idp-visitor-telephone-otp`,
+`idp-visitor-telephone-credential`.
 
 ```sql
 CREATE TABLE visitor_telephones (
@@ -4727,11 +5265,16 @@ ALTER TABLE ONLY public.visitor_telephones
     ADD CONSTRAINT fk_rails_c534739d95 FOREIGN KEY (visitor_telephone_status_id) REFERENCES public.visitor_telephone_statuses(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`, `db/com_principals_migrate/20260525131000_scope_visitor_contact_identifier_uniqueness_to_active_records.rb`, `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`, `db/com_principals_migrate/20260518163000_remove_encrypted_identifier_lookup_indexes_from_visitor_identities.rb`, `db/com_principals_migrate/20260525120000_add_retention_to_visitor_sign_up_artifacts.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`,
+`db/com_principals_migrate/20260525131000_scope_visitor_contact_identifier_uniqueness_to_active_records.rb`,
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`,
+`db/com_principals_migrate/20260518163000_remove_encrypted_identifier_lookup_indexes_from_visitor_identities.rb`,
+`db/com_principals_migrate/20260525120000_add_retention_to_visitor_sign_up_artifacts.rb`.
 
 ### visitor_token_binding_methods
 
-Source: `db/com_ticket_structure.sql:1010`. Machines: .
+Source: `db/op_base_com_structure.sql:1010`. Machines: .
 
 ```sql
 CREATE TABLE visitor_token_binding_methods (
@@ -4741,11 +5284,11 @@ ALTER TABLE ONLY public.visitor_token_binding_methods
     ADD CONSTRAINT visitor_token_binding_methods_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
+Migration provenance: `db/op_base_com_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
 
 ### visitor_token_dbsc_statuses
 
-Source: `db/com_ticket_structure.sql:1038`. Machines: .
+Source: `db/op_base_com_structure.sql:1038`. Machines: .
 
 ```sql
 CREATE TABLE visitor_token_dbsc_statuses (
@@ -4755,11 +5298,11 @@ ALTER TABLE ONLY public.visitor_token_dbsc_statuses
     ADD CONSTRAINT visitor_token_dbsc_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
+Migration provenance: `db/op_base_com_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
 
 ### visitor_token_kinds
 
-Source: `db/com_ticket_structure.sql:1066`. Machines: .
+Source: `db/op_base_com_structure.sql:1066`. Machines: .
 
 ```sql
 CREATE TABLE visitor_token_kinds (
@@ -4769,11 +5312,11 @@ ALTER TABLE ONLY public.visitor_token_kinds
     ADD CONSTRAINT visitor_token_kinds_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
+Migration provenance: `db/op_base_com_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
 
 ### visitor_token_statuses
 
-Source: `db/com_ticket_structure.sql:1094`. Machines: .
+Source: `db/op_base_com_structure.sql:1094`. Machines: .
 
 ```sql
 CREATE TABLE visitor_token_statuses (
@@ -4783,11 +5326,11 @@ ALTER TABLE ONLY public.visitor_token_statuses
     ADD CONSTRAINT visitor_token_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
+Migration provenance: `db/op_base_com_migrate/20260513130000_rename_customer_actor_to_visitor.rb`.
 
 ### visitor_tokens
 
-Source: `db/com_ticket_structure.sql:1122`. Machines: `idp-visitor-token`, `idp-visitor-dbsc`.
+Source: `db/op_base_com_structure.sql:1122`. Machines: `idp-visitor-token`, `idp-visitor-dbsc`.
 
 ```sql
 CREATE TABLE visitor_tokens (
@@ -4853,7 +5396,33 @@ ALTER TABLE ONLY public.visitor_tokens
     ADD CONSTRAINT fk_visitor_tokens_on_visitor_id_and_device_session_id FOREIGN KEY (visitor_id, device_session_id) REFERENCES public.visitor_device_sessions(visitor_id, id) ON DELETE RESTRICT;
 ```
 
-Migration provenance: `db/com_tickets_migrate/20260528183002_add_strict_step_up_state_to_visitor_tokens.rb`, `db/com_tickets_migrate/20260924151000_add_visitor_device_session_token_foreign_keys.rb`, `db/com_tickets_migrate/20260519092001_create_visitor_sign_out_cycles.rb`, `db/com_tickets_migrate/20260924150000_add_visitor_token_device_session_reference_index.rb`, `db/com_tickets_migrate/20260915160000_add_authentication_event_at_to_visitor_tokens.rb`, `db/com_tickets_migrate/20260920152000_restrict_visitor_sign_up_flow_token_delete.rb`, `db/com_tickets_migrate/20260924155000_add_visitor_token_device_session_actor_foreign_key.rb`, `db/com_tickets_migrate/20260727100001_validate_established_authentication_method_on_visitor_tokens.rb`, `db/com_tickets_migrate/20260831064132_add_last_step_up_phishing_resistant_to_visitor_tokens.rb`, `db/com_tickets_migrate/20260924156000_validate_visitor_token_device_session_actor_foreign_key.rb`, `db/com_tickets_migrate/20260513130000_rename_customer_actor_to_visitor.rb`, `db/com_tickets_migrate/20260520190002_create_device_sessions_for_visitor_tokens.rb`, `db/com_tickets_migrate/20260727100000_add_established_authentication_method_to_visitor_tokens.rb`, `db/com_tickets_migrate/20260525131500_restrict_visitor_sign_up_cycle_token_delete.rb`, `db/com_tickets_migrate/20260920152001_validate_restrict_visitor_sign_up_flow_token_delete.rb`, `db/com_tickets_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`, `db/com_tickets_migrate/20260526120102_remove_device_id_from_com_tickets.rb`, `db/com_tickets_migrate/20260518020002_create_visitor_oidc_connections.rb`, `db/com_tickets_migrate/20260616150010_add_on_delete_actions_to_visitor_ticket_foreign_keys.rb`, `db/com_tickets_migrate/20260518084935_create_com_sign_sequence_tickets.rb`, `db/com_tickets_migrate/20260519110001_add_oidc_identifiers_to_visitor_tokens.rb`, `db/com_tickets_migrate/20260517120002_add_single_column_seek_indexes_to_visitor_tokens.rb`, `db/com_tickets_migrate/20260519111001_remove_session_id_from_visitor_tokens.rb`, `db/com_tickets_migrate/20260924152000_validate_visitor_token_device_session_reference.rb`, `db/com_tickets_migrate/20260606120001_add_selected_context_to_visitor_tokens.rb`, `db/com_tickets_migrate/20261002120000_add_root_login_established_at_to_visitor_tokens.rb`.
+Migration provenance:
+`db/op_base_com_migrate/20260528183002_add_strict_step_up_state_to_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260924151000_add_visitor_device_session_token_foreign_keys.rb`,
+`db/op_base_com_migrate/20260519092001_create_visitor_sign_out_cycles.rb`,
+`db/op_base_com_migrate/20260924150000_add_visitor_token_device_session_reference_index.rb`,
+`db/op_base_com_migrate/20260915160000_add_authentication_event_at_to_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260920152000_restrict_visitor_sign_up_flow_token_delete.rb`,
+`db/op_base_com_migrate/20260924155000_add_visitor_token_device_session_actor_foreign_key.rb`,
+`db/op_base_com_migrate/20260727100001_validate_established_authentication_method_on_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260831064132_add_last_step_up_phishing_resistant_to_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260924156000_validate_visitor_token_device_session_actor_foreign_key.rb`,
+`db/op_base_com_migrate/20260513130000_rename_customer_actor_to_visitor.rb`,
+`db/op_base_com_migrate/20260520190002_create_device_sessions_for_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260727100000_add_established_authentication_method_to_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260525131500_restrict_visitor_sign_up_cycle_token_delete.rb`,
+`db/op_base_com_migrate/20260920152001_validate_restrict_visitor_sign_up_flow_token_delete.rb`,
+`db/op_base_com_migrate/20260921133000_rename_com_ticket_retention_columns_to_semantic_names.rb`,
+`db/op_base_com_migrate/20260526120102_remove_device_id_from_com_tickets.rb`,
+`db/op_base_com_migrate/20260518020002_create_visitor_oidc_connections.rb`,
+`db/op_base_com_migrate/20260616150010_add_on_delete_actions_to_visitor_ticket_foreign_keys.rb`,
+`db/op_base_com_migrate/20260518084935_create_com_sign_sequence_tickets.rb`,
+`db/op_base_com_migrate/20260519110001_add_oidc_identifiers_to_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260517120002_add_single_column_seek_indexes_to_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260519111001_remove_session_id_from_visitor_tokens.rb`,
+`db/op_base_com_migrate/20260924152000_validate_visitor_token_device_session_reference.rb`,
+`db/op_base_com_migrate/20260606120001_add_selected_context_to_visitor_tokens.rb`,
+`db/op_base_com_migrate/20261002120000_add_root_login_established_at_to_visitor_tokens.rb`.
 
 ### visitor_visibilities
 
@@ -4867,7 +5436,9 @@ ALTER TABLE ONLY public.visitor_visibilities
     ADD CONSTRAINT visitor_visibilities_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`, `db/com_principals_migrate/20260518181000_validate_remaining_com_principal_foreign_keys.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`,
+`db/com_principals_migrate/20260518181000_validate_remaining_com_principal_foreign_keys.rb`.
 
 ### visitor_withdrawal_ceremonies
 
@@ -4896,7 +5467,8 @@ ALTER TABLE ONLY public.visitor_withdrawal_ceremonies
     ADD CONSTRAINT fk_rails_5cdc4d0fad FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260703010000_create_visitor_withdrawal_ceremonies.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260703010000_create_visitor_withdrawal_ceremonies.rb`.
 
 ### visitor_withdrawal_flow_events
 
@@ -4928,7 +5500,9 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
     ADD CONSTRAINT fk_rails_8ff74bc1cb FOREIGN KEY (from_status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
 ```
 
-Migration provenance: `db/com_principals_migrate/20260530032500_rename_visitor_withdrawal_flow_tables.rb`, `db/com_principals_migrate/20260616150010_add_on_delete_actions_to_visitor_principal_foreign_keys.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260530032500_rename_visitor_withdrawal_flow_tables.rb`,
+`db/com_principals_migrate/20260616150010_add_on_delete_actions_to_visitor_principal_foreign_keys.rb`.
 
 ### visitor_withdrawal_flow_statuses
 
@@ -4942,7 +5516,9 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_statuses
     ADD CONSTRAINT visitor_withdrawal_flow_statuses_pkey PRIMARY KEY (id);
 ```
 
-Migration provenance: `db/com_principals_migrate/20260530032500_rename_visitor_withdrawal_flow_tables.rb`, `db/com_principals_migrate/20260616150010_add_on_delete_actions_to_visitor_principal_foreign_keys.rb`.
+Migration provenance:
+`db/com_principals_migrate/20260530032500_rename_visitor_withdrawal_flow_tables.rb`,
+`db/com_principals_migrate/20260616150010_add_on_delete_actions_to_visitor_principal_foreign_keys.rb`.
 
 ### visitor_withdrawal_flows
 
@@ -4971,11 +5547,15 @@ ALTER TABLE ONLY public.visitor_withdrawal_flows
     ADD CONSTRAINT fk_rails_8021cd7888 FOREIGN KEY (status_id) REFERENCES public.visitor_withdrawal_flow_statuses(id) NOT VALID;
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`, `db/com_principals_migrate/20260530032500_rename_visitor_withdrawal_flow_tables.rb`, `db/com_principals_migrate/20260519094001_create_visitor_withdrawal_cycles.rb`.
+Migration provenance:
+`db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`,
+`db/com_principals_migrate/20260530032500_rename_visitor_withdrawal_flow_tables.rb`,
+`db/com_principals_migrate/20260519094001_create_visitor_withdrawal_cycles.rb`.
 
 ### visitors
 
-Source: `db/com_zenith_structure.sql:3009`. Machines: `idp-visitor-administrative-access`, `idp-visitor-actor-withdrawal`, `idp-visitor-mfa-readiness`.
+Source: `db/com_zenith_structure.sql:3009`. Machines: `idp-visitor-administrative-access`,
+`idp-visitor-actor-withdrawal`, `idp-visitor-mfa-readiness`.
 
 ```sql
 CREATE TABLE visitors (
@@ -5021,20 +5601,58 @@ ALTER TABLE ONLY public.visitors
     ADD CONSTRAINT fk_rails_d25b75677b FOREIGN KEY (visibility_id) REFERENCES public.visitor_visibilities(id);
 ```
 
-Migration provenance: `db/com_zenith_migrate/20260511223458_create_client_visitors.rb`, `db/com_zenith_migrate/20260519161002_rename_com_rp_tables.rb`, `db/com_zenith_migrate/20260917120001_create_com_authority_relations.rb`, `db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`, `db/com_principals_migrate/20260616150010_add_on_delete_actions_to_visitor_principal_foreign_keys.rb`, `db/com_principals_migrate/20260530032400_rename_visitor_mfa_enabled_column.rb`, `db/com_principals_migrate/20260518120000_add_terminated_at_to_visitors.rb`, `db/com_principals_migrate/20260518170001_validate_visitors_birthdate_length.rb`, `db/com_principals_migrate/20260528162002_harden_visitor_lifecycle_and_mfa_constraints.rb`, `db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`, `db/com_principals_migrate/20260514143000_default_visitor_multi_factor_status_to_unconfigured.rb`, `db/com_principals_migrate/20260614090001_validate_administrative_access_lock_on_visitors.rb`, `db/com_principals_migrate/20260719100001_add_webauthn_user_handle_to_visitors.rb`, `db/com_principals_migrate/20260530032100_rename_visitor_mfa_columns.rb`, `db/com_principals_migrate/20260518121000_create_visitor_preferences.rb`, `db/com_principals_migrate/20260519173000_create_visitor_banners.rb`, `db/com_principals_migrate/20260519094001_create_visitor_withdrawal_cycles.rb`, `db/com_principals_migrate/20260614090000_add_administrative_access_lock_to_visitors.rb`, `db/com_principals_migrate/20260514140000_add_multi_factor_status_reference_to_visitors.rb`, `db/com_principals_migrate/20260518181000_validate_remaining_com_principal_foreign_keys.rb`, `db/com_principals_migrate/20260518170000_add_birthdate_to_visitors.rb`, `db/com_principals_migrate/20260513161000_add_multi_factor_reference_to_visitors.rb`, `db/com_principals_migrate/20260518180000_add_discarded_at_index_to_visitors.rb`, `db/app_principals_migrate/20260518180001_backfill_and_default_users_purged_at.rb`.
+Migration provenance: `db/com_zenith_migrate/20260511223458_create_client_visitors.rb`,
+`db/com_zenith_migrate/20260519161002_rename_com_rp_tables.rb`,
+`db/com_zenith_migrate/20260917120001_create_com_authority_relations.rb`,
+`db/com_zenith_migrate/20260921133000_rename_com_zenith_retention_columns_to_semantic_names.rb`,
+`db/com_principals_migrate/20260616150010_add_on_delete_actions_to_visitor_principal_foreign_keys.rb`,
+`db/com_principals_migrate/20260530032400_rename_visitor_mfa_enabled_column.rb`,
+`db/com_principals_migrate/20260518120000_add_terminated_at_to_visitors.rb`,
+`db/com_principals_migrate/20260518170001_validate_visitors_birthdate_length.rb`,
+`db/com_principals_migrate/20260528162002_harden_visitor_lifecycle_and_mfa_constraints.rb`,
+`db/com_principals_migrate/20260513130000_rename_customer_actor_to_visitor.rb`,
+`db/com_principals_migrate/20260514143000_default_visitor_multi_factor_status_to_unconfigured.rb`,
+`db/com_principals_migrate/20260614090001_validate_administrative_access_lock_on_visitors.rb`,
+`db/com_principals_migrate/20260719100001_add_webauthn_user_handle_to_visitors.rb`,
+`db/com_principals_migrate/20260530032100_rename_visitor_mfa_columns.rb`,
+`db/com_principals_migrate/20260518121000_create_visitor_preferences.rb`,
+`db/com_principals_migrate/20260519173000_create_visitor_banners.rb`,
+`db/com_principals_migrate/20260519094001_create_visitor_withdrawal_cycles.rb`,
+`db/com_principals_migrate/20260614090000_add_administrative_access_lock_to_visitors.rb`,
+`db/com_principals_migrate/20260514140000_add_multi_factor_status_reference_to_visitors.rb`,
+`db/com_principals_migrate/20260518181000_validate_remaining_com_principal_foreign_keys.rb`,
+`db/com_principals_migrate/20260518170000_add_birthdate_to_visitors.rb`,
+`db/com_principals_migrate/20260513161000_add_multi_factor_reference_to_visitors.rb`,
+`db/com_principals_migrate/20260518180000_add_discarded_at_index_to_visitors.rb`,
+`db/app_principals_migrate/20260518180001_backfill_and_default_users_purged_at.rb`.
 
 ## Non-SQL owners
 
-- `idp-shared-sequence-carrier`: None (Rails session); no SQL PK/state FK/CHECK/default applies. See its transition section for session key / Valkey lifecycle and TTL.
-- `idp-shared-authorization-code`: None (Valkey); no SQL PK/state FK/CHECK/default applies. See its transition section for session key / Valkey lifecycle and TTL.
-- `idp-shared-opaque-admission`: None (Valkey); no SQL PK/state FK/CHECK/default applies. See its transition section for session key / Valkey lifecycle and TTL.
-- `idp-shared-webauthn-challenge`: None (Rails session); no SQL PK/state FK/CHECK/default applies. See its transition section for session key / Valkey lifecycle and TTL.
-- `idp-shared-sign-out-notice`: None (Valkey); no SQL PK/state FK/CHECK/default applies. See its transition section for session key / Valkey lifecycle and TTL.
+- `idp-shared-sequence-carrier`: None (Rails session); no SQL PK/state FK/CHECK/default applies. See
+  its transition section for session key / Valkey lifecycle and TTL.
+- `idp-shared-authorization-code`: None (Valkey); no SQL PK/state FK/CHECK/default applies. See its
+  transition section for session key / Valkey lifecycle and TTL.
+- `idp-shared-opaque-admission`: None (Valkey); no SQL PK/state FK/CHECK/default applies. See its
+  transition section for session key / Valkey lifecycle and TTL.
+- `idp-shared-webauthn-challenge`: None (Rails session); no SQL PK/state FK/CHECK/default applies.
+  See its transition section for session key / Valkey lifecycle and TTL.
+- `idp-shared-sign-out-notice`: None (Valkey); no SQL PK/state FK/CHECK/default applies. See its
+  transition section for session key / Valkey lifecycle and TTL.
 
 ## Schema/model observations
 
-- Sign-in/sign-up retain `status_id`, `state`, and `step`; model consistency and any checked-in CHECKs are distinct evidence. Historical migration constraints are not assumed present when absent from the current structure.
-- OperatorPasskey SQL default is 0; current model explicitly defaults ACTIVE=1. OperatorPasskeyStatus declares only1/2. The source annotation claiming default1 is not the SQL evidence.
-- ClientSecretCredential current rebuild owns confirmation/claim/revocation facts without a state-reference FK. Legacy SecretCredentialStatus and old status writers/tests do not describe this rebuilt storage. WithdrawalPersonalDataAnonymizer still names `user_secret_status_id`; compatibility with the current Client model is UNCONFIRMED.
-- OperatorEntraIdentity inherits OrgRpRecord and OrgRpRecord currently inherits the consolidated OrgZenithRecord connection owner, matching org_zenith structure. Semantic class names do not imply separate databases.
-- Timestamp-derived machines can overlap; no mutually exclusive status enum or FK is invented for them.
+- Sign-in/sign-up retain `status_id`, `state`, and `step`; model consistency and any checked-in
+  CHECKs are distinct evidence. Historical migration constraints are not assumed present when absent
+  from the current structure.
+- OperatorPasskey SQL default is 0; current model explicitly defaults ACTIVE=1.
+  OperatorPasskeyStatus declares only1/2. The source annotation claiming default1 is not the SQL
+  evidence.
+- ClientSecretCredential current rebuild owns confirmation/claim/revocation facts without a
+  state-reference FK. Legacy SecretCredentialStatus and old status writers/tests do not describe
+  this rebuilt storage. WithdrawalPersonalDataAnonymizer still names `user_secret_status_id`;
+  compatibility with the current Client model is UNCONFIRMED.
+- OperatorEntraIdentity inherits OrgRpRecord and OrgRpRecord currently inherits the consolidated
+  OrgZenithRecord connection owner, matching org_zenith structure. Semantic class names do not imply
+  separate databases.
+- Timestamp-derived machines can overlap; no mutually exclusive status enum or FK is invented for
+  them.

@@ -37,7 +37,7 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
       when "client"
         actor = client_actor
         root_token = client_root_token
-        rp_session = ClientRpSession.create!(
+        rp_session = OpAppGrant.create!(
           client_token: root_token,
           oidc_client_id: client.client_id,
           oidc_scope: "openid profile",
@@ -49,7 +49,7 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
       when "visitor"
         actor = visitor_actor
         root_token = visitor_root_token
-        rp_session = VisitorRpSession.create!(
+        rp_session = OpComGrant.create!(
           visitor_token: root_token,
           oidc_client_id: client.client_id,
           oidc_scope: "openid profile",
@@ -61,7 +61,7 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
       when "operator"
         actor = operator_actor
         root_token = operator_root_token
-        rp_session = OperatorRpSession.create!(
+        rp_session = OpOrgGrant.create!(
           operator_token: root_token,
           oidc_client_id: client.client_id,
           oidc_scope: "openid profile",

@@ -34,7 +34,8 @@ class OidcAccessTokenAuthenticator < ApplicationService
     return failure("invalid_token") unless dpop_valid?(payload)
 
     base_session = find_base_session(payload)
-    return failure("invalid_token") unless base_session&.currently_usable?
+    return failure("invalid_token") unless base_session&.active_status?
+    return failure("invalid_token") unless authentication_context_matches_root?(payload, base_session)
     return failure("invalid_token") unless token_belongs_to_audience?(payload)
     return failure("insufficient_scope") unless token_scope_allows_userinfo?(payload)
 
@@ -103,6 +104,15 @@ class OidcAccessTokenAuthenticator < ApplicationService
 
   def token_scope_allows_userinfo?(payload)
     AuthorizationTokenClaims.scopes(payload).include?("openid")
+  end
+
+  def authentication_context_matches_root?(payload, root_token)
+    context = payload[AuthenticationContextValue::CLAIM]
+    return false unless context.is_a?(String) && AuthenticationContextValue::KEYS.include?(context)
+
+    context == root_token.strict_authentication_context_value.to_s
+  rescue AuthenticationContextValue::UnknownContextError
+    false
   end
 
   def find_resource(payload)

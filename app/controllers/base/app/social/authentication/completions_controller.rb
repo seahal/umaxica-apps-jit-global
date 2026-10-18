@@ -157,7 +157,7 @@ module Base
           end
 
           def record_social_signup_completion!(commit, reference)
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               flow = ClientSignUpFlow.find_by!(public_id: commit.result["actor_ref"])
               flow.with_cycle_lock do
                 evidence = flow.completed_requirements.fetch("social_signup")
@@ -227,7 +227,7 @@ module Base
 
           def bind_social_signup_local_parent!(user, flow, provider, ceremony)
             user.with_lock do
-              AppTicketRecord.connected_to(role: :writing) do
+              OpBaseAppRecord.connected_to(role: :writing) do
                 flow.with_lock do
                   if flow.principal_id == user.id &&
                       (flow.sign_in_primary_pending? || flow.sign_in_session_issuance_pending?) &&

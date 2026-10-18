@@ -31,17 +31,6 @@ class Base::Com::Edge::V0::Token::RefreshesController < Base::Com::AuthorityCont
       return
     end
 
-    refresh_public_id, = token_class.parse_refresh_token(refresh_plain.to_s)
-    token_record = find_refresh_token_record(refresh_public_id)
-    if token_record&.restricted?
-      handle_restricted_refresh_rejected(token_record, refresh_public_id)
-      render json: {
-        error: I18n.t(token_refresh_error_key(refresh_failure_code)),
-        error_code: refresh_failure_code,
-      }, status: refresh_failure_status
-      return
-    end
-
     credentials = refresh_access_token(refresh_plain)
 
     if credentials
@@ -64,7 +53,6 @@ class Base::Com::Edge::V0::Token::RefreshesController < Base::Com::AuthorityCont
       "invalid_refresh_token" => "sign.token_refresh.errors.invalid_refresh_token",
       "withdrawal_required" => "sign.token_refresh.errors.withdrawal_required",
       "administrative_access_locked" => "sign.token_refresh.errors.invalid_refresh_token",
-      "restricted_session" => "sign.token_refresh.errors.restricted_session",
     }.fetch(code) { "sign.token_refresh.errors.invalid_refresh_token" }
   end
 end

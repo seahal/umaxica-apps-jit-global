@@ -107,7 +107,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
              grant_type: "authorization_code",
              code: "code",
              redirect_uri: "https://client.example/callback",
-             client_id: "core-app",
+             client_id: "core-app-jp",
              client_secret: "secret",
              code_verifier: "verifier",
            },
@@ -140,7 +140,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
            params: {
              grant_type: "refresh_token",
              refresh_token: "refresh-value",
-             client_id: "core-app",
+             client_id: "core-app-jp",
              client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
              client_assertion: "assertion",
            }
@@ -167,7 +167,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
              grant_type: "authorization_code",
              code: "bad-code",
              redirect_uri: "https://client.example/callback",
-             client_id: "core-app",
+             client_id: "core-app-jp",
              client_secret: "secret",
              code_verifier: "verifier",
            }
@@ -636,7 +636,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       post base_app_oauth_revocation_url(host: ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
            params: {
              token: "refresh",
-             client_id: "core-app",
+             client_id: "core-app-jp",
              client_secret: "secret",
              token_type_hint: "refresh_token",
            }
@@ -644,7 +644,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "refresh", captured[:token]
-    assert_equal "core-app", captured[:client_id]
+    assert_equal "core-app-jp", captured[:client_id]
     assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), captured[:host]
     assert_equal "client", captured[:expected_resource_type]
   end
@@ -663,7 +663,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       post base_com_oauth_revocation_url(host: host),
            params: {
              token: "refresh",
-             client_id: "core-app",
+             client_id: "core-app-jp",
              client_secret: "secret",
              token_type_hint: "refresh_token",
            }
@@ -671,7 +671,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :ok
     assert_equal "refresh", captured[:token]
-    assert_equal "core-app", captured[:client_id]
+    assert_equal "core-app-jp", captured[:client_id]
     assert_equal host, captured[:host]
     assert_equal "visitor", captured[:expected_resource_type]
   end
@@ -690,7 +690,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       post base_org_oauth_revocation_url(host: host),
            params: {
              token: "refresh",
-             client_id: "core-org",
+             client_id: "core-org-jp",
              client_secret: "secret",
              token_type_hint: "refresh_token",
            }
@@ -708,7 +708,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       post base_com_oauth_revocation_url(host: host),
            params: {
              token: "refresh",
-             client_id: "core-app",
+             client_id: "core-app-jp",
              client_secret: "wrong",
            }
     end
@@ -840,7 +840,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
       user_token_dbsc_status_id: ClientTokenDbscStatus::NOTHING,
     )
-    logout_request = OidcLogoutRequest.issue(client_id: "core-app", ri: "jp")
+    logout_request = OidcLogoutRequest.issue(client_id: "core-app-jp", ri: "jp")
 
     http_headers_2 =
       begin
@@ -857,20 +857,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -904,7 +905,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     get(
       base_app_oidc_logout_url(host: host),
       params: {
-        client_id: "core-app",
+        client_id: "core-app-jp",
         logout_request: logout_request,
         ri: "jp",
       },
@@ -929,20 +930,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -976,7 +978,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     post(
       base_app_oidc_logout_url(host: host),
       params: {
-        client_id: "core-app",
+        client_id: "core-app-jp",
         logout_request: logout_request,
         ri: "jp",
       },
@@ -1049,7 +1051,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         end,
         transaction_class: ClientOidcAuthorizationTransaction,
         resource_type: "client",
-        client_id: "core-app",
+        client_id: "core-app-jp",
         header_builder: ->(actor, host:, session_public_id:) do
           begin
             rp_headers = as_user_headers(actor, host: host, session_public_id: session_public_id)
@@ -1065,20 +1067,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
               rp_client_id =
                 case rp_family
                 when "base" then "base-#{rp_surface}-ww"
-                when "edit" then "edit-org"
-                else "#{rp_family}-#{rp_surface}"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
                 end
               rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               rp_client = OidcClientRegistry.find!(rp_client_id)
               rp_key = [rp_client.client_id, rp_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                  !(rp_token.device_session_id && ClientRpSession.exists?(
+                  !(rp_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                   ))
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
-                rp_session = ClientRpSession.create!(
+                rp_session = OpAppGrant.create!(
                   client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -1128,7 +1131,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         end,
         transaction_class: OperatorOidcAuthorizationTransaction,
         resource_type: "operator",
-        client_id: "core-org",
+        client_id: "core-org-jp",
         header_builder: ->(actor, host:, session_public_id:) do
           begin
             rp_headers = as_staff_headers(actor, host: host, session_public_id: session_public_id)
@@ -1144,20 +1147,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
               rp_client_id =
                 case rp_family
                 when "base" then "base-#{rp_surface}-ww"
-                when "edit" then "edit-org"
-                else "#{rp_family}-#{rp_surface}"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
                 end
               rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               rp_client = OidcClientRegistry.find!(rp_client_id)
               rp_key = [rp_client.client_id, rp_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                  !(rp_token.device_session_id && OperatorRpSession.exists?(
+                  !(rp_token.device_session_id && OpOrgGrant.exists?(
                     device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                   ))
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
-                rp_session = OperatorRpSession.create!(
+                rp_session = OpOrgGrant.create!(
                   operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -1208,7 +1212,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         end,
         transaction_class: VisitorOidcAuthorizationTransaction,
         resource_type: "visitor",
-        client_id: "core-com",
+        client_id: "core-com-jp",
         header_builder: ->(actor, host:, session_public_id:) do
           begin
             rp_headers = as_visitor_headers(actor, host: host, session_public_id: session_public_id)
@@ -1224,20 +1228,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
               rp_client_id =
                 case rp_family
                 when "base" then "base-#{rp_surface}-ww"
-                when "edit" then "edit-org"
-                else "#{rp_family}-#{rp_surface}"
+                when "edit" then "edit-org-ww"
+                when "tech" then "tech-org-ww"
+                else "#{rp_family}-#{rp_surface}-jp"
                 end
               rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
               rp_client = OidcClientRegistry.find!(rp_client_id)
               rp_key = [rp_client.client_id, rp_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                  !(rp_token.device_session_id && VisitorRpSession.exists?(
+                  !(rp_token.device_session_id && OpComGrant.exists?(
                     device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
                   ))
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
-                rp_session = VisitorRpSession.create!(
+                rp_session = OpComGrant.create!(
                   visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -1332,22 +1337,23 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id,
                 oidc_client_id: rp_client.client_id,
                 revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token,
               oidc_client_id: rp_client.client_id,
               oidc_scope: "openid profile",
@@ -1433,20 +1439,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1535,21 +1542,21 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       [
         {
           host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
-          client_id: "core-app",
+          client_id: "core-app-jp",
           resource_type: "client",
           surface: "app",
           transaction_model: ClientOidcAuthorizationTransaction,
         },
         {
           host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-          client_id: "core-com",
+          client_id: "core-com-jp",
           resource_type: "visitor",
           surface: "com",
           transaction_model: VisitorOidcAuthorizationTransaction,
         },
         {
           host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
-          client_id: "core-org",
+          client_id: "core-org-jp",
           resource_type: "operator",
           surface: "org",
           transaction_model: OperatorOidcAuthorizationTransaction,
@@ -1773,13 +1780,13 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         case surface
         when :app
           [Client.create!(id: 9_125_000_000_000), ClientOidcAuthorizationTransaction, ClientToken, :user_id,
-           ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app", "client",]
+           ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app-jp", "client",]
         when :com
           [Visitor.create!(id: 9_125_000_000_000), VisitorOidcAuthorizationTransaction, VisitorToken, :visitor_id,
-           ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "core-com", "visitor",]
+           ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "core-com-jp", "visitor",]
         when :org
           [Operator.create!(id: 9_125_000_000_000), OperatorOidcAuthorizationTransaction, OperatorToken, :staff_id,
-           ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"), "core-org", "operator",]
+           ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"), "core-org-jp", "operator",]
         end
       host!(base_host)
       parameters = oidc_authorize_params(client_id: client_id, resource_type: realm)
@@ -1971,7 +1978,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     screen_hint: nil,
     scope: "openid profile",
     resource_type: "client",
-    client_id: "core-app"
+    client_id: "core-app-jp"
   )
     params = {
       response_type: "code",
@@ -1990,7 +1997,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   def create_old_client_tokens(count:)
     user = clients(:one)
 
-    OrgTicketRecord.connected_to(role: :writing) do
+    OpBaseOrgRecord.connected_to(role: :writing) do
       count.times do |index|
         token = ClientToken.new(
           user: user,

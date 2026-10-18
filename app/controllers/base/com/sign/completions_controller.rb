@@ -18,7 +18,7 @@ module Base
         def local_login_success_path = base_com_dashboard_path(ri: params[:ri])
 
         def local_login_flow(public_id)
-          ComTicketRecord.connected_to(role: :writing) { VisitorSignInFlow.find_by!(public_id: public_id) }
+          OpBaseComRecord.connected_to(role: :writing) { VisitorSignInFlow.find_by!(public_id: public_id) }
         end
 
         def local_login_actor(flow)

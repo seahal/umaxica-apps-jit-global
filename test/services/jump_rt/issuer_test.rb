@@ -468,10 +468,10 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     assert_equal "https://www-jp.umaxica.app", JumpRtSurface.issuer_origin("WARP_APP")
     assert_equal "https://www-jp.umaxica.com", JumpRtSurface.issuer_origin("WARP_COM")
     assert_equal "https://www-jp.umaxica.org", JumpRtSurface.issuer_origin("WARP_ORG")
-    warp_app = OidcClientStoresStaticClientStore::FIRST_PARTY_RP_SPECS.fetch("warp-app")
+    warp_app = OidcClientStoresStaticClientStore.clients.fetch("warp-app-jp")
 
-    assert_equal "warp-app", warp_app.fetch(:aud)
-    assert_equal "WARP_APP", warp_app.fetch(:jwt_namespace)
+    assert_equal "warp-app-jp", warp_app.fetch(:aud)
+    assert_equal "WARP_APP_JP", warp_app.fetch(:jwt_namespace)
   end
 
   test "Edit has no Jump issuer while its OIDC private key client remains configured" do
@@ -486,8 +486,8 @@ class JumpRtIssuerTest < ActiveSupport::TestCase
     assert_raises(JitSecurityJwtRegistry::ConfigurationError) do
       JitSecurityJwtRegistry.surface("EDIT_ORG")
     end
-    assert_equal "EDIT_ORG", JitSecurityJwtRegistry.oidc_client("EDIT_ORG").namespace
-    assert_equal "edit-org", OidcClientRegistry.find!("edit-org").client_id
+    assert_equal "EDIT_ORG_WW", JitSecurityJwtRegistry.oidc_client("EDIT_ORG_WW").namespace
+    assert_equal "edit-org-ww", OidcClientRegistry.find!("edit-org-ww").client_id
   end
 
   test "normalizes unsupported issuer surface names by raising" do

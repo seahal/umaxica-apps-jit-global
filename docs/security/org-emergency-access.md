@@ -7,6 +7,17 @@ It exists for the case where the Entra ID path is unavailable. It is not a conve
 to normal sign-in, and it is not a privilege: it can only ever be narrower than the Operator's
 ordinary session.
 
+## Terminology (R5-WU18)
+
+The session context this ceremony produces is named **Org Standby** in code and data: the context
+value is `standby` (`AuthenticationContextValue::STANDBY_KEY`), the policy is
+`OrgStandbyAccessPolicy` and the ceremony concern is `SignOrgStandbyPasskeyCeremony`. The pre-R5
+literal `emergency` is no longer accepted from an access token; it resolves to the fail-closed
+UNKNOWN context. Public URLs (`/sign/in/emergency/...`), their controllers, challenge purpose
+`emergency_sign_in` and user-facing copy keep their existing names. "Emergency Access" below refers
+to this Standby context. Unrelated Emergency mechanisms (identifier HMAC emergency rotation, token
+emergency service, emergency session revocation events) are a separate matter and unchanged.
+
 ## Scope
 
 Org only. The `app` and `com` surfaces have no Emergency ceremony, no Emergency routes, and no
@@ -32,16 +43,16 @@ Emergency Access uses the Operator's **existing registered passkeys**. There is 
 emergency passkey registration, and no separate emergency credential of any kind. Secret/SecretKey
 is **not** available in Emergency Access: Emergency Access is passkey-only.
 
-|                   | Normal                                  | Emergency                            |
-| ----------------- | --------------------------------------- | ------------------------------------ |
-| Entry             | `GET /sign/in` -> Entra                 | `GET /sign/in/emergency/passkey/new` |
-| First stage       | Entra ID                                | none                                 |
-| Credential        | Passkey                                 | Passkey only                         |
-| Actor selected by | the pending Entra transaction           | the submitted identifier             |
-| Challenge purpose | `authentication`                        | `emergency_sign_in`                  |
-| Session context   | `normal`                                | `emergency`                          |
-| Step-Up           | available                               | **unavailable**                      |
-| Sign-out          | `/sign/out`                             | `/sign/out` (the same ceremony)      |
+|                   | Normal                        | Emergency                            |
+| ----------------- | ----------------------------- | ------------------------------------ |
+| Entry             | `GET /sign/in` -> Entra       | `GET /sign/in/emergency/passkey/new` |
+| First stage       | Entra ID                      | none                                 |
+| Credential        | Passkey                       | Passkey only                         |
+| Actor selected by | the pending Entra transaction | the submitted identifier             |
+| Challenge purpose | `authentication`              | `emergency_sign_in`                  |
+| Session context   | `normal`                      | `standby`                            |
+| Step-Up           | available                     | **unavailable**                      |
+| Sign-out          | `/sign/out`                   | `/sign/out` (the same ceremony)      |
 
 ## Routes
 
@@ -59,7 +70,7 @@ terminate through the one canonical sign-out ceremony.
 
 ## Eligibility
 
-`OrgEmergencyAccessPolicy.eligible?(operator)` is the single authoritative decision. It currently
+`OrgStandbyAccessPolicy.eligible?(operator)` is the single authoritative decision. It currently
 returns the ordinary sign-in eligibility, so every Operator who may sign in at all may use Emergency
 Access.
 
@@ -127,17 +138,17 @@ minutes), and it is one-shot: it is consumed before the session-establishing cal
 second stage has nothing to continue.
 
 The second stage reads the Operator **only** from this transaction. The identifier parameter is not
-consulted at all, and the passkey page does not render a field for one. An attacker who
-completes Entra as Operator A therefore cannot authenticate as Operator B: the challenge is issued
-against A, the challenge store returns A at consumption, and credential ownership is checked against
-A a second time.
+consulted at all, and the passkey page does not render a field for one. An attacker who completes
+Entra as Operator A therefore cannot authenticate as Operator B: the challenge is issued against A,
+the challenge store returns A at consumption, and credential ownership is checked against A a second
+time.
 
 Without a valid transaction, `/sign/in/passkey/*` refuses to run. Permanent-secret sign-in routes
 were retired; there is no secret fallback for the normal or emergency org ceremony.
 
 ## Authentication context and token claims
 
-`AuthenticationContextValue` is a closed registry of `normal` and `emergency`.
+`AuthenticationContextValue` is a closed registry of `normal` and `standby`.
 
 - **Durable authority:** `operator_tokens.authentication_context`. Written once, at session issue,
   and never updated afterwards. `NULL` means Normal, which is what every session predating Emergency
@@ -145,19 +156,35 @@ were retired; there is no secret fallback for the normal or emergency org ceremo
 - **Claim:** `authn_ctx`, present on every access token. `acr`, `amr`, `scp`, `sid` and the rest of
   the token keep their existing meanings.
 
-This is deliberately **not** the existing restricted-session state.
-`Actor::Authentication#restricted?` reports token status `RESTRICTED` (103), the retired
+This is deliberately **not** the historical token-status state. `RESTRICTED` (103) is the retired
 session-limit placeholder that is no longer issued; the session-limit waiting unit is a resolution
-with no session (`docs/security/session-limit.md`). The two axes never collapse into one
-flag.
+with no session (`docs/security/session-limit.md`). Authentication context is read from the durable
+token context and is never inferred from historical status 103.
 
 Authentication context and DBSC binding are independent session properties. Session inventory may
 label a session Emergency only from the persisted authentication context. `dbsc_enabled?`, binding
 method, and device-bound credential state must never be used to infer Normal or Emergency mode.
 
-Reading the claim is lenient in one direction only: a blank claim is Normal, and any unrecognised
-value resolves to a capability-less context that denies everything. Issuing a session under an
-unknown context raises.
+Legacy non-OIDC consumers retain the general claim reader's blank-to-Normal behavior. OIDC Access
+acceptance has a stricter contract: `authn_ctx` must be an explicit string from the closed registry
+and must equal the current bound root's context. A missing, null, empty, unknown or wrong-type claim
+is refused. A signed `normal` claim bound to an Emergency root is also refused; signature validity
+alone cannot establish the correct context. Existing issuer, audience, client, subject, session and
+expiry checks remain necessary.
+
+Issuance derives context from the authoritative root on initial issue, Code exchange, Refresh and
+reissue. App/com roots are Normal because they have no alternative-context column. On org roots, SQL
+`NULL` and explicit `normal` mean Normal, and `standby` means Standby (Emergency Access). The NULL
+storage representation is not a missing token claim and does not require a data backfill. An unknown
+or empty stored context cannot authorize issuance.
+
+This correction can require reauthentication for an existing RP credential that lacks context or
+contradicts its root. Correctly bound existing credentials remain usable. A separately valid Refresh
+credential may obtain corrected Access through the existing rotation authority, preserving the root
+context, lifetime and replay rules. A live root without a valid RP continuation requires the
+ordinary Code Flow; root reuse is governed by its existing rules. A rejected Access token does not
+authorize arbitrary root lookup, reconstruction of a Refresh credential or inference of Normal. No
+new root login or cooldown anchor is created by credential reissue.
 
 ## Capability model
 

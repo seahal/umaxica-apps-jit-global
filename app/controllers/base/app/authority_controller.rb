@@ -22,7 +22,6 @@ module Base
       include ::AuthorizationClient
       include ::VerificationClient
       include ActionPolicy::Controller
-      include ::RestrictedSessionGuard
       include ::ActorSupport
       include ::Finisher
 
@@ -41,7 +40,7 @@ module Base
       rescue_from ApplicationError, with: :handle_application_error
       rescue_from ActionController::InvalidCrossOriginRequest, with: :handle_csrf_failure
       rescue_from ActionPolicy::Unauthorized, with: :handle_authorization_error
-      helper_method :current_actor, :current_account, :current_session_public_id, :current_session_restricted?,
+      helper_method :current_actor, :current_account, :current_session_public_id,
                     :signed_pt_param, :current_client, :logged_in?, :active_client?, :logged_in_client?,
                     :apple_only_credential?
 
@@ -69,7 +68,6 @@ module Base
       before_action :set_timezone
       before_action :set_color_theme
       before_action :enforce_withdrawal_gate!
-      before_action :enforce_restricted_session_guard!
       before_action :enforce_verification_if_required
       before_action :enforce_access_policy!
       before_action :set_current_observability

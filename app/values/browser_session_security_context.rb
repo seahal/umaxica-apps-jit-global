@@ -15,11 +15,7 @@ class BrowserSessionSecurityContext < Data.define(
   public
 
   def active?
-    browser_session&.usable? && root_token&.currently_usable? && rp_session&.active?
-  end
-
-  def restricted?
-    root_token&.restricted? || false
+    browser_session&.usable? && root_token&.active_status? && rp_session&.active?
   end
 
   def root_session_public_id

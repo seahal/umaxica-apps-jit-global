@@ -22,7 +22,7 @@ class TechOrgSignInTest < ActionDispatch::IntegrationTest
     authorize_params = start_sign_in(pt: "/dashboard")
 
     assert_equal "code", authorize_params.fetch("response_type")
-    assert_equal "tech-org", authorize_params.fetch("client_id")
+    assert_equal "tech-org-ww", authorize_params.fetch("client_id")
     assert_equal "S256", authorize_params.fetch("code_challenge_method")
     assert_predicate authorize_params.fetch("code_challenge"), :present?
     assert_predicate authorize_params.fetch("state"), :present?
@@ -48,7 +48,7 @@ class TechOrgSignInTest < ActionDispatch::IntegrationTest
     get tech_org_sign_show_path(ri: "jp")
 
     assert_not_equal 200, response.status
-    assert_not_includes response.body.to_s, "tech-org"
+    assert_not_includes response.body.to_s, "tech-org-ww"
   end
 
   test "an untrusted forwarded host does not change the callback target" do

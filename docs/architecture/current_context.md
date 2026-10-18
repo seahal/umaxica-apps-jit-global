@@ -149,7 +149,6 @@ Do not treat raw access-token payloads as the normal application contract. Prefe
 - `login_public_id`
 - `acr`
 - `amr`
-- `restricted?`
 - `verified?`
 
 `Actor.authn.access_claims` may exist as a low-level authentication-boundary escape hatch, but new

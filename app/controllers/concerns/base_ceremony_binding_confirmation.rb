@@ -70,7 +70,7 @@ module BaseCeremonyBindingConfirmation
 
     token = current_session_token
     if binding.base_token_id.present?
-      unless token && token.id == binding.base_token_id && token.currently_usable?(token.class.database_now)
+      unless token && token.id == binding.base_token_id && token.active_status?(token.class.database_now)
         raise BaseAuthAdmissionCoordinator::Denied.new(
           "Base session does not match binding",
           code: "session_binding_mismatch",

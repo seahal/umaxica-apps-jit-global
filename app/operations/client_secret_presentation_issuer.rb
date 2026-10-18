@@ -110,7 +110,7 @@ class ClientSecretPresentationIssuer
     def with_authorization(context, token, issuance)
       validate_presentation_context!(context, token, issuance)
 
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             context.subject.with_lock do
@@ -143,7 +143,7 @@ class ClientSecretPresentationIssuer
       end
 
       requirement = presentation_step_up_requirement(context, current, owned)
-      unless current.currently_usable?(ClientToken.database_now) && !current.restricted? &&
+      unless current.active_status?(ClientToken.database_now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: ClientToken.database_now).satisfied? &&
           owned.expires_at && owned.expires_at > now && owned.canceled_at.nil?
         raise Denied, "Secret presentation requires current scoped Step-Up and issuance"

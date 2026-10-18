@@ -9,8 +9,8 @@ class WarpComPreferenceAdoptionTest < ActionDispatch::IntegrationTest
     @visitor = visitors(:reserved_visitor)
     @token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = @token.rotate_refresh_token!
-    client = OidcClientRegistry.find!("warp-com")
-    @rp_session = VisitorRpSession.create!(
+    client = OidcClientRegistry.find!("warp-com-jp")
+    @rp_session = OpComGrant.create!(
       visitor_token: @token, oidc_client_id: client.client_id,
       oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
       oidc_nonce: SecureRandom.hex(16), oidc_auth_time: 1.minute.ago,

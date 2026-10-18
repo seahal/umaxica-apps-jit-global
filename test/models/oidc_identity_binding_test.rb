@@ -21,13 +21,13 @@ class ClientOidcIdentityBindingTest < ActiveSupport::TestCase
       client_identity: identity,
       issuer: "https://www.umaxica.app",
       subject: "cli-#{SecureRandom.hex(6)}",
-      audience: "warp-app",
+      audience: "warp-app-jp",
     )
     second = ClientOidcIdentityBinding.create!(
       client_identity: identity,
       issuer: "https://www.umaxica.app",
       subject: "cli-#{SecureRandom.hex(6)}",
-      audience: "core-app",
+      audience: "core-app-jp",
     )
 
     assert_equal identity.id, first.client_identity_id
@@ -54,7 +54,7 @@ class ClientOidcIdentityBindingTest < ActiveSupport::TestCase
     claims = {
       issuer: "https://www.umaxica.app",
       subject: "cli-#{SecureRandom.hex(6)}",
-      audience: "warp-app",
+      audience: "warp-app-jp",
     }
     ClientOidcIdentityBinding.create!(client_identity: identity, **claims)
 
@@ -88,7 +88,7 @@ class ClientOidcIdentityBindingTest < ActiveSupport::TestCase
       client_identity: identity,
       issuer: "https://www.umaxica.app",
       subject: "cli-#{SecureRandom.hex(6)}",
-      audience: "warp-app",
+      audience: "warp-app-jp",
     )
 
     assert_equal identity.id, persona.reload.client_identity_id
@@ -114,7 +114,7 @@ class VisitorOidcIdentityBindingTest < ActiveSupport::TestCase
       visitor_identity: identity,
       issuer: "https://www.umaxica.com",
       subject: "vis-#{SecureRandom.hex(6)}",
-      audience: "warp-com",
+      audience: "warp-com-jp",
     )
 
     assert_equal identity, binding.visitor_identity
@@ -139,7 +139,7 @@ class OperatorOidcIdentityBindingTest < ActiveSupport::TestCase
       operator_identity: identity,
       issuer: "https://www.umaxica.org",
       subject: "opr-#{SecureRandom.hex(6)}",
-      audience: "warp-org",
+      audience: "warp-org-jp",
     )
 
     assert_equal identity, binding.operator_identity

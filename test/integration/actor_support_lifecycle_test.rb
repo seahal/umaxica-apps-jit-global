@@ -205,20 +205,21 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -335,20 +336,21 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OperatorRpSession.exists?(
+              !(rp_token.device_session_id && OpOrgGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = OperatorRpSession.create!(
+            rp_session = OpOrgGrant.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -445,20 +447,21 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = VisitorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && VisitorRpSession.exists?(
+              !(rp_token.device_session_id && OpComGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = VisitorRpSession.create!(
+            rp_session = OpComGrant.create!(
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -576,20 +579,21 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -664,20 +668,21 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -742,20 +747,21 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = OperatorToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && OperatorRpSession.exists?(
+              !(rp_token.device_session_id && OpOrgGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
-            rp_session = OperatorRpSession.create!(
+            rp_session = OpOrgGrant.create!(
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

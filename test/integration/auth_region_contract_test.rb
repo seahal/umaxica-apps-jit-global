@@ -299,7 +299,7 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
   # signature rather than a stub -- `AuthCeremonyAdmission#admit_or_render_sign_ceremony!` verifies
   # it for real.
   def admission_reference_for(surface, path)
-    client_id = { "app" => "core-app", "com" => "core-com", "org" => "core-org" }.fetch(surface)
+    client_id = { "app" => "core-app-jp", "com" => "core-com-jp", "org" => "core-org-jp" }.fetch(surface)
     client = OidcClientRegistry.find!(client_id)
     transaction =
       OidcAuthorizationTransactionCoordinator.issue!(

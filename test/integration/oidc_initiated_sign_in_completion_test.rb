@@ -996,7 +996,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
+    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
     begin
       fv5067 = action
       post(
@@ -1145,7 +1145,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
+    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
     begin
       fv5053 = action
       post(
@@ -1310,7 +1310,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    existing_tokens = Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
+    existing_tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
     assert_no_difference "ClientToken.count" do
       begin
         fv5038 = action
@@ -1343,22 +1343,6 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     patch limitation, params: {
       resolution_challenge: challenge,
       session_ref: SessionLimitResolutionTokenRef.issue(existing_tokens.first),
-    }
-
-    assert_response :unprocessable_content
-    assert_predicate ClientSignInFlow.find(@transaction.secret_sign_in_flow_id),
-                     :sign_in_session_issuance_pending?
-    assert_nil credential.reload.consumed_at
-    assert_equal I18n.t("base.app.sign.in.limitations.capacity_still_full"),
-                 JSON.parse(css_select("script[data-page=app]").first.text).fetch("props").fetch("notice")
-    challenge =
-      begin
-        fv5036 = session[:session_limit_gate] || session["session_limit_gate"]
-        fv5036.fetch("resolution_challenge")
-      end
-    patch limitation, params: {
-      resolution_challenge: challenge,
-      session_ref: SessionLimitResolutionTokenRef.issue(existing_tokens.second),
     }
 
     assert_response :redirect
@@ -1817,8 +1801,8 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   def oidc_authorize_params(realm:)
     {
       response_type: "code",
-      client_id: "core-app",
-      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch(realm).first,
+      client_id: "core-app-jp",
+      redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch(realm).first,
       code_challenge: "a" * 43,
       code_challenge_method: "S256",
       state: SecureRandom.urlsafe_base64(32),

@@ -17,15 +17,15 @@ class SignFlowTest < ActiveSupport::TestCase
   ].freeze
 
   test "sign-in cycles inherit from their surface cycle records" do
-    assert_operator ClientSignInFlow, :<, AppTicketRecord
-    assert_operator VisitorSignInFlow, :<, ComTicketRecord
-    assert_operator OperatorSignInFlow, :<, OrgTicketRecord
+    assert_operator ClientSignInFlow, :<, OpBaseAppRecord
+    assert_operator VisitorSignInFlow, :<, OpBaseComRecord
+    assert_operator OperatorSignInFlow, :<, OpBaseOrgRecord
   end
 
   test "sign-up cycles inherit from their surface cycle records" do
-    assert_operator ClientSignUpFlow, :<, AppTicketRecord
-    assert_operator VisitorSignUpFlow, :<, ComTicketRecord
-    assert_operator OperatorSignUpFlow, :<, OrgTicketRecord
+    assert_operator ClientSignUpFlow, :<, OpBaseAppRecord
+    assert_operator VisitorSignUpFlow, :<, OpBaseComRecord
+    assert_operator OperatorSignUpFlow, :<, OpBaseOrgRecord
   end
 
   test "sign-in cycles accept expected protocol boundary states" do

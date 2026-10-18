@@ -37,7 +37,7 @@ class StepUpSessionConsumptionConcurrencyTest < ActiveSupport::TestCase
     threads =
       2.times.map do
         Thread.new do
-          AppTicketRecord.connection_pool.with_connection do
+          OpBaseAppRecord.connection_pool.with_connection do
             ready << true
             release.pop
             result =

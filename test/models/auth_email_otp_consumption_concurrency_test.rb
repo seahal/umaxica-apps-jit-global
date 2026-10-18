@@ -16,10 +16,10 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
       owner_model, contact_association, contact_status, auth_model, binding_model, ticket_owner =
         if surface == "app"
           [Client, :client_emails, { user_email_status_id: ClientEmailStatus::VERIFIED },
-           ClientAuthCeremonySession, ClientAuthAdmissionBinding, AppTicketRecord,]
+           ClientAuthCeremonySession, ClientAuthAdmissionBinding, OpBaseAppRecord,]
         else
           [Visitor, :visitor_emails, { visitor_email_status_id: VisitorEmailStatus::VERIFIED },
-           VisitorAuthCeremonySession, VisitorAuthAdmissionBinding, ComTicketRecord,]
+           VisitorAuthCeremonySession, VisitorAuthAdmissionBinding, OpBaseComRecord,]
         end
       owner = owner_model.create!(id: next_owner_id(owner_model))
       contact = owner.public_send(contact_association).create!(

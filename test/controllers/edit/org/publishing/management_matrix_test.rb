@@ -27,7 +27,7 @@ class Edit::Org::Publishing::ManagementMatrixTest < ActiveSupport::TestCase
   class UndeclaredEntriesController < Edit::Org::Publishing::Docs::App::EntriesController; end
 
   test "a controller that declares no cell raises rather than inheriting one" do
-    %i(publishing_audience publishing_surface publishing_entry_class).each do |reader|
+    %i(publishing_audience publishing_surface).each do |reader|
       error = assert_raises(NameError, reader.to_s) { UndeclaredEntriesController.public_send(reader) }
 
       assert_match(/must declare/, error.message, reader.to_s)

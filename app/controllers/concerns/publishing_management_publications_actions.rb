@@ -19,55 +19,47 @@ module PublishingManagementPublicationsActions
   include ::PublishingManagementCell
 
   def create
-    entry = find_nested_management_entry!
-    authorize_publishing!(entry, to: :update?)
     form = Publishing::PublishEntryForm.new(publish_form_attributes)
-
     unless form.valid?
+      entry = find_nested_management_entry!
+      return unless entry
+
       render_show_failure(entry, errors: form.message_hash)
       return
     end
 
-    result = Publishing::PublishEntryOperation.call(
-      entry: entry,
-      operator_public_id: operator_public_id,
-      effective_from: form.effective_from,
-    )
-
-    unless result.ok?
-      render_show_failure(entry.reload, errors: result.errors)
-      return
-    end
-
-    redirect_to(entry_path(entry, action: :show), status: :see_other)
+    attributes = params[:publication].present? ? { publication: { effective_from: form.effective_from&.iso8601 } } : {}
+    result = authority_result!(publishing_authority.publish(params.expect(:entry_id), attributes))
+    finish_entry_command(result)
   end
 
   def destroy
-    entry = find_nested_management_entry!
-    authorize_publishing!(entry, to: :update?)
-    publication = entry.publications.find_by!(public_id: params.expect(:id))
     form = Publishing::EndPublicationForm.new(end_form_attributes)
-
     unless form.valid?
+      entry = find_nested_management_entry!
+      return unless entry
+
       render_show_failure(entry, errors: form.message_hash)
       return
     end
 
-    result = Publishing::EndPublicationOperation.call(
-      publication: publication,
-      reason: form.reason,
-      operator_public_id: operator_public_id,
+    result = authority_result!(
+      publishing_authority.end_publication(
+        params.expect(:entry_id), params.expect(:id),
+        { publication: { reason: form.reason } },
+      ),
     )
-
-    unless result.ok?
-      render_show_failure(entry.reload, errors: result.errors)
-      return
-    end
-
-    redirect_to(entry_path(entry, action: :show), status: :see_other)
+    finish_entry_command(result)
   end
 
   private
+
+  def finish_entry_command(result)
+    return unless result
+    return render_show_failure(result.data.fetch("entry"), errors: result.errors) if result.status == :unprocessable
+
+    redirect_to(entry_path(result.data.fetch("entry"), action: :show), status: :see_other)
+  end
 
   # The Publish button sends no parameters at all -- it means "now" -- so an
   # absent `publication` key is the common case rather than a missing

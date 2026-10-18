@@ -13,12 +13,12 @@ class ParentSignOutCallersTest < ActiveSupport::TestCase
     @user = clients(:one)
     AuthenticationSessionRevoker.tokens_for(@user).find_each(&:revoke!)
     @root = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    @children = %w(core-app warp-app).map { |client_id| rp_session_for(@root, client_id) }
+    @children = %w(core-app-jp warp-app-jp).map { |client_id| rp_session_for(@root, client_id) }
   end
 
   test "selected-session revocation ends the selected parent with its RP rows and leaves the current one" do
     current = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    current_child = rp_session_for(current, "core-app")
+    current_child = rp_session_for(current, "core-app-jp")
 
     assert_no_enqueued_jobs do
       AuthenticationSelectedSessionRevoker.call(owner: @user, token: @root, current_token: current)
@@ -69,7 +69,7 @@ class ParentSignOutCallersTest < ActiveSupport::TestCase
   private
 
   def rp_session_for(root, client_id)
-    ClientRpSession.create!(
+    OpAppGrant.create!(
       client_token: root,
       oidc_client_id: client_id,
       oidc_scope: "openid profile",

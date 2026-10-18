@@ -17,7 +17,7 @@ class ClientSecretClaimCommitter
 
       AppZenithRecord.connected_to(role: :writing) do
         client.with_lock do
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             transaction.with_lock do
               flow = ClientSignInFlow.find_by(id: transaction.secret_sign_in_flow_id)
               flow&.lock!
@@ -64,7 +64,7 @@ class ClientSecretClaimCommitter
       claim = nil
       # The Ticket lock spans the independent source commit. A later evidence rollback
       # does not roll back the irreversible Zenith claim.
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignInFlow.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do

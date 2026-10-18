@@ -36,7 +36,7 @@ class ClientSecretManualIssuanceInvalidator
 
     def invalidate!(actor_context, token, issuance, purge_after, reason)
       validate_binding!(actor_context, token, issuance, purge_after)
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor_context.subject.with_lock(requires_new: true) do
@@ -133,7 +133,7 @@ class ClientSecretManualIssuanceInvalidator
         require_session_binding: true, ttl: StepUpRequirement::DEFAULT_TTL,
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
-      unless current.currently_usable?(now) && !current.restricted? &&
+      unless current.active_status?(now) &&
           StepUpResolver.call(token: current, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret cancellation requires current scoped Step-Up"
       end

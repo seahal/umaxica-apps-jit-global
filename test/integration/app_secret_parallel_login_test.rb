@@ -427,7 +427,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     futures =
       callbacks.map do |browser|
         Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
-          AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+          OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
             ready << connection.select_value("SELECT pg_backend_pid()")
             release.pop
             begin
@@ -485,7 +485,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
   end
 
   test "session limit cancellation retires the claim and rejects a callback with the old valid browser locator" do
-    (ClientToken::MAX_TOTAL_SESSIONS_PER_USER - 1).times { ClientToken.create!(user: @actor) }
+    (ClientToken::MAX_SESSIONS_PER_USER - 1).times { ClientToken.create!(user: @actor) }
     begin
       fv5004 = @base
       fv5004.post(
@@ -534,7 +534,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     assert_equal 400, stale_browser.response.status
     assert_nil stale_browser.cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
-    assert_equal ClientToken::MAX_TOTAL_SESSIONS_PER_USER, ClientToken.where(user_id: @actor.id).count
+    assert_equal ClientToken::MAX_SESSIONS_PER_USER, ClientToken.where(user_id: @actor.id).count
     assert_equal "flow_canceled", ClientSecretAuditOutbox.find_by!(
       credential_ref: credential.public_id, event_name: "secret.discarded",
     ).reason
@@ -587,7 +587,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
   end
 
   test "partial session revocation keeps the claim pending and sufficient capacity permits its one root login" do
-    (ClientToken::MAX_TOTAL_SESSIONS_PER_USER - 1).times { ClientToken.create!(user: @actor) }
+    (ClientToken::MAX_SESSIONS_PER_USER - 1).times { ClientToken.create!(user: @actor) }
     begin
       fv5000 = @base
       fv5000.post(
@@ -608,21 +608,6 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
 
     assert_equal 200, @base.response.status
     page = JSON.parse(Nokogiri::HTML(@base.response.body).at_css("script[data-page='app']").text)
-    csrf = Nokogiri::HTML(@base.response.body).at_css('meta[name="csrf-token"]')["content"]
-    @base.patch(
-      base_app_sign_in_limitation_path(ri: "jp"), params: {
-        authenticity_token: csrf, session_ref: page.fetch("props").fetch("sessions").first.fetch("session_ref"),
-      }, headers: { "Origin" => "https://#{@base_host}", "Sec-Fetch-Site" => "same-origin" },
-    )
-
-    assert_equal 422, @base.response.status
-    assert_predicate @flow.reload, :sign_in_session_issuance_pending?
-    assert_nil credential.reload.consumed_at
-    assert_equal Float::INFINITY, credential.discard_at
-    assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
-    page = JSON.parse(Nokogiri::HTML(@base.response.body).at_css("script[data-page='app']").text)
-
-    assert_equal I18n.t("base.app.sign.in.limitations.capacity_still_full"), page.fetch("props").fetch("notice")
     csrf = Nokogiri::HTML(@base.response.body).at_css('meta[name="csrf-token"]')["content"]
     @base.patch(
       base_app_sign_in_limitation_path(ri: "jp"), params: {

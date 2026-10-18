@@ -4,8 +4,6 @@
 module TokenStatusManagement
   extend ActiveSupport::Concern
 
-  RESTRICTED_TTL = 15.minutes
-
   STATUS_ACTIVE = 1
   STATUS_EXPIRED = 102
   STATUS_RESTRICTED = 103
@@ -36,38 +34,36 @@ module TokenStatusManagement
   # surface with no Emergency ceremony has no way to produce a non-Normal
   # session, so the absent column states Normal rather than guessing at one.
   #
-  # Deliberately not `restricted?`: that marks a session-limit remediation
-  # state, and the two axes are independent.
+  # Historical token status is deliberately separate from the authentication
+  # context. Status 103 is readable for retention and inspection, but never
+  # establishes a session context or authentication authority.
   def authentication_context_value
     return AuthenticationContextValue.normal unless has_attribute?(:authentication_context)
 
     AuthenticationContextValue.from_claim(authentication_context)
   end
 
-  def emergency_authentication_context?
-    authentication_context_value.emergency?
+  # Issuance must distinguish a legacy NULL from corrupt persisted context.
+  # NULL is the canonical Normal value; empty and unknown values are invalid.
+  def strict_authentication_context_value
+    return AuthenticationContextValue.normal unless has_attribute?(:authentication_context)
+
+    value = authentication_context
+    return AuthenticationContextValue.normal if value.nil?
+
+    AuthenticationContextValue.for(value)
+  end
+
+  def standby_authentication_context?
+    authentication_context_value.standby?
   end
 
   def revoked?
     token_status_id == self.class.token_status_model::REVOKED
   end
 
-  def active_status?
-    token_status_id == self.class.token_status_model::ACTIVE && currently_usable?
-  end
-
-  def mark_restricted!(now: nil)
-    update_status_transition!(
-      { self.class.token_status_foreign_key => self.class.token_status_model::RESTRICTED },
-      now: now,
-    )
-  end
-
-  def promote_to_active!(now: nil)
-    update_status_transition!(
-      { self.class.token_status_foreign_key => self.class.token_status_model::ACTIVE },
-      now: now,
-    )
+  def active_status?(now = Time.current)
+    token_status_id == self.class.token_status_model::ACTIVE && currently_usable?(now)
   end
 
   public

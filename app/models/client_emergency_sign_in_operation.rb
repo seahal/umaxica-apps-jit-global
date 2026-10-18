@@ -3,7 +3,7 @@
 
 # Proof, committed with the ClientToken it names, that an Emergency Secret Credential sign-in
 # operation created its app session. adr/emergency-secret-credential-commit-acknowledgement.md
-class ClientEmergencySignInOperation < AppTicketRecord
+class ClientEmergencySignInOperation < OpBaseAppRecord
   belongs_to :client_token
 
   validates :operation_id, presence: true

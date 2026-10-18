@@ -2,7 +2,7 @@
 
 # Successful Ticket commit evidence; failed attempts remain SignInFlow facts.
 # This record does not authorize a claim or replace the canonical login boundary.
-class ClientSecretSignInReceipt < AppTicketRecord
+class ClientSecretSignInReceipt < OpBaseAppRecord
   class InvalidCommit < StandardError; end
 
   belongs_to :sign_in_flow, class_name: "ClientSignInFlow"

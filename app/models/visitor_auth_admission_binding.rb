@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class VisitorAuthAdmissionBinding < ComTicketRecord
+class VisitorAuthAdmissionBinding < OpBaseComRecord
   include AuthAdmissionBinding
 
   belongs_to :sign_in_flow, class_name: "VisitorSignInFlow", optional: true
@@ -32,6 +32,6 @@ class VisitorAuthAdmissionBinding < ComTicketRecord
 
     def auth_admission_session_class = VisitorAuthCeremonySession
 
-    def connection_owner = ComTicketRecord
+    def connection_owner = OpBaseComRecord
   end
 end

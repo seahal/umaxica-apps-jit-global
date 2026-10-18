@@ -69,7 +69,7 @@ class IdentityTotpEnrollmentFinalCommitter
     end
 
     def commit_ticket!(actor, token, transaction, payload, digest)
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         token.with_lock do
           record = ClientStepUpSession.lock.find_by!(
             user_token_id: token.id, step_up_ceremony_transaction_ref: transaction.transaction_id,
@@ -108,7 +108,7 @@ class IdentityTotpEnrollmentFinalCommitter
     end
 
     def validate_ticket!(actor, token, transaction, record, digest, payload, now)
-      unless token.currently_usable?(now) && transaction.surface == "app" &&
+      unless token.active_status?(now) && transaction.surface == "app" &&
           transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           %w(bootstrap credential_registration).include?(transaction.purpose) &&
           %w(verified consumed).include?(transaction.status) && enrollment_scope_permitted?(transaction) &&

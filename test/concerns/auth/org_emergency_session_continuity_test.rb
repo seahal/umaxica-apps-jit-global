@@ -79,15 +79,15 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
 
   test "an emergency sign-in records the context on the session row and in the access token" do
     result = @harness.invoke(
-      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::STANDBY_KEY,
     )
 
     assert_equal :success, result[:status]
 
     token = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
-    assert_equal "emergency", token.authentication_context
-    assert_equal "emergency", claims_of(result[:access_token]).fetch(AuthenticationContextValue::CLAIM)
+    assert_equal "standby", token.authentication_context
+    assert_equal "standby", claims_of(result[:access_token]).fetch(AuthenticationContextValue::CLAIM)
   end
 
   test "a normal sign-in records the normal context and never the emergency one" do
@@ -95,29 +95,29 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
     token = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
     assert_nil token.authentication_context
-    assert_not_predicate token, :emergency_authentication_context?
+    assert_not_predicate token, :standby_authentication_context?
     assert_equal "normal", claims_of(result[:access_token]).fetch(AuthenticationContextValue::CLAIM)
   end
 
   test "refresh keeps the emergency context and never upgrades the session" do
     issued = @harness.invoke(
-      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::STANDBY_KEY,
     )
 
     refreshed = @harness.invoke(:refresh_access_token, issued[:refresh_token])
 
     assert_not_nil refreshed[:access_token]
     assert_equal(
-      "emergency",
+      "standby",
       claims_of(refreshed[:access_token]).fetch(AuthenticationContextValue::CLAIM),
       "a refreshed access token must not silently become a normal session",
     )
-    assert_equal "emergency", OperatorToken.where(staff_id: @staff.id).order(:id).last.authentication_context
+    assert_equal "standby", OperatorToken.where(staff_id: @staff.id).order(:id).last.authentication_context
   end
 
   test "repeated rotation never drops the emergency context" do
     issued = @harness.invoke(
-      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+      :log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::STANDBY_KEY,
     )
     refresh_token = issued[:refresh_token]
 
@@ -125,7 +125,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
       result = @harness.invoke(:refresh_access_token, refresh_token)
 
       assert_not_nil result[:access_token]
-      assert_equal "emergency", claims_of(result[:access_token]).fetch(AuthenticationContextValue::CLAIM)
+      assert_equal "standby", claims_of(result[:access_token]).fetch(AuthenticationContextValue::CLAIM)
       refresh_token = result[:refresh_token] || refresh_token
     end
   end
@@ -133,7 +133,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
   # Changing mode means ending the session and starting a new one, so the new
   # session must be a new row rather than the old one relabelled.
   test "signing out of an emergency session and signing in normally produces a new normal session" do
-    @harness.invoke(:log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::EMERGENCY_KEY)
+    @harness.invoke(:log_in, @staff, establishment: :root_login, authentication_context: AuthenticationContextValue::STANDBY_KEY)
     emergency_token = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
     @harness.invoke(:log_out)
@@ -144,7 +144,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
     normal_token = OperatorToken.where(staff_id: @staff.id).order(:id).last
 
     assert_not_equal emergency_token.id, normal_token.id
-    assert_equal "emergency", emergency_token.reload.authentication_context,
+    assert_equal "standby", emergency_token.reload.authentication_context,
                  "the terminated session keeps its own history rather than being rewritten"
     assert_nil normal_token.authentication_context
     assert_equal "normal", claims_of(normal[:access_token]).fetch(AuthenticationContextValue::CLAIM)
@@ -158,7 +158,7 @@ class Auth::OrgEmergencySessionContinuityTest < ActiveSupport::TestCase
     [ClientToken, VisitorToken].each do |token_class|
       assert_not_includes token_class.column_names, "authentication_context"
       assert_predicate token_class.new.authentication_context_value, :normal?
-      assert_not_predicate token_class.new, :emergency_authentication_context?
+      assert_not_predicate token_class.new, :standby_authentication_context?
     end
   end
 end

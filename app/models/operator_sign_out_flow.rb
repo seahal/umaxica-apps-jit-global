@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_sign_out_flows
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                      :bigint           not null, primary key
 #  access_discarded_at     :datetime
@@ -46,7 +46,7 @@
 #  fk_rails_...  (status_id => operator_sign_out_flow_statuses.id)
 #  fk_rails_...  (token_id => operator_tokens.id) ON DELETE => cascade
 #
-class OperatorSignOutFlow < OrgTicketRecord
+class OperatorSignOutFlow < OpBaseOrgRecord
   include SignOutFlow
   include FlowSignOut
 

@@ -28,7 +28,7 @@ class IdentityStepUpCeremonyCancellationCommitter
                   )
                 end
                 now = transaction.class.database_now
-                unless actor.login_allowed? && token.currently_usable?(now) && device.usable? &&
+                unless actor.login_allowed? && token.active_status?(now) && device.usable? &&
                     device.current_refresh_token_id == token.id
                   raise IdentityStepUpCeremonyContract::Error.new(
                     "step-up cancellation session unavailable",
@@ -71,7 +71,7 @@ class IdentityStepUpCeremonyCancellationCommitter
       in [Visitor, VisitorToken, VisitorStepUpCeremonyTransaction] if token.visitor_id == actor.id
         [VisitorStepUpSession, VisitorAuthCeremonySession]
       in [Operator, OperatorToken, OperatorStepUpCeremonyTransaction]
-        unless token.staff_id == actor.id && !token.emergency_authentication_context?
+        unless token.staff_id == actor.id && !token.standby_authentication_context?
           raise IdentityStepUpCeremonyContract::Error.new(
             "step-up cancellation surface mismatch",
             code: "session_binding_mismatch",

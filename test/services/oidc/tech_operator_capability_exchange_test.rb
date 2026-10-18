@@ -7,7 +7,7 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
   setup do
     @operator = operators(:one)
     @operator_token = OperatorToken.create!(staff: @operator, authentication_event_at: 1.minute.ago)
-    @client = OidcClientRegistry.find!("tech-org")
+    @client = OidcClientRegistry.find!("tech-org-ww")
     @redirect_uri = @client.redirect_uris_by_realm.fetch("operator").first
     @code_verifier = SecureRandom.urlsafe_base64(32)
     @code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(@code_verifier), padding: false)
@@ -31,13 +31,13 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "tech-org" && assertion.present? && token_url.present? },
+        ->(client_id, assertion, token_url:) { client_id == "tech-org-ww" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code.code,
           redirect_uri: @redirect_uri,
-          client_id: "tech-org",
+          client_id: "tech-org-ww",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-tech-assertion",
           token_endpoint_uri: "https://tech.umaxica.org/oauth/token",
@@ -49,7 +49,7 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "access_denied", result.error
     assert_equal "issued", Valkey::AuthState::AuthorizationCodeStore.new.read(code.code).fetch("state")
-    assert_nil OperatorRpSession.find_by(operator_token: @operator_token, oidc_client_id: "tech-org")
+    assert_nil OpOrgGrant.find_by(operator_token: @operator_token, oidc_client_id: "tech-org-ww")
   end
 
   test "Tech capability does not bypass PKCE or exact callback binding with real client assertions" do
@@ -76,9 +76,9 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
         resource: @operator, session_token: @operator_token,
         authentication_event_at: @operator_token.authentication_event_at,
       )
-      assertion = OidcClientAssertionJwt.issue(client_id: "tech-org", token_url: token_url)
+      assertion = OidcClientAssertionJwt.issue(client_id: "tech-org-ww", token_url: token_url)
       result = OidcTokenExchangeCoordinator.call(
-        grant_type: "authorization_code", code: code.code, client_id: "tech-org",
+        grant_type: "authorization_code", code: code.code, client_id: "tech-org-ww",
         redirect_uri: input.fetch(:redirect_uri), code_verifier: input.fetch(:verifier),
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: assertion, token_endpoint_uri: token_url, expected_resource_type: "operator",
@@ -86,7 +86,7 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
 
       assert_not_predicate result, :success?
       assert_equal "invalid_request", result.error
-      assert_not OperatorRpSession.exists?(operator_token: @operator_token, oidc_client_id: "tech-org")
+      assert_not OpOrgGrant.exists?(operator_token: @operator_token, oidc_client_id: "tech-org-ww")
       assert_predicate @operator_token.reload, :currently_usable?
     end
   end
@@ -118,13 +118,13 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     exchange_result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "tech-org" && assertion.present? && token_url.present? },
+        ->(client_id, assertion, token_url:) { client_id == "tech-org-ww" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code.code,
           redirect_uri: @redirect_uri,
-          client_id: "tech-org",
+          client_id: "tech-org-ww",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-tech-assertion",
           token_endpoint_uri: "https://tech.umaxica.org/oauth/token",
@@ -139,12 +139,12 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
     refresh_result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "tech-org" && assertion.present? && token_url.present? },
+        ->(client_id, assertion, token_url:) { client_id == "tech-org-ww" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: refresh_token,
-          client_id: "tech-org",
+          client_id: "tech-org-ww",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-tech-refresh-assertion",
           token_endpoint_uri: "https://tech.umaxica.org/oauth/token",
@@ -154,7 +154,7 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
 
     assert_not refresh_result.success?
     assert_equal "access_denied", refresh_result.error
-    rp_session = OperatorRpSession.find_by!(operator_token: @operator_token, oidc_client_id: "tech-org")
+    rp_session = OpOrgGrant.find_by!(operator_token: @operator_token, oidc_client_id: "tech-org-ww")
     verifier = OperatorToken.parse_refresh_token(refresh_token).last
 
     assert rp_session.refresh_token_digest_matches?(verifier)

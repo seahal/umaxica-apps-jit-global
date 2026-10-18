@@ -7,22 +7,22 @@ vocabulary decision is `adr/idp-flow-lifecycle-vocabulary.md`, the state storage
 
 > **Reading rule:** The historical inventory below records the pre-unification vocabulary and is
 > retained for traceability. The delivered amendments at the end of this document describe the
-> current runtime for the implemented slices. A target term is not evidence of implementation
-> unless the current amendment, code, schema, and tests all show it.
+> current runtime for the implemented slices. A target term is not evidence of implementation unless
+> the current amendment, code, schema, and tests all show it.
 
 ## Term Categories
 
 Every term used about these flows belongs to exactly one category.
 
-| Category           | What it is                                                                                    | Examples (target)                                     |
-| ------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Lifecycle state    | Coarse, flow-independent position of a flow instance.                                        | `ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`, `HALTED` |
-| Phase              | Flow-specific position while `ACTIVE`.                                                       | `MFA_PENDING`, `CHECKPOINT_PENDING`, `ACCESS_DISCARDED` |
-| Transition event   | Something that may change lifecycle or phase.                                                | `start`, `advance`, `back`, `cancel`, `external_result`, `complete`, `expire`, `halt` |
-| Request semantics  | How the server classifies an arriving request before or instead of a transition.             | `reentry`, `replay`, `conflict`                       |
-| Condition          | A predicate evaluated on the request or flow.                                                 | TTL lapsed, checkpoint version matches, actor already signed in |
-| Transition outcome | What one request achieved.                                                                    | `advanced`, `rejected`, `conflict`, `replay`          |
-| Reason code        | Implementation detail explaining an outcome or a halt.                                        | `credential_locked`, `stale_version`, `credential_mismatch` |
+| Category           | What it is                                                                       | Examples (target)                                                                     |
+| ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Lifecycle state    | Coarse, flow-independent position of a flow instance.                            | `ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`, `HALTED`                               |
+| Phase              | Flow-specific position while `ACTIVE`.                                           | `MFA_PENDING`, `CHECKPOINT_PENDING`, `ACCESS_DISCARDED`                               |
+| Transition event   | Something that may change lifecycle or phase.                                    | `start`, `advance`, `back`, `cancel`, `external_result`, `complete`, `expire`, `halt` |
+| Request semantics  | How the server classifies an arriving request before or instead of a transition. | `reentry`, `replay`, `conflict`                                                       |
+| Condition          | A predicate evaluated on the request or flow.                                    | TTL lapsed, checkpoint version matches, actor already signed in                       |
+| Transition outcome | What one request achieved.                                                       | `advanced`, `rejected`, `conflict`, `replay`                                          |
+| Reason code        | Implementation detail explaining an outcome or a halt.                           | `credential_locked`, `stale_version`, `credential_mismatch`                           |
 
 `conflict` and `replay` are both request semantics and outcomes: classifying the request is the
 semantics, and reporting it back is the outcome. They are never events or states.
@@ -42,7 +42,8 @@ Records: `ClientSignInFlow`, `VisitorSignInFlow`, `OperatorSignInFlow` with `Flo
   draw `EXPIRED` and `CANCELLED`; that is diagram vocabulary, not runtime.
 - `fail_sign_in!` moves to `FAILED` from every non-terminal status. Current callers: user
   cancellation of pending MFA (`cancel_pending_mfa!`), user cancellation on the session-limit page,
-  the former `session_limit_hard_reject` (removed in `c737e51ae`), and `SignInSessionLimitManager#cancel!`.
+  the former `session_limit_hard_reject` (removed in `c737e51ae`), and
+  `SignInSessionLimitManager#cancel!`.
 - Result statuses (`SignInResult`): `success`, `mfa_required`, `session_limit_pending`, and the
   terminal-HTTP set `session_limit_hard_reject`, `guardrail_blocked`, `login_forbidden`,
   `credential_rejected`, `credential_failed`, `identity_unavailable`, `transaction_expired`,
@@ -57,9 +58,9 @@ Records: `ClientSignUpFlow`, `VisitorSignUpFlow` (and `OperatorSignUpFlow`, whic
 - Statuses: `STARTED`, `CONTACT_PENDING`, `CREDENTIAL_PENDING`, `CONTACT_VERIFIED`,
   `SOCIAL_CALLBACK_PENDING`, `GUARDRAIL_PENDING`, `CHECKPOINT_PENDING`, `FINALIZING`, `FINALIZED`,
   `SIGN_IN_HANDOFF_PENDING`, `COMPLETED`, `FAILED`, `EXPIRED`, `CANCELLED`.
-- `SignUpStateMachine` events: `start`, `submit_contact`, `verify_contact`,
-  `start_social_callback`, `complete_social_callback`, `enter_guardrail`, `enter_checkpoint`,
-  `clear_requirement`, `finalize`, `handoff_to_sign_in`, `complete`, `fail`, `expire`, `cancel`.
+- `SignUpStateMachine` events: `start`, `submit_contact`, `verify_contact`, `start_social_callback`,
+  `complete_social_callback`, `enter_guardrail`, `enter_checkpoint`, `clear_requirement`,
+  `finalize`, `handoff_to_sign_in`, `complete`, `fail`, `expire`, `cancel`.
 - Result statuses (`SignUpResult`): `ok`, `advanced`, `blocked`, `invalid_transition`,
   `unauthorized`, `expired`, `failed`, `completed`, `sign_in_handoff_accepted`,
   `sign_in_handoff_stopped`, `sign_in_handoff_failed`. A successful `cancel` reports `failed` from
@@ -67,8 +68,8 @@ Records: `ClientSignUpFlow`, `VisitorSignUpFlow` (and `OperatorSignUpFlow`, whic
 - Cancel is allowed before `FINALIZING` only (`adr/sign-up-cycle-cancellation-retention.md`).
   `FINALIZING`, `FINALIZED`, and `SIGN_IN_HANDOFF_PENDING` have only `FAILED` (and the next phase)
   as outbound edges; they have no `EXPIRED` edge.
-- `clear_requirement` rejects a mismatched `checkpoint_version` as `invalid_transition` with
-  message "checkpoint is stale".
+- `clear_requirement` rejects a mismatched `checkpoint_version` as `invalid_transition` with message
+  "checkpoint is stale".
 - `SignUpTermination` drives `cancel`, `expire`, and `fail`, then schedules retention and artifact
   cleanup. `SignUpExpiryJob` sweeps in-progress rows past `expires_at`.
 
@@ -78,9 +79,9 @@ Records: `ClientSignOutFlow`, `VisitorSignOutFlow`, `OperatorSignOutFlow` with `
 
 - Statuses: `NOTHING`, `REQUESTED`, `ACCESS_DISCARDED`, `LOGICALLY_REVOKED`, `AWAITING_EXPIRY`,
   `COMPLETED`, `FAILED`. Kinds: `IDP_SIGN_OUT`, `RP_INITIATED`, `SESSION_REVOKE`.
-- The current-session logout runs every phase in one request. Any exception marks the flow
-  `FAILED` and re-raises. A completed flow for the same token within five minutes short-circuits a
-  repeated logout.
+- The current-session logout runs every phase in one request. Any exception marks the flow `FAILED`
+  and re-raises. A completed flow for the same token within five minutes short-circuits a repeated
+  logout.
 - There is no cancellation phase. Not submitting the confirmation page simply never starts a flow.
 - The sign-out Mermaid diagrams are marked deprecated and name `TOKEN_REVOKED` where runtime uses
   `LOGICALLY_REVOKED`.
@@ -100,11 +101,11 @@ derivable from one status column is an implementation decision.
 
 ### Terminal states
 
-| State       | Entered by | Meaning                                                                         |
-| ----------- | ---------- | ------------------------------------------------------------------------------- |
-| `COMPLETED` | `complete` | The flow finished normally.                                                     |
-| `CANCELLED` | `cancel`   | The user explicitly ended the flow.                                             |
-| `EXPIRED`   | `expire`   | The authoritative clock or TTL ended the flow.                                  |
+| State       | Entered by | Meaning                                                                          |
+| ----------- | ---------- | -------------------------------------------------------------------------------- |
+| `COMPLETED` | `complete` | The flow finished normally.                                                      |
+| `CANCELLED` | `cancel`   | The user explicitly ended the flow.                                              |
+| `EXPIRED`   | `expire`   | The authoritative clock or TTL ended the flow.                                   |
 | `HALTED`    | `halt`     | The system irreversibly ended the flow for safety, integrity, or policy reasons. |
 
 Terminal states are absorbing. A request against a terminal flow can only observe it; it cannot
@@ -118,7 +119,7 @@ return it to `ACTIVE` or move it to a different terminal state. A new attempt is
 | `advance`         | User request or orchestrator   | Moves to a later phase after the current phase is satisfied.     |
 | `back`            | User request                   | Moves to an earlier phase only along an explicitly allowed edge. |
 | `cancel`          | User only                      | `ACTIVE` to `CANCELLED`.                                         |
-| `external_result` | External boundary via callback | Feeds a correlated external result into the flow.               |
+| `external_result` | External boundary via callback | Feeds a correlated external result into the flow.                |
 | `complete`        | Orchestrator only              | `ACTIVE` to `COMPLETED` when completion conditions hold.         |
 | `expire`          | Authoritative clock            | `ACTIVE` to `EXPIRED`.                                           |
 | `halt`            | System only, with reason code  | `ACTIVE` to `HALTED`.                                            |
@@ -149,15 +150,15 @@ cleanup, and physical deletion are separate retention steps that may follow.
 
 ### Outcomes
 
-| Outcome    | Meaning                                                | Lifecycle effect |
-| ---------- | ------------------------------------------------------ | ---------------- |
-| `advanced` | The event was accepted.                                 | As per the event |
-| `rejected` | The operation was not accepted.                         | Unchanged        |
-| `conflict` | The request was based on non-authoritative state.       | Unchanged        |
-| `replay`   | The request repeated already-processed work.            | Unchanged        |
+| Outcome    | Meaning                                           | Lifecycle effect |
+| ---------- | ------------------------------------------------- | ---------------- |
+| `advanced` | The event was accepted.                           | As per the event |
+| `rejected` | The operation was not accepted.                   | Unchanged        |
+| `conflict` | The request was based on non-authoritative state. | Unchanged        |
+| `replay`   | The request repeated already-processed work.      | Unchanged        |
 
-An outcome is never a lifecycle state. A rejected credential leaves the flow `ACTIVE`; a halted
-flow is `HALTED` regardless of how the triggering request is reported.
+An outcome is never a lifecycle state. A rejected credential leaves the flow `ACTIVE`; a halted flow
+is `HALTED` regardless of how the triggering request is reported.
 
 ## Examples
 
@@ -167,27 +168,27 @@ flow is `HALTED` regardless of how the triggering request is reported.
   then the MFA page renders again. No challenge is re-issued unless the phase defines that.
 - **Reload after TTL.** Reentry evaluates expiry first, fires `expire`, and the flow becomes
   `EXPIRED`. The user is told to start again.
-- **Double-submitted cancel.** The first request cancels; the second is replay and returns the
-  same observation without re-running cleanup.
+- **Double-submitted cancel.** The first request cancels; the second is replay and returns the same
+  observation without re-running cleanup.
 - **Two tabs at checkpoint.** Tab A clears the passkey requirement and the checkpoint version
-  increments. Tab B submits the old version. Tab B gets `conflict` with `reason_code =
-  stale_version`; tab A's work stands, and tab B reenters the current checkpoint.
+  increments. Tab B submits the old version. Tab B gets `conflict` with
+  `reason_code = stale_version`; tab A's work stands, and tab B reenters the current checkpoint.
 - **Finalize raced by a second request.** The row lock admits one finalization. The second request
   is `conflict` (or `replay` when it is the same request) and creates no second identity graph.
 
 ### Cancellation versus halt
 
-| Situation                                                      | Target classification                                 |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| User presses cancel on pending MFA                             | `cancel`, `CANCELLED`                                 |
-| User cancels on the session-limit page                         | `cancel`, `CANCELLED`                                 |
-| Sign-in while the actor's waiting slot is occupied (decided 2026-10-16, pending) | `halt(policy_terminal_block)`, `HALTED` |
-| OTP attempts exhausted and the flow is locked                  | `halt(credential_locked)`, `HALTED`                   |
-| Guardrail forbids continuation                                 | `halt(policy_terminal_block)`, `HALTED`               |
-| Wrong OTP, attempts remain                                     | `rejected`, still `ACTIVE`                            |
-| Provider returned a transient error                            | `rejected` or unchanged, still `ACTIVE` until TTL     |
-| Database timeout during a transition                           | Unchanged; the transaction rolls back                 |
-| Integrity check fails during sign-up finalization              | `halt(integrity_violation)`, `HALTED`                 |
+| Situation                                                                        | Target classification                             |
+| -------------------------------------------------------------------------------- | ------------------------------------------------- |
+| User presses cancel on pending MFA                                               | `cancel`, `CANCELLED`                             |
+| User cancels on the session-limit page                                           | `cancel`, `CANCELLED`                             |
+| Sign-in while the actor's waiting slot is occupied (decided 2026-10-16, pending) | `halt(policy_terminal_block)`, `HALTED`           |
+| OTP attempts exhausted and the flow is locked                                    | `halt(credential_locked)`, `HALTED`               |
+| Guardrail forbids continuation                                                   | `halt(policy_terminal_block)`, `HALTED`           |
+| Wrong OTP, attempts remain                                                       | `rejected`, still `ACTIVE`                        |
+| Provider returned a transient error                                              | `rejected` or unchanged, still `ACTIVE` until TTL |
+| Database timeout during a transition                                             | Unchanged; the transaction rolls back             |
+| Integrity check fails during sign-up finalization                                | `halt(integrity_violation)`, `HALTED`             |
 
 ## external_result Contract
 
@@ -233,8 +234,8 @@ variants live only in the payload.
 
 - Transitions are decided under the flow row lock against re-read state, so the decision and the
   write are serialized, not only the write.
-- An authoritative transition is never overwritten by a request based on earlier state; that
-  request is `conflict`.
+- An authoritative transition is never overwritten by a request based on earlier state; that request
+  is `conflict`.
 - Version-guarded phases (such as checkpoint) reject a mismatched version as `conflict` with
   `stale_version`.
 
@@ -283,15 +284,15 @@ Decision: `adr/idp-flow-state-machine-lifecycle.md`. Current facts were observed
 
 ### Current storage
 
-| Flow table (database)                 | State column          | Reference table                     | FK                        | Duplicate representation                           |
-| ------------------------------------- | --------------------- | ----------------------------------- | ------------------------- | -------------------------------------------------- |
-| `*_sign_in_flows` (app/com/org_ticket) | `status_id` default 10 | `*_sign_in_flow_statuses` (`id` only) | `NOT VALID`, no action    | `state`, `step` strings tied by `NOT VALID` `CHECK` |
-| `*_sign_up_flows` (app/com/org_ticket) | `status_id` default 10 | `*_sign_up_flow_statuses` (`id` only) | `NOT VALID`, `ON DELETE RESTRICT` (client, visitor); no action (operator) | `state`, `step` strings, no `CHECK`                 |
-| `*_sign_out_flows` (app/com/org_ticket) | `status_id` default 10 | `*_sign_out_flow_statuses` (`id` only) | `NOT VALID`, no action    | none                                               |
+| Flow table (database)                    | State column           | Reference table                        | FK                                                                        | Duplicate representation                            |
+| ---------------------------------------- | ---------------------- | -------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------- |
+| `*_sign_in_flows` (app/com/op_base_org)  | `status_id` default 10 | `*_sign_in_flow_statuses` (`id` only)  | `NOT VALID`, no action                                                    | `state`, `step` strings tied by `NOT VALID` `CHECK` |
+| `*_sign_up_flows` (app/com/op_base_org)  | `status_id` default 10 | `*_sign_up_flow_statuses` (`id` only)  | `NOT VALID`, `ON DELETE RESTRICT` (client, visitor); no action (operator) | `state`, `step` strings, no `CHECK`                 |
+| `*_sign_out_flows` (app/com/op_base_org) | `status_id` default 10 | `*_sign_out_flow_statuses` (`id` only) | `NOT VALID`, no action                                                    | none                                                |
 
 Reference rows: sign-up rows are inserted by request-path `ensure_defaults!` calls; no migration
-inserts flow status rows; a provisioning path for sign-in and sign-out rows was not located.
-Direct `status_id` assignments exist outside the state machines (sign-up OTP controllers,
+inserts flow status rows; a provisioning path for sign-in and sign-out rows was not located. Direct
+`status_id` assignments exist outside the state machines (sign-up OTP controllers,
 `sign_up_sequence_controller_support`, sign-up finalizer operations, `SignUpTermination`).
 
 ### Target storage
@@ -300,19 +301,19 @@ Direct `status_id` assignments exist outside the state machines (sign-up OTP con
   with a validated FK to its own `*_flow_states` reference table in the same database.
 - The reference table has only `id`. No name, code, label, lifecycle, terminal flag, ordering,
   enablement, or timestamps. Runtime never joins it.
-- Meaning comes from per-flow application constants and the tables below. No lifecycle column and
-  no lifecycle-plus-phase FK pair.
-- Rows are inserted by migrations, idempotently, before the FK is validated. Seeds and request
-  code do not provision them.
+- Meaning comes from per-flow application constants and the tables below. No lifecycle column and no
+  lifecycle-plus-phase FK pair.
+- Rows are inserted by migrations, idempotently, before the FK is validated. Seeds and request code
+  do not provision them.
 - Flow state tables do not use the `NOTHING = 0` sentinel; the default is the start state.
 
 ### Integrity layers
 
-| Layer                     | Guarantees                                          | Does not guarantee                    |
-| ------------------------- | --------------------------------------------------- | ------------------------------------- |
-| FK to reference table     | State-domain integrity: no unknown state id stored. | Transition legality (for example `STARTED -> COMPLETED`). |
+| Layer                     | Guarantees                                                | Does not guarantee                                                              |
+| ------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| FK to reference table     | State-domain integrity: no unknown state id stored.       | Transition legality (for example `STARTED -> COMPLETED`).                       |
 | Application state machine | Transition legality: from-state, event, to-state, guards. | Nothing at the DB level; bypass is prevented by forbidding direct state writes. |
-| DB triggers               | Not used for transitions.                           |                                       |
+| DB triggers               | Not used for transitions.                                 |                                                                                 |
 
 ### State id contract
 
@@ -329,27 +330,27 @@ Direct `status_id` assignments exist outside the state machines (sign-up OTP con
 | `HALTED`        | `930` | absent        | absent                       | absent                 | absent         |
 | legacy `FAILED` | `900` | present       | present                      | absent                 | present        |
 
-`900` stays reserved for legacy `FAILED` and is never reassigned. Active phases use ids below
-`900`, never `100`. A renumbering such as `900 COMPLETED / 910 CANCELLED / 920 EXPIRED` is
-forbidden because it would change the meaning of existing ids.
+`900` stays reserved for legacy `FAILED` and is never reassigned. Active phases use ids below `900`,
+never `100`. A renumbering such as `900 COMPLETED / 910 CANCELLED / 920 EXPIRED` is forbidden
+because it would change the meaning of existing ids.
 
 ### Current active phase ids
 
-| Id  | Sign-in                    | Sign-up client/visitor    | Sign-up operator     | Sign-out            |
-| --- | -------------------------- | ------------------------- | -------------------- | ------------------- |
-| 0   |                            |                           |                      | `NOTHING` (retire to tombstone) |
-| 10  | `PRIMARY_PENDING`          | `STARTED`                 | `STARTED`            | `REQUESTED`         |
-| 20  | `MFA_PENDING`              | `CONTACT_PENDING`         | `CONTACT_PENDING`    | `ACCESS_DISCARDED`  |
-| 30  | `SESSION_LIMIT_PENDING`    | `CREDENTIAL_PENDING`      | `CREDENTIAL_PENDING` | `LOGICALLY_REVOKED` |
-| 35  |                            | `CONTACT_VERIFIED`        |                      |                     |
-| 36  |                            | `SOCIAL_CALLBACK_PENDING` |                      |                     |
-| 38  |                            | `GUARDRAIL_PENDING`       |                      |                     |
-| 40  | `GUARDRAIL_PENDING`        | `CHECKPOINT_PENDING`      | `CHECKPOINT_PENDING` | `AWAITING_EXPIRY`   |
-| 50  | `SESSION_ISSUANCE_PENDING` |                           |                      |                     |
-| 60  | `CHECKPOINT_PENDING`       | `FINALIZING`              |                      |                     |
-| 65  | `SELECTOR_PENDING`         |                           |                      |                     |
-| 70  | `DASHBOARD_PENDING` (retire) | `FINALIZED`             |                      |                     |
-| 80  | `RETURN_PENDING` (retire)  | `SIGN_IN_HANDOFF_PENDING` |                      |                     |
+| Id  | Sign-in                      | Sign-up client/visitor    | Sign-up operator     | Sign-out                        |
+| --- | ---------------------------- | ------------------------- | -------------------- | ------------------------------- |
+| 0   |                              |                           |                      | `NOTHING` (retire to tombstone) |
+| 10  | `PRIMARY_PENDING`            | `STARTED`                 | `STARTED`            | `REQUESTED`                     |
+| 20  | `MFA_PENDING`                | `CONTACT_PENDING`         | `CONTACT_PENDING`    | `ACCESS_DISCARDED`              |
+| 30  | `SESSION_LIMIT_PENDING`      | `CREDENTIAL_PENDING`      | `CREDENTIAL_PENDING` | `LOGICALLY_REVOKED`             |
+| 35  |                              | `CONTACT_VERIFIED`        |                      |                                 |
+| 36  |                              | `SOCIAL_CALLBACK_PENDING` |                      |                                 |
+| 38  |                              | `GUARDRAIL_PENDING`       |                      |                                 |
+| 40  | `GUARDRAIL_PENDING`          | `CHECKPOINT_PENDING`      | `CHECKPOINT_PENDING` | `AWAITING_EXPIRY`               |
+| 50  | `SESSION_ISSUANCE_PENDING`   |                           |                      |                                 |
+| 60  | `CHECKPOINT_PENDING`         | `FINALIZING`              |                      |                                 |
+| 65  | `SELECTOR_PENDING`           |                           |                      |                                 |
+| 70  | `DASHBOARD_PENDING` (retire) | `FINALIZED`               |                      |                                 |
+| 80  | `RETURN_PENDING` (retire)    | `SIGN_IN_HANDOFF_PENDING` |                      |                                 |
 
 These ids keep their meaning in the target. New phases take unused ids below `900`.
 
@@ -366,39 +367,39 @@ These ids keep their meaning in the target. New phases take unused ids below `90
 
 Mappings marked "case by case" depend on the call site. No runtime rename is implied.
 
-| Current term                                     | Where                                      | Category today        | Target                                                                                       |
-| ------------------------------------------------ | ------------------------------------------ | --------------------- | -------------------------------------------------------------------------------------------- |
-| `*_PENDING`, `STARTED`, `CONTACT_VERIFIED`, `FINALIZING`, `FINALIZED`, `REQUESTED`, `ACCESS_DISCARDED`, `LOGICALLY_REVOKED`, `AWAITING_EXPIRY` | flow statuses | Status | Phase under `ACTIVE` |
-| `NOTHING`                                        | sign-out status                            | Status sentinel       | Not a lifecycle state; pre-`start`; id `0` kept as unreachable tombstone                     |
-| `status_id`                                      | all flow tables                            | Column                | `state_id` (target terminology; rename decided in the plan)                                  |
-| `*_flow_statuses`                                | reference tables                           | Table                 | `*_flow_states` (target terminology; rename decided in the plan)                             |
-| `DASHBOARD_PENDING`, `RETURN_PENDING`            | sign-in status                             | Legacy status         | Retire; post-auth navigation is not lifecycle                                                |
-| `COMPLETED`                                      | all flows                                  | Status                | `COMPLETED`                                                                                  |
-| `CANCELLED`                                      | sign-up status                             | Status                | `CANCELLED`                                                                                  |
-| `EXPIRED`                                        | sign-up status                             | Status                | `EXPIRED`                                                                                    |
-| `EXPIRED`, `CANCELLED`                           | sign-in Mermaid only                       | Diagram state         | Target states; not in sign-in runtime                                                        |
-| `FAILED` via user cancel (MFA, session limit)    | sign-in                                    | Status                | `CANCELLED`                                                                                  |
-| `FAILED` via `session_limit_hard_reject`         | sign-in                                    | Status                | `HALTED`, `policy_terminal_block`                                                            |
-| `FAILED` via `fail` event                        | sign-up                                    | Status                | Case by case: `HALTED` when unrecoverable; otherwise `rejected` with flow kept `ACTIVE`      |
-| `FAILED` via exception during logout             | sign-out                                   | Status                | Case by case: operational failure is not `HALTED`; open question in the plan                 |
-| `fail`, `fail_sign_in!`, `fail_sign_out!`        | events and methods                         | Event                 | `cancel` or `halt` by cause; never a canonical event                                         |
-| `failure`, `credential_failed`                   | `SignInResult`                             | Outcome               | `rejected` with a reason code                                                                |
-| `credential_rejected`, `identity_unavailable`, `invalid_request` | `SignInResult`             | Outcome               | `rejected` with a reason code                                                                |
-| `session_limit_hard_reject`, `guardrail_blocked`, `login_forbidden` | `SignInResult`          | Outcome               | Reason code; `halt` when the flow cannot continue                                            |
-| `transaction_expired`                            | `SignInResult`                             | Outcome               | Observation of `EXPIRED`; reason code                                                        |
-| `blocked`                                        | `SignUpResult`                             | Outcome               | `rejected` (precondition not met)                                                            |
-| `invalid_transition`                             | `SignUpResult`                             | Outcome               | `rejected`, or `conflict` when caused by state mismatch                                      |
-| "checkpoint is stale"                            | `SignUpStateMachine` message               | Reason detail         | `conflict` with `stale_version`                                                              |
-| `failed` result of a successful `cancel`         | `SignUpStateMachine`                       | Outcome (mislabelled) | Observation of `CANCELLED`                                                                   |
-| `stopped`, `sign_in_handoff_stopped`             | sign-up handoff                            | Outcome               | Sign-in phase observation; not a sign-up state. `stopped` is retired                         |
-| `sign_in_handoff_failed`                         | sign-up handoff                            | Outcome               | Sign-in outcome; sign-up side is undefined today (see plan)                                  |
-| `locked` OTP or credential                       | ceremonies                                 | Resource condition    | Condition; `halt(credential_locked)` when the flow cannot continue                           |
-| retry                                            | docs                                       | Prose                 | New `advance` attempt, or `replay`, depending on meaning                                     |
-| stale                                            | docs and messages                          | Prose                 | `conflict`; `stale_version` reason code                                                      |
-| reenter, re-entry                                | docs                                       | Prose                 | `reentry`                                                                                    |
-| social or provider callback success or failure   | callbacks                                  | Prose                 | `external_result` with `outcome` in the payload                                              |
-| suspended (`SignUpSuspension`)                   | registration kill switch                   | Surface availability  | Not lifecycle; a `start` precondition                                                        |
-| canceled (American spelling)                     | step-up ceremony transaction               | Ceremony status       | Out of scope; separate ceremony lifecycle                                                    |
+| Current term                                                                                                                                   | Where                        | Category today        | Target                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | --------------------- | --------------------------------------------------------------------------------------- |
+| `*_PENDING`, `STARTED`, `CONTACT_VERIFIED`, `FINALIZING`, `FINALIZED`, `REQUESTED`, `ACCESS_DISCARDED`, `LOGICALLY_REVOKED`, `AWAITING_EXPIRY` | flow statuses                | Status                | Phase under `ACTIVE`                                                                    |
+| `NOTHING`                                                                                                                                      | sign-out status              | Status sentinel       | Not a lifecycle state; pre-`start`; id `0` kept as unreachable tombstone                |
+| `status_id`                                                                                                                                    | all flow tables              | Column                | `state_id` (target terminology; rename decided in the plan)                             |
+| `*_flow_statuses`                                                                                                                              | reference tables             | Table                 | `*_flow_states` (target terminology; rename decided in the plan)                        |
+| `DASHBOARD_PENDING`, `RETURN_PENDING`                                                                                                          | sign-in status               | Legacy status         | Retire; post-auth navigation is not lifecycle                                           |
+| `COMPLETED`                                                                                                                                    | all flows                    | Status                | `COMPLETED`                                                                             |
+| `CANCELLED`                                                                                                                                    | sign-up status               | Status                | `CANCELLED`                                                                             |
+| `EXPIRED`                                                                                                                                      | sign-up status               | Status                | `EXPIRED`                                                                               |
+| `EXPIRED`, `CANCELLED`                                                                                                                         | sign-in Mermaid only         | Diagram state         | Target states; not in sign-in runtime                                                   |
+| `FAILED` via user cancel (MFA, session limit)                                                                                                  | sign-in                      | Status                | `CANCELLED`                                                                             |
+| `FAILED` via `session_limit_hard_reject`                                                                                                       | sign-in                      | Status                | `HALTED`, `policy_terminal_block`                                                       |
+| `FAILED` via `fail` event                                                                                                                      | sign-up                      | Status                | Case by case: `HALTED` when unrecoverable; otherwise `rejected` with flow kept `ACTIVE` |
+| `FAILED` via exception during logout                                                                                                           | sign-out                     | Status                | Case by case: operational failure is not `HALTED`; open question in the plan            |
+| `fail`, `fail_sign_in!`, `fail_sign_out!`                                                                                                      | events and methods           | Event                 | `cancel` or `halt` by cause; never a canonical event                                    |
+| `failure`, `credential_failed`                                                                                                                 | `SignInResult`               | Outcome               | `rejected` with a reason code                                                           |
+| `credential_rejected`, `identity_unavailable`, `invalid_request`                                                                               | `SignInResult`               | Outcome               | `rejected` with a reason code                                                           |
+| `session_limit_hard_reject`, `guardrail_blocked`, `login_forbidden`                                                                            | `SignInResult`               | Outcome               | Reason code; `halt` when the flow cannot continue                                       |
+| `transaction_expired`                                                                                                                          | `SignInResult`               | Outcome               | Observation of `EXPIRED`; reason code                                                   |
+| `blocked`                                                                                                                                      | `SignUpResult`               | Outcome               | `rejected` (precondition not met)                                                       |
+| `invalid_transition`                                                                                                                           | `SignUpResult`               | Outcome               | `rejected`, or `conflict` when caused by state mismatch                                 |
+| "checkpoint is stale"                                                                                                                          | `SignUpStateMachine` message | Reason detail         | `conflict` with `stale_version`                                                         |
+| `failed` result of a successful `cancel`                                                                                                       | `SignUpStateMachine`         | Outcome (mislabelled) | Observation of `CANCELLED`                                                              |
+| `stopped`, `sign_in_handoff_stopped`                                                                                                           | sign-up handoff              | Outcome               | Sign-in phase observation; not a sign-up state. `stopped` is retired                    |
+| `sign_in_handoff_failed`                                                                                                                       | sign-up handoff              | Outcome               | Sign-in outcome; sign-up side is undefined today (see plan)                             |
+| `locked` OTP or credential                                                                                                                     | ceremonies                   | Resource condition    | Condition; `halt(credential_locked)` when the flow cannot continue                      |
+| retry                                                                                                                                          | docs                         | Prose                 | New `advance` attempt, or `replay`, depending on meaning                                |
+| stale                                                                                                                                          | docs and messages            | Prose                 | `conflict`; `stale_version` reason code                                                 |
+| reenter, re-entry                                                                                                                              | docs                         | Prose                 | `reentry`                                                                               |
+| social or provider callback success or failure                                                                                                 | callbacks                    | Prose                 | `external_result` with `outcome` in the payload                                         |
+| suspended (`SignUpSuspension`)                                                                                                                 | registration kill switch     | Surface availability  | Not lifecycle; a `start` precondition                                                   |
+| canceled (American spelling)                                                                                                                   | step-up ceremony transaction | Ceremony status       | Out of scope; separate ceremony lifecycle                                               |
 
 ## Related
 
@@ -419,10 +420,10 @@ It does not replace the credential-family authority objects or make browser hist
 event.
 
 For local sign-in flows that use the shared sign-in flow row, the server-generated phase binding
-contains the flow public identifier, the expected phase, an immutable flow-generation value, and
-the surface. It is purpose-bound and signed by the application. The binding does not expose the
-locator nonce, a raw database id, or a client-chosen phase. The flow row, actor binding, expiry,
-and session-issuance boundary remain authoritative; the binding is an additional admission check.
+contains the flow public identifier, the expected phase, an immutable flow-generation value, and the
+surface. It is purpose-bound and signed by the application. The binding does not expose the locator
+nonce, a raw database id, or a client-chosen phase. The flow row, actor binding, expiry, and
+session-issuance boundary remain authoritative; the binding is an additional admission check.
 
 Same-phase reload and re-entry are allowed. A GET or HEAD request whose binding is missing,
 malformed, expired, for another surface or flow, or for a different phase is refused with HTTP
@@ -434,24 +435,23 @@ observation and is not a lifecycle transition.
 For a state-changing request that was bound to an attributable flow instance but assumes a phase
 that is no longer authoritative, the server locks and reloads that original flow and applies the
 system-only `halt` transition with reason `phase_regression` or `phase_violation`. The flow enters
-`HALTED = 930`; the terminal state is absorbing, cannot be revived or moved to another terminal,
-and cannot issue a session, OTP, challenge, or provider transaction. A request from old flow A
-must never halt the current flow B. A missing or invalid binding is refused without using the
-current session locator as a substitute authority.
+`HALTED = 930`; the terminal state is absorbing, cannot be revived or moved to another terminal, and
+cannot issue a session, OTP, challenge, or provider transaction. A request from old flow A must
+never halt the current flow B. A missing or invalid binding is refused without using the current
+session locator as a substitute authority.
 
-The existing Auth ceremony/Base session-issuance boundary is unchanged. Email OTP, passkey,
-MFA, and the local app/com sign-in routes use this binding where a local `SignInFlow` is the
-authoritative phase object. Social callbacks, org Entra, and other credential families retain
-their existing provider state or concrete ceremony transaction as the primary authority when no
-local sign-in flow is present; they are not forced into a universal flow object. The existing
-`commit_login_session!` and `lock_sign_in_flow_for_issuance!` checks remain the final session
-issuance boundary.
+The existing Auth ceremony/Base session-issuance boundary is unchanged. Email OTP, passkey, MFA, and
+the local app/com sign-in routes use this binding where a local `SignInFlow` is the authoritative
+phase object. Social callbacks, org Entra, and other credential families retain their existing
+provider state or concrete ceremony transaction as the primary authority when no local sign-in flow
+is present; they are not forced into a universal flow object. The existing `commit_login_session!`
+and `lock_sign_in_flow_for_issuance!` checks remain the final session issuance boundary.
 
 This amendment covers the runtime paths and tests changed in the current implementation slice.
 Untouched ceremony axes remain governed by their existing concrete authority until their own
 implementation slice is completed. The acceptance criteria in
-`docs/checklists/authentication-flow-integrity.md` define the observable contract; a test result
-or implementation report is evidence for a particular revision, not a permanent pass.
+`docs/checklists/authentication-flow-integrity.md` define the observable contract; a test result or
+implementation report is evidence for a particular revision, not a permanent pass.
 
 ## Delivered reconciliation (2026-10-06)
 

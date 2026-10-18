@@ -16,44 +16,31 @@ module PublishingManagementArchivesActions
   include ::PublishingManagementCell
 
   def create
-    entry = find_nested_management_entry!
-    authorize_publishing!(entry, to: :update?)
     form = Publishing::ArchiveEntryForm.new(archive_form_attributes)
-
     unless form.valid?
+      entry = find_nested_management_entry!
+      return unless entry
+
       render_show_failure(entry, errors: form.message_hash)
       return
     end
 
-    result = Publishing::ArchiveEntryOperation.call(
-      entry: entry,
-      reason: form.reason,
-      operator_public_id: operator_public_id,
-    )
-
-    unless result.ok?
-      render_show_failure(publishing_entries_query.find!(public_id: entry.public_id), errors: result.errors)
-      return
-    end
-
-    redirect_to(entry_path(entry, action: :show), status: :see_other)
+    finish_archive_command(publishing_authority.archive(params.expect(:entry_id), { archive: { reason: form.reason } }))
   end
 
   def destroy
-    entry = find_nested_management_entry!
-    authorize_publishing!(entry, to: :update?)
-
-    result = Publishing::UnarchiveEntryOperation.call(entry: entry, operator_public_id: operator_public_id)
-
-    unless result.ok?
-      render_show_failure(publishing_entries_query.find!(public_id: entry.public_id), errors: result.errors)
-      return
-    end
-
-    redirect_to(entry_path(entry, action: :show), status: :see_other)
+    finish_archive_command(publishing_authority.unarchive(params.expect(:entry_id)))
   end
 
   private
+
+  def finish_archive_command(response)
+    result = authority_result!(response)
+    return unless result
+    return render_show_failure(result.data.fetch("entry"), errors: result.errors) if result.status == :unprocessable
+
+    redirect_to(entry_path(result.data.fetch("entry"), action: :show), status: :see_other)
+  end
 
   def archive_form_attributes
     return {} if params[:archive].blank?

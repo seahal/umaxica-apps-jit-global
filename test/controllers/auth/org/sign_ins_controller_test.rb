@@ -1554,8 +1554,8 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
   def authorize_params
     {
       response_type: "code",
-      client_id: "core-org",
-      redirect_uri: OidcClientRegistry.find!("core-org").redirect_uris.first,
+      client_id: "core-org-jp",
+      redirect_uri: OidcClientRegistry.find!("core-org-jp").redirect_uris.first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",

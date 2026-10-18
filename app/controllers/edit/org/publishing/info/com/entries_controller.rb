@@ -13,7 +13,6 @@ module Edit
             declare_authentication_mode! :private
             PUBLISHING_SURFACE = "info"
             PUBLISHING_AUDIENCE = "com"
-            ENTRY_CLASS = ::Publishing::Info::Com::Entry
 
             public
 

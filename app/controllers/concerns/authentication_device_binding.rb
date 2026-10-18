@@ -12,7 +12,7 @@ module AuthenticationDeviceBinding
     device_session = find_device_session_by_public_id(session_identifier)
     return unless device_session
 
-    token_class.currently_usable_at.where(device_session_id: device_session.id).order(created_at: :desc).first
+    token_class.active_status.where(device_session_id: device_session.id).order(created_at: :desc).first
   end
 
   def find_device_session_by_public_id(public_id)

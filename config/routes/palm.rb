@@ -42,8 +42,12 @@ scope module: :palm, as: :palm do
       end
 
       # Authorization-code callback for the Palm browser RP.
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace :oidc do
         resource :callback, only: :show
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource :backchannel_logout, only: :create, path: "backchannel-logout"
       end
 
       # Neutral Browser RP entry: GET renders the page, POST starts the server-owned flow.

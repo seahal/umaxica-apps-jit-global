@@ -10,7 +10,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @client = OidcClientRegistry.find!("core-app")
+    @client = OidcClientRegistry.find!("core-app-jp")
     @user = clients(:one)
     @token = ClientToken.create!(
       user: @user,
@@ -54,7 +54,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f0_client_id =
                 case f0_family
                 when "base" then "base-#{f0_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f0_family}-#{f0_surface}"
                 end
               f0_token = ClientToken.includes(
@@ -65,14 +65,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f0_key = [f0_client.client_id, f0_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f0_key] && f0_token.currently_usable? &&
-                  !(f0_token.device_session_id && ClientRpSession.exists?(
+                  !(f0_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f0_token.device_session_id,
                     oidc_client_id: f0_client.client_id,
                     revoked_at: nil,
                   ))
                 f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
-                f0_session = ClientRpSession.create!(
+                f0_session = OpAppGrant.create!(
                   client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                   refresh_token_expires_at: f0_now + 10.minutes,
@@ -140,7 +140,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f1_client_id =
                 case f1_family
                 when "base" then "base-#{f1_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f1_family}-#{f1_surface}"
                 end
               f1_token = ClientToken.includes(
@@ -151,14 +151,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f1_key = [f1_client.client_id, f1_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f1_key] && f1_token.currently_usable? &&
-                  !(f1_token.device_session_id && ClientRpSession.exists?(
+                  !(f1_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f1_token.device_session_id,
                     oidc_client_id: f1_client.client_id,
                     revoked_at: nil,
                   ))
                 f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
-                f1_session = ClientRpSession.create!(
+                f1_session = OpAppGrant.create!(
                   client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                   refresh_token_expires_at: f1_now + 10.minutes,
@@ -228,7 +228,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f2_client_id =
                 case f2_family
                 when "base" then "base-#{f2_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f2_family}-#{f2_surface}"
                 end
               f2_token = ClientToken.includes(
@@ -239,14 +239,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f2_key = [f2_client.client_id, f2_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f2_key] && f2_token.currently_usable? &&
-                  !(f2_token.device_session_id && ClientRpSession.exists?(
+                  !(f2_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f2_token.device_session_id,
                     oidc_client_id: f2_client.client_id,
                     revoked_at: nil,
                   ))
                 f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                 f2_now = Time.current
-                f2_session = ClientRpSession.create!(
+                f2_session = OpAppGrant.create!(
                   client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                   refresh_token_expires_at: f2_now + 10.minutes,
@@ -318,7 +318,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f3_client_id =
                 case f3_family
                 when "base" then "base-#{f3_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f3_family}-#{f3_surface}"
                 end
               f3_token = ClientToken.includes(
@@ -329,14 +329,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f3_key = [f3_client.client_id, f3_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f3_key] && f3_token.currently_usable? &&
-                  !(f3_token.device_session_id && ClientRpSession.exists?(
+                  !(f3_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f3_token.device_session_id,
                     oidc_client_id: f3_client.client_id,
                     revoked_at: nil,
                   ))
                 f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                 f3_now = Time.current
-                f3_session = ClientRpSession.create!(
+                f3_session = OpAppGrant.create!(
                   client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                   refresh_token_expires_at: f3_now + 10.minutes,
@@ -404,7 +404,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f4_client_id =
                 case f4_family
                 when "base" then "base-#{f4_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f4_family}-#{f4_surface}"
                 end
               f4_token = ClientToken.includes(
@@ -415,14 +415,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f4_key = [f4_client.client_id, f4_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f4_key] && f4_token.currently_usable? &&
-                  !(f4_token.device_session_id && ClientRpSession.exists?(
+                  !(f4_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f4_token.device_session_id,
                     oidc_client_id: f4_client.client_id,
                     revoked_at: nil,
                   ))
                 f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                 f4_now = Time.current
-                f4_session = ClientRpSession.create!(
+                f4_session = OpAppGrant.create!(
                   client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                   refresh_token_expires_at: f4_now + 10.minutes,
@@ -490,7 +490,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f5_client_id =
                 case f5_family
                 when "base" then "base-#{f5_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f5_family}-#{f5_surface}"
                 end
               f5_token = ClientToken.includes(
@@ -501,14 +501,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f5_key = [f5_client.client_id, f5_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f5_key] && f5_token.currently_usable? &&
-                  !(f5_token.device_session_id && ClientRpSession.exists?(
+                  !(f5_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f5_token.device_session_id,
                     oidc_client_id: f5_client.client_id,
                     revoked_at: nil,
                   ))
                 f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                 f5_now = Time.current
-                f5_session = ClientRpSession.create!(
+                f5_session = OpAppGrant.create!(
                   client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                   refresh_token_expires_at: f5_now + 10.minutes,
@@ -573,7 +573,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f6_client_id =
                 case f6_family
                 when "base" then "base-#{f6_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f6_family}-#{f6_surface}"
                 end
               f6_token = ClientToken.includes(
@@ -584,14 +584,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f6_key = [f6_client.client_id, f6_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f6_key] && f6_token.currently_usable? &&
-                  !(f6_token.device_session_id && ClientRpSession.exists?(
+                  !(f6_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f6_token.device_session_id,
                     oidc_client_id: f6_client.client_id,
                     revoked_at: nil,
                   ))
                 f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                 f6_now = Time.current
-                f6_session = ClientRpSession.create!(
+                f6_session = OpAppGrant.create!(
                   client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                   refresh_token_expires_at: f6_now + 10.minutes,
@@ -649,9 +649,9 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "post_logout_redirect_uri registered for another realm never redirects externally" do
-    cross_realm_uri = OidcClientRegistry.find!("core-org").post_logout_redirect_uris.first
+    cross_realm_uri = OidcClientRegistry.find!("core-org-jp").post_logout_redirect_uris.first
 
-    assert_not_nil cross_realm_uri, "core-org should register an org-realm post_logout uri"
+    assert_not_nil cross_realm_uri, "core-org-jp should register an org-realm post_logout uri"
 
     http_headers_23 =
       begin
@@ -670,7 +670,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f7_client_id =
                 case f7_family
                 when "base" then "base-#{f7_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f7_family}-#{f7_surface}"
                 end
               f7_token = ClientToken.includes(
@@ -681,14 +681,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f7_key = [f7_client.client_id, f7_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f7_key] && f7_token.currently_usable? &&
-                  !(f7_token.device_session_id && ClientRpSession.exists?(
+                  !(f7_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f7_token.device_session_id,
                     oidc_client_id: f7_client.client_id,
                     revoked_at: nil,
                   ))
                 f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                 f7_now = Time.current
-                f7_session = ClientRpSession.create!(
+                f7_session = OpAppGrant.create!(
                   client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                   refresh_token_expires_at: f7_now + 10.minutes,
@@ -758,7 +758,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f8_client_id =
                 case f8_family
                 when "base" then "base-#{f8_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f8_family}-#{f8_surface}"
                 end
               f8_token = ClientToken.includes(
@@ -769,14 +769,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f8_key = [f8_client.client_id, f8_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f8_key] && f8_token.currently_usable? &&
-                  !(f8_token.device_session_id && ClientRpSession.exists?(
+                  !(f8_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f8_token.device_session_id,
                     oidc_client_id: f8_client.client_id,
                     revoked_at: nil,
                   ))
                 f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
                 f8_now = Time.current
-                f8_session = ClientRpSession.create!(
+                f8_session = OpAppGrant.create!(
                   client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
                   refresh_token_expires_at: f8_now + 10.minutes,
@@ -829,7 +829,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -856,7 +856,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f9_client_id =
                 case f9_family
                 when "base" then "base-#{f9_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f9_family}-#{f9_surface}"
                 end
               f9_token = ClientToken.includes(
@@ -867,14 +867,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f9_key = [f9_client.client_id, f9_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f9_key] && f9_token.currently_usable? &&
-                  !(f9_token.device_session_id && ClientRpSession.exists?(
+                  !(f9_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f9_token.device_session_id,
                     oidc_client_id: f9_client.client_id,
                     revoked_at: nil,
                   ))
                 f9_token.rotate_refresh_token! unless f9_token.device_session_record.current_refresh_token_id
                 f9_now = Time.current
-                f9_session = ClientRpSession.create!(
+                f9_session = OpAppGrant.create!(
                   client_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f9_now,
                   refresh_token_expires_at: f9_now + 10.minutes,
@@ -927,7 +927,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -953,7 +953,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f10_client_id =
                 case f10_family
                 when "base" then "base-#{f10_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f10_family}-#{f10_surface}"
                 end
               f10_token = ClientToken.includes(
@@ -964,14 +964,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f10_key = [f10_client.client_id, f10_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f10_key] && f10_token.currently_usable? &&
-                  !(f10_token.device_session_id && ClientRpSession.exists?(
+                  !(f10_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f10_token.device_session_id,
                     oidc_client_id: f10_client.client_id,
                     revoked_at: nil,
                   ))
                 f10_token.rotate_refresh_token! unless f10_token.device_session_record.current_refresh_token_id
                 f10_now = Time.current
-                f10_session = ClientRpSession.create!(
+                f10_session = OpAppGrant.create!(
                   client_token: f10_token, oidc_client_id: f10_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f10_now,
                   refresh_token_expires_at: f10_now + 10.minutes,
@@ -1031,7 +1031,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -1058,7 +1058,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                  f11_client_id =
                    case f11_family
                    when "base" then "base-#{f11_surface}-ww"
-                   when "edit" then "edit-org"
+                   when "edit" then "edit-org-ww"
                    else "#{f11_family}-#{f11_surface}"
                    end
                  f11_token = ClientToken.includes(
@@ -1069,14 +1069,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                  f11_key = [f11_client.client_id, f11_token.public_id]
                  @base_browser_rp_credentials ||= {}
                  if !@base_browser_rp_credentials[f11_key] && f11_token.currently_usable? &&
-                     !(f11_token.device_session_id && ClientRpSession.exists?(
+                     !(f11_token.device_session_id && OpAppGrant.exists?(
                        device_session_id: f11_token.device_session_id,
                        oidc_client_id: f11_client.client_id,
                        revoked_at: nil,
                      ))
                    f11_token.rotate_refresh_token! unless f11_token.device_session_record.current_refresh_token_id
                    f11_now = Time.current
-                   f11_session = ClientRpSession.create!(
+                   f11_session = OpAppGrant.create!(
                      client_token: f11_token, oidc_client_id: f11_client.client_id, oidc_scope: "openid profile",
                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f11_now,
                      refresh_token_expires_at: f11_now + 10.minutes,
@@ -1136,7 +1136,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -1164,7 +1164,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                  f12_client_id =
                    case f12_family
                    when "base" then "base-#{f12_surface}-ww"
-                   when "edit" then "edit-org"
+                   when "edit" then "edit-org-ww"
                    else "#{f12_family}-#{f12_surface}"
                    end
                  f12_token = ClientToken.includes(
@@ -1175,14 +1175,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                  f12_key = [f12_client.client_id, f12_token.public_id]
                  @base_browser_rp_credentials ||= {}
                  if !@base_browser_rp_credentials[f12_key] && f12_token.currently_usable? &&
-                     !(f12_token.device_session_id && ClientRpSession.exists?(
+                     !(f12_token.device_session_id && OpAppGrant.exists?(
                        device_session_id: f12_token.device_session_id,
                        oidc_client_id: f12_client.client_id,
                        revoked_at: nil,
                      ))
                    f12_token.rotate_refresh_token! unless f12_token.device_session_record.current_refresh_token_id
                    f12_now = Time.current
-                   f12_session = ClientRpSession.create!(
+                   f12_session = OpAppGrant.create!(
                      client_token: f12_token, oidc_client_id: f12_client.client_id, oidc_scope: "openid profile",
                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f12_now,
                      refresh_token_expires_at: f12_now + 10.minutes,
@@ -1242,7 +1242,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "palm",
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "palm", ri: "jp",
           surface: "app",
@@ -1272,7 +1272,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                  f13_client_id =
                    case f13_family
                    when "base" then "base-#{f13_surface}-ww"
-                   when "edit" then "edit-org"
+                   when "edit" then "edit-org-ww"
                    else "#{f13_family}-#{f13_surface}"
                    end
                  f13_token = ClientToken.includes(
@@ -1283,14 +1283,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                  f13_key = [f13_client.client_id, f13_token.public_id]
                  @base_browser_rp_credentials ||= {}
                  if !@base_browser_rp_credentials[f13_key] && f13_token.currently_usable? &&
-                     !(f13_token.device_session_id && ClientRpSession.exists?(
+                     !(f13_token.device_session_id && OpAppGrant.exists?(
                        device_session_id: f13_token.device_session_id,
                        oidc_client_id: f13_client.client_id,
                        revoked_at: nil,
                      ))
                    f13_token.rotate_refresh_token! unless f13_token.device_session_record.current_refresh_token_id
                    f13_now = Time.current
-                   f13_session = ClientRpSession.create!(
+                   f13_session = OpAppGrant.create!(
                      client_token: f13_token, oidc_client_id: f13_client.client_id, oidc_scope: "openid profile",
                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f13_now,
                      refresh_token_expires_at: f13_now + 10.minutes,
@@ -1366,7 +1366,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f14_client_id =
                 case f14_family
                 when "base" then "base-#{f14_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f14_family}-#{f14_surface}"
                 end
               f14_token = ClientToken.includes(
@@ -1377,14 +1377,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f14_key = [f14_client.client_id, f14_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f14_key] && f14_token.currently_usable? &&
-                  !(f14_token.device_session_id && ClientRpSession.exists?(
+                  !(f14_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f14_token.device_session_id,
                     oidc_client_id: f14_client.client_id,
                     revoked_at: nil,
                   ))
                 f14_token.rotate_refresh_token! unless f14_token.device_session_record.current_refresh_token_id
                 f14_now = Time.current
-                f14_session = ClientRpSession.create!(
+                f14_session = OpAppGrant.create!(
                   client_token: f14_token, oidc_client_id: f14_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f14_now,
                   refresh_token_expires_at: f14_now + 10.minutes,
@@ -1464,7 +1464,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f15_client_id =
                 case f15_family
                 when "base" then "base-#{f15_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f15_family}-#{f15_surface}"
                 end
               f15_token = ClientToken.includes(
@@ -1475,14 +1475,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f15_key = [f15_client.client_id, f15_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f15_key] && f15_token.currently_usable? &&
-                  !(f15_token.device_session_id && ClientRpSession.exists?(
+                  !(f15_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f15_token.device_session_id,
                     oidc_client_id: f15_client.client_id,
                     revoked_at: nil,
                   ))
                 f15_token.rotate_refresh_token! unless f15_token.device_session_record.current_refresh_token_id
                 f15_now = Time.current
-                f15_session = ClientRpSession.create!(
+                f15_session = OpAppGrant.create!(
                   client_token: f15_token, oidc_client_id: f15_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f15_now,
                   refresh_token_expires_at: f15_now + 10.minutes,
@@ -1560,7 +1560,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f16_client_id =
                 case f16_family
                 when "base" then "base-#{f16_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f16_family}-#{f16_surface}"
                 end
               f16_token = ClientToken.includes(
@@ -1571,14 +1571,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f16_key = [f16_client.client_id, f16_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f16_key] && f16_token.currently_usable? &&
-                  !(f16_token.device_session_id && ClientRpSession.exists?(
+                  !(f16_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f16_token.device_session_id,
                     oidc_client_id: f16_client.client_id,
                     revoked_at: nil,
                   ))
                 f16_token.rotate_refresh_token! unless f16_token.device_session_record.current_refresh_token_id
                 f16_now = Time.current
-                f16_session = ClientRpSession.create!(
+                f16_session = OpAppGrant.create!(
                   client_token: f16_token, oidc_client_id: f16_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f16_now,
                   refresh_token_expires_at: f16_now + 10.minutes,
@@ -1643,7 +1643,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f17_client_id =
                 case f17_family
                 when "base" then "base-#{f17_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f17_family}-#{f17_surface}"
                 end
               f17_token = ClientToken.includes(
@@ -1654,14 +1654,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f17_key = [f17_client.client_id, f17_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f17_key] && f17_token.currently_usable? &&
-                  !(f17_token.device_session_id && ClientRpSession.exists?(
+                  !(f17_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f17_token.device_session_id,
                     oidc_client_id: f17_client.client_id,
                     revoked_at: nil,
                   ))
                 f17_token.rotate_refresh_token! unless f17_token.device_session_record.current_refresh_token_id
                 f17_now = Time.current
-                f17_session = ClientRpSession.create!(
+                f17_session = OpAppGrant.create!(
                   client_token: f17_token, oidc_client_id: f17_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f17_now,
                   refresh_token_expires_at: f17_now + 10.minutes,
@@ -1729,7 +1729,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f18_client_id =
                 case f18_family
                 when "base" then "base-#{f18_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f18_family}-#{f18_surface}"
                 end
               f18_token = ClientToken.includes(
@@ -1740,14 +1740,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f18_key = [f18_client.client_id, f18_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f18_key] && f18_token.currently_usable? &&
-                  !(f18_token.device_session_id && ClientRpSession.exists?(
+                  !(f18_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f18_token.device_session_id,
                     oidc_client_id: f18_client.client_id,
                     revoked_at: nil,
                   ))
                 f18_token.rotate_refresh_token! unless f18_token.device_session_record.current_refresh_token_id
                 f18_now = Time.current
-                f18_session = ClientRpSession.create!(
+                f18_session = OpAppGrant.create!(
                   client_token: f18_token, oidc_client_id: f18_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f18_now,
                   refresh_token_expires_at: f18_now + 10.minutes,
@@ -1813,7 +1813,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f19_client_id =
                   case f19_family
                   when "base" then "base-#{f19_surface}-ww"
-                  when "edit" then "edit-org"
+                  when "edit" then "edit-org-ww"
                   else "#{f19_family}-#{f19_surface}"
                   end
                 f19_token = ClientToken.includes(
@@ -1824,14 +1824,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f19_key = [f19_client.client_id, f19_token.public_id]
                 @base_browser_rp_credentials ||= {}
                 if !@base_browser_rp_credentials[f19_key] && f19_token.currently_usable? &&
-                    !(f19_token.device_session_id && ClientRpSession.exists?(
+                    !(f19_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f19_token.device_session_id,
                       oidc_client_id: f19_client.client_id,
                       revoked_at: nil,
                     ))
                   f19_token.rotate_refresh_token! unless f19_token.device_session_record.current_refresh_token_id
                   f19_now = Time.current
-                  f19_session = ClientRpSession.create!(
+                  f19_session = OpAppGrant.create!(
                     client_token: f19_token, oidc_client_id: f19_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f19_now,
                     refresh_token_expires_at: f19_now + 10.minutes,
@@ -1991,7 +1991,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f20_client_id =
                     case f20_family
                     when "base" then "base-#{f20_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f20_family}-#{f20_surface}"
                     end
                   f20_token = ClientToken.includes(
@@ -2002,14 +2002,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f20_key = [f20_client.client_id, f20_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f20_key] && f20_token.currently_usable? &&
-                      !(f20_token.device_session_id && ClientRpSession.exists?(
+                      !(f20_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f20_token.device_session_id,
                         oidc_client_id: f20_client.client_id,
                         revoked_at: nil,
                       ))
                     f20_token.rotate_refresh_token! unless f20_token.device_session_record.current_refresh_token_id
                     f20_now = Time.current
-                    f20_session = ClientRpSession.create!(
+                    f20_session = OpAppGrant.create!(
                       client_token: f20_token, oidc_client_id: f20_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f20_now,
                       refresh_token_expires_at: f20_now + 10.minutes,
@@ -2081,7 +2081,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f21_client_id =
                      case f21_family
                      when "base" then "base-#{f21_surface}-ww"
-                     when "edit" then "edit-org"
+                     when "edit" then "edit-org-ww"
                      else "#{f21_family}-#{f21_surface}"
                      end
                    f21_token = ClientToken.includes(
@@ -2092,14 +2092,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f21_key = [f21_client.client_id, f21_token.public_id]
                    @base_browser_rp_credentials ||= {}
                    if !@base_browser_rp_credentials[f21_key] && f21_token.currently_usable? &&
-                       !(f21_token.device_session_id && ClientRpSession.exists?(
+                       !(f21_token.device_session_id && OpAppGrant.exists?(
                          device_session_id: f21_token.device_session_id,
                          oidc_client_id: f21_client.client_id,
                          revoked_at: nil,
                        ))
                      f21_token.rotate_refresh_token! unless f21_token.device_session_record.current_refresh_token_id
                      f21_now = Time.current
-                     f21_session = ClientRpSession.create!(
+                     f21_session = OpAppGrant.create!(
                        client_token: f21_token, oidc_client_id: f21_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f21_now,
                        refresh_token_expires_at: f21_now + 10.minutes,
@@ -2182,7 +2182,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f22_client_id =
                     case f22_family
                     when "base" then "base-#{f22_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f22_family}-#{f22_surface}"
                     end
                   f22_token = ClientToken.includes(
@@ -2193,14 +2193,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f22_key = [f22_client.client_id, f22_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f22_key] && f22_token.currently_usable? &&
-                      !(f22_token.device_session_id && ClientRpSession.exists?(
+                      !(f22_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f22_token.device_session_id,
                         oidc_client_id: f22_client.client_id,
                         revoked_at: nil,
                       ))
                     f22_token.rotate_refresh_token! unless f22_token.device_session_record.current_refresh_token_id
                     f22_now = Time.current
-                    f22_session = ClientRpSession.create!(
+                    f22_session = OpAppGrant.create!(
                       client_token: f22_token, oidc_client_id: f22_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f22_now,
                       refresh_token_expires_at: f22_now + 10.minutes,
@@ -2270,7 +2270,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f23_client_id =
                 case f23_family
                 when "base" then "base-#{f23_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f23_family}-#{f23_surface}"
                 end
               f23_token =
@@ -2281,14 +2281,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f23_key = [f23_client.client_id, f23_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f23_key] && f23_token.currently_usable? &&
-                  !(f23_token.device_session_id && ClientRpSession.exists?(
+                  !(f23_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f23_token.device_session_id,
                     oidc_client_id: f23_client.client_id,
                     revoked_at: nil,
                   ))
                 f23_token.rotate_refresh_token! unless f23_token.device_session_record.current_refresh_token_id
                 f23_now = Time.current
-                f23_session = ClientRpSession.create!(
+                f23_session = OpAppGrant.create!(
                   client_token: f23_token, oidc_client_id: f23_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f23_now,
                   refresh_token_expires_at: f23_now + 10.minutes,
@@ -2394,7 +2394,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f24_client_id =
                     case f24_family
                     when "base" then "base-#{f24_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f24_family}-#{f24_surface}"
                     end
                   f24_token = ClientToken.includes(
@@ -2405,14 +2405,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f24_key = [f24_client.client_id, f24_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f24_key] && f24_token.currently_usable? &&
-                      !(f24_token.device_session_id && ClientRpSession.exists?(
+                      !(f24_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f24_token.device_session_id,
                         oidc_client_id: f24_client.client_id,
                         revoked_at: nil,
                       ))
                     f24_token.rotate_refresh_token! unless f24_token.device_session_record.current_refresh_token_id
                     f24_now = Time.current
-                    f24_session = ClientRpSession.create!(
+                    f24_session = OpAppGrant.create!(
                       client_token: f24_token, oidc_client_id: f24_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f24_now,
                       refresh_token_expires_at: f24_now + 10.minutes,
@@ -2478,7 +2478,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f25_client_id =
                      case f25_family
                      when "base" then "base-#{f25_surface}-ww"
-                     when "edit" then "edit-org"
+                     when "edit" then "edit-org-ww"
                      else "#{f25_family}-#{f25_surface}"
                      end
                    f25_token = ClientToken.includes(
@@ -2489,14 +2489,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f25_key = [f25_client.client_id, f25_token.public_id]
                    @base_browser_rp_credentials ||= {}
                    if !@base_browser_rp_credentials[f25_key] && f25_token.currently_usable? &&
-                       !(f25_token.device_session_id && ClientRpSession.exists?(
+                       !(f25_token.device_session_id && OpAppGrant.exists?(
                          device_session_id: f25_token.device_session_id,
                          oidc_client_id: f25_client.client_id,
                          revoked_at: nil,
                        ))
                      f25_token.rotate_refresh_token! unless f25_token.device_session_record.current_refresh_token_id
                      f25_now = Time.current
-                     f25_session = ClientRpSession.create!(
+                     f25_session = OpAppGrant.create!(
                        client_token: f25_token, oidc_client_id: f25_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f25_now,
                        refresh_token_expires_at: f25_now + 10.minutes,
@@ -2573,7 +2573,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f26_client_id =
                 case f26_family
                 when "base" then "base-#{f26_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f26_family}-#{f26_surface}"
                 end
               f26_token = ClientToken.includes(
@@ -2584,14 +2584,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f26_key = [f26_client.client_id, f26_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f26_key] && f26_token.currently_usable? &&
-                  !(f26_token.device_session_id && ClientRpSession.exists?(
+                  !(f26_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f26_token.device_session_id,
                     oidc_client_id: f26_client.client_id,
                     revoked_at: nil,
                   ))
                 f26_token.rotate_refresh_token! unless f26_token.device_session_record.current_refresh_token_id
                 f26_now = Time.current
-                f26_session = ClientRpSession.create!(
+                f26_session = OpAppGrant.create!(
                   client_token: f26_token, oidc_client_id: f26_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f26_now,
                   refresh_token_expires_at: f26_now + 10.minutes,
@@ -2655,7 +2655,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f27_client_id =
                 case f27_family
                 when "base" then "base-#{f27_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f27_family}-#{f27_surface}"
                 end
               f27_token = ClientToken.includes(
@@ -2666,14 +2666,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f27_key = [f27_client.client_id, f27_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f27_key] && f27_token.currently_usable? &&
-                  !(f27_token.device_session_id && ClientRpSession.exists?(
+                  !(f27_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f27_token.device_session_id,
                     oidc_client_id: f27_client.client_id,
                     revoked_at: nil,
                   ))
                 f27_token.rotate_refresh_token! unless f27_token.device_session_record.current_refresh_token_id
                 f27_now = Time.current
-                f27_session = ClientRpSession.create!(
+                f27_session = OpAppGrant.create!(
                   client_token: f27_token, oidc_client_id: f27_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f27_now,
                   refresh_token_expires_at: f27_now + 10.minutes,
@@ -2741,7 +2741,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f28_client_id =
                 case f28_family
                 when "base" then "base-#{f28_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f28_family}-#{f28_surface}"
                 end
               f28_token = ClientToken.includes(
@@ -2752,14 +2752,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f28_key = [f28_client.client_id, f28_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f28_key] && f28_token.currently_usable? &&
-                  !(f28_token.device_session_id && ClientRpSession.exists?(
+                  !(f28_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f28_token.device_session_id,
                     oidc_client_id: f28_client.client_id,
                     revoked_at: nil,
                   ))
                 f28_token.rotate_refresh_token! unless f28_token.device_session_record.current_refresh_token_id
                 f28_now = Time.current
-                f28_session = ClientRpSession.create!(
+                f28_session = OpAppGrant.create!(
                   client_token: f28_token, oidc_client_id: f28_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f28_now,
                   refresh_token_expires_at: f28_now + 10.minutes,
@@ -2823,7 +2823,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f29_client_id =
                 case f29_family
                 when "base" then "base-#{f29_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f29_family}-#{f29_surface}"
                 end
               f29_token = ClientToken.includes(
@@ -2834,14 +2834,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f29_key = [f29_client.client_id, f29_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f29_key] && f29_token.currently_usable? &&
-                  !(f29_token.device_session_id && ClientRpSession.exists?(
+                  !(f29_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f29_token.device_session_id,
                     oidc_client_id: f29_client.client_id,
                     revoked_at: nil,
                   ))
                 f29_token.rotate_refresh_token! unless f29_token.device_session_record.current_refresh_token_id
                 f29_now = Time.current
-                f29_session = ClientRpSession.create!(
+                f29_session = OpAppGrant.create!(
                   client_token: f29_token, oidc_client_id: f29_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f29_now,
                   refresh_token_expires_at: f29_now + 10.minutes,
@@ -2907,7 +2907,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f30_client_id =
                 case f30_family
                 when "base" then "base-#{f30_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f30_family}-#{f30_surface}"
                 end
               f30_token = ClientToken.includes(
@@ -2918,14 +2918,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f30_key = [f30_client.client_id, f30_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f30_key] && f30_token.currently_usable? &&
-                  !(f30_token.device_session_id && ClientRpSession.exists?(
+                  !(f30_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f30_token.device_session_id,
                     oidc_client_id: f30_client.client_id,
                     revoked_at: nil,
                   ))
                 f30_token.rotate_refresh_token! unless f30_token.device_session_record.current_refresh_token_id
                 f30_now = Time.current
-                f30_session = ClientRpSession.create!(
+                f30_session = OpAppGrant.create!(
                   client_token: f30_token, oidc_client_id: f30_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f30_now,
                   refresh_token_expires_at: f30_now + 10.minutes,
@@ -2987,7 +2987,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f31_client_id =
                 case f31_family
                 when "base" then "base-#{f31_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f31_family}-#{f31_surface}"
                 end
               f31_token = ClientToken.includes(
@@ -2998,14 +2998,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f31_key = [f31_client.client_id, f31_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f31_key] && f31_token.currently_usable? &&
-                  !(f31_token.device_session_id && ClientRpSession.exists?(
+                  !(f31_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f31_token.device_session_id,
                     oidc_client_id: f31_client.client_id,
                     revoked_at: nil,
                   ))
                 f31_token.rotate_refresh_token! unless f31_token.device_session_record.current_refresh_token_id
                 f31_now = Time.current
-                f31_session = ClientRpSession.create!(
+                f31_session = OpAppGrant.create!(
                   client_token: f31_token, oidc_client_id: f31_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f31_now,
                   refresh_token_expires_at: f31_now + 10.minutes,
@@ -3073,7 +3073,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f32_client_id =
                 case f32_family
                 when "base" then "base-#{f32_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f32_family}-#{f32_surface}"
                 end
               f32_token = ClientToken.includes(
@@ -3084,14 +3084,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f32_key = [f32_client.client_id, f32_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f32_key] && f32_token.currently_usable? &&
-                  !(f32_token.device_session_id && ClientRpSession.exists?(
+                  !(f32_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f32_token.device_session_id,
                     oidc_client_id: f32_client.client_id,
                     revoked_at: nil,
                   ))
                 f32_token.rotate_refresh_token! unless f32_token.device_session_record.current_refresh_token_id
                 f32_now = Time.current
-                f32_session = ClientRpSession.create!(
+                f32_session = OpAppGrant.create!(
                   client_token: f32_token, oidc_client_id: f32_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f32_now,
                   refresh_token_expires_at: f32_now + 10.minutes,
@@ -3167,7 +3167,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f33_client_id =
                   case f33_family
                   when "base" then "base-#{f33_surface}-ww"
-                  when "edit" then "edit-org"
+                  when "edit" then "edit-org-ww"
                   else "#{f33_family}-#{f33_surface}"
                   end
                 f33_token = ClientToken.includes(
@@ -3178,14 +3178,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f33_key = [f33_client.client_id, f33_token.public_id]
                 @base_browser_rp_credentials ||= {}
                 if !@base_browser_rp_credentials[f33_key] && f33_token.currently_usable? &&
-                    !(f33_token.device_session_id && ClientRpSession.exists?(
+                    !(f33_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f33_token.device_session_id,
                       oidc_client_id: f33_client.client_id,
                       revoked_at: nil,
                     ))
                   f33_token.rotate_refresh_token! unless f33_token.device_session_record.current_refresh_token_id
                   f33_now = Time.current
-                  f33_session = ClientRpSession.create!(
+                  f33_session = OpAppGrant.create!(
                     client_token: f33_token, oidc_client_id: f33_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f33_now,
                     refresh_token_expires_at: f33_now + 10.minutes,
@@ -3244,7 +3244,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f34_client_id =
                   case f34_family
                   when "base" then "base-#{f34_surface}-ww"
-                  when "edit" then "edit-org"
+                  when "edit" then "edit-org-ww"
                   else "#{f34_family}-#{f34_surface}"
                   end
                 f34_token = ClientToken.includes(
@@ -3255,14 +3255,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f34_key = [f34_client.client_id, f34_token.public_id]
                 @base_browser_rp_credentials ||= {}
                 if !@base_browser_rp_credentials[f34_key] && f34_token.currently_usable? &&
-                    !(f34_token.device_session_id && ClientRpSession.exists?(
+                    !(f34_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f34_token.device_session_id,
                       oidc_client_id: f34_client.client_id,
                       revoked_at: nil,
                     ))
                   f34_token.rotate_refresh_token! unless f34_token.device_session_record.current_refresh_token_id
                   f34_now = Time.current
-                  f34_session = ClientRpSession.create!(
+                  f34_session = OpAppGrant.create!(
                     client_token: f34_token, oidc_client_id: f34_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f34_now,
                     refresh_token_expires_at: f34_now + 10.minutes,
@@ -3328,7 +3328,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f35_client_id =
                 case f35_family
                 when "base" then "base-#{f35_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f35_family}-#{f35_surface}"
                 end
               f35_token = ClientToken.includes(
@@ -3339,14 +3339,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f35_key = [f35_client.client_id, f35_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f35_key] && f35_token.currently_usable? &&
-                  !(f35_token.device_session_id && ClientRpSession.exists?(
+                  !(f35_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f35_token.device_session_id,
                     oidc_client_id: f35_client.client_id,
                     revoked_at: nil,
                   ))
                 f35_token.rotate_refresh_token! unless f35_token.device_session_record.current_refresh_token_id
                 f35_now = Time.current
-                f35_session = ClientRpSession.create!(
+                f35_session = OpAppGrant.create!(
                   client_token: f35_token, oidc_client_id: f35_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f35_now,
                   refresh_token_expires_at: f35_now + 10.minutes,
@@ -3408,7 +3408,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f36_client_id =
                 case f36_family
                 when "base" then "base-#{f36_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f36_family}-#{f36_surface}"
                 end
               f36_token = ClientToken.includes(
@@ -3419,14 +3419,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f36_key = [f36_client.client_id, f36_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f36_key] && f36_token.currently_usable? &&
-                  !(f36_token.device_session_id && ClientRpSession.exists?(
+                  !(f36_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f36_token.device_session_id,
                     oidc_client_id: f36_client.client_id,
                     revoked_at: nil,
                   ))
                 f36_token.rotate_refresh_token! unless f36_token.device_session_record.current_refresh_token_id
                 f36_now = Time.current
-                f36_session = ClientRpSession.create!(
+                f36_session = OpAppGrant.create!(
                   client_token: f36_token, oidc_client_id: f36_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f36_now,
                   refresh_token_expires_at: f36_now + 10.minutes,
@@ -3491,7 +3491,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f37_client_id =
                 case f37_family
                 when "base" then "base-#{f37_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f37_family}-#{f37_surface}"
                 end
               f37_token = ClientToken.includes(
@@ -3502,14 +3502,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f37_key = [f37_client.client_id, f37_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f37_key] && f37_token.currently_usable? &&
-                  !(f37_token.device_session_id && ClientRpSession.exists?(
+                  !(f37_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f37_token.device_session_id,
                     oidc_client_id: f37_client.client_id,
                     revoked_at: nil,
                   ))
                 f37_token.rotate_refresh_token! unless f37_token.device_session_record.current_refresh_token_id
                 f37_now = Time.current
-                f37_session = ClientRpSession.create!(
+                f37_session = OpAppGrant.create!(
                   client_token: f37_token, oidc_client_id: f37_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f37_now,
                   refresh_token_expires_at: f37_now + 10.minutes,
@@ -3560,7 +3560,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "D1 hint issued for another realm's client and issuer ends no session" do
-    org_client = OidcClientRegistry.find!("core-org")
+    org_client = OidcClientRegistry.find!("core-org-jp")
     foreign_hint = OidcIdTokenIssuer.call(
       resource: @user,
       client: org_client,
@@ -3588,7 +3588,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f38_client_id =
                 case f38_family
                 when "base" then "base-#{f38_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f38_family}-#{f38_surface}"
                 end
               f38_token = ClientToken.includes(
@@ -3599,14 +3599,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f38_key = [f38_client.client_id, f38_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f38_key] && f38_token.currently_usable? &&
-                  !(f38_token.device_session_id && ClientRpSession.exists?(
+                  !(f38_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f38_token.device_session_id,
                     oidc_client_id: f38_client.client_id,
                     revoked_at: nil,
                   ))
                 f38_token.rotate_refresh_token! unless f38_token.device_session_record.current_refresh_token_id
                 f38_now = Time.current
-                f38_session = ClientRpSession.create!(
+                f38_session = OpAppGrant.create!(
                   client_token: f38_token, oidc_client_id: f38_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f38_now,
                   refresh_token_expires_at: f38_now + 10.minutes,
@@ -3670,7 +3670,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f39_client_id =
                 case f39_family
                 when "base" then "base-#{f39_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f39_family}-#{f39_surface}"
                 end
               f39_token = ClientToken.includes(
@@ -3681,14 +3681,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f39_key = [f39_client.client_id, f39_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f39_key] && f39_token.currently_usable? &&
-                  !(f39_token.device_session_id && ClientRpSession.exists?(
+                  !(f39_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f39_token.device_session_id,
                     oidc_client_id: f39_client.client_id,
                     revoked_at: nil,
                   ))
                 f39_token.rotate_refresh_token! unless f39_token.device_session_record.current_refresh_token_id
                 f39_now = Time.current
-                f39_session = ClientRpSession.create!(
+                f39_session = OpAppGrant.create!(
                   client_token: f39_token, oidc_client_id: f39_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f39_now,
                   refresh_token_expires_at: f39_now + 10.minutes,
@@ -3762,7 +3762,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f40_client_id =
                     case f40_family
                     when "base" then "base-#{f40_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f40_family}-#{f40_surface}"
                     end
                   f40_token = ClientToken.includes(
@@ -3773,14 +3773,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f40_key = [f40_client.client_id, f40_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f40_key] && f40_token.currently_usable? &&
-                      !(f40_token.device_session_id && ClientRpSession.exists?(
+                      !(f40_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f40_token.device_session_id,
                         oidc_client_id: f40_client.client_id,
                         revoked_at: nil,
                       ))
                     f40_token.rotate_refresh_token! unless f40_token.device_session_record.current_refresh_token_id
                     f40_now = Time.current
-                    f40_session = ClientRpSession.create!(
+                    f40_session = OpAppGrant.create!(
                       client_token: f40_token, oidc_client_id: f40_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f40_now,
                       refresh_token_expires_at: f40_now + 10.minutes,
@@ -3850,7 +3850,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f41_client_id =
                     case f41_family
                     when "base" then "base-#{f41_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f41_family}-#{f41_surface}"
                     end
                   f41_token = ClientToken.includes(
@@ -3861,14 +3861,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f41_key = [f41_client.client_id, f41_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f41_key] && f41_token.currently_usable? &&
-                      !(f41_token.device_session_id && ClientRpSession.exists?(
+                      !(f41_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f41_token.device_session_id,
                         oidc_client_id: f41_client.client_id,
                         revoked_at: nil,
                       ))
                     f41_token.rotate_refresh_token! unless f41_token.device_session_record.current_refresh_token_id
                     f41_now = Time.current
-                    f41_session = ClientRpSession.create!(
+                    f41_session = OpAppGrant.create!(
                       client_token: f41_token, oidc_client_id: f41_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f41_now,
                       refresh_token_expires_at: f41_now + 10.minutes,
@@ -3935,7 +3935,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f42_client_id =
                 case f42_family
                 when "base" then "base-#{f42_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f42_family}-#{f42_surface}"
                 end
               f42_token =
@@ -3946,14 +3946,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f42_key = [f42_client.client_id, f42_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f42_key] && f42_token.currently_usable? &&
-                  !(f42_token.device_session_id && ClientRpSession.exists?(
+                  !(f42_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f42_token.device_session_id,
                     oidc_client_id: f42_client.client_id,
                     revoked_at: nil,
                   ))
                 f42_token.rotate_refresh_token! unless f42_token.device_session_record.current_refresh_token_id
                 f42_now = Time.current
-                f42_session = ClientRpSession.create!(
+                f42_session = OpAppGrant.create!(
                   client_token: f42_token, oidc_client_id: f42_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f42_now,
                   refresh_token_expires_at: f42_now + 10.minutes,
@@ -4008,7 +4008,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -4036,7 +4036,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f43_client_id =
                     case f43_family
                     when "base" then "base-#{f43_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f43_family}-#{f43_surface}"
                     end
                   f43_token = ClientToken.includes(
@@ -4047,14 +4047,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f43_key = [f43_client.client_id, f43_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f43_key] && f43_token.currently_usable? &&
-                      !(f43_token.device_session_id && ClientRpSession.exists?(
+                      !(f43_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f43_token.device_session_id,
                         oidc_client_id: f43_client.client_id,
                         revoked_at: nil,
                       ))
                     f43_token.rotate_refresh_token! unless f43_token.device_session_record.current_refresh_token_id
                     f43_now = Time.current
-                    f43_session = ClientRpSession.create!(
+                    f43_session = OpAppGrant.create!(
                       client_token: f43_token, oidc_client_id: f43_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f43_now,
                       refresh_token_expires_at: f43_now + 10.minutes,
@@ -4125,7 +4125,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f44_client_id =
                      case f44_family
                      when "base" then "base-#{f44_surface}-ww"
-                     when "edit" then "edit-org"
+                     when "edit" then "edit-org-ww"
                      else "#{f44_family}-#{f44_surface}"
                      end
                    f44_token = ClientToken.includes(
@@ -4136,14 +4136,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f44_key = [f44_client.client_id, f44_token.public_id]
                    @base_browser_rp_credentials ||= {}
                    if !@base_browser_rp_credentials[f44_key] && f44_token.currently_usable? &&
-                       !(f44_token.device_session_id && ClientRpSession.exists?(
+                       !(f44_token.device_session_id && OpAppGrant.exists?(
                          device_session_id: f44_token.device_session_id,
                          oidc_client_id: f44_client.client_id,
                          revoked_at: nil,
                        ))
                      f44_token.rotate_refresh_token! unless f44_token.device_session_record.current_refresh_token_id
                      f44_now = Time.current
-                     f44_session = ClientRpSession.create!(
+                     f44_session = OpAppGrant.create!(
                        client_token: f44_token, oidc_client_id: f44_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f44_now,
                        refresh_token_expires_at: f44_now + 10.minutes,
@@ -4203,7 +4203,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "sign",
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
           origin_surface: "sign", ri: "jp",
           surface: "app",
@@ -4231,7 +4231,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f45_client_id =
                      case f45_family
                      when "base" then "base-#{f45_surface}-ww"
-                     when "edit" then "edit-org"
+                     when "edit" then "edit-org-ww"
                      else "#{f45_family}-#{f45_surface}"
                      end
                    f45_token = ClientToken.includes(
@@ -4242,14 +4242,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f45_key = [f45_client.client_id, f45_token.public_id]
                    @base_browser_rp_credentials ||= {}
                    if !@base_browser_rp_credentials[f45_key] && f45_token.currently_usable? &&
-                       !(f45_token.device_session_id && ClientRpSession.exists?(
+                       !(f45_token.device_session_id && OpAppGrant.exists?(
                          device_session_id: f45_token.device_session_id,
                          oidc_client_id: f45_client.client_id,
                          revoked_at: nil,
                        ))
                      f45_token.rotate_refresh_token! unless f45_token.device_session_record.current_refresh_token_id
                      f45_now = Time.current
-                     f45_session = ClientRpSession.create!(
+                     f45_session = OpAppGrant.create!(
                        client_token: f45_token, oidc_client_id: f45_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f45_now,
                        refresh_token_expires_at: f45_now + 10.minutes,
@@ -4327,7 +4327,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f46_client_id =
                     case f46_family
                     when "base" then "base-#{f46_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f46_family}-#{f46_surface}"
                     end
                   f46_token = ClientToken.includes(
@@ -4338,14 +4338,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f46_key = [f46_client.client_id, f46_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f46_key] && f46_token.currently_usable? &&
-                      !(f46_token.device_session_id && ClientRpSession.exists?(
+                      !(f46_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f46_token.device_session_id,
                         oidc_client_id: f46_client.client_id,
                         revoked_at: nil,
                       ))
                     f46_token.rotate_refresh_token! unless f46_token.device_session_record.current_refresh_token_id
                     f46_now = Time.current
-                    f46_session = ClientRpSession.create!(
+                    f46_session = OpAppGrant.create!(
                       client_token: f46_token, oidc_client_id: f46_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f46_now,
                       refresh_token_expires_at: f46_now + 10.minutes,
@@ -4410,7 +4410,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f47_client_id =
                      case f47_family
                      when "base" then "base-#{f47_surface}-ww"
-                     when "edit" then "edit-org"
+                     when "edit" then "edit-org-ww"
                      else "#{f47_family}-#{f47_surface}"
                      end
                    f47_token = ClientToken.includes(
@@ -4421,14 +4421,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f47_key = [f47_client.client_id, f47_token.public_id]
                    @base_browser_rp_credentials ||= {}
                    if !@base_browser_rp_credentials[f47_key] && f47_token.currently_usable? &&
-                       !(f47_token.device_session_id && ClientRpSession.exists?(
+                       !(f47_token.device_session_id && OpAppGrant.exists?(
                          device_session_id: f47_token.device_session_id,
                          oidc_client_id: f47_client.client_id,
                          revoked_at: nil,
                        ))
                      f47_token.rotate_refresh_token! unless f47_token.device_session_record.current_refresh_token_id
                      f47_now = Time.current
-                     f47_session = ClientRpSession.create!(
+                     f47_session = OpAppGrant.create!(
                        client_token: f47_token, oidc_client_id: f47_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f47_now,
                        refresh_token_expires_at: f47_now + 10.minutes,
@@ -4503,7 +4503,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f48_client_id =
                     case f48_family
                     when "base" then "base-#{f48_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
                     else "#{f48_family}-#{f48_surface}"
                     end
                   f48_token = ClientToken.includes(
@@ -4514,14 +4514,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f48_key = [f48_client.client_id, f48_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[f48_key] && f48_token.currently_usable? &&
-                      !(f48_token.device_session_id && ClientRpSession.exists?(
+                      !(f48_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: f48_token.device_session_id,
                         oidc_client_id: f48_client.client_id,
                         revoked_at: nil,
                       ))
                     f48_token.rotate_refresh_token! unless f48_token.device_session_record.current_refresh_token_id
                     f48_now = Time.current
-                    f48_session = ClientRpSession.create!(
+                    f48_session = OpAppGrant.create!(
                       client_token: f48_token, oidc_client_id: f48_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f48_now,
                       refresh_token_expires_at: f48_now + 10.minutes,
@@ -4590,7 +4590,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f49_client_id =
                 case f49_family
                 when "base" then "base-#{f49_surface}-ww"
-                when "edit" then "edit-org"
+                when "edit" then "edit-org-ww"
                 else "#{f49_family}-#{f49_surface}"
                 end
               f49_token =
@@ -4601,14 +4601,14 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
               f49_key = [f49_client.client_id, f49_token.public_id]
               @base_browser_rp_credentials ||= {}
               if !@base_browser_rp_credentials[f49_key] && f49_token.currently_usable? &&
-                  !(f49_token.device_session_id && ClientRpSession.exists?(
+                  !(f49_token.device_session_id && OpAppGrant.exists?(
                     device_session_id: f49_token.device_session_id,
                     oidc_client_id: f49_client.client_id,
                     revoked_at: nil,
                   ))
                 f49_token.rotate_refresh_token! unless f49_token.device_session_record.current_refresh_token_id
                 f49_now = Time.current
-                f49_session = ClientRpSession.create!(
+                f49_session = OpAppGrant.create!(
                   client_token: f49_token, oidc_client_id: f49_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f49_now,
                   refresh_token_expires_at: f49_now + 10.minutes,

@@ -395,7 +395,7 @@ module Auth
 
           def bind_sign_up_flow_to_email!(email)
             cycle = current_sign_up_flow
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               cycle.update!(
                 principal_id: email.user_id,
                 pending_contact_type: "email",

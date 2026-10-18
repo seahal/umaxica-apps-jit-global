@@ -305,7 +305,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     }
 
     registered_rp = OidcClientRegistry.find!("base-app-ww")
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: session_record, oidc_client_id: registered_rp.client_id,
       oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,
@@ -416,7 +416,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
     }
 
     registered_rp = OidcClientRegistry.find!("base-app-ww")
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: session_record, oidc_client_id: registered_rp.client_id,
       oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,

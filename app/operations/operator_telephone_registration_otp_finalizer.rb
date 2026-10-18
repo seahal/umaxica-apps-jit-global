@@ -29,8 +29,8 @@ class OperatorTelephoneRegistrationOtpFinalizer
       surface: "org", channel: :telephone, transaction_ref: transaction.transaction_id,
       root_ref: token.public_id, browser_nonce: browser_nonce,
     ).dump
-    OrgTicketRecord.connected_to(role: :writing) do
-      OrgTicketRecord.transaction do
+    OpBaseOrgRecord.connected_to(role: :writing) do
+      OpBaseOrgRecord.transaction do
         committed = finalize_source(session_ref)
         next :unavailable unless committed
 
@@ -79,7 +79,7 @@ class OperatorTelephoneRegistrationOtpFinalizer
   end
 
   def root_current?
-    token.currently_usable?(OperatorTelephoneCeremonyTransaction.database_now) && token_device_session.usable? &&
+    token.active_status?(OperatorTelephoneCeremonyTransaction.database_now) && token_device_session.usable? &&
       token_device_session.current_refresh_token_id == token.id
   end
 

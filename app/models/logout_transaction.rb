@@ -20,7 +20,7 @@
 #  token_digest  :binary           not null
 #  updated_at    :datetime         not null
 #
-class LogoutTransaction < AppTicketRecord
+class LogoutTransaction < OpBaseAppRecord
   include OneTimeUrlTokenShared
 
   MAX_PUBLIC_ID_COLLISION_RETRIES = PublicId::MAX_COLLISION_RETRIES

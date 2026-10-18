@@ -69,9 +69,7 @@ module AuthenticationJwtTokens
   # token for an Emergency session: there is nowhere else for the value to come
   # from. See docs/security/org-emergency-access.md.
   def token_record_authentication_context(token_record)
-    return nil unless token_record.respond_to?(:authentication_context_value)
-
-    token_record.authentication_context_value.to_s
+    token_record.strict_authentication_context_value.to_s
   end
 
   def token_record_authentication_event_at(token_record)

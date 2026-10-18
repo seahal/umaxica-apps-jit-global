@@ -9,7 +9,7 @@ class BaseIdentitySessionsTimestampTest < ActiveSupport::TestCase
       :id, :public_id, :created_at, :last_used_at, :discard_at,
       keyword_init: true,
     ) do
-      def emergency_authentication_context? = false
+      def standby_authentication_context? = false
 
       def authentication_context_value = AuthenticationContextValue.normal
 

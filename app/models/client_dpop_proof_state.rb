@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_dpop_proof_states
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id            :bigint           not null, primary key
 #  expires_at    :datetime         not null
@@ -24,6 +24,6 @@
 #  index_client_dpop_proof_states_on_jti         (jti) UNIQUE WHERE (jti IS NOT NULL)
 #  index_client_dpop_proof_states_on_nonce       (nonce) UNIQUE WHERE (nonce IS NOT NULL)
 #
-class ClientDpopProofState < AppTicketRecord
+class ClientDpopProofState < OpBaseAppRecord
   include DpopProofStateable
 end

@@ -8,7 +8,7 @@ module BrowserRpLogoutFlowHelper
 
   def create_rp_session(client_id, root_token: @root_token)
     client = OidcClientRegistry.find!(client_id)
-    ClientRpSession.create!(
+    OpAppGrant.create!(
       client_token: root_token,
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",
@@ -20,7 +20,7 @@ module BrowserRpLogoutFlowHelper
   end
 
   def sign_in_core_rp(rp_session, root_token: @root_token, user: @user)
-    client = OidcClientRegistry.find!("core-app")
+    client = OidcClientRegistry.find!("core-app-jp")
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
       user,
       host: @core_host,

@@ -3,13 +3,12 @@
 
 # Closed enumeration of the authentication context a session was established
 # under. It answers one question -- "which sign-in ceremony produced this
-# session?" -- and it is the only place that decides what an Emergency session
+# session?" -- and it is the only place that decides what a Standby session
 # may exercise.
 #
-# This is deliberately distinct from the session-limit "restricted" state on
-# Actor::Authentication, which marks a session awaiting session-management
-# remediation. A session can be normal and session-limit restricted at the same
-# time; the two axes never collapse into one flag.
+# This is deliberately distinct from the historical token-status 103 row used
+# by the retired session-limit placeholder. A session's authentication context
+# is never inferred from that historical status.
 #
 # It is also distinct from Webauthn::AuthenticationContext, which is the result
 # of one WebAuthn assertion (UV flags, AAGUID, transports). This value describes
@@ -18,7 +17,7 @@
 # Authority: the durable value lives on the session token row
 # (`operator_tokens.authentication_context`) and is re-derived into the access
 # token's `authn_ctx` claim on every issue, refresh, and rotation, so a
-# continuation can never silently produce a Normal session from an Emergency one.
+# continuation can never silently produce a Normal session from a Standby one.
 class AuthenticationContextValue
   class UnknownContextError < StandardError; end
 
@@ -27,7 +26,9 @@ class AuthenticationContextValue
   CLAIM = "authn_ctx"
 
   NORMAL_KEY = "normal"
-  EMERGENCY_KEY = "emergency"
+  # Org Standby: the alternative sign-in used when Entra is unavailable (R5-WU18). The pre-R5 literal
+  # `emergency` is no longer accepted from a token: it resolves to UNKNOWN and denies.
+  STANDBY_KEY = "standby"
 
   # Capability vocabulary. These are session capabilities, never role grants:
   # they can only narrow what the actor's DB roles already allow.
@@ -45,12 +46,12 @@ class AuthenticationContextValue
 
   def normal? = key == NORMAL_KEY
 
-  def emergency? = key == EMERGENCY_KEY
+  def standby? = key == STANDBY_KEY
 
   def permits?(capability) = capabilities.include?(capability.to_s)
 
   # Step-Up is an authentication-context capability, not a freshness question.
-  # An Emergency session is not eligible to perform Step-Up-protected
+  # A Standby session is not eligible to perform Step-Up-protected
   # operations at all, however valid the Operator's Step-Up credential is.
   def step_up_permitted? = permits?(CAPABILITY_STEP_UP)
 
@@ -58,13 +59,13 @@ class AuthenticationContextValue
 
   # Capability gate consumed by ApplicationPolicy's pre-check.
   #
-  # An Emergency session is fully authenticated, so it answers to the same
+  # A Standby session is fully authenticated, so it answers to the same
   # policy rules as a Normal one. Its restriction is that Step-Up is unavailable
   # (step_up_permitted?), so an operation is withheld from it by giving that
   # operation a Step-Up gate. An unrecognised context still denies every rule
   # rather than falling through to Normal.
   def permits_rule?(_rule)
-    normal? || emergency?
+    normal? || standby?
   end
 
   REGISTRY = {
@@ -72,8 +73,8 @@ class AuthenticationContextValue
       NORMAL_KEY,
       capabilities: [CAPABILITY_STEP_UP, CAPABILITY_ORG_READ, CAPABILITY_ORG_WRITE],
     ),
-    EMERGENCY_KEY => new(
-      EMERGENCY_KEY,
+    STANDBY_KEY => new(
+      STANDBY_KEY,
       capabilities: [CAPABILITY_ORG_READ],
     ),
   }.freeze
@@ -87,7 +88,7 @@ class AuthenticationContextValue
 
   def self.normal = REGISTRY.fetch(NORMAL_KEY)
 
-  def self.emergency = REGISTRY.fetch(EMERGENCY_KEY)
+  def self.standby = REGISTRY.fetch(STANDBY_KEY)
 
   # Strict lookup for issue-time call sites, which must never mint a session
   # under a context this build cannot enumerate.

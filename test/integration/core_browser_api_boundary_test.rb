@@ -118,7 +118,30 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
 
   test "an authenticated actor is identified by public id, never by the database key" do
     client = clients(:one)
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = oidc_access_token_for(client)
+    root_token = client_tokens(:one)
+    rp_session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      client_token: root_token, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current, refresh_token_expires_at: 1.hour.from_now,
+    )
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      client,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: root_token.public_id,
+      base_session_public_id: root_token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(client, resource_type: "client"),
+      client_id: oidc_client.client_id,
+      authentication_context: root_token.strict_authentication_context_value.to_s,
+    )
 
     get("/api/v0/session", headers: json_headers)
 
@@ -144,6 +167,50 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
   ensure
     clients(:one).update_columns(public_id: original_public_id) if defined?(original_public_id)
+  end
+
+  test "a context claim that disagrees with the current Base root is rejected from the cookie boundary" do
+    client = clients(:one)
+    root_token = client_tokens(:one)
+    rp_session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      client_token: root_token, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current, refresh_token_expires_at: 1.hour.from_now,
+    )
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      client,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: root_token.public_id,
+      base_session_public_id: root_token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(client, resource_type: "client"),
+      client_id: oidc_client.client_id,
+      authentication_context: AuthenticationContextValue::STANDBY_KEY,
+    )
+
+    get "/api/v0/session",
+        headers: {
+          "Accept" => "application/json",
+          "Content-Type" => "application/json",
+          "Client-Agent" =>
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+
+    assert_response :unauthorized
+    assert_match(
+      /#{Regexp.escape(OidcRpBrowserCredentialContract::ACCESS_COOKIE)}=;/,
+      Array(response.headers["Set-Cookie"]).join("\n"),
+    )
+    assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
   end
 
   # A routing miss never reaches a controller, so only the exceptions app can answer it. The test
@@ -261,6 +328,13 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
       host: HOST,
       resource_type: "client",
     )
+    claims = CoreBrowserCredentialContract.decode_access_token(
+      token: root_cookie,
+      host: HOST,
+      resource_type: "client",
+    )
+
+    assert_equal AuthenticationContextValue::NORMAL_KEY, claims.fetch(AuthenticationContextValue::CLAIM)
     cookies[CoreBrowserCredentialContract::ACCESS_COOKIE] = root_cookie
 
     get "/api/v0/session", headers: json_headers
@@ -270,7 +344,31 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   test "authenticated session response is minimal and excludes raw credentials" do
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = oidc_access_token_for(clients(:one))
+    client = clients(:one)
+    root_token = client_tokens(:one)
+    rp_session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      client_token: root_token, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
+      oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current, refresh_token_expires_at: 1.hour.from_now,
+    )
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
+      client,
+      host: OidcIssuer.host_for_resource_type("client"),
+      resource_type: "client",
+      session_public_id: root_token.public_id,
+      base_session_public_id: root_token.public_id,
+      oidc_sid: rp_session.public_id,
+      oidc_jti: rp_session.oidc_jti,
+      expires_at: 10.minutes.from_now,
+      scopes: %w(openid profile),
+      issuer: OidcIssuer.for_resource_type("client"),
+      audiences: [oidc_client.aud],
+      jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
+      subject: OidcSubject.for(client, resource_type: "client"),
+      client_id: oidc_client.client_id,
+      authentication_context: root_token.strict_authentication_context_value.to_s,
+    )
 
     get "/api/v0/session", headers: json_headers
 
@@ -323,9 +421,10 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     absolute_expiry = 2.minutes.from_now.change(usec: 0)
     token = client_tokens(:one)
     token.update!(discard_at: absolute_expiry)
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
       oidc_nonce: SecureRandom.hex(16),
@@ -366,7 +465,7 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
       token: access_token,
       host: HOST,
       resource_type: "client",
-      client_id: "core-app",
+      client_id: "core-app-jp",
     )
 
     assert_operator Time.at(access_claims.fetch("exp")).utc, :<=, absolute_expiry
@@ -389,13 +488,14 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     }
   end
 
-  def oidc_access_token_for(client, audiences: nil)
-    oidc_client = OidcClientRegistry.find!("core-app")
+  def oidc_access_token_for(client, audiences: nil, authentication_context: AuthenticationContextValue::NORMAL_KEY)
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
     AuthenticationTokenService.encode(
       client,
       host: OidcIssuer.host_for_resource_type("client"),
       resource_type: "client",
       session_public_id: "rp-session-public-id",
+      base_session_public_id: ClientToken.find_by(user_id: client.id)&.public_id,
       oidc_sid: "rp-session-public-id",
       oidc_jti: SecureRandom.uuid,
       expires_at: 10.minutes.from_now,
@@ -405,13 +505,15 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(oidc_client),
       subject: OidcSubject.for(client, resource_type: "client"),
       client_id: oidc_client.client_id,
+      authentication_context: authentication_context,
     )
   end
 
   def oidc_refresh_token_for_client
-    session = ClientRpSession.create!(
+    session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
       client_token: client_tokens(:one),
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
       oidc_auth_time: 1.minute.ago,

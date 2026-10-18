@@ -28,7 +28,7 @@ class EditOrgJumpRtSignInTest < ActionDispatch::IntegrationTest
 
     assert_equal "www.umaxica.org", location.host
     assert_equal "/oauth/authorize", location.path
-    assert_equal "edit-org", query.fetch("client_id")
+    assert_equal "edit-org-ww", query.fetch("client_id")
     assert_equal "https://edit.umaxica.org/oidc/callback", query.fetch("redirect_uri")
     assert_equal "S256", query.fetch("code_challenge_method")
     assert_predicate query.fetch("state"), :present?

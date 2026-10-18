@@ -59,11 +59,11 @@ CREATE TABLE public.ar_internal_metadata (
 --
 
 CREATE TABLE public.area_client_occurrences (
-    id bigint NOT NULL,
-    area_occurrence_id bigint NOT NULL,
-    user_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT area_user_occurrences_id_not_null NOT NULL,
+    area_occurrence_id bigint CONSTRAINT area_user_occurrences_area_occurrence_id_not_null NOT NULL,
+    user_occurrence_id bigint CONSTRAINT area_user_occurrences_user_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT area_user_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT area_user_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -222,8 +222,8 @@ CREATE TABLE public.area_occurrences (
     memo character varying DEFAULT ''::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT area_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT area_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_area_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -252,11 +252,11 @@ ALTER SEQUENCE public.area_occurrences_id_seq OWNED BY public.area_occurrences.i
 --
 
 CREATE TABLE public.area_operator_occurrences (
-    id bigint NOT NULL,
-    area_occurrence_id bigint NOT NULL,
-    staff_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT area_staff_occurrences_id_not_null NOT NULL,
+    area_occurrence_id bigint CONSTRAINT area_staff_occurrences_area_occurrence_id_not_null NOT NULL,
+    staff_occurrence_id bigint CONSTRAINT area_staff_occurrences_staff_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT area_staff_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT area_staff_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -316,11 +316,11 @@ ALTER SEQUENCE public.area_telephone_occurrences_id_seq OWNED BY public.area_tel
 --
 
 CREATE TABLE public.area_visitor_occurrences (
-    id bigint NOT NULL,
-    area_occurrence_id bigint NOT NULL,
-    visitor_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT area_customer_occurrences_id_not_null NOT NULL,
+    area_occurrence_id bigint CONSTRAINT area_customer_occurrences_area_occurrence_id_not_null NOT NULL,
+    visitor_occurrence_id bigint CONSTRAINT area_customer_occurrences_customer_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT area_customer_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT area_customer_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -380,8 +380,8 @@ ALTER SEQUENCE public.area_zip_occurrences_id_seq OWNED BY public.area_zip_occur
 --
 
 CREATE TABLE public.client_occurrence_statuses (
-    id bigint NOT NULL,
-    name character varying DEFAULT ''::character varying NOT NULL
+    id bigint CONSTRAINT user_occurrence_statuses_id_not_null NOT NULL,
+    name character varying DEFAULT ''::character varying CONSTRAINT user_occurrence_statuses_name_not_null NOT NULL
 );
 
 
@@ -409,17 +409,17 @@ ALTER SEQUENCE public.client_occurrence_statuses_id_seq OWNED BY public.client_o
 --
 
 CREATE TABLE public.client_occurrences (
-    id bigint NOT NULL,
-    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
-    body character varying DEFAULT ''::character varying NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL,
-    memo character varying DEFAULT ''::character varying NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    event_type character varying DEFAULT ''::character varying NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    id bigint CONSTRAINT user_occurrences_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT user_occurrences_public_id_not_null NOT NULL,
+    body character varying DEFAULT ''::character varying CONSTRAINT user_occurrences_body_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT user_occurrences_status_id_not_null NOT NULL,
+    memo character varying DEFAULT ''::character varying CONSTRAINT user_occurrences_memo_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_occurrences_updated_at_not_null NOT NULL,
+    event_type character varying DEFAULT ''::character varying CONSTRAINT user_occurrences_event_type_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT user_occurrences_context_not_null NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT user_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT user_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_user_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -448,11 +448,11 @@ ALTER SEQUENCE public.client_occurrences_id_seq OWNED BY public.client_occurrenc
 --
 
 CREATE TABLE public.client_zip_occurrences (
-    id bigint NOT NULL,
-    user_occurrence_id bigint NOT NULL,
-    zip_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_zip_occurrences_id_not_null NOT NULL,
+    user_occurrence_id bigint CONSTRAINT user_zip_occurrences_user_occurrence_id_not_null NOT NULL,
+    zip_occurrence_id bigint CONSTRAINT user_zip_occurrences_zip_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_zip_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_zip_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -480,11 +480,11 @@ ALTER SEQUENCE public.client_zip_occurrences_id_seq OWNED BY public.client_zip_o
 --
 
 CREATE TABLE public.domain_client_occurrences (
-    id bigint NOT NULL,
-    domain_occurrence_id bigint NOT NULL,
-    user_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT domain_user_occurrences_id_not_null NOT NULL,
+    domain_occurrence_id bigint CONSTRAINT domain_user_occurrences_domain_occurrence_id_not_null NOT NULL,
+    user_occurrence_id bigint CONSTRAINT domain_user_occurrences_user_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT domain_user_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT domain_user_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -611,8 +611,8 @@ CREATE TABLE public.domain_occurrences (
     memo character varying DEFAULT ''::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT domain_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT domain_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_domain_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -641,11 +641,11 @@ ALTER SEQUENCE public.domain_occurrences_id_seq OWNED BY public.domain_occurrenc
 --
 
 CREATE TABLE public.domain_operator_occurrences (
-    id bigint NOT NULL,
-    domain_occurrence_id bigint NOT NULL,
-    staff_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT domain_staff_occurrences_id_not_null NOT NULL,
+    domain_occurrence_id bigint CONSTRAINT domain_staff_occurrences_domain_occurrence_id_not_null NOT NULL,
+    staff_occurrence_id bigint CONSTRAINT domain_staff_occurrences_staff_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT domain_staff_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT domain_staff_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -737,11 +737,11 @@ ALTER SEQUENCE public.domain_zip_occurrences_id_seq OWNED BY public.domain_zip_o
 --
 
 CREATE TABLE public.email_client_occurrences (
-    id bigint NOT NULL,
-    email_occurrence_id bigint NOT NULL,
-    user_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT email_user_occurrences_id_not_null NOT NULL,
+    email_occurrence_id bigint CONSTRAINT email_user_occurrences_email_occurrence_id_not_null NOT NULL,
+    user_occurrence_id bigint CONSTRAINT email_user_occurrences_user_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT email_user_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT email_user_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -836,8 +836,8 @@ CREATE TABLE public.email_occurrences (
     memo character varying DEFAULT ''::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT email_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT email_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_email_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
     CONSTRAINT chk_email_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
@@ -867,11 +867,11 @@ ALTER SEQUENCE public.email_occurrences_id_seq OWNED BY public.email_occurrences
 --
 
 CREATE TABLE public.email_operator_occurrences (
-    id bigint NOT NULL,
-    email_occurrence_id bigint NOT NULL,
-    staff_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT email_staff_occurrences_id_not_null NOT NULL,
+    email_occurrence_id bigint CONSTRAINT email_staff_occurrences_email_occurrence_id_not_null NOT NULL,
+    staff_occurrence_id bigint CONSTRAINT email_staff_occurrences_staff_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT email_staff_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT email_staff_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -931,11 +931,11 @@ ALTER SEQUENCE public.email_telephone_occurrences_id_seq OWNED BY public.email_t
 --
 
 CREATE TABLE public.email_visitor_occurrences (
-    id bigint NOT NULL,
-    email_occurrence_id bigint NOT NULL,
-    visitor_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT email_customer_occurrences_id_not_null NOT NULL,
+    email_occurrence_id bigint CONSTRAINT email_customer_occurrences_email_occurrence_id_not_null NOT NULL,
+    visitor_occurrence_id bigint CONSTRAINT email_customer_occurrences_customer_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT email_customer_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT email_customer_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -995,11 +995,11 @@ ALTER SEQUENCE public.email_zip_occurrences_id_seq OWNED BY public.email_zip_occ
 --
 
 CREATE TABLE public.ip_client_occurrences (
-    id bigint NOT NULL,
-    ip_occurrence_id bigint NOT NULL,
-    user_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT ip_user_occurrences_id_not_null NOT NULL,
+    ip_occurrence_id bigint CONSTRAINT ip_user_occurrences_ip_occurrence_id_not_null NOT NULL,
+    user_occurrence_id bigint CONSTRAINT ip_user_occurrences_user_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT ip_user_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT ip_user_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -1062,8 +1062,8 @@ CREATE TABLE public.ip_occurrences (
     memo character varying DEFAULT ''::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT ip_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT ip_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_ip_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
     CONSTRAINT chk_ip_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
@@ -1093,11 +1093,11 @@ ALTER SEQUENCE public.ip_occurrences_id_seq OWNED BY public.ip_occurrences.id;
 --
 
 CREATE TABLE public.ip_operator_occurrences (
-    id bigint NOT NULL,
-    ip_occurrence_id bigint NOT NULL,
-    staff_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT ip_staff_occurrences_id_not_null NOT NULL,
+    ip_occurrence_id bigint CONSTRAINT ip_staff_occurrences_ip_occurrence_id_not_null NOT NULL,
+    staff_occurrence_id bigint CONSTRAINT ip_staff_occurrences_staff_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT ip_staff_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT ip_staff_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -1157,11 +1157,11 @@ ALTER SEQUENCE public.ip_telephone_occurrences_id_seq OWNED BY public.ip_telepho
 --
 
 CREATE TABLE public.ip_visitor_occurrences (
-    id bigint NOT NULL,
-    ip_occurrence_id bigint NOT NULL,
-    visitor_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT ip_customer_occurrences_id_not_null NOT NULL,
+    ip_occurrence_id bigint CONSTRAINT ip_customer_occurrences_ip_occurrence_id_not_null NOT NULL,
+    visitor_occurrence_id bigint CONSTRAINT ip_customer_occurrences_customer_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT ip_customer_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT ip_customer_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -1299,8 +1299,8 @@ CREATE TABLE public.jwt_occurrences (
     status_id bigint DEFAULT 1 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT jwt_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT jwt_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_jwt_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
     CONSTRAINT chk_jwt_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
@@ -1330,11 +1330,11 @@ ALTER SEQUENCE public.jwt_occurrences_id_seq OWNED BY public.jwt_occurrences.id;
 --
 
 CREATE TABLE public.operator_client_occurrences (
-    id bigint NOT NULL,
-    staff_occurrence_id bigint NOT NULL,
-    user_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_user_occurrences_id_not_null NOT NULL,
+    staff_occurrence_id bigint CONSTRAINT staff_user_occurrences_staff_occurrence_id_not_null NOT NULL,
+    user_occurrence_id bigint CONSTRAINT staff_user_occurrences_user_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_user_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_user_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -1362,8 +1362,8 @@ ALTER SEQUENCE public.operator_client_occurrences_id_seq OWNED BY public.operato
 --
 
 CREATE TABLE public.operator_occurrence_statuses (
-    id bigint NOT NULL,
-    name character varying DEFAULT ''::character varying NOT NULL
+    id bigint CONSTRAINT staff_occurrence_statuses_id_not_null NOT NULL,
+    name character varying DEFAULT ''::character varying CONSTRAINT staff_occurrence_statuses_name_not_null NOT NULL
 );
 
 
@@ -1391,17 +1391,17 @@ ALTER SEQUENCE public.operator_occurrence_statuses_id_seq OWNED BY public.operat
 --
 
 CREATE TABLE public.operator_occurrences (
-    id bigint NOT NULL,
-    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
-    body character varying DEFAULT ''::character varying NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL,
-    memo character varying DEFAULT ''::character varying NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    event_type character varying DEFAULT ''::character varying NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    id bigint CONSTRAINT staff_occurrences_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT staff_occurrences_public_id_not_null NOT NULL,
+    body character varying DEFAULT ''::character varying CONSTRAINT staff_occurrences_body_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT staff_occurrences_status_id_not_null NOT NULL,
+    memo character varying DEFAULT ''::character varying CONSTRAINT staff_occurrences_memo_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_occurrences_updated_at_not_null NOT NULL,
+    event_type character varying DEFAULT ''::character varying CONSTRAINT staff_occurrences_event_type_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT staff_occurrences_context_not_null NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_staff_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -1430,11 +1430,11 @@ ALTER SEQUENCE public.operator_occurrences_id_seq OWNED BY public.operator_occur
 --
 
 CREATE TABLE public.operator_telephone_occurrences (
-    id bigint NOT NULL,
-    staff_occurrence_id bigint NOT NULL,
-    telephone_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_telephone_occurrences_id_not_null NOT NULL,
+    staff_occurrence_id bigint CONSTRAINT staff_telephone_occurrences_staff_occurrence_id_not_null NOT NULL,
+    telephone_occurrence_id bigint CONSTRAINT staff_telephone_occurrences_telephone_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_telephone_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_telephone_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -1462,11 +1462,11 @@ ALTER SEQUENCE public.operator_telephone_occurrences_id_seq OWNED BY public.oper
 --
 
 CREATE TABLE public.operator_zip_occurrences (
-    id bigint NOT NULL,
-    staff_occurrence_id bigint NOT NULL,
-    zip_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_zip_occurrences_id_not_null NOT NULL,
+    staff_occurrence_id bigint CONSTRAINT staff_zip_occurrences_staff_occurrence_id_not_null NOT NULL,
+    zip_occurrence_id bigint CONSTRAINT staff_zip_occurrences_zip_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_zip_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_zip_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -1503,11 +1503,11 @@ CREATE TABLE public.schema_migrations (
 --
 
 CREATE TABLE public.telephone_client_occurrences (
-    id bigint NOT NULL,
-    telephone_occurrence_id bigint NOT NULL,
-    user_occurrence_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT telephone_user_occurrences_id_not_null NOT NULL,
+    telephone_occurrence_id bigint CONSTRAINT telephone_user_occurrences_telephone_occurrence_id_not_null NOT NULL,
+    user_occurrence_id bigint CONSTRAINT telephone_user_occurrences_user_occurrence_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT telephone_user_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT telephone_user_occurrences_updated_at_not_null NOT NULL
 );
 
 
@@ -1570,8 +1570,8 @@ CREATE TABLE public.telephone_occurrences (
     memo character varying DEFAULT ''::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT telephone_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT telephone_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_telephone_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
     CONSTRAINT chk_telephone_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
@@ -1633,8 +1633,8 @@ ALTER SEQUENCE public.telephone_zip_occurrences_id_seq OWNED BY public.telephone
 --
 
 CREATE TABLE public.visitor_occurrence_statuses (
-    id bigint NOT NULL,
-    name character varying DEFAULT ''::character varying NOT NULL
+    id bigint CONSTRAINT customer_occurrence_statuses_id_not_null NOT NULL,
+    name character varying DEFAULT ''::character varying CONSTRAINT customer_occurrence_statuses_name_not_null NOT NULL
 );
 
 
@@ -1662,17 +1662,17 @@ ALTER SEQUENCE public.visitor_occurrence_statuses_id_seq OWNED BY public.visitor
 --
 
 CREATE TABLE public.visitor_occurrences (
-    id bigint NOT NULL,
-    body character varying DEFAULT ''::character varying NOT NULL,
-    context jsonb DEFAULT '{}'::jsonb NOT NULL,
-    event_type character varying DEFAULT ''::character varying NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    memo character varying DEFAULT ''::character varying NOT NULL,
-    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT customer_occurrences_id_not_null NOT NULL,
+    body character varying DEFAULT ''::character varying CONSTRAINT customer_occurrences_body_not_null NOT NULL,
+    context jsonb DEFAULT '{}'::jsonb CONSTRAINT customer_occurrences_context_not_null NOT NULL,
+    event_type character varying DEFAULT ''::character varying CONSTRAINT customer_occurrences_event_type_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT customer_occurrences_discarded_at_not_null NOT NULL,
+    memo character varying DEFAULT ''::character varying CONSTRAINT customer_occurrences_memo_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT customer_occurrences_public_id_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT customer_occurrences_purged_at_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT customer_occurrences_status_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT customer_occurrences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT customer_occurrences_updated_at_not_null NOT NULL,
     CONSTRAINT chk_customer_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -1736,8 +1736,8 @@ CREATE TABLE public.zip_occurrences (
     memo character varying DEFAULT ''::character varying NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT zip_occurrences_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT zip_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_zip_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -3394,7 +3394,7 @@ ALTER TABLE ONLY public.jwt_occurrences
 --
 
 ALTER TABLE ONLY public.ip_visitor_occurrences
-    ADD CONSTRAINT fk_rails_008a174aa0 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_008a174aa0 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id);
 
 
 --
@@ -3402,7 +3402,7 @@ ALTER TABLE ONLY public.ip_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.ip_telephone_occurrences
-    ADD CONSTRAINT fk_rails_0091298830 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_0091298830 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3410,7 +3410,7 @@ ALTER TABLE ONLY public.ip_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_client_occurrences
-    ADD CONSTRAINT fk_rails_00e504b9ab FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_00e504b9ab FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
 
 
 --
@@ -3418,7 +3418,7 @@ ALTER TABLE ONLY public.ip_client_occurrences
 --
 
 ALTER TABLE ONLY public.area_ip_occurrences
-    ADD CONSTRAINT fk_rails_02206200a2 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_02206200a2 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3426,7 +3426,7 @@ ALTER TABLE ONLY public.area_ip_occurrences
 --
 
 ALTER TABLE ONLY public.operator_client_occurrences
-    ADD CONSTRAINT fk_rails_13800338d1 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_13800338d1 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
 
 
 --
@@ -3434,7 +3434,7 @@ ALTER TABLE ONLY public.operator_client_occurrences
 --
 
 ALTER TABLE ONLY public.area_zip_occurrences
-    ADD CONSTRAINT fk_rails_18554dc64e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_18554dc64e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3442,7 +3442,7 @@ ALTER TABLE ONLY public.area_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_email_occurrences
-    ADD CONSTRAINT fk_rails_190d1d7227 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_190d1d7227 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3450,7 +3450,7 @@ ALTER TABLE ONLY public.domain_email_occurrences
 --
 
 ALTER TABLE ONLY public.email_operator_occurrences
-    ADD CONSTRAINT fk_rails_1b3f55514c FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_1b3f55514c FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3458,7 +3458,7 @@ ALTER TABLE ONLY public.email_operator_occurrences
 --
 
 ALTER TABLE ONLY public.operator_client_occurrences
-    ADD CONSTRAINT fk_rails_1e7954599d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_1e7954599d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
 
 
 --
@@ -3466,7 +3466,7 @@ ALTER TABLE ONLY public.operator_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_telephone_occurrences
-    ADD CONSTRAINT fk_rails_209d51cbd3 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_209d51cbd3 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
 
 
 --
@@ -3474,7 +3474,7 @@ ALTER TABLE ONLY public.email_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.domain_zip_occurrences
-    ADD CONSTRAINT fk_rails_20ab26995d FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_20ab26995d FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
 
 
 --
@@ -3482,7 +3482,7 @@ ALTER TABLE ONLY public.domain_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_ip_occurrences
-    ADD CONSTRAINT fk_rails_22b982fb0e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_22b982fb0e FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3490,7 +3490,7 @@ ALTER TABLE ONLY public.area_ip_occurrences
 --
 
 ALTER TABLE ONLY public.area_visitor_occurrences
-    ADD CONSTRAINT fk_rails_22c72f835b FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_22c72f835b FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3498,7 +3498,7 @@ ALTER TABLE ONLY public.area_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.area_zip_occurrences
-    ADD CONSTRAINT fk_rails_2f56574cee FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_2f56574cee FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
 
 
 --
@@ -3506,7 +3506,7 @@ ALTER TABLE ONLY public.area_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_ip_occurrences
-    ADD CONSTRAINT fk_rails_30c617346d FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_30c617346d FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3514,7 +3514,7 @@ ALTER TABLE ONLY public.domain_ip_occurrences
 --
 
 ALTER TABLE ONLY public.email_telephone_occurrences
-    ADD CONSTRAINT fk_rails_34a4ac5d57 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_34a4ac5d57 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3522,7 +3522,7 @@ ALTER TABLE ONLY public.email_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.email_visitor_occurrences
-    ADD CONSTRAINT fk_rails_363c71b53f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_363c71b53f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3530,7 +3530,7 @@ ALTER TABLE ONLY public.email_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.email_zip_occurrences
-    ADD CONSTRAINT fk_rails_381f0f5f60 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_381f0f5f60 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
 
 
 --
@@ -3538,7 +3538,7 @@ ALTER TABLE ONLY public.email_zip_occurrences
 --
 
 ALTER TABLE ONLY public.client_zip_occurrences
-    ADD CONSTRAINT fk_rails_3e61e47523 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3e61e47523 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
 
 
 --
@@ -3546,7 +3546,7 @@ ALTER TABLE ONLY public.client_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_telephone_occurrences
-    ADD CONSTRAINT fk_rails_42743b1b5d FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_42743b1b5d FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
 
 
 --
@@ -3554,7 +3554,7 @@ ALTER TABLE ONLY public.area_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_zip_occurrences
-    ADD CONSTRAINT fk_rails_43681b033b FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_43681b033b FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3562,7 +3562,7 @@ ALTER TABLE ONLY public.ip_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_telephone_occurrences
-    ADD CONSTRAINT fk_rails_43b450d653 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_43b450d653 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
 
 
 --
@@ -3570,7 +3570,7 @@ ALTER TABLE ONLY public.domain_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_visitor_occurrences
-    ADD CONSTRAINT fk_rails_4bd9e2f547 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_4bd9e2f547 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3578,7 +3578,7 @@ ALTER TABLE ONLY public.ip_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.operator_telephone_occurrences
-    ADD CONSTRAINT fk_rails_4fe85fb8ea FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_4fe85fb8ea FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
 
 
 --
@@ -3586,7 +3586,7 @@ ALTER TABLE ONLY public.operator_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.area_operator_occurrences
-    ADD CONSTRAINT fk_rails_51d4f8ec16 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_51d4f8ec16 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3594,7 +3594,7 @@ ALTER TABLE ONLY public.area_operator_occurrences
 --
 
 ALTER TABLE ONLY public.area_email_occurrences
-    ADD CONSTRAINT fk_rails_587a294924 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_587a294924 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3602,7 +3602,7 @@ ALTER TABLE ONLY public.area_email_occurrences
 --
 
 ALTER TABLE ONLY public.area_telephone_occurrences
-    ADD CONSTRAINT fk_rails_58c6f190f9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_58c6f190f9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3610,7 +3610,7 @@ ALTER TABLE ONLY public.area_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.email_operator_occurrences
-    ADD CONSTRAINT fk_rails_59212c3511 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_59212c3511 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
 
 
 --
@@ -3618,7 +3618,7 @@ ALTER TABLE ONLY public.email_operator_occurrences
 --
 
 ALTER TABLE ONLY public.area_domain_occurrences
-    ADD CONSTRAINT fk_rails_5bec914d67 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_5bec914d67 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3626,7 +3626,7 @@ ALTER TABLE ONLY public.area_domain_occurrences
 --
 
 ALTER TABLE ONLY public.domain_client_occurrences
-    ADD CONSTRAINT fk_rails_5fc25fbd6a FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_5fc25fbd6a FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
 
 
 --
@@ -3634,7 +3634,7 @@ ALTER TABLE ONLY public.domain_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_client_occurrences
-    ADD CONSTRAINT fk_rails_64273fb6e5 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_64273fb6e5 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3642,7 +3642,7 @@ ALTER TABLE ONLY public.email_client_occurrences
 --
 
 ALTER TABLE ONLY public.operator_zip_occurrences
-    ADD CONSTRAINT fk_rails_69f99bbeaf FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_69f99bbeaf FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
 
 
 --
@@ -3650,7 +3650,7 @@ ALTER TABLE ONLY public.operator_zip_occurrences
 --
 
 ALTER TABLE ONLY public.ip_telephone_occurrences
-    ADD CONSTRAINT fk_rails_6a0a2e9960 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_6a0a2e9960 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
 
 
 --
@@ -3658,7 +3658,7 @@ ALTER TABLE ONLY public.ip_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_operator_occurrences
-    ADD CONSTRAINT fk_rails_6d03a3d401 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_6d03a3d401 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
 
 
 --
@@ -3666,7 +3666,7 @@ ALTER TABLE ONLY public.ip_operator_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_client_occurrences
-    ADD CONSTRAINT fk_rails_6f536d5ebf FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_6f536d5ebf FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
 
 
 --
@@ -3674,7 +3674,7 @@ ALTER TABLE ONLY public.telephone_client_occurrences
 --
 
 ALTER TABLE ONLY public.ip_client_occurrences
-    ADD CONSTRAINT fk_rails_72d1905cdd FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_72d1905cdd FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3682,7 +3682,7 @@ ALTER TABLE ONLY public.ip_client_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_zip_occurrences
-    ADD CONSTRAINT fk_rails_762eceb883 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_762eceb883 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
 
 
 --
@@ -3690,7 +3690,7 @@ ALTER TABLE ONLY public.telephone_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_ip_occurrences
-    ADD CONSTRAINT fk_rails_77c6097609 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_77c6097609 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
 
 
 --
@@ -3698,7 +3698,7 @@ ALTER TABLE ONLY public.domain_ip_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_zip_occurrences
-    ADD CONSTRAINT fk_rails_79d04c2147 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_79d04c2147 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
 
 
 --
@@ -3706,7 +3706,7 @@ ALTER TABLE ONLY public.telephone_zip_occurrences
 --
 
 ALTER TABLE ONLY public.email_client_occurrences
-    ADD CONSTRAINT fk_rails_7a5ab1e241 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_7a5ab1e241 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
 
 
 --
@@ -3714,7 +3714,7 @@ ALTER TABLE ONLY public.email_client_occurrences
 --
 
 ALTER TABLE ONLY public.area_domain_occurrences
-    ADD CONSTRAINT fk_rails_8684e941ea FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_8684e941ea FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
 
 
 --
@@ -3722,7 +3722,7 @@ ALTER TABLE ONLY public.area_domain_occurrences
 --
 
 ALTER TABLE ONLY public.operator_telephone_occurrences
-    ADD CONSTRAINT fk_rails_8b1f6ba670 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_8b1f6ba670 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
 
 
 --
@@ -3730,7 +3730,7 @@ ALTER TABLE ONLY public.operator_telephone_occurrences
 --
 
 ALTER TABLE ONLY public.ip_zip_occurrences
-    ADD CONSTRAINT fk_rails_9136c2236a FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_9136c2236a FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
 
 
 --
@@ -3738,7 +3738,7 @@ ALTER TABLE ONLY public.ip_zip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_operator_occurrences
-    ADD CONSTRAINT fk_rails_93a08a87ce FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_93a08a87ce FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
 
 
 --
@@ -3746,7 +3746,7 @@ ALTER TABLE ONLY public.domain_operator_occurrences
 --
 
 ALTER TABLE ONLY public.area_email_occurrences
-    ADD CONSTRAINT fk_rails_a358e72324 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_a358e72324 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3754,7 +3754,7 @@ ALTER TABLE ONLY public.area_email_occurrences
 --
 
 ALTER TABLE ONLY public.domain_operator_occurrences
-    ADD CONSTRAINT fk_rails_a39158f9e1 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_a39158f9e1 FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
 
 
 --
@@ -3762,7 +3762,7 @@ ALTER TABLE ONLY public.domain_operator_occurrences
 --
 
 ALTER TABLE ONLY public.operator_zip_occurrences
-    ADD CONSTRAINT fk_rails_b2a9b8a8b3 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_b2a9b8a8b3 FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
 
 
 --
@@ -3770,7 +3770,7 @@ ALTER TABLE ONLY public.operator_zip_occurrences
 --
 
 ALTER TABLE ONLY public.email_ip_occurrences
-    ADD CONSTRAINT fk_rails_b2fd16e596 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_b2fd16e596 FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3778,7 +3778,7 @@ ALTER TABLE ONLY public.email_ip_occurrences
 --
 
 ALTER TABLE ONLY public.area_client_occurrences
-    ADD CONSTRAINT fk_rails_bc8f2fb1d9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_bc8f2fb1d9 FOREIGN KEY (area_occurrence_id) REFERENCES public.area_occurrences(id);
 
 
 --
@@ -3786,7 +3786,7 @@ ALTER TABLE ONLY public.area_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_zip_occurrences
-    ADD CONSTRAINT fk_rails_c31148b25f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_c31148b25f FOREIGN KEY (email_occurrence_id) REFERENCES public.email_occurrences(id);
 
 
 --
@@ -3794,7 +3794,7 @@ ALTER TABLE ONLY public.email_zip_occurrences
 --
 
 ALTER TABLE ONLY public.email_visitor_occurrences
-    ADD CONSTRAINT fk_rails_c912bd4a94 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_c912bd4a94 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id);
 
 
 --
@@ -3802,7 +3802,7 @@ ALTER TABLE ONLY public.email_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.client_zip_occurrences
-    ADD CONSTRAINT fk_rails_c91ad2be3e FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_c91ad2be3e FOREIGN KEY (zip_occurrence_id) REFERENCES public.zip_occurrences(id);
 
 
 --
@@ -3810,7 +3810,7 @@ ALTER TABLE ONLY public.client_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_visitor_occurrences
-    ADD CONSTRAINT fk_rails_cb6a0677f8 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_cb6a0677f8 FOREIGN KEY (visitor_occurrence_id) REFERENCES public.visitor_occurrences(id);
 
 
 --
@@ -3818,7 +3818,7 @@ ALTER TABLE ONLY public.area_visitor_occurrences
 --
 
 ALTER TABLE ONLY public.domain_client_occurrences
-    ADD CONSTRAINT fk_rails_cc055fd395 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_cc055fd395 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
 
 
 --
@@ -3826,7 +3826,7 @@ ALTER TABLE ONLY public.domain_client_occurrences
 --
 
 ALTER TABLE ONLY public.email_ip_occurrences
-    ADD CONSTRAINT fk_rails_cc0f42ece0 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_cc0f42ece0 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3834,7 +3834,7 @@ ALTER TABLE ONLY public.email_ip_occurrences
 --
 
 ALTER TABLE ONLY public.domain_email_occurrences
-    ADD CONSTRAINT fk_rails_dfecbcc166 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_dfecbcc166 FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
 
 
 --
@@ -3842,7 +3842,7 @@ ALTER TABLE ONLY public.domain_email_occurrences
 --
 
 ALTER TABLE ONLY public.area_operator_occurrences
-    ADD CONSTRAINT fk_rails_e851adb93d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_e851adb93d FOREIGN KEY (staff_occurrence_id) REFERENCES public.operator_occurrences(id);
 
 
 --
@@ -3850,7 +3850,7 @@ ALTER TABLE ONLY public.area_operator_occurrences
 --
 
 ALTER TABLE ONLY public.telephone_client_occurrences
-    ADD CONSTRAINT fk_rails_e92d26d9f1 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_e92d26d9f1 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
 
 
 --
@@ -3858,7 +3858,7 @@ ALTER TABLE ONLY public.telephone_client_occurrences
 --
 
 ALTER TABLE ONLY public.visitor_occurrences
-    ADD CONSTRAINT fk_rails_f0316e1852 FOREIGN KEY (status_id) REFERENCES public.visitor_occurrence_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f0316e1852 FOREIGN KEY (status_id) REFERENCES public.visitor_occurrence_statuses(id);
 
 
 --
@@ -3866,7 +3866,7 @@ ALTER TABLE ONLY public.visitor_occurrences
 --
 
 ALTER TABLE ONLY public.ip_operator_occurrences
-    ADD CONSTRAINT fk_rails_f098ca3601 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f098ca3601 FOREIGN KEY (ip_occurrence_id) REFERENCES public.ip_occurrences(id);
 
 
 --
@@ -3874,7 +3874,7 @@ ALTER TABLE ONLY public.ip_operator_occurrences
 --
 
 ALTER TABLE ONLY public.domain_zip_occurrences
-    ADD CONSTRAINT fk_rails_f15deee84c FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f15deee84c FOREIGN KEY (domain_occurrence_id) REFERENCES public.domain_occurrences(id);
 
 
 --
@@ -3882,7 +3882,7 @@ ALTER TABLE ONLY public.domain_zip_occurrences
 --
 
 ALTER TABLE ONLY public.area_client_occurrences
-    ADD CONSTRAINT fk_rails_f171bdb1c9 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_f171bdb1c9 FOREIGN KEY (user_occurrence_id) REFERENCES public.client_occurrences(id);
 
 
 --
@@ -3890,7 +3890,7 @@ ALTER TABLE ONLY public.area_client_occurrences
 --
 
 ALTER TABLE ONLY public.domain_telephone_occurrences
-    ADD CONSTRAINT fk_rails_fc2f6167c7 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_fc2f6167c7 FOREIGN KEY (telephone_occurrence_id) REFERENCES public.telephone_occurrences(id);
 
 
 --

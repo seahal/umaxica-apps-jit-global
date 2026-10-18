@@ -31,11 +31,11 @@ Creating a reset request must notify the account through every safe registered n
 for that actor and surface. Existing sessions should also receive an in-product warning when
 practical.
 
-An MFA reset request never places a session into a restricted or other limited state, and no
-session below full access may reach any MFA-reset entry point. In particular, a session-limit
-waiting unit and a `RESTRICTED` (103) token cannot reach `base/{app,com,org}/identity/mfa/resets`
-(user decision 2026-10-16, `adr/root-login-establishment-boundary.md` waiting-slot amendment;
-removal of the guard allowlist entries is pending).
+An MFA reset request never places a session into a restricted or other limited state, and no session
+below full access may reach any MFA-reset entry point. In particular, a session-limit waiting unit
+and a `RESTRICTED` (103) token cannot reach `base/{app,com,org}/identity/mfa/resets`. The retired
+session guard and its MFA-reset allowlist entries have been removed; normal ACTIVE Browser RP
+authentication remains the entry boundary.
 
 ## Operator Review
 

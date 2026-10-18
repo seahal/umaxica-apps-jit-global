@@ -154,7 +154,7 @@ class RetentionPurgeJob < ApplicationJob
         owner = Client.find_by(id: flow.principal_id)
         if owner
           owner.with_lock do
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               klass.transaction do
                 current = klass.lock.find_by(id: flow.id, public_id: flow.public_id)
                 next unless current
@@ -177,7 +177,7 @@ class RetentionPurgeJob < ApplicationJob
         owner = Client.find_by(id: token.user_id)
         if owner
           owner.with_lock do
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               klass.transaction do
                 current = klass.lock.find_by(id: token.id, public_id: token.public_id)
                 next unless current
@@ -200,7 +200,7 @@ class RetentionPurgeJob < ApplicationJob
         owner = Client.find_by(id: passkey.user_id)
         if owner
           owner.with_lock do
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               ClientSignUpFlow.transaction do
                 next if ClientSignUpFlow.lock.exists?(pending_passkey_registration_id: passkey.id)
 

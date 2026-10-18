@@ -4,56 +4,52 @@
 module Base
   module Com
     module Organizations
+      # Company memberships for the com Base Self-RP; decided by the owner (R5-WU15). Writes stay
+      # unsupported exactly as before.
       class MembershipsController < Base::Com::ApplicationController
+        include ::BaseMembershipRelay
+
         AUTHENTICATION_MODE = :private
         declare_authentication_mode! :private
 
-        before_action :set_organization
-        before_action :set_membership, only: %i(show edit update destroy)
+        MEMBERSHIP_SURFACE = "com"
+
+        public
 
         def index
-          authorize!(@organization, to: :index?, with: OrganizationMembershipPolicy)
-          render json: []
+          render(json: []) if decide!("index?")
         end
 
         def show
-          authorize!(@membership, to: :show?, with: OrganizationMembershipPolicy)
-          render json: {}
+          render(json: {}) if decide!("show?", id: params.expect(:id))
         end
 
         def new
-          authorize!(@organization, to: :new?, with: OrganizationMembershipPolicy)
-          render plain: "New Membership"
+          render(plain: "New Membership") if decide!("new?")
         end
 
         def edit
-          authorize!(@membership, to: :edit?, with: OrganizationMembershipPolicy)
-          render plain: "Edit Membership"
+          render(plain: "Edit Membership") if decide!("edit?", id: params.expect(:id))
         end
 
         def create
-          authorize!(@organization, to: :create?, with: OrganizationMembershipPolicy)
-          head :unprocessable_content
+          head(:unprocessable_content) if decide!("create?")
         end
 
         def update
-          authorize!(@membership, to: :update?, with: OrganizationMembershipPolicy)
-          head :unprocessable_content
+          head(:unprocessable_content) if decide!("update?", id: params.expect(:id))
         end
 
         def destroy
-          authorize!(@membership, to: :destroy?, with: OrganizationMembershipPolicy)
-          head :no_content
+          head(:no_content) if decide!("destroy?", id: params.expect(:id))
         end
 
         private
 
-        def set_organization
-          @organization = Company.find_by!(public_id: params.expect(:organization_id))
-        end
-
-        def set_membership
-          @membership = @organization.individual_memberships.find(params.expect(:id))
+        # Every action asks the owner for its membership decision; only an explicit allow passes.
+        def decide!(rule, id: nil)
+          result = membership_authority.authorization(params.expect(:organization_id), rule, id:)
+          membership_result!(result)
         end
       end
     end

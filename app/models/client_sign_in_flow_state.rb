@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class ClientSignInFlowState < AppTicketRecord
+class ClientSignInFlowState < OpBaseAppRecord
   include ReferenceRecord
 
   PRIMARY_PENDING = 10

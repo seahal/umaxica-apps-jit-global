@@ -14,9 +14,10 @@ class TechOrgAccessRevocationTest < ActionDispatch::IntegrationTest
     host! @host
     https!
     @operator = operators(:one)
-    @client = OidcClientRegistry.find!("tech-org")
+    @client = OidcClientRegistry.find!("tech-org-ww")
     @root_token = OperatorToken.create!(staff: @operator, authentication_event_at: 1.minute.ago)
-    @rp_session = OperatorRpSession.create!(
+    @rp_session = OpOrgGrant.create!(
+      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
       operator_token: @root_token,
       oidc_client_id: @client.client_id,
       oidc_scope: "openid profile",

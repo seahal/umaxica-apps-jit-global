@@ -16,6 +16,30 @@ end
 
 return if Rails.env.production?
 
+# Protocol epoch rows are fixed reference state owned by each OP store. A SQL structure load
+# restores the table and its schema_migrations rows but does not replay the migration INSERT,
+# so preserve the initialized epoch on a fresh local/test database without changing an existing
+# operator-selected epoch.
+[
+  [OpAppProtocolEpoch, "app"],
+  [OpComProtocolEpoch, "com"],
+  [OpOrgProtocolEpoch, "org"],
+].each do |model, realm|
+  model.connection_class_for_self.connected_to(role: :writing) do
+    next unless model.lease_connection.data_source_exists?(model.table_name)
+
+    row = model.find_or_initialize_by(id: 1)
+    if row.new_record?
+      row.realm = realm
+      row.contract_epoch = ContractEpochValue::MINIMUM
+      row.changed_at = Time.current
+      row.save!
+    elsif row.realm != realm || !ContractEpochValue.valid?(row.contract_epoch)
+      raise ArgumentError, "#{model.name} epoch row has an invalid persisted shape"
+    end
+  end
+end
+
 # `schema_format: :sql` loads `structure.sql` for db:prepare, which carries schema only (no row
 # data). Migrations that seed fixed reference-table rows via raw INSERTs are marked "already run"
 # by structure.sql's schema_migrations rows, so their INSERT side effects never replay on a freshly

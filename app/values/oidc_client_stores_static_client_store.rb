@@ -13,101 +13,103 @@ module OidcClientStoresStaticClientStore
   end
 
   # First-party Browser RP clients use independent audiences, keys, callbacks, and RP sessions.
+  # Specs are keyed by family-realm; the exact Client ID (and its audience) comes from the trusted
+  # deployment binding, so a JP process registers core-app-jp and never a US or unsuffixed ID.
   def first_party_browser_rp_clients
-    FIRST_PARTY_RP_SPECS.to_h { |client_id, spec| [client_id, face_rp_client(**spec)] }
+    FIRST_PARTY_RP_SPECS.to_h do |family_realm, spec|
+      client_id = RpDeploymentBindingValue.client_id(family_realm)
+      # Key namespace follows the exact Client ID (core-app-jp -> CORE_APP_JP); only the Base
+      # Self-RPs keep their explicit BASE_RP_* namespaces.
+      jwt_namespace = spec.fetch(:jwt_namespace) { client_id.upcase.tr("-", "_") }
+      [client_id, face_rp_client(**spec, aud: client_id, jwt_namespace:)]
+    end
   end
 
   FIRST_PARTY_RP_SPECS = {
     "core-app" => {
       env_key: "PUBLIC_CORE_SERVICE_URL",
       resource_type: "client",
-      aud: "core-app",
       name: "Core App RP",
-      jwt_namespace: "CORE_APP",
     },
     "core-com" => {
       env_key: "PUBLIC_CORE_CORPORATE_URL",
       resource_type: "visitor",
-      aud: "core-com",
       name: "Core Com RP",
-      jwt_namespace: "CORE_COM",
     },
     "core-org" => {
       env_key: "PUBLIC_CORE_STAFF_URL",
       resource_type: "operator",
-      aud: "core-org",
       name: "Core Org RP",
-      jwt_namespace: "CORE_ORG",
     },
     "warp-app" => {
       env_key: "PUBLIC_WARP_SERVICE_URL",
       default_host: "warp.app.localhost",
       resource_type: "client",
-      aud: "warp-app",
       name: "Warp App RP",
-      jwt_namespace: "WARP_APP",
     },
     "warp-com" => {
       env_key: "PUBLIC_WARP_CORPORATE_URL",
       default_host: "warp.com.localhost",
       resource_type: "visitor",
-      aud: "warp-com",
       name: "Warp Com RP",
-      jwt_namespace: "WARP_COM",
     },
     "warp-org" => {
       env_key: "PUBLIC_WARP_STAFF_URL",
       default_host: "warp.org.localhost",
       resource_type: "operator",
-      aud: "warp-org",
       name: "Warp Org RP",
-      jwt_namespace: "WARP_ORG",
     },
     "edit-org" => {
       env_key: "PUBLIC_EDIT_STAFF_URL",
       default_host: "edit.org.localhost",
       resource_type: "operator",
-      aud: "edit-org",
       name: "Edit Org RP",
-      jwt_namespace: "EDIT_ORG",
     },
     "palm-app" => {
       env_key: "PUBLIC_PALM_SERVICE_URL",
       resource_type: "client",
-      aud: "palm-app",
       name: "Palm App RP",
-      jwt_namespace: "PALM_APP",
     },
     "tech-org" => {
       env_key: %w(PUBLIC_TECH_STAFF_URL PRIVATE_TECH_STAFF_URL),
       resource_type: "operator",
-      aud: "tech-org",
       name: "Tech Org RP",
-      jwt_namespace: "TECH_ORG",
       required_operator_capability: OperatorCapabilityGrant::TECH_ACCESS,
     },
-    "base-app-ww" => {
+    "base-app" => {
       env_key: "BASE_SERVICE_URL",
       resource_type: "client",
-      aud: "base-app-ww",
       name: "Base App Self RP",
       jwt_namespace: "BASE_RP_APP_WW",
     },
-    "base-com-ww" => {
+    "base-com" => {
       env_key: "BASE_CORPORATE_URL",
       resource_type: "visitor",
-      aud: "base-com-ww",
       name: "Base Com Self RP",
       jwt_namespace: "BASE_RP_COM_WW",
     },
-    "base-org-ww" => {
+    "base-org" => {
       env_key: "BASE_STAFF_URL",
       resource_type: "operator",
-      aud: "base-org-ww",
       name: "Base Org Self RP",
       jwt_namespace: "BASE_RP_ORG_WW",
     },
   }.freeze
+
+  RP_BACKCHANNEL_LOGOUT_PATH = "/oidc/backchannel-logout"
+
+  # The frozen back-channel logout endpoint for an active first-party RP (R5-WU10, one.md 7.6).
+  # It is derived from the same registered host as the RP callback; no logout delivery target is
+  # ever taken from a grant, token or request.
+  def backchannel_logout_uri(client_id)
+    family_realm, spec =
+      FIRST_PARTY_RP_SPECS.find { |key, _|
+      RpDeploymentBindingValue.client_id(key) == client_id.to_s
+    }
+    raise KeyError, "no registered back-channel logout endpoint for #{client_id.inspect}" unless family_realm
+
+    build_redirect_uris(spec.fetch(:env_key), spec[:default_host], path: RP_BACKCHANNEL_LOGOUT_PATH).first
+  end
 
   def face_rp_client(env_key:, resource_type:, aud:, name:, jwt_namespace:, default_host: nil,
                      callback_path: AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH,

@@ -9,7 +9,7 @@ class OidcAuthorizationTransactionPurgeJobTest < ActiveJob::TestCase
   end
 
   test "removes an authorization transaction past its retention and keeps a live one" do
-    client = OidcClientRegistry.find!("core-app")
+    client = OidcClientRegistry.find!("core-app-jp")
     params = {
       response_type: "code",
       client_id: client.client_id,

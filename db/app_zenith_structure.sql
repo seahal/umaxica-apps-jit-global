@@ -90,7 +90,7 @@ CREATE FUNCTION public.check_user_identity_totp_limit() RETURNS trigger
 CREATE FUNCTION public.enforce_client_emails_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF current_user = 'umaxica_app_email_hmac_definer_05cb87204d65' AND (to_jsonb(NEW) - 'address_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'address_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.address_digest IS DISTINCT FROM OLD.address_digest AND current_user <> 'umaxica_app_email_hmac_definer_05cb87204d65')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF current_user = 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae' AND (to_jsonb(NEW) - 'address_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'address_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.address_digest IS DISTINCT FROM OLD.address_digest AND current_user <> 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -109,7 +109,7 @@ CREATE FUNCTION public.enforce_client_external_identity_binding_facts() RETURNS 
 CREATE FUNCTION public.enforce_client_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_app_email_hmac_definer_05cb87204d65' AND NEW.channel = 'email') OR (current_user = 'umaxica_app_telephone_hmac_definer_05cb87204d65' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae' AND NEW.channel = 'email') OR (current_user = 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -119,7 +119,7 @@ CREATE FUNCTION public.enforce_client_rotation_audit() RETURNS trigger
 CREATE FUNCTION public.enforce_client_telephones_binding_facts() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF current_user = 'umaxica_app_telephone_hmac_definer_05cb87204d65' AND (to_jsonb(NEW) - 'number_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'number_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.number_digest IS DISTINCT FROM OLD.number_digest AND current_user <> 'umaxica_app_telephone_hmac_definer_05cb87204d65')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF current_user = 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae' AND (to_jsonb(NEW) - 'number_digest') IS DISTINCT FROM (to_jsonb(OLD) - 'number_digest') THEN RAISE EXCEPTION 'identifier rotation may change only its digest'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND (NEW.user_id IS DISTINCT FROM OLD.user_id OR (NEW.number_digest IS DISTINCT FROM OLD.number_digest AND current_user <> 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae')) THEN RAISE EXCEPTION 'effective contact binding owner and digest are immutable'; END IF; IF OLD.binding_finalized_at IS NOT NULL AND NEW.binding_finalized_at IS DISTINCT FROM OLD.binding_finalized_at THEN RAISE EXCEPTION 'effective contact binding finalization is immutable'; END IF; IF OLD.binding_released_at IS NOT NULL AND NEW.binding_released_at IS DISTINCT FROM OLD.binding_released_at THEN RAISE EXCEPTION 'released contact binding cannot be reactivated or rewritten'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -147,7 +147,7 @@ CREATE FUNCTION public.enforcement_protect_clients_delete() RETURNS trigger
 CREATE FUNCTION public.rotate_client_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_email_hmac_definer_05cb87204d65' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.client_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_email_hmac_definer_5d2e3f6bb4ae' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.client_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -157,7 +157,7 @@ CREATE FUNCTION public.rotate_client_emails_hmac(p_record_id bigint, p_new_diges
 CREATE FUNCTION public.rotate_client_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_telephone_hmac_definer_05cb87204d65' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.client_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_app_telephone_hmac_definer_5d2e3f6bb4ae' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.client_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.client_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.client_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -246,15 +246,15 @@ ALTER SEQUENCE public.app_enforcement_appeals_id_seq OWNED BY public.app_enforce
 
 CREATE TABLE public.app_enforcement_authentication_method_effects (
     id bigint NOT NULL,
-    app_enforcement_case_id bigint NOT NULL,
-    principal_public_id character varying NOT NULL,
-    authentication_method character varying NOT NULL,
+    app_enforcement_case_id bigint CONSTRAINT app_enforcement_authentication_app_enforcement_case_id_not_null NOT NULL,
+    principal_public_id character varying CONSTRAINT app_enforcement_authentication_met_principal_public_id_not_null NOT NULL,
+    authentication_method character varying CONSTRAINT app_enforcement_authentication_m_authentication_method_not_null NOT NULL,
     effect character varying NOT NULL,
-    effective_at timestamp(6) with time zone NOT NULL,
+    effective_at timestamp(6) with time zone CONSTRAINT app_enforcement_authentication_method_eff_effective_at_not_null NOT NULL,
     expires_at timestamp(6) with time zone,
     ended_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT app_enforcement_authentication_method_effec_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT app_enforcement_authentication_method_effec_updated_at_not_null NOT NULL,
     CONSTRAINT chk_app_enforcement_method_effects_effect CHECK (((effect)::text = ANY ((ARRAY['mutation_locked'::character varying, 'unusable'::character varying, 'permanently_frozen'::character varying])::text[]))),
     CONSTRAINT chk_app_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying])::text[]))),
     CONSTRAINT chk_app_enforcement_method_effects_no_social_freeze CHECK ((((effect)::text <> 'permanently_frozen'::text) OR ((authentication_method)::text <> ALL ((ARRAY['google'::character varying, 'apple'::character varying])::text[]))))
@@ -353,14 +353,14 @@ ALTER SEQUENCE public.app_enforcement_cases_id_seq OWNED BY public.app_enforceme
 
 CREATE TABLE public.app_enforcement_identifier_effects (
     id bigint NOT NULL,
-    app_enforcement_case_id bigint NOT NULL,
+    app_enforcement_case_id bigint CONSTRAINT app_enforcement_identifier_eff_app_enforcement_case_id_not_null NOT NULL,
     identifier_kind character varying NOT NULL,
     lookup_digest character varying NOT NULL,
     key_version integer NOT NULL,
     digest_version integer NOT NULL,
-    normalization_version integer NOT NULL,
+    normalization_version integer CONSTRAINT app_enforcement_identifier_effec_normalization_version_not_null NOT NULL,
     display_value text,
-    registration_blocked boolean DEFAULT false NOT NULL,
+    registration_blocked boolean DEFAULT false CONSTRAINT app_enforcement_identifier_effect_registration_blocked_not_null NOT NULL,
     attachment_blocked boolean DEFAULT false NOT NULL,
     recovery_blocked boolean DEFAULT false NOT NULL,
     effective_at timestamp(6) with time zone NOT NULL,
@@ -397,13 +397,13 @@ ALTER SEQUENCE public.app_enforcement_identifier_effects_id_seq OWNED BY public.
 
 CREATE TABLE public.app_enforcement_principal_effects (
     id bigint NOT NULL,
-    app_enforcement_case_id bigint NOT NULL,
+    app_enforcement_case_id bigint CONSTRAINT app_enforcement_principal_effe_app_enforcement_case_id_not_null NOT NULL,
     principal_public_id character varying NOT NULL,
     access_blocking boolean DEFAULT false NOT NULL,
     recovery_blocked boolean DEFAULT false NOT NULL,
     reactivation_blocked boolean DEFAULT false NOT NULL,
-    withdrawal_purge_blocked boolean DEFAULT false NOT NULL,
-    principal_hard_delete_blocked boolean DEFAULT false NOT NULL,
+    withdrawal_purge_blocked boolean DEFAULT false CONSTRAINT app_enforcement_principal_eff_withdrawal_purge_blocked_not_null NOT NULL,
+    principal_hard_delete_blocked boolean DEFAULT false CONSTRAINT app_enforcement_principal_e_principal_hard_delete_bloc_not_null NOT NULL,
     profile_effect character varying,
     effective_at timestamp(6) with time zone NOT NULL,
     expires_at timestamp(6) with time zone,
@@ -438,7 +438,7 @@ ALTER SEQUENCE public.app_enforcement_principal_effects_id_seq OWNED BY public.a
 
 CREATE TABLE public.app_enforcement_principal_links (
     id bigint NOT NULL,
-    app_enforcement_case_id bigint NOT NULL,
+    app_enforcement_case_id bigint CONSTRAINT app_enforcement_principal_link_app_enforcement_case_id_not_null NOT NULL,
     principal_kind character varying NOT NULL,
     principal_public_id character varying NOT NULL,
     relationship_kind character varying NOT NULL,
@@ -524,11 +524,11 @@ CREATE TABLE public.ar_internal_metadata (
 --
 
 CREATE TABLE public.client_accounts (
-    id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
-    user_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT user_accounts_id_not_null NOT NULL,
+    public_id character varying DEFAULT ''::character varying CONSTRAINT user_accounts_public_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_accounts_user_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_accounts_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_accounts_updated_at_not_null NOT NULL,
     CONSTRAINT client_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
@@ -633,15 +633,15 @@ ALTER SEQUENCE public.client_authority_locks_id_seq OWNED BY public.client_autho
 --
 
 CREATE TABLE public.client_banners (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    title character varying DEFAULT ''::character varying NOT NULL,
-    body text NOT NULL,
-    published boolean DEFAULT false NOT NULL,
-    starts_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    ends_at timestamp(6) with time zone DEFAULT '9999-12-31 23:59:59+00'::timestamp with time zone NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT user_banners_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_banners_user_id_not_null NOT NULL,
+    title character varying DEFAULT ''::character varying CONSTRAINT user_banners_title_not_null NOT NULL,
+    body text CONSTRAINT user_banners_body_not_null NOT NULL,
+    published boolean DEFAULT false CONSTRAINT user_banners_published_not_null NOT NULL,
+    starts_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT user_banners_starts_at_not_null NOT NULL,
+    ends_at timestamp(6) with time zone DEFAULT '9999-12-31 23:59:59+00'::timestamp with time zone CONSTRAINT user_banners_ends_at_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_banners_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_banners_updated_at_not_null NOT NULL,
     CONSTRAINT user_banners_ends_at_after_starts_at CHECK ((ends_at > starts_at))
 );
 
@@ -670,14 +670,14 @@ ALTER SEQUENCE public.client_banners_id_seq OWNED BY public.client_banners.id;
 --
 
 CREATE TABLE public.client_bulletins (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    public_id character varying(21) NOT NULL,
-    title character varying NOT NULL,
+    id bigint CONSTRAINT user_bulletins_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_bulletins_user_id_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT user_bulletins_public_id_not_null NOT NULL,
+    title character varying CONSTRAINT user_bulletins_title_not_null NOT NULL,
     body text,
     read_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    created_at timestamp(6) with time zone CONSTRAINT user_bulletins_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_bulletins_updated_at_not_null NOT NULL
 );
 
 
@@ -781,7 +781,7 @@ ALTER SEQUENCE public.client_email_histories_id_seq OWNED BY public.client_email
 --
 
 CREATE TABLE public.client_email_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_email_statuses_id_not_null NOT NULL
 );
 
 
@@ -809,24 +809,24 @@ ALTER SEQUENCE public.client_email_statuses_id_seq OWNED BY public.client_email_
 --
 
 CREATE TABLE public.client_emails (
-    id bigint NOT NULL,
-    address character varying DEFAULT ''::character varying NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    locked_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    otp_attempts_count integer DEFAULT 0 NOT NULL,
-    otp_last_sent_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
-    public_id character varying(21) NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    user_id bigint NOT NULL,
+    id bigint CONSTRAINT user_emails_id_not_null NOT NULL,
+    address character varying DEFAULT ''::character varying CONSTRAINT user_emails_address_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_emails_created_at_not_null NOT NULL,
+    locked_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT user_emails_locked_at_not_null NOT NULL,
+    otp_attempts_count integer DEFAULT 0 CONSTRAINT user_emails_otp_attempts_count_not_null NOT NULL,
+    otp_last_sent_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone CONSTRAINT user_emails_otp_last_sent_at_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT user_emails_public_id_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_emails_updated_at_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_emails_user_id_not_null NOT NULL,
     verification_token_digest bytea,
-    user_email_status_id bigint DEFAULT 0 NOT NULL,
+    user_email_status_id bigint DEFAULT 0 CONSTRAINT user_emails_user_identity_email_status_id_not_null NOT NULL,
     address_digest character varying,
-    undeletable boolean DEFAULT false NOT NULL,
-    promotional boolean DEFAULT true NOT NULL,
-    notifiable boolean DEFAULT true NOT NULL,
-    subscribable boolean DEFAULT true NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    undeletable boolean DEFAULT false CONSTRAINT user_emails_undeletable_not_null NOT NULL,
+    promotional boolean DEFAULT true CONSTRAINT user_emails_promotional_not_null NOT NULL,
+    notifiable boolean DEFAULT true CONSTRAINT user_emails_notifiable_not_null NOT NULL,
+    subscribable boolean DEFAULT true CONSTRAINT user_emails_subscribable_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_emails_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_emails_purged_at_not_null NOT NULL,
     step_up_otp_failures integer DEFAULT 0 NOT NULL,
     step_up_otp_locked_until timestamp(6) with time zone,
     step_up_otp_last_issued_at timestamp(6) with time zone,
@@ -981,17 +981,17 @@ ALTER SEQUENCE public.client_identifier_rotation_audits_id_seq OWNED BY public.c
 --
 
 CREATE TABLE public.client_identities (
-    id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
-    issuer character varying NOT NULL,
-    subject character varying NOT NULL,
-    audience character varying NOT NULL,
-    source_record_id bigint NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL,
+    id bigint CONSTRAINT user_residents_id_not_null NOT NULL,
+    public_id character varying DEFAULT ''::character varying CONSTRAINT user_residents_public_id_not_null NOT NULL,
+    issuer character varying CONSTRAINT user_residents_issuer_not_null NOT NULL,
+    subject character varying CONSTRAINT user_residents_subject_not_null NOT NULL,
+    audience character varying CONSTRAINT user_residents_audience_not_null NOT NULL,
+    source_record_id bigint CONSTRAINT user_residents_source_record_id_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT user_residents_status_id_not_null NOT NULL,
     last_authenticated_at timestamp(6) with time zone,
-    lock_version integer DEFAULT 0 NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    lock_version integer DEFAULT 0 CONSTRAINT user_residents_lock_version_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_residents_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_residents_updated_at_not_null NOT NULL,
     CONSTRAINT client_identities_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
@@ -1020,7 +1020,7 @@ ALTER SEQUENCE public.client_identities_id_seq OWNED BY public.client_identities
 --
 
 CREATE TABLE public.client_identity_states (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_resident_statuses_id_not_null NOT NULL
 );
 
 
@@ -1048,11 +1048,11 @@ ALTER SEQUENCE public.client_identity_states_id_seq OWNED BY public.client_ident
 --
 
 CREATE TABLE public.client_member_deletions (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    member_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_member_deletions_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_member_deletions_user_id_not_null NOT NULL,
+    member_id bigint CONSTRAINT user_member_deletions_member_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_member_deletions_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_member_deletions_updated_at_not_null NOT NULL
 );
 
 
@@ -1080,11 +1080,11 @@ ALTER SEQUENCE public.client_member_deletions_id_seq OWNED BY public.client_memb
 --
 
 CREATE TABLE public.client_member_discoveries (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    member_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_member_discoveries_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_member_discoveries_user_id_not_null NOT NULL,
+    member_id bigint CONSTRAINT user_member_discoveries_member_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_member_discoveries_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_member_discoveries_updated_at_not_null NOT NULL
 );
 
 
@@ -1112,11 +1112,11 @@ ALTER SEQUENCE public.client_member_discoveries_id_seq OWNED BY public.client_me
 --
 
 CREATE TABLE public.client_member_impersonations (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    member_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_member_impersonations_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_member_impersonations_user_id_not_null NOT NULL,
+    member_id bigint CONSTRAINT user_member_impersonations_member_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_member_impersonations_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_member_impersonations_updated_at_not_null NOT NULL
 );
 
 
@@ -1144,11 +1144,11 @@ ALTER SEQUENCE public.client_member_impersonations_id_seq OWNED BY public.client
 --
 
 CREATE TABLE public.client_member_observations (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    member_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_member_observations_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_member_observations_user_id_not_null NOT NULL,
+    member_id bigint CONSTRAINT user_member_observations_member_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_member_observations_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_member_observations_updated_at_not_null NOT NULL
 );
 
 
@@ -1176,11 +1176,11 @@ ALTER SEQUENCE public.client_member_observations_id_seq OWNED BY public.client_m
 --
 
 CREATE TABLE public.client_member_revocations (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    member_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_member_revocations_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_member_revocations_user_id_not_null NOT NULL,
+    member_id bigint CONSTRAINT user_member_revocations_member_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_member_revocations_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_member_revocations_updated_at_not_null NOT NULL
 );
 
 
@@ -1208,11 +1208,11 @@ ALTER SEQUENCE public.client_member_revocations_id_seq OWNED BY public.client_me
 --
 
 CREATE TABLE public.client_member_suspensions (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    member_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_member_suspensions_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_member_suspensions_user_id_not_null NOT NULL,
+    member_id bigint CONSTRAINT user_member_suspensions_member_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_member_suspensions_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_member_suspensions_updated_at_not_null NOT NULL
 );
 
 
@@ -1240,11 +1240,11 @@ ALTER SEQUENCE public.client_member_suspensions_id_seq OWNED BY public.client_me
 --
 
 CREATE TABLE public.client_members (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    member_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_members_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_members_user_id_not_null NOT NULL,
+    member_id bigint CONSTRAINT user_members_member_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_members_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_members_updated_at_not_null NOT NULL
 );
 
 
@@ -1272,13 +1272,13 @@ ALTER SEQUENCE public.client_members_id_seq OWNED BY public.client_members.id;
 --
 
 CREATE TABLE public.client_memberships (
-    id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    joined_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    left_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    user_id bigint NOT NULL,
-    workspace_id bigint NOT NULL
+    id bigint CONSTRAINT user_memberships_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_memberships_created_at_not_null NOT NULL,
+    joined_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT user_memberships_joined_at_not_null NOT NULL,
+    left_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone CONSTRAINT user_memberships_left_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_memberships_updated_at_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_memberships_user_id_not_null NOT NULL,
+    workspace_id bigint CONSTRAINT user_memberships_workspace_id_not_null NOT NULL
 );
 
 
@@ -1306,7 +1306,7 @@ ALTER SEQUENCE public.client_memberships_id_seq OWNED BY public.client_membershi
 --
 
 CREATE TABLE public.client_mfa_levels (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_multi_factors_id_not_null NOT NULL
 );
 
 
@@ -1334,7 +1334,7 @@ ALTER SEQUENCE public.client_mfa_levels_id_seq OWNED BY public.client_mfa_levels
 --
 
 CREATE TABLE public.client_mfa_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_multi_factor_statuses_id_not_null NOT NULL
 );
 
 
@@ -1396,7 +1396,7 @@ ALTER SEQUENCE public.client_oidc_identity_bindings_id_seq OWNED BY public.clien
 --
 
 CREATE TABLE public.client_passkey_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_passkey_statuses_id_not_null NOT NULL
 );
 
 
@@ -1424,20 +1424,20 @@ ALTER SEQUENCE public.client_passkey_statuses_id_seq OWNED BY public.client_pass
 --
 
 CREATE TABLE public.client_passkeys (
-    id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    description character varying DEFAULT ''::character varying NOT NULL,
-    external_id uuid NOT NULL,
-    public_key text NOT NULL,
-    sign_count bigint DEFAULT 0 NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    user_id bigint NOT NULL,
-    webauthn_id character varying DEFAULT ''::character varying NOT NULL,
-    status_id bigint DEFAULT 1 NOT NULL,
+    id bigint CONSTRAINT user_passkeys_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_passkeys_created_at_not_null NOT NULL,
+    description character varying DEFAULT ''::character varying CONSTRAINT user_passkeys_description_not_null NOT NULL,
+    external_id uuid CONSTRAINT user_passkeys_external_id_not_null NOT NULL,
+    public_key text CONSTRAINT user_passkeys_public_key_not_null NOT NULL,
+    sign_count bigint DEFAULT 0 CONSTRAINT user_passkeys_sign_count_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_passkeys_updated_at_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_passkeys_user_id_not_null NOT NULL,
+    webauthn_id character varying DEFAULT ''::character varying CONSTRAINT user_passkeys_webauthn_id_not_null NOT NULL,
+    status_id bigint DEFAULT 1 CONSTRAINT user_passkeys_user_passkey_status_id_not_null NOT NULL,
     last_used_at timestamp(6) with time zone,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    public_id character varying(21) NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_passkeys_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_passkeys_purged_at_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT client_passkeys_public_id_not_null1 NOT NULL,
     aaguid uuid,
     transports jsonb,
     backup_eligible boolean,
@@ -1605,13 +1605,13 @@ ALTER SEQUENCE public.client_persona_lifecycles_id_seq OWNED BY public.client_pe
 
 CREATE TABLE public.client_persona_ownership_transfer_requests (
     id bigint NOT NULL,
-    client_persona_id bigint NOT NULL,
-    source_client_id bigint NOT NULL,
-    destination_client_id bigint NOT NULL,
+    client_persona_id bigint CONSTRAINT client_persona_ownership_transfer_re_client_persona_id_not_null NOT NULL,
+    source_client_id bigint CONSTRAINT client_persona_ownership_transfer_req_source_client_id_not_null NOT NULL,
+    destination_client_id bigint CONSTRAINT client_persona_ownership_transfe_destination_client_id_not_null NOT NULL,
     public_id character varying NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
-    expected_ownership_revision integer NOT NULL,
-    requested_at timestamp(6) with time zone NOT NULL,
+    expected_ownership_revision integer CONSTRAINT client_persona_ownership_tr_expected_ownership_revisio_not_null NOT NULL,
+    requested_at timestamp(6) with time zone CONSTRAINT client_persona_ownership_transfer_request_requested_at_not_null NOT NULL,
     expires_at timestamp(6) with time zone NOT NULL,
     accepted_at timestamp(6) with time zone,
     rejected_at timestamp(6) with time zone,
@@ -1749,7 +1749,7 @@ ALTER SEQUENCE public.client_persona_view_grants_id_seq OWNED BY public.client_p
 --
 
 CREATE TABLE public.client_preference_adult_content_gate_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT client_preference_r18_display_stopper_options_id_not_null NOT NULL
 );
 
 
@@ -1777,11 +1777,11 @@ ALTER SEQUENCE public.client_preference_adult_content_gate_options_id_seq OWNED 
 --
 
 CREATE TABLE public.client_preference_adult_content_gates (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT client_preference_r18_display_stoppers_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT client_preference_r18_display_stoppers_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT client_preference_r18_display_stoppers_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT client_preference_r18_display_stoppers_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT client_preference_r18_display_stoppers_updated_at_not_null NOT NULL
 );
 
 
@@ -1809,11 +1809,11 @@ ALTER SEQUENCE public.client_preference_adult_content_gates_id_seq OWNED BY publ
 --
 
 CREATE TABLE public.client_preference_currencies (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_currencies_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_currencies_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_currencies_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_currencies_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_currencies_updated_at_not_null NOT NULL
 );
 
 
@@ -1841,7 +1841,7 @@ ALTER SEQUENCE public.client_preference_currencies_id_seq OWNED BY public.client
 --
 
 CREATE TABLE public.client_preference_currency_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_currency_options_id_not_null NOT NULL
 );
 
 
@@ -1869,7 +1869,7 @@ ALTER SEQUENCE public.client_preference_currency_options_id_seq OWNED BY public.
 --
 
 CREATE TABLE public.client_preference_date_format_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_date_format_options_id_not_null NOT NULL
 );
 
 
@@ -1897,11 +1897,11 @@ ALTER SEQUENCE public.client_preference_date_format_options_id_seq OWNED BY publ
 --
 
 CREATE TABLE public.client_preference_date_formats (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_date_formats_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_date_formats_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_date_formats_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_date_formats_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_date_formats_updated_at_not_null NOT NULL
 );
 
 
@@ -1929,11 +1929,11 @@ ALTER SEQUENCE public.client_preference_date_formats_id_seq OWNED BY public.clie
 --
 
 CREATE TABLE public.client_preference_densities (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_densities_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_densities_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_densities_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_densities_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_densities_updated_at_not_null NOT NULL
 );
 
 
@@ -1961,7 +1961,7 @@ ALTER SEQUENCE public.client_preference_densities_id_seq OWNED BY public.client_
 --
 
 CREATE TABLE public.client_preference_density_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_density_options_id_not_null NOT NULL
 );
 
 
@@ -1989,7 +1989,7 @@ ALTER SEQUENCE public.client_preference_density_options_id_seq OWNED BY public.c
 --
 
 CREATE TABLE public.client_preference_language_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_language_options_id_not_null NOT NULL
 );
 
 
@@ -2017,11 +2017,11 @@ ALTER SEQUENCE public.client_preference_language_options_id_seq OWNED BY public.
 --
 
 CREATE TABLE public.client_preference_languages (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_languages_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_languages_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_languages_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_languages_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_languages_updated_at_not_null NOT NULL
 );
 
 
@@ -2049,7 +2049,7 @@ ALTER SEQUENCE public.client_preference_languages_id_seq OWNED BY public.client_
 --
 
 CREATE TABLE public.client_preference_motion_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_motion_options_id_not_null NOT NULL
 );
 
 
@@ -2077,11 +2077,11 @@ ALTER SEQUENCE public.client_preference_motion_options_id_seq OWNED BY public.cl
 --
 
 CREATE TABLE public.client_preference_motions (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_motions_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_motions_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_motions_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_motions_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_motions_updated_at_not_null NOT NULL
 );
 
 
@@ -2109,7 +2109,7 @@ ALTER SEQUENCE public.client_preference_motions_id_seq OWNED BY public.client_pr
 --
 
 CREATE TABLE public.client_preference_page_size_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_items_per_page_options_id_not_null NOT NULL
 );
 
 
@@ -2137,11 +2137,11 @@ ALTER SEQUENCE public.client_preference_page_size_options_id_seq OWNED BY public
 --
 
 CREATE TABLE public.client_preference_page_sizes (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_items_per_pages_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_items_per_pages_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_items_per_pages_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_items_per_pages_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_items_per_pages_updated_at_not_null NOT NULL
 );
 
 
@@ -2169,7 +2169,7 @@ ALTER SEQUENCE public.client_preference_page_sizes_id_seq OWNED BY public.client
 --
 
 CREATE TABLE public.client_preference_region_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_region_options_id_not_null NOT NULL
 );
 
 
@@ -2197,11 +2197,11 @@ ALTER SEQUENCE public.client_preference_region_options_id_seq OWNED BY public.cl
 --
 
 CREATE TABLE public.client_preference_regions (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_regions_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_regions_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_regions_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_regions_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_regions_updated_at_not_null NOT NULL
 );
 
 
@@ -2229,7 +2229,7 @@ ALTER SEQUENCE public.client_preference_regions_id_seq OWNED BY public.client_pr
 --
 
 CREATE TABLE public.client_preference_theme_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_colortheme_options_id_not_null NOT NULL
 );
 
 
@@ -2257,11 +2257,11 @@ ALTER SEQUENCE public.client_preference_theme_options_id_seq OWNED BY public.cli
 --
 
 CREATE TABLE public.client_preference_themes (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_colorthemes_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_colorthemes_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_colorthemes_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_colorthemes_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_colorthemes_updated_at_not_null NOT NULL
 );
 
 
@@ -2289,7 +2289,7 @@ ALTER SEQUENCE public.client_preference_themes_id_seq OWNED BY public.client_pre
 --
 
 CREATE TABLE public.client_preference_time_format_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_time_format_options_id_not_null NOT NULL
 );
 
 
@@ -2317,11 +2317,11 @@ ALTER SEQUENCE public.client_preference_time_format_options_id_seq OWNED BY publ
 --
 
 CREATE TABLE public.client_preference_time_formats (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_time_formats_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_time_formats_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_time_formats_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_time_formats_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_time_formats_updated_at_not_null NOT NULL
 );
 
 
@@ -2349,7 +2349,7 @@ ALTER SEQUENCE public.client_preference_time_formats_id_seq OWNED BY public.clie
 --
 
 CREATE TABLE public.client_preference_timezone_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_preference_timezone_options_id_not_null NOT NULL
 );
 
 
@@ -2377,11 +2377,11 @@ ALTER SEQUENCE public.client_preference_timezone_options_id_seq OWNED BY public.
 --
 
 CREATE TABLE public.client_preference_timezones (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT user_preference_timezones_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT user_preference_timezones_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT user_preference_timezones_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preference_timezones_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preference_timezones_updated_at_not_null NOT NULL
 );
 
 
@@ -2409,27 +2409,27 @@ ALTER SEQUENCE public.client_preference_timezones_id_seq OWNED BY public.client_
 --
 
 CREATE TABLE public.client_preferences (
-    id bigint NOT NULL,
-    user_id bigint NOT NULL,
-    consented boolean DEFAULT false NOT NULL,
-    functional boolean DEFAULT false NOT NULL,
-    performant boolean DEFAULT false NOT NULL,
-    targetable boolean DEFAULT false NOT NULL,
+    id bigint CONSTRAINT user_preferences_id_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_preferences_user_id_not_null NOT NULL,
+    consented boolean DEFAULT false CONSTRAINT user_preferences_consented_not_null NOT NULL,
+    functional boolean DEFAULT false CONSTRAINT user_preferences_functional_not_null NOT NULL,
+    performant boolean DEFAULT false CONSTRAINT user_preferences_performant_not_null NOT NULL,
+    targetable boolean DEFAULT false CONSTRAINT user_preferences_targetable_not_null NOT NULL,
     consented_at timestamp(6) with time zone,
     consent_version uuid,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    language character varying DEFAULT 'ja'::character varying NOT NULL,
-    region character varying DEFAULT 'jp'::character varying NOT NULL,
-    timezone character varying DEFAULT 'Asia/Tokyo'::character varying NOT NULL,
-    theme character varying DEFAULT 'sy'::character varying NOT NULL,
-    public_id character varying(21) NOT NULL,
-    currency character varying DEFAULT 'jpy'::character varying NOT NULL,
-    date_format character varying DEFAULT 'iso'::character varying NOT NULL,
-    time_format character varying DEFAULT '24'::character varying NOT NULL,
-    motion character varying DEFAULT 'standard'::character varying NOT NULL,
-    density character varying DEFAULT 'standard'::character varying NOT NULL,
-    page_size character varying DEFAULT 'infinity'::character varying NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_preferences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_preferences_updated_at_not_null NOT NULL,
+    language character varying DEFAULT 'ja'::character varying CONSTRAINT user_preferences_language_not_null NOT NULL,
+    region character varying DEFAULT 'jp'::character varying CONSTRAINT user_preferences_region_not_null NOT NULL,
+    timezone character varying DEFAULT 'Asia/Tokyo'::character varying CONSTRAINT user_preferences_timezone_not_null NOT NULL,
+    theme character varying DEFAULT 'sy'::character varying CONSTRAINT user_preferences_theme_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT client_preferences_public_id_not_null1 NOT NULL,
+    currency character varying DEFAULT 'jpy'::character varying CONSTRAINT user_preferences_currency_not_null NOT NULL,
+    date_format character varying DEFAULT 'iso'::character varying CONSTRAINT user_preferences_date_format_not_null NOT NULL,
+    time_format character varying DEFAULT '24'::character varying CONSTRAINT user_preferences_time_format_not_null NOT NULL,
+    motion character varying DEFAULT 'standard'::character varying CONSTRAINT user_preferences_motion_not_null NOT NULL,
+    density character varying DEFAULT 'standard'::character varying CONSTRAINT user_preferences_density_not_null NOT NULL,
+    page_size character varying DEFAULT 'infinity'::character varying CONSTRAINT user_preferences_items_per_page_not_null NOT NULL,
     explicit_fields jsonb DEFAULT '[]'::jsonb
 );
 
@@ -2506,8 +2506,8 @@ CREATE TABLE public.client_privacy_requests (
     legal_hold_blocked_at timestamp(6) with time zone,
     final_response_sent_at timestamp(6) with time zone,
     lock_version integer DEFAULT 0 NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_privacy_requests_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_privacy_requests_purged_at_not_null NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_client_privacy_requests_retention_order CHECK ((discard_at <= purge_eligible_at))
@@ -2539,20 +2539,20 @@ ALTER SEQUENCE public.client_privacy_requests_id_seq OWNED BY public.client_priv
 
 CREATE TABLE public.client_processor_erasure_notification_attempts (
     id bigint NOT NULL,
-    client_processor_erasure_notification_id bigint NOT NULL,
-    delivery_generation bigint NOT NULL,
-    attempt_number integer NOT NULL,
-    processor_key character varying NOT NULL,
-    idempotency_key_digest character varying(64) NOT NULL,
+    client_processor_erasure_notification_id bigint CONSTRAINT client_processor_erasure_no_client_processor_erasure_n_not_null NOT NULL,
+    delivery_generation bigint CONSTRAINT client_processor_erasure_notifica_delivery_generation_not_null1 NOT NULL,
+    attempt_number integer CONSTRAINT client_processor_erasure_notification_a_attempt_number_not_null NOT NULL,
+    processor_key character varying CONSTRAINT client_processor_erasure_notification_at_processor_key_not_null NOT NULL,
+    idempotency_key_digest character varying(64) CONSTRAINT client_processor_erasure_notifi_idempotency_key_digest_not_null NOT NULL,
     outcome character varying NOT NULL,
-    started_at timestamp(6) with time zone NOT NULL,
+    started_at timestamp(6) with time zone CONSTRAINT client_processor_erasure_notification_attem_started_at_not_null NOT NULL,
     finished_at timestamp(6) with time zone,
     lease_expires_at timestamp(6) with time zone,
     receipt_reference_digest character varying(64),
-    error_code character varying DEFAULT ''::character varying NOT NULL,
-    error_message character varying DEFAULT ''::character varying NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    error_code character varying DEFAULT ''::character varying CONSTRAINT client_processor_erasure_notification_attem_error_code_not_null NOT NULL,
+    error_message character varying DEFAULT ''::character varying CONSTRAINT client_processor_erasure_notification_at_error_message_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT client_processor_erasure_notification_attem_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT client_processor_erasure_notification_attem_updated_at_not_null NOT NULL,
     CONSTRAINT chk_client_proc_erase_attempt_generation_positive CHECK ((delivery_generation > 0)),
     CONSTRAINT chk_client_proc_erase_attempt_idempotency_digest CHECK (((idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT chk_client_proc_erase_attempt_number_positive CHECK ((attempt_number > 0)),
@@ -2615,23 +2615,23 @@ ALTER SEQUENCE public.client_processor_erasure_notification_statuses_id_seq OWNE
 CREATE TABLE public.client_processor_erasure_notifications (
     id bigint NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying NOT NULL,
-    client_privacy_request_id bigint NOT NULL,
+    client_privacy_request_id bigint CONSTRAINT client_processor_erasure_not_client_privacy_request_id_not_null NOT NULL,
     processor_key character varying DEFAULT ''::character varying NOT NULL,
     status_id bigint DEFAULT 10 NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
     notified_at timestamp(6) with time zone,
     failed_at timestamp(6) with time zone,
     last_error_code character varying DEFAULT ''::character varying NOT NULL,
-    last_error_message character varying DEFAULT ''::character varying NOT NULL,
+    last_error_message character varying DEFAULT ''::character varying CONSTRAINT client_processor_erasure_notificati_last_error_message_not_null NOT NULL,
     retry_count integer DEFAULT 0 NOT NULL,
     next_retry_at timestamp(6) with time zone,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_processor_erasure_notifications_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_processor_erasure_notifications_purged_at_not_null NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    delivery_generation bigint DEFAULT 1 NOT NULL,
+    delivery_generation bigint DEFAULT 1 CONSTRAINT client_processor_erasure_notificat_delivery_generation_not_null NOT NULL,
     permanent_failed_at timestamp(6) with time zone,
-    delivery_idempotency_key_digest character varying(64) NOT NULL,
+    delivery_idempotency_key_digest character varying(64) CONSTRAINT client_processor_erasure_no_delivery_idempotency_key_d_not_null NOT NULL,
     CONSTRAINT chk_client_proc_erase_notifications_generation_positive CHECK ((delivery_generation > 0)),
     CONSTRAINT chk_client_proc_erase_notifications_idempotency_digest CHECK (((delivery_idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT chk_client_proc_erase_notifications_retention_order CHECK ((discard_at <= purge_eligible_at)),
@@ -2770,8 +2770,8 @@ CREATE TABLE public.client_retention_holds (
     applied_by_type character varying DEFAULT ''::character varying NOT NULL,
     applied_by_public_id character varying DEFAULT ''::character varying NOT NULL,
     memo character varying DEFAULT ''::character varying NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_retention_holds_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_retention_holds_purged_at_not_null NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_client_retention_holds_retention_order CHECK ((discard_at <= purge_eligible_at))
@@ -2997,7 +2997,7 @@ ALTER SEQUENCE public.client_social_audit_outboxes_id_seq OWNED BY public.client
 --
 
 CREATE TABLE public.client_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_statuses_id_not_null NOT NULL
 );
 
 
@@ -3058,7 +3058,7 @@ ALTER SEQUENCE public.client_telephone_histories_id_seq OWNED BY public.client_t
 --
 
 CREATE TABLE public.client_telephone_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_telephone_statuses_id_not_null NOT NULL
 );
 
 
@@ -3086,18 +3086,18 @@ ALTER SEQUENCE public.client_telephone_statuses_id_seq OWNED BY public.client_te
 --
 
 CREATE TABLE public.client_telephones (
-    id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    locked_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone NOT NULL,
-    number character varying DEFAULT ''::character varying NOT NULL,
-    otp_attempts_count integer DEFAULT 0 NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    user_id bigint NOT NULL,
-    user_identity_telephone_status_id bigint DEFAULT 0 NOT NULL,
-    public_id character varying(21) NOT NULL,
+    id bigint CONSTRAINT user_telephones_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_telephones_created_at_not_null NOT NULL,
+    locked_at timestamp(6) with time zone DEFAULT '-infinity'::timestamp with time zone CONSTRAINT user_telephones_locked_at_not_null NOT NULL,
+    number character varying DEFAULT ''::character varying CONSTRAINT user_telephones_number_not_null NOT NULL,
+    otp_attempts_count integer DEFAULT 0 CONSTRAINT user_telephones_otp_attempts_count_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_telephones_updated_at_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_telephones_user_id_not_null NOT NULL,
+    user_identity_telephone_status_id bigint DEFAULT 0 CONSTRAINT user_telephones_user_identity_telephone_status_id_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT user_telephones_public_id_not_null NOT NULL,
     number_digest character varying,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_telephones_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_telephones_purged_at_not_null NOT NULL,
     binding_finalized_at timestamp(6) with time zone,
     binding_released_at timestamp(6) with time zone,
     otp_last_sent_at timestamp(6) with time zone,
@@ -3132,7 +3132,7 @@ ALTER SEQUENCE public.client_telephones_id_seq OWNED BY public.client_telephones
 --
 
 CREATE TABLE public.client_totp_credential_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_one_time_password_statuses_id_not_null NOT NULL
 );
 
 
@@ -3160,15 +3160,15 @@ ALTER SEQUENCE public.client_totp_credential_statuses_id_seq OWNED BY public.cli
 --
 
 CREATE TABLE public.client_totp_credentials (
-    id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT user_one_time_passwords_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT user_one_time_passwords_created_at_not_null NOT NULL,
     last_otp_at timestamp(6) with time zone,
-    private_key character varying(1024) DEFAULT ''::character varying NOT NULL,
-    public_id character varying(21) NOT NULL,
+    private_key character varying(1024) DEFAULT ''::character varying CONSTRAINT user_one_time_passwords_private_key_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT user_one_time_passwords_public_id_not_null NOT NULL,
     title character varying(32),
-    updated_at timestamp(6) with time zone NOT NULL,
-    user_id bigint NOT NULL,
-    user_identity_totp_credential_status_id bigint DEFAULT 5 NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT user_one_time_passwords_updated_at_not_null NOT NULL,
+    user_id bigint CONSTRAINT user_one_time_passwords_user_id_not_null NOT NULL,
+    user_identity_totp_credential_status_id bigint DEFAULT 5 CONSTRAINT user_one_time_passwords_user_identity_one_time_passwor_not_null NOT NULL,
     otp_attempts_count integer DEFAULT 0 NOT NULL,
     CONSTRAINT client_totp_credentials_otp_attempts_count_range CHECK (((otp_attempts_count >= 0) AND (otp_attempts_count <= 100)))
 );
@@ -3198,7 +3198,7 @@ ALTER SEQUENCE public.client_totp_credentials_id_seq OWNED BY public.client_totp
 --
 
 CREATE TABLE public.client_visibilities (
-    id bigint NOT NULL
+    id bigint CONSTRAINT user_visibilities_id_not_null NOT NULL
 );
 
 
@@ -3267,17 +3267,17 @@ ALTER SEQUENCE public.client_withdrawal_ceremonies_id_seq OWNED BY public.client
 --
 
 CREATE TABLE public.client_withdrawal_flow_events (
-    id bigint NOT NULL,
-    client_withdrawal_flow_id bigint NOT NULL,
-    client_id bigint NOT NULL,
+    id bigint CONSTRAINT client_withdrawal_cycle_events_id_not_null NOT NULL,
+    client_withdrawal_flow_id bigint CONSTRAINT client_withdrawal_cycle_eve_client_withdrawal_cycle_id_not_null NOT NULL,
+    client_id bigint CONSTRAINT client_withdrawal_cycle_events_client_id_not_null NOT NULL,
     from_status_id bigint,
-    to_status_id bigint NOT NULL,
-    occurred_at timestamp(6) with time zone NOT NULL,
-    token_public_id character varying(64) DEFAULT ''::character varying NOT NULL,
-    reason character varying(64) DEFAULT ''::character varying NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    to_status_id bigint CONSTRAINT client_withdrawal_cycle_events_to_status_id_not_null NOT NULL,
+    occurred_at timestamp(6) with time zone CONSTRAINT client_withdrawal_cycle_events_occurred_at_not_null NOT NULL,
+    token_public_id character varying(64) DEFAULT ''::character varying CONSTRAINT client_withdrawal_cycle_events_token_public_id_not_null NOT NULL,
+    reason character varying(64) DEFAULT ''::character varying CONSTRAINT client_withdrawal_cycle_events_reason_not_null NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb CONSTRAINT client_withdrawal_cycle_events_metadata_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT client_withdrawal_cycle_events_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT client_withdrawal_cycle_events_updated_at_not_null NOT NULL
 );
 
 
@@ -3305,7 +3305,7 @@ ALTER SEQUENCE public.client_withdrawal_flow_events_id_seq OWNED BY public.clien
 --
 
 CREATE TABLE public.client_withdrawal_flow_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT client_withdrawal_cycle_statuses_id_not_null NOT NULL
 );
 
 
@@ -3333,17 +3333,17 @@ ALTER SEQUENCE public.client_withdrawal_flow_statuses_id_seq OWNED BY public.cli
 --
 
 CREATE TABLE public.client_withdrawal_flows (
-    id bigint NOT NULL,
-    public_id character varying(21) NOT NULL,
-    client_id bigint NOT NULL,
-    status_id bigint DEFAULT 10 NOT NULL,
-    began_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT client_withdrawal_cycles_id_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT client_withdrawal_cycles_public_id_not_null NOT NULL,
+    client_id bigint CONSTRAINT client_withdrawal_cycles_client_id_not_null NOT NULL,
+    status_id bigint DEFAULT 10 CONSTRAINT client_withdrawal_cycles_status_id_not_null NOT NULL,
+    began_at timestamp(6) with time zone CONSTRAINT client_withdrawal_cycles_began_at_not_null NOT NULL,
     completed_at timestamp(6) with time zone,
     failed_at timestamp(6) with time zone,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_withdrawal_cycles_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT client_withdrawal_cycles_purged_at_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT client_withdrawal_cycles_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT client_withdrawal_cycles_updated_at_not_null NOT NULL,
     CONSTRAINT chk_client_withdrawal_cycles_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -3372,22 +3372,22 @@ ALTER SEQUENCE public.client_withdrawal_flows_id_seq OWNED BY public.client_with
 --
 
 CREATE TABLE public.clients (
-    id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT users_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT users_created_at_not_null NOT NULL,
     last_step_up_at timestamp(6) with time zone,
-    lock_version integer DEFAULT 0 NOT NULL,
-    public_id character varying(255) DEFAULT ''::character varying NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    lock_version integer DEFAULT 0 CONSTRAINT users_lock_version_not_null NOT NULL,
+    public_id character varying(255) DEFAULT ''::character varying CONSTRAINT users_public_id_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT users_updated_at_not_null NOT NULL,
     withdrawn_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone,
-    status_id bigint DEFAULT 11 NOT NULL,
-    mfa_level_enabled boolean DEFAULT false NOT NULL,
+    status_id bigint DEFAULT 11 CONSTRAINT users_status_id_not_null NOT NULL,
+    mfa_level_enabled boolean DEFAULT false CONSTRAINT users_multi_factor_enabled_not_null NOT NULL,
     withdrawal_started_at timestamp(6) with time zone,
     deactivated_at timestamp(6) with time zone,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    visibility_id bigint DEFAULT 2 NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    mfa_level_id bigint DEFAULT 0 NOT NULL,
-    mfa_status_id bigint DEFAULT 5 NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT users_purged_at_not_null NOT NULL,
+    visibility_id bigint DEFAULT 2 CONSTRAINT users_visibility_id_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT users_discarded_at_not_null NOT NULL,
+    mfa_level_id bigint DEFAULT 0 CONSTRAINT users_multi_factor_id_not_null NOT NULL,
+    mfa_status_id bigint DEFAULT 5 CONSTRAINT users_multi_factor_status_id_not_null NOT NULL,
     terminated_at timestamp(6) with time zone,
     birthdate text,
     access_state character varying DEFAULT 'enabled'::character varying NOT NULL,
@@ -3398,8 +3398,10 @@ CREATE TABLE public.clients (
     token_valid_after_at timestamp(6) with time zone,
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
+    authentication_epoch bigint DEFAULT 0 NOT NULL,
     CONSTRAINT chk_clients_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_clients_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT chk_clients_authentication_epoch_nonnegative CHECK ((authentication_epoch >= 0)),
     CONSTRAINT chk_clients_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000))),
     CONSTRAINT chk_users_retention_order CHECK ((discard_at <= purge_eligible_at)),
     CONSTRAINT clients_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
@@ -3600,11 +3602,11 @@ ALTER SEQUENCE public.enterprise_lifecycles_id_seq OWNED BY public.enterprise_li
 CREATE TABLE public.enterprise_ownership_transfer_requests (
     id bigint NOT NULL,
     enterprise_id bigint NOT NULL,
-    source_client_id bigint NOT NULL,
-    destination_client_id bigint NOT NULL,
+    source_client_id bigint CONSTRAINT enterprise_ownership_transfer_request_source_client_id_not_null NOT NULL,
+    destination_client_id bigint CONSTRAINT enterprise_ownership_transfer_re_destination_client_id_not_null NOT NULL,
     public_id character varying NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
-    expected_ownership_revision integer NOT NULL,
+    expected_ownership_revision integer CONSTRAINT enterprise_ownership_transf_expected_ownership_revisio_not_null NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
     expires_at timestamp(6) with time zone NOT NULL,
     accepted_at timestamp(6) with time zone,
@@ -3813,19 +3815,58 @@ ALTER SEQUENCE public.enterprises_id_seq OWNED BY public.enterprises.id;
 
 
 --
+-- Name: identity_authentication_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.identity_authentication_events (
+    id bigint NOT NULL,
+    event_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    actor_ref character varying NOT NULL,
+    realm character varying(3) NOT NULL,
+    cutoff_epoch bigint NOT NULL,
+    reason character varying(64) NOT NULL,
+    scope character varying(64) NOT NULL,
+    committed_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_app_identity_authentication_events_epoch_nonnegative CHECK ((cutoff_epoch >= 0)),
+    CONSTRAINT chk_app_identity_authentication_events_realm CHECK (((realm)::text = 'app'::text))
+);
+
+
+--
+-- Name: identity_authentication_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.identity_authentication_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: identity_authentication_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.identity_authentication_events_id_seq OWNED BY public.identity_authentication_events.id;
+
+
+--
 -- Name: legacy_replaced_client_banners; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.legacy_replaced_client_banners (
-    id bigint NOT NULL,
-    client_id bigint NOT NULL,
-    title character varying DEFAULT ''::character varying NOT NULL,
-    body text NOT NULL,
-    published boolean DEFAULT false NOT NULL,
-    starts_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    ends_at timestamp(6) with time zone DEFAULT '9999-12-31 23:59:59+00'::timestamp with time zone NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT client_banners_id_not_null NOT NULL,
+    client_id bigint CONSTRAINT client_banners_client_id_not_null NOT NULL,
+    title character varying DEFAULT ''::character varying CONSTRAINT client_banners_title_not_null NOT NULL,
+    body text CONSTRAINT client_banners_body_not_null NOT NULL,
+    published boolean DEFAULT false CONSTRAINT client_banners_published_not_null NOT NULL,
+    starts_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT client_banners_starts_at_not_null NOT NULL,
+    ends_at timestamp(6) with time zone DEFAULT '9999-12-31 23:59:59+00'::timestamp with time zone CONSTRAINT client_banners_ends_at_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT client_banners_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT client_banners_updated_at_not_null NOT NULL,
     CONSTRAINT client_banners_ends_at_after_starts_at CHECK ((ends_at > starts_at))
 );
 
@@ -3854,7 +3895,7 @@ ALTER SEQUENCE public.legacy_replaced_client_banners_id_seq OWNED BY public.lega
 --
 
 CREATE TABLE public.legacy_replaced_client_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT client_statuses_id_not_null NOT NULL
 );
 
 
@@ -3882,16 +3923,16 @@ ALTER SEQUENCE public.legacy_replaced_client_statuses_id_seq OWNED BY public.leg
 --
 
 CREATE TABLE public.legacy_replaced_clients (
-    id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT clients_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT clients_created_at_not_null NOT NULL,
     division_id bigint,
-    lock_version integer DEFAULT 0 NOT NULL,
+    lock_version integer DEFAULT 0 CONSTRAINT clients_lock_version_not_null NOT NULL,
     moniker character varying,
-    public_id character varying NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    public_id character varying CONSTRAINT clients_public_id_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT clients_updated_at_not_null NOT NULL,
     user_id bigint,
-    client_status_id bigint DEFAULT 0 NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL
+    client_status_id bigint DEFAULT 0 CONSTRAINT clients_client_status_id_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT clients_status_id_not_null NOT NULL
 );
 
 
@@ -3957,8 +3998,8 @@ CREATE TABLE public.members (
     status_id bigint DEFAULT 5 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT members_shreddable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT members_discarded_at_not_null NOT NULL,
     CONSTRAINT members_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
@@ -5164,6 +5205,13 @@ ALTER TABLE ONLY public.enterprises ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
+-- Name: identity_authentication_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_authentication_events ALTER COLUMN id SET DEFAULT nextval('public.identity_authentication_events_id_seq'::regclass);
+
+
+--
 -- Name: legacy_replaced_client_banners id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -6169,6 +6217,14 @@ ALTER TABLE ONLY public.enterprises
 
 
 --
+-- Name: identity_authentication_events identity_authentication_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_authentication_events
+    ADD CONSTRAINT identity_authentication_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: legacy_replaced_client_banners legacy_replaced_client_banners_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6410,6 +6466,20 @@ CREATE UNIQUE INDEX idx_app_enforcement_method_effects_one_open_per_method ON pu
 --
 
 CREATE INDEX idx_app_enforcement_principal_effects_principal_open ON public.app_enforcement_principal_effects USING btree (principal_public_id, ended_at);
+
+
+--
+-- Name: idx_app_identity_authentication_events_actor_epoch; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_app_identity_authentication_events_actor_epoch ON public.identity_authentication_events USING btree (actor_ref, cutoff_epoch);
+
+
+--
+-- Name: idx_app_identity_authentication_events_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_app_identity_authentication_events_event_id ON public.identity_authentication_events USING btree (event_id);
 
 
 --
@@ -8247,7 +8317,7 @@ ALTER TABLE ONLY public.legacy_replaced_clients
 --
 
 ALTER TABLE ONLY public.enterprise_units
-    ADD CONSTRAINT fk_enterprise_units_parent_same_enterprise FOREIGN KEY (parent_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_enterprise_units_parent_same_enterprise FOREIGN KEY (parent_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT;
 
 
 --
@@ -8255,7 +8325,7 @@ ALTER TABLE ONLY public.enterprise_units
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_persona_memberships_unit_same_enterprise FOREIGN KEY (enterprise_unit_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_persona_memberships_unit_same_enterprise FOREIGN KEY (enterprise_unit_id, enterprise_id) REFERENCES public.enterprise_units(id, enterprise_id) ON DELETE RESTRICT;
 
 
 --
@@ -8295,7 +8365,7 @@ ALTER TABLE ONLY public.client_banners
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_0d7f5f74b1 FOREIGN KEY (revoke_reason_id) REFERENCES public.persona_membership_revoke_reasons(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_0d7f5f74b1 FOREIGN KEY (revoke_reason_id) REFERENCES public.persona_membership_revoke_reasons(id);
 
 
 --
@@ -8351,7 +8421,7 @@ ALTER TABLE ONLY public.client_emails
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_182816542a FOREIGN KEY (membership_state_id) REFERENCES public.persona_membership_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_182816542a FOREIGN KEY (membership_state_id) REFERENCES public.persona_membership_states(id);
 
 
 --
@@ -8431,7 +8501,7 @@ ALTER TABLE ONLY public.members
 --
 
 ALTER TABLE ONLY public.client_identities
-    ADD CONSTRAINT fk_rails_3045b2b3f6 FOREIGN KEY (status_id) REFERENCES public.client_identity_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3045b2b3f6 FOREIGN KEY (status_id) REFERENCES public.client_identity_states(id);
 
 
 --
@@ -8479,7 +8549,7 @@ ALTER TABLE ONLY public.enterprise_view_grants
 --
 
 ALTER TABLE ONLY public.client_preferences
-    ADD CONSTRAINT fk_rails_39373ef225 FOREIGN KEY (user_id) REFERENCES public.clients(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_39373ef225 FOREIGN KEY (user_id) REFERENCES public.clients(id) ON DELETE CASCADE;
 
 
 --
@@ -8495,7 +8565,7 @@ ALTER TABLE ONLY public.client_preference_currencies
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flows
-    ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3a897cfb78 FOREIGN KEY (status_id) REFERENCES public.client_withdrawal_flow_statuses(id);
 
 
 --
@@ -8575,7 +8645,7 @@ ALTER TABLE ONLY public.enterprise_delegation_grants
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_4f3c994599 FOREIGN KEY (membership_kind_id) REFERENCES public.persona_membership_kinds(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_4f3c994599 FOREIGN KEY (membership_kind_id) REFERENCES public.persona_membership_kinds(id);
 
 
 --
@@ -8583,7 +8653,7 @@ ALTER TABLE ONLY public.persona_memberships
 --
 
 ALTER TABLE ONLY public.client_profiles
-    ADD CONSTRAINT fk_rails_510843a98e FOREIGN KEY (client_status_id) REFERENCES public.client_profile_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_510843a98e FOREIGN KEY (client_status_id) REFERENCES public.client_profile_statuses(id);
 
 
 --
@@ -8607,7 +8677,7 @@ ALTER TABLE ONLY public.persona_memberships
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_529c28deb1 FOREIGN KEY (granted_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_529c28deb1 FOREIGN KEY (granted_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
 
 
 --
@@ -8759,7 +8829,7 @@ ALTER TABLE ONLY public.client_member_revocations
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_7344701780 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_7344701780 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE;
 
 
 --
@@ -8847,7 +8917,7 @@ ALTER TABLE ONLY public.client_preference_page_sizes
 --
 
 ALTER TABLE ONLY public.personas
-    ADD CONSTRAINT fk_rails_8dc042a1c9 FOREIGN KEY (client_identity_id) REFERENCES public.client_identities(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_8dc042a1c9 FOREIGN KEY (client_identity_id) REFERENCES public.client_identities(id) ON DELETE RESTRICT;
 
 
 --
@@ -8927,7 +8997,7 @@ ALTER TABLE ONLY public.app_enforcement_identifier_effects
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_9511d96f8c FOREIGN KEY (to_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_9511d96f8c FOREIGN KEY (to_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -9039,7 +9109,7 @@ ALTER TABLE ONLY public.enterprise_ownership_transfer_requests
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_b55e5a56c4 FOREIGN KEY (client_withdrawal_flow_id) REFERENCES public.client_withdrawal_flows(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_b55e5a56c4 FOREIGN KEY (client_withdrawal_flow_id) REFERENCES public.client_withdrawal_flows(id);
 
 
 --
@@ -9079,7 +9149,7 @@ ALTER TABLE ONLY public.persona_assignments
 --
 
 ALTER TABLE ONLY public.client_profiles
-    ADD CONSTRAINT fk_rails_c49c0906dc FOREIGN KEY (status_id) REFERENCES public.client_profile_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_c49c0906dc FOREIGN KEY (status_id) REFERENCES public.client_profile_statuses(id);
 
 
 --
@@ -9111,7 +9181,7 @@ ALTER TABLE ONLY public.clients
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_cdfe640663 FOREIGN KEY (revoked_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_cdfe640663 FOREIGN KEY (revoked_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
 
 
 --
@@ -9191,7 +9261,7 @@ ALTER TABLE ONLY public.user_clients
 --
 
 ALTER TABLE ONLY public.persona_memberships
-    ADD CONSTRAINT fk_rails_e031c03097 FOREIGN KEY (approved_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_e031c03097 FOREIGN KEY (approved_by_persona_id) REFERENCES public.personas(id) ON DELETE SET NULL;
 
 
 --
@@ -9207,7 +9277,7 @@ ALTER TABLE ONLY public.app_enforcement_principal_links
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flows
-    ADD CONSTRAINT fk_rails_e5e99fd372 FOREIGN KEY (client_id) REFERENCES public.clients(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_e5e99fd372 FOREIGN KEY (client_id) REFERENCES public.clients(id);
 
 
 --
@@ -9287,7 +9357,7 @@ ALTER TABLE ONLY public.client_member_suspensions
 --
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_f24d4919a7 FOREIGN KEY (from_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_f24d4919a7 FOREIGN KEY (from_status_id) REFERENCES public.client_withdrawal_flow_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -9425,6 +9495,8 @@ ALTER TABLE ONLY public.client_preference_timezones
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261016210003'),
+('20261016210000'),
 ('20261012093100'),
 ('20261012093000'),
 ('20261012092100'),

@@ -616,8 +616,8 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     browser.host!(base_host)
     authorization = {
       response_type: "code",
-      client_id: "core-app",
-      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch("client").first,
+      client_id: "core-app-jp",
+      redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch("client").first,
       code_challenge: "a" * 43,
       code_challenge_method: "S256",
       scope: "openid",
@@ -783,11 +783,11 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
   end
 
   [
-    ["app", "PUBLIC_BASE_SERVICE_URL", "PUBLIC_AUTH_SERVICE_URL", "core-app", "client",
+    ["app", "PUBLIC_BASE_SERVICE_URL", "PUBLIC_AUTH_SERVICE_URL", "core-app-jp", "client",
      ClientAuthAdmissionBinding,],
-    ["com", "PUBLIC_BASE_CORPORATE_URL", "PUBLIC_AUTH_CORPORATE_URL", "core-com", "visitor",
+    ["com", "PUBLIC_BASE_CORPORATE_URL", "PUBLIC_AUTH_CORPORATE_URL", "core-com-jp", "visitor",
      VisitorAuthAdmissionBinding,],
-    ["org", "PUBLIC_BASE_STAFF_URL", "PUBLIC_AUTH_STAFF_URL", "core-org", "operator",
+    ["org", "PUBLIC_BASE_STAFF_URL", "PUBLIC_AUTH_STAFF_URL", "core-org-jp", "operator",
      OperatorAuthAdmissionBinding,],
   ].each do |surface, base_key, auth_key, client_id, realm, binding_model|
     test "#{surface} Base cookie loss and new nonce cannot confirm an old attached operation" do
@@ -871,15 +871,17 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
     [
       ["app", ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-       "core-app", "client", ClientOidcAuthorizationTransaction, ClientAuthAdmissionBinding, "sign_in", "/sign/in",],
+       "core-app-jp", "client", ClientOidcAuthorizationTransaction, ClientAuthAdmissionBinding, "sign_in", "/sign/in",],
       ["app", ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-       "core-app", "client", ClientOidcAuthorizationTransaction, ClientAuthAdmissionBinding, "sign_up", "/sign/in",],
+       "core-app-jp", "client", ClientOidcAuthorizationTransaction, ClientAuthAdmissionBinding, "sign_up", "/sign/in",],
       ["com", ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-       "core-com", "visitor", VisitorOidcAuthorizationTransaction, VisitorAuthAdmissionBinding, "sign_in", "/sign/in",],
+       "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction,
+       VisitorAuthAdmissionBinding, "sign_in", "/sign/in",],
       ["com", ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-       "core-com", "visitor", VisitorOidcAuthorizationTransaction, VisitorAuthAdmissionBinding, "sign_up", "/sign/in",],
+       "core-com-jp", "visitor", VisitorOidcAuthorizationTransaction,
+       VisitorAuthAdmissionBinding, "sign_up", "/sign/in",],
       ["org", ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-       "core-org", "operator", OperatorOidcAuthorizationTransaction, OperatorAuthAdmissionBinding,
+       "core-org-jp", "operator", OperatorOidcAuthorizationTransaction, OperatorAuthAdmissionBinding,
        "sign_in", "/sign/in",],
     ].each do |surface, base_host, auth_host, client_id, realm, transaction_model, binding_model, intent, entry_path|
       owner = open_session
@@ -1043,21 +1045,21 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     {
       name: "app",
       host_env: "PUBLIC_AUTH_SERVICE_URL",
-      client_id: "core-app",
+      client_id: "core-app-jp",
       realm: "client",
       sign_in: :auth_app_sign_in_url,
     },
     {
       name: "com",
       host_env: "PUBLIC_AUTH_CORPORATE_URL",
-      client_id: "core-com",
+      client_id: "core-com-jp",
       realm: "visitor",
       sign_in: :auth_com_sign_in_url,
     },
     {
       name: "org",
       host_env: "PUBLIC_AUTH_STAFF_URL",
-      client_id: "core-org",
+      client_id: "core-org-jp",
       realm: "operator",
       sign_in: :auth_org_sign_in_url,
     },

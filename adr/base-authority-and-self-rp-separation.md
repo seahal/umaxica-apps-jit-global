@@ -4,11 +4,12 @@
 
 Accepted (2026-10-06) as the target architecture for the `two.md` implementation cycle.
 
-> **Partial supersession (2026-10-13):** `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`
-> replaces the statement below that sibling RP rows are not synchronously revoked, and ends the
-> retained back-channel scope freeze: the parent and all of its RP rows are revoked in one
-> transaction and first-party Back-Channel Logout is removed. Authority-first logout and the
-> irreversible commit point are unchanged.
+> **Partial supersession (2026-10-13):**
+> `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` replaces the statement
+> below that sibling RP rows are not synchronously revoked, and ends the retained back-channel scope
+> freeze: the parent and all of its RP rows are revoked in one transaction and first-party
+> Back-Channel Logout is removed. Authority-first logout and the irreversible commit point are
+> unchanged.
 
 ## Context
 
@@ -32,7 +33,7 @@ The Browser Session is OP login state. It is not an RP credential, but a valid B
 authorize an OIDC request under the explicit `prompt` and `max_age` contract. Identity to Browser
 Session to RP Session is 1:N; an RP Session is parented by the stable DeviceSession and has at most
 one active row per DeviceSession and RP client. The current root token remains the carrier for
-step-up freshness, restricted-session state, establishment, idle, and absolute expiry.
+step-up freshness, historical status-103 rejection, establishment, idle, and absolute expiry.
 
 The shared layer owns state, nonce, PKCE, authorization start, callback validation, ID Token and
 UserInfo checks, identity binding, RP sessions, cookie credentials, refresh, failure behavior, and

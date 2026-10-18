@@ -19,10 +19,10 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       begin
         actors, tokens, flows, ceremonies, tickets, token_key =
           case surface
-          when :app then [Client, ClientToken, ClientSignInFlow, ClientAuthCeremonySession, AppTicketRecord, :user_id]
-          when :com then [Visitor, VisitorToken, VisitorSignInFlow, VisitorAuthCeremonySession, ComTicketRecord,
+          when :app then [Client, ClientToken, ClientSignInFlow, ClientAuthCeremonySession, OpBaseAppRecord, :user_id]
+          when :com then [Visitor, VisitorToken, VisitorSignInFlow, VisitorAuthCeremonySession, OpBaseComRecord,
                           :visitor_id,]
-          when :org then [Operator, OperatorToken, OperatorSignInFlow, OperatorAuthCeremonySession, OrgTicketRecord,
+          when :org then [Operator, OperatorToken, OperatorSignInFlow, OperatorAuthCeremonySession, OpBaseOrgRecord,
                           :staff_id,]
           end
         actor = (surface == :com) ? create_unique_visitor! : actors.create!
@@ -339,8 +339,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     threads =
       Array.new(2) do
         Thread.new do
-          AppTicketRecord.connected_to(role: :writing) do
-            AppTicketRecord.connection_pool.with_connection do |connection|
+          OpBaseAppRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connection_pool.with_connection do |connection|
               ready << connection.select_value("SELECT pg_backend_pid()")
               release.pop
               IdentityStepUpEmailVerificationCommitter.call!(
@@ -420,8 +420,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     threads =
       Array.new(2) do
         Thread.new do
-          ComTicketRecord.connected_to(role: :writing) do
-            ComTicketRecord.connection_pool.with_connection do |connection|
+          OpBaseComRecord.connected_to(role: :writing) do
+            OpBaseComRecord.connection_pool.with_connection do |connection|
               ready << connection.select_value("SELECT pg_backend_pid()")
               release.pop
               IdentityStepUpEmailVerificationCommitter.call!(
@@ -477,11 +477,11 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
 
   [
     [:app, Client, ClientToken, ClientPasskey, ClientStepUpCeremonyTransaction,
-     ClientAuthCeremonySession, ClientStepUpSession, AppTicketRecord,],
+     ClientAuthCeremonySession, ClientStepUpSession, OpBaseAppRecord,],
     [:com, Visitor, VisitorToken, VisitorPasskey, VisitorStepUpCeremonyTransaction,
-     VisitorAuthCeremonySession, VisitorStepUpSession, ComTicketRecord,],
+     VisitorAuthCeremonySession, VisitorStepUpSession, OpBaseComRecord,],
     [:org, Operator, OperatorToken, OperatorPasskey, OperatorStepUpCeremonyTransaction,
-     OperatorAuthCeremonySession, OperatorStepUpSession, OrgTicketRecord,],
+     OperatorAuthCeremonySession, OperatorStepUpSession, OpBaseOrgRecord,],
   ].each do |surface, actors, tokens, passkeys, transactions, continuities, sessions, tickets|
     test "#{surface} logout racing Base finalization leaves no usable authority or reusable result" do
       case surface
@@ -927,9 +927,9 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
   end
 
   [
-    [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession, AppTicketRecord, :app],
-    [VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession, ComTicketRecord, :com],
-    [OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession, OrgTicketRecord, :org],
+    [ClientStepUpCeremonyTransaction, ClientAuthCeremonySession, OpBaseAppRecord, :app],
+    [VisitorStepUpCeremonyTransaction, VisitorAuthCeremonySession, OpBaseComRecord, :com],
+    [OperatorStepUpCeremonyTransaction, OperatorAuthCeremonySession, OpBaseOrgRecord, :org],
   ].each do |parent_model, continuity_model, writer_model, surface|
     test "#{surface} writer connections close expired continuity once and refuse its competing transition" do
       parent = parent_model.create_transaction!(
@@ -1005,8 +1005,8 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     threads =
       Array.new(2) do |index|
         Thread.new do
-          AppTicketRecord.connected_to(role: :writing) do
-            AppTicketRecord.connection_pool.with_connection do |connection|
+          OpBaseAppRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connection_pool.with_connection do |connection|
               ready << connection.select_value("SELECT pg_backend_pid()")
               release.pop
               if index.zero?

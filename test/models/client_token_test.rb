@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_tokens
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
@@ -88,10 +88,10 @@ class ClientTokenTest < ActiveSupport::TestCase
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 
-  test "inherits from AppTicketRecord" do
-    assert_operator ClientToken, :<, AppTicketRecord
+  test "inherits from OpBaseAppRecord" do
+    assert_operator ClientToken, :<, OpBaseAppRecord
     assert_operator ClientToken, :<, ApplicationRecord
-    assert_not_operator ClientToken, :<, OrgTicketRecord
+    assert_not_operator ClientToken, :<, OpBaseOrgRecord
   end
 
   test "signed ref lookup role defaults to reading" do

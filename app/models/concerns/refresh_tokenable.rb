@@ -47,7 +47,7 @@ module RefreshTokenable
 
             current_token = lock.find(current_token_id)
             return { status: :replay, token: current_token } if current_token.rotated_at.present?
-            return { status: :invalid, token: current_token } unless current_token.currently_usable?(decision_time)
+            return { status: :invalid, token: current_token } unless current_token.active_status?(decision_time)
 
             current_token.assign_attributes(
               rotated_at: decision_time,
@@ -86,7 +86,7 @@ module RefreshTokenable
         raise RpSession::IssuanceRejected, "Browser Session is missing" unless device_session&.usable?
 
         current_token = lock.find_by(id: device_session.current_refresh_token_id)
-        unless current_token&.id == token.id && current_token.currently_usable?(decision_time)
+        unless current_token&.id == token.id && current_token.active_status?(decision_time)
           raise RpSession::IssuanceRejected, "Browser Session current root token changed"
         end
 

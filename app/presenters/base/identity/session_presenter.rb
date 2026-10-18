@@ -26,7 +26,7 @@ module Base
       def emergency_mode(session)
         context = session.authentication_context_value
         mode_type =
-          if context.emergency?
+          if context.standby?
             "emergency"
           elsif context.normal?
             "normal"

@@ -526,7 +526,7 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
 
     assert_equal token.public_id, transaction.reload.browser_session_ref
     assert_predicate transaction, :consumed?
-    assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
+    assert_equal 0, OpAppGrant.where(client_token_id: token.id).count
   end
   test "a result-delivery outage resumes the exact committed signup without another Source or Root" do
     subject = "new-social-#{SecureRandom.hex(8)}"

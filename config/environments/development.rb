@@ -75,7 +75,10 @@ Rails.application.configure do
   config.active_support.deprecation = :raise
 
   # Raise an error on page load if there are pending migrations.
-  config.active_record.migration_error = :page_load
+  # The pending-migration page check connects to every configured database. A role process
+  # (R5-WU03A) may CONNECT only to its own, so only the shared maintenance role runs the check;
+  # migrations are applied with the maintenance login, never from a role process.
+  config.active_record.migration_error = RuntimeRole.shared? ? :page_load : false
 
   # Raise on SQL warnings from PostgreSQL (overrides :log in application.rb).
   config.active_record.db_warnings_action = :raise

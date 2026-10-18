@@ -10,6 +10,7 @@ module Base
       class VisitorsController < Base::Org::ApplicationController
         include ::SurfaceInertiaPage
         include ::OrgAdministrationPage
+        include ::OrgAdminRelay
 
         AUTHENTICATION_MODE = :private
         REALM = "com"
@@ -19,13 +20,18 @@ module Base
 
         public
 
+        # R5-WU12: listed and decided by the org Support owner over HTTPS.
         def index
-          authorize!(Visitor, to: :index?, with: SupportVisitorPolicy)
-          query = admin_query
-          relation = Visitor.order(created_at: :desc, id: :desc)
-          relation = relation.where(public_id: query) if query
-          visitors, page, more = admin_paginate(relation)
+          result = org_admin_result!(
+            org_admin_authority.get(
+              "/support/com/accounts",
+              { q: params[:q], page: params[:page] }.compact,
+            ),
+          )
+          return unless result
 
+          query = params[:q].presence
+          data = result.data
           render inertia: "base/org/support/visitors/index",
                  props: {
                    title: t("base.org.admin.visitors.title"),
@@ -33,7 +39,7 @@ module Base
                    context: admin_context(realm: REALM),
                    columns: [t("base.org.admin.fields.public_id"), t("base.org.admin.fields.access_state"),
                              t("base.org.admin.fields.created_at"),],
-                   rows: visitors.map { |visitor| visitor_row(visitor) },
+                   rows: data.fetch("accounts").map { |row| visitor_row(row) },
                    empty_message: t("base.org.admin.visitors.empty"),
                    search: {
                      action: base_org_support_visitors_path,
@@ -44,8 +50,7 @@ module Base
                      maxlength: OrgAdministrationPage::MAX_QUERY_LENGTH,
                    },
                    pagination: admin_pagination_links(
-                     page: page,
-                     more: more,
+                     page: data.fetch("page"), more: data["next_page"].present?,
                      path_builder: ->(number) { base_org_support_visitors_path(q: query, page: number) },
                    ),
                    actions: [],
@@ -53,18 +58,19 @@ module Base
         end
 
         def show
-          visitor = Visitor.find_by!(public_id: params.expect(:id))
-          authorize!(visitor, to: :show?, with: SupportVisitorPolicy)
+          result = org_admin_result!(org_admin_authority.get("/support/com/accounts/#{ERB::Util.url_encode(params.expect(:id))}"))
+          return unless result
 
+          data = result.data
+          account = data.fetch("account")
           render inertia: "base/org/support/visitors/show",
                  props: {
-                   title: t("base.org.admin.visitors.show_title", public_id: visitor.public_id),
-                   up_link: { label: t("base.org.admin.visitors.title"),
-                              href: base_org_support_visitors_path, },
+                   title: t("base.org.admin.visitors.show_title", public_id: account.fetch("public_id")),
+                   up_link: { label: t("base.org.admin.visitors.title"), href: base_org_support_visitors_path },
                    context: admin_context(realm: REALM),
-                   fields: account_fields(visitor),
-                   actions: visitor_actions(visitor),
-                   sections: [enforcement_section(visitor)].compact,
+                   fields: account_fields(account),
+                   actions: visitor_actions(account.fetch("public_id"), data),
+                   sections: [enforcement_section(data["cases"])].compact,
                  }
         end
 
@@ -74,54 +80,46 @@ module Base
           response.headers["Cache-Control"] = "private, no-store"
         end
 
-        def visitor_row(visitor)
+        def owner_time(value) = admin_time(value && Time.zone.parse(value))
+
+        def visitor_row(row)
           {
-            key: visitor.public_id,
-            cells: [visitor.public_id, visitor.access_state, admin_time(visitor.created_at)],
-            href: base_org_support_visitor_path(visitor.public_id),
+            key: row.fetch("public_id"),
+            cells: [row.fetch("public_id"), row.fetch("access_state"), owner_time(row["created_at"])],
+            href: base_org_support_visitor_path(row.fetch("public_id")),
           }
         end
 
-        def account_fields(visitor)
+        def account_fields(account)
           [
-            { term: t("base.org.admin.fields.public_id"), description: visitor.public_id },
-            { term: t("base.org.admin.fields.access_state"), description: visitor.access_state },
-            { term: t("base.org.admin.fields.created_at"), description: admin_time(visitor.created_at) },
-            {
-              term: t("base.org.admin.fields.active_sessions"),
-              description: AuthenticationSessionRevoker.tokens_for(visitor).not_revoked.count.to_s,
-            },
+            { term: t("base.org.admin.fields.public_id"), description: account.fetch("public_id") },
+            { term: t("base.org.admin.fields.access_state"), description: account.fetch("access_state") },
+            { term: t("base.org.admin.fields.created_at"), description: owner_time(account["created_at"]) },
+            { term: t("base.org.admin.fields.active_sessions"), description: account.fetch("active_sessions").to_s },
           ]
         end
 
-        def visitor_actions(visitor)
+        def visitor_actions(public_id, data)
           actions = []
-          if allowed_to?(:revoke_sessions?, visitor, with: SupportVisitorPolicy)
-            actions << {
-              label: t("base.org.admin.revocations.action"),
-              href: new_base_org_support_visitor_revocation_path(visitor.public_id),
-            }
+          if data.fetch("can_revoke_sessions")
+            actions << { label: t("base.org.admin.revocations.action"),
+                         href: new_base_org_support_visitor_revocation_path(public_id), }
           end
-          if allowed_to?(:create?, ComEnforcementCase.new, with: EnforcementCasePolicy)
-            actions << {
-              label: t("base.org.admin.enforcement.new_action"),
-              href: new_base_org_support_com_enforcement_case_path(principal_public_id: visitor.public_id),
-            }
+          if data.fetch("can_create_case")
+            actions << { label: t("base.org.admin.enforcement.new_action"),
+                         href: new_base_org_support_com_enforcement_case_path(principal_public_id: public_id), }
           end
           actions
         end
 
-        def enforcement_section(visitor)
-          return nil unless allowed_to?(:index?, ComEnforcementCase.new, with: EnforcementCasePolicy)
+        def enforcement_section(cases)
+          return nil if cases.nil?
 
-          cases = ComEnforcementCase.where(principal_public_id: visitor.public_id).order(created_at: :desc).limit(20)
           {
             heading: t("base.org.admin.enforcement.title"),
-            links: cases.map do |enforcement_case|
-              {
-                label: "#{enforcement_case.public_id} (#{enforcement_case.kind}, #{enforcement_case.state})",
-                href: base_org_support_com_enforcement_case_path(enforcement_case.public_id),
-              }
+            links: cases.map do |row|
+              { label: "#{row.fetch("public_id")} (#{row.fetch("kind")}, #{row.fetch("state")})",
+                href: base_org_support_com_enforcement_case_path(row.fetch("public_id")), }
             end,
             empty_message: t("base.org.admin.enforcement.empty"),
           }

@@ -41,7 +41,7 @@ class AuthenticationPurposeContractTest < ActiveSupport::TestCase
 
   def issued_purpose_for(intent:, kind:)
     store = PurposeCaptureStore.new
-    client = OidcClientRegistry.find!("core-app")
+    client = OidcClientRegistry.find!("core-app-jp")
     transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",
       intent: intent,

@@ -22,7 +22,7 @@ class IdentityStepUpEmailCodeIssuer
             transaction.class.connection_owner.connected_to(role: :writing) do
               token.with_lock do
                 now = transaction.class.database_now
-                unless token.currently_usable? && token.public_id == transaction.session_ref &&
+                unless token.active_status? && token.public_id == transaction.session_ref &&
                     transaction.actor_ref == actor.public_id &&
                     (!credential.step_up_otp_locked_until || credential.step_up_otp_locked_until <= now) &&
                     (!credential.step_up_otp_last_issued_at ||

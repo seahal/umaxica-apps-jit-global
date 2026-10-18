@@ -87,11 +87,11 @@ class PalmJumpSignEntryTest < ActionDispatch::IntegrationTest
       payload, = JWT.decode(rt, nil, false)
       authorization_uri = URI.parse(payload.fetch("url"))
       authorization_query = Rack::Utils.parse_nested_query(authorization_uri.query)
-      client = OidcClientRegistry.find!("palm-app")
+      client = OidcClientRegistry.find!("palm-app-jp")
       expected_redirect_uri = client.redirect_uris.find { |value| URI.parse(value).host == @host }
 
       assert_equal "/oauth/authorize", authorization_uri.path
-      assert_equal "palm-app", authorization_query.fetch("client_id")
+      assert_equal "palm-app-jp", authorization_query.fetch("client_id")
       assert_equal expected_redirect_uri, authorization_query.fetch("redirect_uri")
       assert_equal "code", authorization_query.fetch("response_type")
       assert_equal "S256", authorization_query.fetch("code_challenge_method")

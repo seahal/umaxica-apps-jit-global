@@ -154,9 +154,9 @@ class RpSessionRevoker < ApplicationService
 
   def rp_sessions_for(device_session)
     case device_session
-    when ClientDeviceSession then ClientRpSession.where(device_session_id: device_session.id)
-    when VisitorDeviceSession then VisitorRpSession.where(device_session_id: device_session.id)
-    when OperatorDeviceSession then OperatorRpSession.where(device_session_id: device_session.id)
+    when ClientDeviceSession then OpAppGrant.where(device_session_id: device_session.id)
+    when VisitorDeviceSession then OpComGrant.where(device_session_id: device_session.id)
+    when OperatorDeviceSession then OpOrgGrant.where(device_session_id: device_session.id)
     else
       raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
     end

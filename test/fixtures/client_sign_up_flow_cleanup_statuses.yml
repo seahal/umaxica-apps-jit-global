@@ -1,4 +1,4 @@
-# Rows inserted by db/app_tickets_migrate/20261006160000_seed_app_sign_flow_reference_data.rb.
+# Rows inserted by db/op_base_app_migrate/20261006160000_seed_app_sign_flow_reference_data.rb.
 # Structure loads do not replay that data migration.
 _fixture:
   model_class: ClientSignUpFlowCleanupStatus

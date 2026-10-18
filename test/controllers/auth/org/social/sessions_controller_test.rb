@@ -25,8 +25,8 @@ class Auth::Org::Social::SessionsControllerTest < ActionDispatch::IntegrationTes
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "edit-org",
-        redirect_uri: OidcClientRegistry.find!("edit-org").redirect_uris.first,
+        client_id: "edit-org-ww",
+        redirect_uri: OidcClientRegistry.find!("edit-org-ww").redirect_uris.first,
         code_challenge: "challenge",
         code_challenge_method: "S256",
         state: "state",

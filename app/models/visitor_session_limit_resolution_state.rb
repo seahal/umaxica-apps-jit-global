@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class VisitorSessionLimitResolutionState < ComTicketRecord
+class VisitorSessionLimitResolutionState < OpBaseComRecord
   include ReferenceRecord
 
   PENDING = 10

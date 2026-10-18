@@ -7,11 +7,11 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     [
-      ["app", "core-app", "client", ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      ["app", "core-app-jp", "client", ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
        ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), Client, ClientToken,],
-      ["com", "core-com", "visitor", ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
        ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), Visitor, VisitorToken,],
-      ["org", "core-org", "operator", ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+      ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_BASE_STAFF_URL"),
        ENV.fetch("PUBLIC_AUTH_STAFF_URL"), Operator, OperatorToken,],
     ].each do |surface, client_id, realm, base_host, auth_host, actor_model, token_model|
       parameters = {

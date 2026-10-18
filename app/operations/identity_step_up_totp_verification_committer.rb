@@ -51,7 +51,7 @@ class IdentityStepUpTotpVerificationCommitter
           record.with_lock do
             transaction.with_lock do
               now = ClientStepUpCeremonyTransaction.database_now
-              unless token.currently_usable?(now) && transaction.purpose == "step_up" &&
+              unless token.active_status?(now) && transaction.purpose == "step_up" &&
                   transaction.allowed_methods_array.include?("totp") &&
                   transaction.status == "pending" && !transaction.expired?(now: now) &&
                   record.status == "PENDING" && record.discard_at > now

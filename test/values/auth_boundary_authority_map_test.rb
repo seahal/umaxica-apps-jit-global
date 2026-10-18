@@ -9,11 +9,11 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
 
     assert_equal 12, ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?
-    assert_includes ids, "core-app"
-    assert_includes ids, "edit-org"
-    assert_includes ids, "warp-com"
-    assert_includes ids, "palm-app"
-    assert_includes ids, "tech-org"
+    assert_includes ids, "core-app-jp"
+    assert_includes ids, "edit-org-ww"
+    assert_includes ids, "warp-com-jp"
+    assert_includes ids, "palm-app-jp"
+    assert_includes ids, "tech-org-ww"
   end
 
   test "deprecated shared browser client ids do not overlap the first-party RPs" do
@@ -27,7 +27,7 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
   test "approved map contains regional clients plus global Edit, Palm, and Tech clients" do
     assert_equal 15, AuthBoundaryAuthorityMap.approved_rp_client_ids.size
     assert_equal 12, AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.size
-    assert_equal %w(edit-org palm-app tech-org), AuthBoundaryAuthorityMap.approved_rp_client_ids.last(3)
+    assert_equal %w(edit-org-ww palm-app-jp tech-org-ww), AuthBoundaryAuthorityMap.approved_rp_client_ids.last(3)
     assert_equal AuthBoundaryAuthorityMap.approved_rp_client_ids.sort,
                  AuthBoundaryAuthorityMap.approved_rp_faces.keys.sort
     regions = AuthBoundaryAuthorityMap::REGIONAL_RP_CLIENT_IDS.map do |client_id|
@@ -36,11 +36,11 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
 
     assert_equal %w(jp us), regions
 
-    assert_nil AuthBoundaryAuthorityMap.approved_rp_faces.fetch("edit-org").fetch(:region)
-    assert_equal "palm", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("palm-app").fetch(:surface)
-    assert_equal "client", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("palm-app").fetch(:actor)
-    assert_equal "tech", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("tech-org").fetch(:surface)
-    assert_equal "operator", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("tech-org").fetch(:actor)
+    assert_nil AuthBoundaryAuthorityMap.approved_rp_faces.fetch("edit-org-ww").fetch(:region)
+    assert_equal "palm", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("palm-app-jp").fetch(:surface)
+    assert_equal "client", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("palm-app-jp").fetch(:actor)
+    assert_equal "tech", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("tech-org-ww").fetch(:surface)
+    assert_equal "operator", AuthBoundaryAuthorityMap.approved_rp_faces.fetch("tech-org-ww").fetch(:actor)
   end
 
   test "approved regional client metadata never crosses surface or region" do
@@ -52,13 +52,13 @@ class AuthBoundaryAuthorityMapTest < ActiveSupport::TestCase
     assert_equal "us", metadata.fetch("core-app-us").fetch(:region)
     assert_equal "core", metadata.fetch("core-app-jp").fetch(:surface)
     assert_equal "warp", metadata.fetch("warp-app-us").fetch(:surface)
-    assert_equal "operator", metadata.fetch("edit-org").fetch(:actor)
+    assert_equal "operator", metadata.fetch("edit-org-ww").fetch(:actor)
   end
 
   test "every RP face maps to surface face and actor" do
     AuthBoundaryAuthorityMap.rp_faces.each do |client_id, meta|
-      expected_surface = client_id.start_with?("warp-") ? "warp" : client_id.split("-").first
-      expected_face = client_id.start_with?("base-") ? client_id.split("-").second : client_id.split("-").last
+      # Every exact Client ID is `<family>-<realm>-<scope>`.
+      expected_surface, expected_face, = client_id.split("-")
 
       assert_equal expected_surface, meta.fetch(:surface)
       assert_equal expected_face, meta.fetch(:face)

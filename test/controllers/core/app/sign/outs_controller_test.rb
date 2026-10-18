@@ -97,8 +97,8 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "post sign out leaves parent and RP rows unchanged until authority confirmation" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    oidc_client = OidcClientRegistry.find!("core-app")
-    rp_session = ClientRpSession.create!(
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
+    rp_session = OpAppGrant.create!(
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -137,8 +137,8 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   test "post sign out rejects a sibling RP credential without revoking either session" do
     user = clients(:one)
     token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    oidc_client = OidcClientRegistry.find!("warp-app")
-    sibling_session = ClientRpSession.create!(
+    oidc_client = OidcClientRegistry.find!("warp-app-jp")
+    sibling_session = OpAppGrant.create!(
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -275,8 +275,8 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def authenticate_rp!(user, token)
-    oidc_client = OidcClientRegistry.find!("core-app")
-    @rp_session = ClientRpSession.create!(
+    oidc_client = OidcClientRegistry.find!("core-app-jp")
+    @rp_session = OpAppGrant.create!(
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

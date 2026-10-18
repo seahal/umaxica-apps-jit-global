@@ -21,7 +21,6 @@ module Tech
       include ::AuthorizationOperator
       include ::VerificationOperator
       include ActionPolicy::Controller
-      include ::RestrictedSessionGuard
       include ::OidcSsoInitiator
       include SurfaceRouteAliasHelper
       include ::ActorSupport
@@ -35,7 +34,7 @@ module Tech
                     :current_browser_session_security_context, :current_session_public_id,
                     :current_session, :logged_in?, :current_actor, :current_account,
                     :current_operator, :active_operator?, :logged_in_operator?,
-                    :current_session_restricted?, :signed_pt_param
+                    :signed_pt_param
       before_action :authenticate_browser_rp_safe_request!
       prepend_before_action :authenticate_browser_rp_unsafe_request!
 
@@ -75,7 +74,6 @@ module Tech
       before_action :set_locale
       before_action :set_timezone
       before_action :set_color_theme
-      before_action :enforce_restricted_session_guard!
       before_action :enforce_verification_if_required
       before_action :enforce_access_policy!
       before_action :enforce_tech_access!, if: :tech_private_action?
@@ -84,9 +82,9 @@ module Tech
 
       public
 
-      def oidc_client_id = "tech-org"
+      def oidc_client_id = "tech-org-ww"
 
-      def browser_rp_client_id = "tech-org"
+      def browser_rp_client_id = "tech-org-ww"
 
       def browser_rp_resource_type = "operator"
 
@@ -104,8 +102,11 @@ module Tech
         self.class.authentication_mode_for(action_name) == :private
       end
 
+      # R5-WU11: the org authority decides tech.access over HTTPS for every private Tech action,
+      # from the Operator's current Access JWT; any failure denies (no positive cache).
       def enforce_tech_access!
-        authorize!(current_operator, to: :show?, with: TechAccessPolicy)
+        access_token = BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE)
+        authorize!(TechRemoteAccessPolicy::Request.new(access_token:), to: :show?, with: TechRemoteAccessPolicy)
       end
 
       def handle_authorization_error(exception)

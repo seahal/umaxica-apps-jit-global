@@ -83,8 +83,8 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   private
 
   def authenticate_rp!(operator, token)
-    oidc_client = OidcClientRegistry.find!("warp-org")
-    @rp_session = OperatorRpSession.create!(
+    oidc_client = OidcClientRegistry.find!("warp-org-jp")
+    @rp_session = OpOrgGrant.create!(
       operator_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

@@ -91,26 +91,22 @@ module Base
         { heading: t("base.org.admin.dashboard.administration"), items: items }
       end
 
+      # R5-WU14: persona display name and Avatar image version come from their owner over HTTPS.
       def dashboard_current_identity
-        persona = switcher.find_account(Actor.selection.account_public_id)
-        raise ActiveRecord::RecordNotFound, "selected org Persona is not available to this principal" if persona.blank?
+        result = AvatarAuthorityClient.new(
+          surface: "org",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
+        ).dashboard_identity
+        raise ActiveRecord::RecordNotFound, "selected org Persona is not available to this principal" if
+          result.status == :not_found
+        raise RuntimeError, "Avatar owner is unavailable for the dashboard identity" unless result.ok?
 
-        display_name = persona.moniker
-        raise RuntimeError, "selected org Persona has no display name" if display_name.blank?
-
-        identity = { display_name: display_name }
-        avatar = switcher.selected_avatar
+        identity = { display_name: result.data.fetch("display_name") }
         # org Avatars are optional; without an Avatar or a stored image there is no image element.
-        if avatar&.image
-          identity[:avatar_image] = { src: base_org_dashboard_avatar_image_path(v: avatar.image_cache_key) }
-        end
+        version = result.data["image_version"]
+        identity[:avatar_image] = { src: base_org_dashboard_avatar_image_path(v: version) } if version
         identity
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :org, principal: current_operator, session: current_session,
-        )
       end
 
       def menu_links

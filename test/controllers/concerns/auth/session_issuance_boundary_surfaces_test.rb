@@ -47,7 +47,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
     controller.set_response!(Base::App::AuthorityController.make_response!(request))
 
     assert_no_difference -> { ClientToken.where(user_id: actor.id).count } do
-      AppTicketRecord.transaction(requires_new: true) do
+      OpBaseAppRecord.transaction(requires_new: true) do
         controller.log_in(actor, establishment: :root_login)
 
         assert_equal 1, ClientToken.where(user_id: actor.id).count

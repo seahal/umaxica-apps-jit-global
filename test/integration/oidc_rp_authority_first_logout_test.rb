@@ -20,9 +20,9 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     core_session, core_refresh =
       begin
         fv5040 = root_token
-        fv5041 = "core-app"
+        fv5041 = "core-app-jp"
         fv5039 = OidcClientRegistry.find!(fv5041)
-        fv5038 = ClientRpSession.create!(
+        fv5038 = OpAppGrant.create!(
           client_token: fv5040,
           oidc_client_id: fv5039.client_id,
           oidc_scope: "openid profile",
@@ -36,9 +36,9 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     sibling_session, sibling_refresh =
       begin
         fv5036 = root_token
-        fv5037 = "warp-app"
+        fv5037 = "warp-app-jp"
         fv5035 = OidcClientRegistry.find!(fv5037)
-        fv5034 = ClientRpSession.create!(
+        fv5034 = OpAppGrant.create!(
           client_token: fv5036,
           oidc_client_id: fv5035.client_id,
           oidc_scope: "openid profile",
@@ -54,7 +54,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5029 = user
         fv5031 = root_token
         fv5030 = core_session
-        fv5033 = "core-app"
+        fv5033 = "core-app-jp"
         fv5032 = @core_host
         fv5028 = OidcClientRegistry.find!(fv5033)
         AuthenticationTokenService.encode(
@@ -276,6 +276,15 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_predicate sibling_session.reload, :revoked?
     assert_equal "success", sibling_session.last_logout_status
 
+    # R5-WU09/WU16: the same OP commit recorded the realm logout flow, one participant and outbox
+    # row per RP grant, and a browser receipt; Base /sign/bye reads it without changing state.
+    flow = OpAppLogoutFlow.find_by!(target_root_ref: root_token.public_id)
+
+    assert_not_nil flow.op_revoked_at
+    assert_equal [core_session.public_id, sibling_session.public_id].sort,
+                 OpAppLogoutFlowParticipant.where(logout_flow_id: flow.id).pluck(:sid).sort
+    assert_equal 1, OpAppLogoutReceipt.where(logout_flow_id: flow.id, consumed_at: nil).count
+
     # The initiating RP can arrive with a row that was revoked independently after the parent
     # phase. Phase 4 is idempotent and must still finalize the durable transaction.
     core_session.revoke!(status: "success")
@@ -360,16 +369,16 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
     )
-    rp_session = VisitorRpSession.create!(
+    rp_session = OpComGrant.create!(
       visitor_token: root_token,
-      oidc_client_id: "core-com",
+      oidc_client_id: "core-com-jp",
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
       oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
-    client = OidcClientRegistry.find!("core-com")
+    client = OidcClientRegistry.find!("core-com-jp")
     issue_result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "core",
       initiating_client_id: client.client_id,
@@ -454,9 +463,9 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     core_session, =
       begin
         fv5026 = root_token
-        fv5027 = "core-app"
+        fv5027 = "core-app-jp"
         fv5025 = OidcClientRegistry.find!(fv5027)
-        fv5024 = ClientRpSession.create!(
+        fv5024 = OpAppGrant.create!(
           client_token: fv5026,
           oidc_client_id: fv5025.client_id,
           oidc_scope: "openid profile",
@@ -472,7 +481,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5019 = user
         fv5021 = root_token
         fv5020 = core_session
-        fv5023 = "core-app"
+        fv5023 = "core-app-jp"
         fv5022 = @core_host
         fv5018 = OidcClientRegistry.find!(fv5023)
         AuthenticationTokenService.encode(
@@ -528,7 +537,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5016 = root_token
         fv5017 = "base-app-ww"
         fv5015 = OidcClientRegistry.find!(fv5017)
-        fv5014 = ClientRpSession.create!(
+        fv5014 = OpAppGrant.create!(
           client_token: fv5016,
           oidc_client_id: fv5015.client_id,
           oidc_scope: "openid profile",
@@ -650,8 +659,8 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     rp_session, refresh_token =
       begin
         fv5007 = root_token
-        fv5006 = OidcClientRegistry.find!("edit-org")
-        fv5005 = OperatorRpSession.create!(
+        fv5006 = OidcClientRegistry.find!("edit-org-ww")
+        fv5005 = OpOrgGrant.create!(
           operator_token: fv5007,
           oidc_client_id: fv5006.client_id,
           oidc_scope: "openid profile",
@@ -671,7 +680,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5003 = root_token
         fv5002 = rp_session
         fv5004 = edit_host
-        fv5000 = OidcClientRegistry.find!("edit-org")
+        fv5000 = OidcClientRegistry.find!("edit-org-ww")
         AuthenticationTokenService.encode(
           fv5001,
           host: fv5004,

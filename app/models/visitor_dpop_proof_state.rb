@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_dpop_proof_states
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id            :bigint           not null, primary key
 #  expires_at    :datetime         not null
@@ -24,6 +24,6 @@
 #  index_visitor_dpop_proof_states_on_jti         (jti) UNIQUE WHERE (jti IS NOT NULL)
 #  index_visitor_dpop_proof_states_on_nonce       (nonce) UNIQUE WHERE (nonce IS NOT NULL)
 #
-class VisitorDpopProofState < ComTicketRecord
+class VisitorDpopProofState < OpBaseComRecord
   include DpopProofStateable
 end

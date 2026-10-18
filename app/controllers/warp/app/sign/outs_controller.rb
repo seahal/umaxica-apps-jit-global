@@ -42,7 +42,7 @@ module Warp
           return continue_browser_rp_logout! if params[:logout_challenge].present?
 
           launch_oidc_rp_logout!(
-            client_id: "warp-app",
+            client_id: RpDeploymentBindingValue.client_id("warp-app"),
             issuer_resource_type: "client",
             token_issuer: "client",
             session_authority: :rp_session,

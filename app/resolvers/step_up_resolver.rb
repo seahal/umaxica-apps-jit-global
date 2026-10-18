@@ -76,7 +76,7 @@ class StepUpResolver
     # Step-Up-protected operations at all. This is an authentication-context
     # decision, not a freshness one, so it precedes every freshness check.
     return true unless requirement.step_up_required?
-    return false if emergency_authentication_context?
+    return false if standby_authentication_context?
 
     usable_token? && current_step_up_evidence? && requirement_matches_evidence? && request_bindings_match?
   end
@@ -95,11 +95,11 @@ class StepUpResolver
   end
 
   def usable_token?
-    token.present? && token.currently_usable?(now)
+    token.present? && token.active_status?(now)
   end
 
-  def emergency_authentication_context?
-    token.respond_to?(:emergency_authentication_context?) && token.emergency_authentication_context?
+  def standby_authentication_context?
+    token.respond_to?(:standby_authentication_context?) && token.standby_authentication_context?
   end
 
   def satisfied_at

@@ -61,10 +61,10 @@ New credential endpoints must choose one of:
 
 ## Admission Control Evidence And Gaps
 
-Existing code contains session-limit managers, token status models, restricted-session handling, and
-rate-limit profile infrastructure. Telephone verification short-window pacing now uses a composite
-IP plus telephone blind-index digest key, avoiding raw telephone values in cache keys while reducing
-IP-only NAT blast radius.
+Existing code contains session-limit managers, token status models with historical 103 rejection,
+and rate-limit profile infrastructure. Telephone verification short-window pacing now uses a
+composite IP plus telephone blind-index digest key, avoiding raw telephone values in cache keys
+while reducing IP-only NAT blast radius.
 
 Deferred checks:
 

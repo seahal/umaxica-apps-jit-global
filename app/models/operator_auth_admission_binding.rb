@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class OperatorAuthAdmissionBinding < OrgTicketRecord
+class OperatorAuthAdmissionBinding < OpBaseOrgRecord
   include AuthAdmissionBinding
 
   belongs_to :sign_in_flow, class_name: "OperatorSignInFlow", optional: true
@@ -32,6 +32,6 @@ class OperatorAuthAdmissionBinding < OrgTicketRecord
 
     def auth_admission_session_class = OperatorAuthCeremonySession
 
-    def connection_owner = OrgTicketRecord
+    def connection_owner = OpBaseOrgRecord
   end
 end

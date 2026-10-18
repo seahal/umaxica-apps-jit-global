@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class SecurityConsumedJti < AppTicketRecord
+class SecurityConsumedJti < OpBaseAppRecord
   PURPOSES = {
     oidc_logout_request: "oidc_logout_request",
     oidc_client_assertion: "oidc_client_assertion",

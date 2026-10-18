@@ -31,7 +31,7 @@ module Warp
         end
 
         def oidc_client_id
-          "warp-app"
+          RpDeploymentBindingValue.client_id("warp-app")
         end
       end
     end

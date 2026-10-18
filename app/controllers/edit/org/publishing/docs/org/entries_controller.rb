@@ -13,7 +13,6 @@ module Edit
             declare_authentication_mode! :private
             PUBLISHING_SURFACE = "docs"
             PUBLISHING_AUDIENCE = "org"
-            ENTRY_CLASS = ::Publishing::Docs::Org::Entry
 
             public
 

@@ -28,7 +28,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     @headers = begin
       fv5010 = @token
       fv5008 = OidcClientRegistry.find!("base-app-ww")
-      fv5009 = ClientRpSession.create!(
+      fv5009 = OpAppGrant.create!(
         client_token: fv5010,
         oidc_client_id: fv5008.client_id,
         oidc_scope: "openid profile",
@@ -409,7 +409,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
     begin
       fv5005 = token
       fv5003 = OidcClientRegistry.find!("base-app-ww")
-      fv5004 = ClientRpSession.create!(
+      fv5004 = OpAppGrant.create!(
         client_token: fv5005,
         oidc_client_id: fv5003.client_id,
         oidc_scope: "openid profile",

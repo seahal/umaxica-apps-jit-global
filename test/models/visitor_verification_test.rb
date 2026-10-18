@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_verifications
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id               :bigint           not null, primary key
 #  discard_at     :datetime         default(Infinity), not null

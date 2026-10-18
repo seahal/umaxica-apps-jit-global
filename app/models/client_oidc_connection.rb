@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_oidc_connections
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id           :bigint           not null, primary key
 #  last_used_at :datetime
@@ -21,7 +21,7 @@
 #  index_client_oidc_connections_on_public_id              (public_id) UNIQUE
 #  index_client_oidc_connections_on_user_id_and_client_id  (user_id,client_id) UNIQUE
 #
-class ClientOidcConnection < AppTicketRecord
+class ClientOidcConnection < OpBaseAppRecord
   include OidcConnectionRecord
 
   belongs_to :user, class_name: "Client"

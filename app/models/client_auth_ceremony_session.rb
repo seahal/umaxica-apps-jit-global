@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class ClientAuthCeremonySession < AppTicketRecord
+class ClientAuthCeremonySession < OpBaseAppRecord
   include AuthCeremonySession
   include AuthEmailOtpChallenge
 

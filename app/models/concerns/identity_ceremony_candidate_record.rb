@@ -58,9 +58,9 @@ module IdentityCeremonyCandidateRecord
 
   class_methods do
     def connection_owner
-      return AppTicketRecord if self <= AppTicketRecord
-      return ComTicketRecord if self <= ComTicketRecord
-      return OrgTicketRecord if self <= OrgTicketRecord
+      return OpBaseAppRecord if self <= OpBaseAppRecord
+      return OpBaseComRecord if self <= OpBaseComRecord
+      return OpBaseOrgRecord if self <= OpBaseOrgRecord
 
       raise ArgumentError, "unsupported ceremony candidate database: #{name}"
     end

@@ -94,8 +94,8 @@ class Base::Org::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   def authorize_params(**overrides)
     {
       response_type: "code",
-      client_id: "core-org",
-      redirect_uri: OidcClientRegistry.find!("core-org").redirect_uris_by_realm.fetch("operator").first,
+      client_id: "core-org-jp",
+      redirect_uri: OidcClientRegistry.find!("core-org-jp").redirect_uris_by_realm.fetch("operator").first,
       code_challenge: "a" * 43,
       code_challenge_method: "S256",
       scope: "openid",

@@ -247,7 +247,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
       when OperatorToken
         unless actor.is_a?(Operator) && token.staff_id == actor.id &&
             transaction.is_a?(OperatorStepUpCeremonyTransaction) &&
-            !token.emergency_authentication_context?
+            !token.standby_authentication_context?
           raise IdentityStepUpCeremonyContract::Error.new("ORG binding mismatch", code: "session_binding_mismatch")
         end
 
@@ -280,7 +280,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
 
     def validate_finalization!(actor, token, transaction, requirement, now)
       device = find_device_session(token)
-      unless token.currently_usable?(now) && device.usable? && device.current_refresh_token_id == token.id &&
+      unless token.active_status?(now) && device.usable? && device.current_refresh_token_id == token.id &&
           transaction.actor_ref == actor.public_id &&
           transaction.session_ref == token.public_id && %w(step_up reauthentication).include?(transaction.purpose) &&
           %w(verified consumed).include?(transaction.status) && !transaction.expired?(now: now)
@@ -321,7 +321,7 @@ class IdentityStepUpCeremonyFreshnessCommitter
 
     def validate_reauthentication_replay_root!(actor, current_token, previous_token, now)
       device = find_device_session(current_token)
-      unless current_token.currently_usable?(now) && device.usable? &&
+      unless current_token.active_status?(now) && device.usable? &&
           device.current_refresh_token_id == current_token.id && previous_token&.rotated_at.present? &&
           previous_token.device_session_id == current_token.device_session_id &&
           actor_matches_token?(actor, previous_token)

@@ -179,7 +179,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     assert_equal(
       {
         response_type: "code",
-        client_id: "core-app",
+        client_id: "core-app-jp",
         redirect_uri: "https://example.test/callback",
         scope: "openid email",
         state: "state-one",
@@ -413,7 +413,7 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
     transaction_class.create_transaction!(
       surface: surface,
       intent: "sign_in",
-      client_id: "core-app",
+      client_id: "core-app-jp",
       redirect_uri: "https://example.test/callback",
       response_type: "code",
       scope: "openid email",

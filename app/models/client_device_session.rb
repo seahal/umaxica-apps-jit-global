@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_device_sessions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                         :bigint           not null, primary key
 #  dbsc_bound_at              :datetime
@@ -32,7 +32,7 @@
 #  index_client_device_sessions_on_revoked_at                (revoked_at)
 #  index_client_device_sessions_on_user_id                   (user_id)
 #
-class ClientDeviceSession < AppTicketRecord
+class ClientDeviceSession < OpBaseAppRecord
   include DeviceSessionable
 
   belongs_to :user, class_name: "Client", inverse_of: :client_device_sessions
@@ -44,7 +44,7 @@ class ClientDeviceSession < AppTicketRecord
   has_many :client_tokens, foreign_key: :device_session_id,
                            dependent: :restrict_with_exception,
                            inverse_of: :device_session
-  has_many :client_rp_sessions, foreign_key: :device_session_id,
-                                dependent: :restrict_with_exception,
-                                inverse_of: :client_device_session
+  has_many :op_app_grants, foreign_key: :device_session_id,
+                           dependent: :restrict_with_exception,
+                           inverse_of: :client_device_session
 end

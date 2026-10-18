@@ -30,7 +30,7 @@ class SecurityConsumedJtiTest < ActiveSupport::TestCase
       ActiveRecord::Base.connected_to(role: :reading) do
         SecurityConsumedJti.consume!(
           purpose: SecurityConsumedJti::PURPOSES.fetch(:oidc_client_assertion),
-          issuer: "tech-org",
+          issuer: "tech-org-ww",
           jti: jti,
           expires_at: 2.minutes.from_now,
         )

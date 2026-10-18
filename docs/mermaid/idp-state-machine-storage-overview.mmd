@@ -58,7 +58,7 @@ flowchart LR
         T14["client_device_sessions: status_id"]
         M14 -.->|"owns or evaluates state; not FK"| T14
         M15["idp-client-rp-session: RpSession"]
-        T15["client_rp_sessions: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
+        T15["op_app_grants: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
         M15 -.->|"owns or evaluates state; not FK"| T15
         M16["idp-client-passkey-credential: IdentityPasskeyCeremonyFinalCommitter; IdentityCredentialRemovalCommitter"]
         T16["client_passkeys: status_id"]
@@ -220,7 +220,7 @@ flowchart LR
         T30["visitor_device_sessions: status_id"]
         M30 -.->|"owns or evaluates state; not FK"| T30
         M31["idp-visitor-rp-session: RpSession"]
-        T31["visitor_rp_sessions: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
+        T31["op_com_grants: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
         M31 -.->|"owns or evaluates state; not FK"| T31
         M32["idp-visitor-passkey-credential: IdentityPasskeyCeremonyFinalCommitter; IdentityCredentialRemovalCommitter"]
         T32["visitor_passkeys: status_id"]
@@ -357,7 +357,7 @@ flowchart LR
         T47["operator_device_sessions: status_id"]
         M47 -.->|"owns or evaluates state; not FK"| T47
         M48["idp-operator-rp-session: RpSession"]
-        T48["operator_rp_sessions: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
+        T48["op_org_grants: revoked_at / refresh_token_expires_at / oidc_access_token_max_expires_at"]
         M48 -.->|"owns or evaluates state; not FK"| T48
         M49["idp-operator-passkey-credential: IdentityPasskeyCeremonyFinalCommitter; IdentityCredentialRemovalCommitter"]
         T49["operator_passkeys: status_id"]

@@ -3,6 +3,11 @@
 
 ENV["BUNDLE_GEMFILE"] ||= File.expand_path("../Gemfile", __dir__)
 
+# A browser E2E flag is valid only in an explicitly selected Rails test process.
+if ENV["RAILS_BROWSER_E2E"] && !(ENV.fetch("RAILS_BROWSER_E2E") == "1" && ENV.fetch("RAILS_ENV") == "test")
+  raise ArgumentError, "RAILS_BROWSER_E2E requires RAILS_ENV=test"
+end
+
 # Load the repository's non-secret local contract before Rails configuration is evaluated.
 # Compose may provide topology, but the application reads the same contract on bare metal and
 # in a Dev Container; it never needs Compose to decide its own configuration.

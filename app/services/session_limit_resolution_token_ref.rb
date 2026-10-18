@@ -16,7 +16,7 @@ class SessionLimitResolutionTokenRef
     public_id = data[:pid] || data["pid"]
     return nil if public_id.blank?
 
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       ClientToken.find_by(public_id: public_id)
     end
   rescue ActiveSupport::MessageVerifier::InvalidSignature
@@ -28,7 +28,7 @@ class SessionLimitResolutionTokenRef
     public_id = data[:pid] || data["pid"]
     return nil if public_id.blank?
 
-    ComTicketRecord.connected_to(role: :writing) do
+    OpBaseComRecord.connected_to(role: :writing) do
       VisitorToken.find_by(public_id: public_id)
     end
   rescue ActiveSupport::MessageVerifier::InvalidSignature
@@ -40,7 +40,7 @@ class SessionLimitResolutionTokenRef
     public_id = data[:pid] || data["pid"]
     return nil if public_id.blank?
 
-    OrgTicketRecord.connected_to(role: :writing) do
+    OpBaseOrgRecord.connected_to(role: :writing) do
       OperatorToken.find_by(public_id: public_id)
     end
   rescue ActiveSupport::MessageVerifier::InvalidSignature

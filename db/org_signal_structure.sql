@@ -31,11 +31,11 @@ CREATE TABLE public.ar_internal_metadata (
 --
 
 CREATE TABLE public.operator_notification_records (
-    id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
-    staff_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT staff_notifications_id_not_null NOT NULL,
+    public_id character varying DEFAULT ''::character varying CONSTRAINT staff_notifications_public_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_notifications_staff_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_notifications_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_notifications_updated_at_not_null NOT NULL,
     CONSTRAINT operator_notification_records_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 

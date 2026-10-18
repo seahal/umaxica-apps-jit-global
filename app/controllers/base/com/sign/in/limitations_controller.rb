@@ -19,7 +19,7 @@ module Base
 
           def token_class = VisitorToken
 
-          def ticket_record = ComTicketRecord
+          def ticket_record = OpBaseComRecord
 
           def resolution_transaction_class = VisitorSessionLimitResolutionTransaction
 

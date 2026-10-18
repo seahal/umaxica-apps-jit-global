@@ -20,7 +20,7 @@ module Base
         def local_login_success_path = base_app_dashboard_path(ri: params[:ri])
 
         def local_login_flow(public_id)
-          AppTicketRecord.connected_to(role: :writing) { ClientSignInFlow.find_by!(public_id: public_id) }
+          OpBaseAppRecord.connected_to(role: :writing) { ClientSignInFlow.find_by!(public_id: public_id) }
         end
 
         def local_login_actor(flow)

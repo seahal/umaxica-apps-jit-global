@@ -72,9 +72,58 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     )
 
     assert_predicate resolution.reload, :resolved?
+    assert_nil resolution.waiting_slot
     assert_not_predicate token.reload, :currently_usable?
     assert_predicate foreign_token.reload, :currently_usable?
     assert_predicate flow.reload, :sign_in_session_issuance_pending?
+  end
+
+  test "session issuance finalization rolls back selected revocation with the ticket transaction" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: actor) }
+    binding = SecureRandom.urlsafe_base64(32)
+    issuance = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow,
+      actor: actor,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(binding),
+    )
+    resolution = issuance.transaction
+    resolution.select_session!(
+      actor: actor,
+      challenge: issuance.challenge,
+      session_ref: tokens.first.public_id,
+      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(binding),
+    )
+
+    assert_raises(RuntimeError) do
+      actor.class.connection_class_for_self.connected_to(role: :writing) do
+        actor.with_lock do
+          flow.with_cycle_lock do
+            ClientToken.transaction(requires_new: true) do
+              resolution.finalize_for_session_issuance!(
+                actor: actor,
+                parent: flow,
+                challenge: issuance.challenge,
+                browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(binding),
+              ) { :at_limit }
+              raise RuntimeError, "force the final issuance transaction to roll back"
+            end
+          end
+        end
+      end
+    end
+
+    assert_predicate tokens.first.reload, :currently_usable?
+    assert_predicate resolution.reload, :session_selected?
+    assert_predicate resolution, :open?
   end
 
   test "visitor and operator resolutions use their own realm state and token ownership" do
@@ -136,8 +185,121 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
     assert_equal VisitorSessionLimitResolutionTransaction::CANCELLED, visitor_resolution.reload.state_id
     assert_equal OperatorSessionLimitResolutionTransaction::EXPIRED, operator_resolution.reload.state_id
+    assert_nil visitor_resolution.waiting_slot
+    assert_nil operator_resolution.waiting_slot
     assert_predicate visitor_token.reload, :currently_usable?
     assert_predicate operator_token.reload, :currently_usable?
+  end
+
+  test "a live resolution occupies the actor waiting slot across sign-in flows" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    first_flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    second_flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+
+    first = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: first_flow,
+      actor: actor,
+      browser_binding_digest: "a" * 64,
+    ).transaction
+
+    assert_raises(SessionLimitResolutionTransactionable::WaitingSlotOccupied) do
+      ClientSessionLimitResolutionTransaction.issue!(
+        sign_in_flow: second_flow,
+        actor: actor,
+        browser_binding_digest: "b" * 64,
+      )
+    end
+
+    assert_equal 1, ClientSessionLimitResolutionTransaction.open.where(actor_ref: actor.public_id).count
+    assert_equal 1, ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: first_flow.id).count
+    assert_empty ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: second_flow.id)
+    assert_equal SessionLimitResolutionTransactionable::WAITING_SLOT, first.reload.waiting_slot
+  end
+
+  test "issuing a new flow lazily expires the actor's elapsed resolution and claims its slot" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    first_flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    first = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: first_flow,
+      actor: actor,
+      browser_binding_digest: "c" * 64,
+    ).transaction
+    first.update!(expires_at: ClientSessionLimitResolutionTransaction.database_now - 1.second)
+
+    second_flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    second = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: second_flow,
+      actor: actor,
+      browser_binding_digest: "d" * 64,
+    ).transaction
+
+    assert_predicate first.reload, :expired?
+    assert_nil first.waiting_slot
+    assert_not_nil first.expired_at
+    assert_predicate second.reload, :pending?
+    assert_equal SessionLimitResolutionTransactionable::WAITING_SLOT, second.waiting_slot
+    assert_equal [second.id], ClientSessionLimitResolutionTransaction.open.where(actor_ref: actor.public_id).pluck(:id)
+  end
+
+  test "database constraints enforce waiting-slot state ownership independently of model validation" do
+    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    now = ClientSignInFlow.database_now
+    flow = ClientSignInFlow.create!(
+      principal_id: actor.id,
+      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
+      nonce_digest: ClientSignInFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
+      issued_at: now,
+      expires_at: now + 5.minutes,
+    )
+    issuance = ClientSessionLimitResolutionTransaction.issue!(
+      sign_in_flow: flow,
+      actor: actor,
+      browser_binding_digest: "e" * 64,
+    )
+    resolution = issuance.transaction
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      resolution.update_columns(waiting_slot: nil)
+    end
+    assert_equal SessionLimitResolutionTransactionable::WAITING_SLOT, resolution.reload.waiting_slot
+
+    resolution.cancel!(
+      actor: actor,
+      challenge: issuance.challenge,
+      browser_binding_digest: "e" * 64,
+    )
+
+    assert_nil resolution.reload.waiting_slot
+    assert_raises(ActiveRecord::StatementInvalid) do
+      resolution.update_columns(waiting_slot: SessionLimitResolutionTransactionable::WAITING_SLOT)
+    end
+    assert_nil resolution.reload.waiting_slot
   end
 
   test "wrong browser binding and terminal replay cannot mutate a resolution" do
@@ -383,7 +545,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     threads =
       2.times.map do
         Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
-          AppTicketRecord.connection_pool.with_connection do
+          OpBaseAppRecord.connection_pool.with_connection do
             barrier.wait
             binding = SecureRandom.urlsafe_base64(32)
             results << ClientSessionLimitResolutionTransaction.issue!(
@@ -439,7 +601,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     threads =
       [first_token, second_token].map do |token|
         Concurrent::Future.execute(executor: Concurrent::SimpleExecutorService.new) do
-          AppTicketRecord.connection_pool.with_connection do
+          OpBaseAppRecord.connection_pool.with_connection do
             barrier.wait
             results << begin
               fv5006 = issuance.transaction.id
@@ -465,6 +627,92 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
     assert_includes [first_token.public_id, second_token.public_id], issuance.transaction.reload.selected_session_ref
     assert_predicate first_token.reload, :currently_usable?
     assert_predicate second_token.reload, :currently_usable?
+  end
+
+  [
+    ["app", Base::App::AuthorityController, "PUBLIC_BASE_SERVICE_URL", ClientToken, :user_id,
+     ClientToken::MAX_SESSIONS_PER_USER, ClientSessionLimitResolutionTransaction,],
+    ["com", Base::Com::AuthorityController, "PUBLIC_BASE_CORPORATE_URL", VisitorToken, :visitor_id,
+     VisitorToken::MAX_SESSIONS_PER_VISITOR, VisitorSessionLimitResolutionTransaction,],
+    ["org", Base::Org::AuthorityController, "PUBLIC_BASE_STAFF_URL", OperatorToken, :staff_id,
+     OperatorToken::MAX_SESSIONS_PER_STAFF, OperatorSessionLimitResolutionTransaction,],
+  ].each do |surface, controller_class, host_env, token_class, owner_key, limit, resolution_class|
+    test "#{surface} refuses a different root flow when a live waiting slot is occupied" do
+      previous_cooldown = login_cooldown
+      self.login_cooldown = 0.seconds
+      actor, flow_class =
+        case surface
+        when "app"
+          [Client.create!(status_id: ClientStatus::ACTIVE), ClientSignInFlow]
+        when "com"
+          [Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR),
+           VisitorSignInFlow,]
+        when "org"
+          [Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF),
+           OperatorSignInFlow,]
+        end
+      now = flow_class.database_now
+      flows =
+        Array.new(2) do
+          flow_class.create!(
+            principal_id: actor.id,
+            state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
+            nonce_digest: flow_class.digest_nonce(SecureRandom.urlsafe_base64(32)),
+            issued_at: now,
+            expires_at: now + 5.minutes,
+          )
+        end
+
+      token_class.where(owner_key => actor.id).delete_all
+      limit.times do
+        token = token_class.new(owner_key => actor.id)
+        token.skip_session_limit_check = true if token.respond_to?(:skip_session_limit_check=)
+        token.save!
+      end
+      controllers =
+        Array.new(2) do
+          request = ActionDispatch::TestRequest.create
+          request.host = ENV.fetch(host_env)
+          request.session = ActionController::TestSession.new
+          controller = controller_class.new
+          controller.set_request!(request)
+          controller.set_response!(controller_class.make_response!(request))
+          controller
+        end
+
+      pending = controllers.first.log_in(
+        actor.class.find(actor.id), establishment: :root_login, sign_in_flow: flow_class.find(flows.first.id),
+      )
+
+      assert_equal :session_limit_pending, pending.fetch(:status)
+      waiting = resolution_class.find_by!(sign_in_flow_id: flows.first.id)
+      waiting_snapshot = waiting.attributes.slice(
+        "state_id", "waiting_slot", "expires_at", "challenge_digest", "browser_binding_digest", "audit_context",
+      )
+      token_ids = token_class.where(owner_key => actor.id).order(:id).pluck(:id)
+
+      refused = controllers.second.log_in(
+        actor.class.find(actor.id), establishment: :root_login, sign_in_flow: flow_class.find(flows.second.id),
+      )
+
+      assert_equal :session_limit_conflict, refused.fetch(:status)
+      assert_equal :forbidden, refused.fetch(:http_status)
+      assert_equal I18n.t("session_limit.login_limit_exceeded"), refused.fetch(:message)
+      assert_equal waiting_snapshot, waiting.reload.attributes.slice(
+        "state_id", "waiting_slot", "expires_at", "challenge_digest", "browser_binding_digest", "audit_context",
+      )
+      assert_equal 1, resolution_class.open.where(actor_ref: actor.public_id).count
+      assert_empty resolution_class.where(sign_in_flow_id: flows.second.id)
+      assert_equal token_ids, token_class.where(owner_key => actor.id).order(:id).pluck(:id)
+      assert_predicate flow_class.find(flows.second.id), :sign_in_session_issuance_pending?
+    ensure
+      self.login_cooldown = previous_cooldown
+      if actor
+        resolution_class.where(sign_in_flow_id: flows.map(&:id)).delete_all
+        flow_class.where(id: flows.map(&:id)).delete_all
+        token_class.where(owner_key => actor.id).delete_all
+      end
+    end
   end
 
   # D-30: capacity is decided at session commit under the actor lock. Two logins racing for the

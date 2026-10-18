@@ -22,7 +22,7 @@ module Tech
         private
 
         def oidc_client_id
-          "tech-org"
+          "tech-org-ww"
         end
 
         def oidc_rp_credentials_only?
@@ -56,8 +56,8 @@ module Tech
         def revoke_failed_callback_rp_session!(sid:, operator:)
           return unless operator.is_a?(Operator) && sid.is_a?(String) && sid.present?
 
-          OrgTicketRecord.connected_to(role: :writing) do
-            usage = OperatorRpSession.lock.find_by(public_id: sid, oidc_client_id: "tech-org")
+          OpBaseOrgRecord.connected_to(role: :writing) do
+            usage = OpOrgGrant.lock.find_by(public_id: sid, oidc_client_id: "tech-org-ww")
             return unless usage && OperatorToken.exists?(
               id: usage.operator_token_id,
               staff_id: operator.id,

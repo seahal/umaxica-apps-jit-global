@@ -135,7 +135,6 @@ class SignInSequenceCarrier
     {
       "mfa_challenge_id" => refs[:mfa_challenge_id].presence,
       "session_limit_gate_id" => refs[:session_limit_gate_id].presence,
-      "restricted_login_public_id" => refs[:restricted_login_public_id].presence,
     }.compact
   end
 end

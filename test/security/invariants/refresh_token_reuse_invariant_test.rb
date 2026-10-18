@@ -58,8 +58,8 @@ module Security
           discard_at: 1.day.from_now,
           purge_eligible_at: 2.days.from_now,
         )
-        usage = ClientRpSession.create!(
-          client_token: root_token, oidc_client_id: "core-app", refresh_token_expires_at: 1.hour.from_now,
+        usage = OpAppGrant.create!(
+          client_token: root_token, oidc_client_id: "core-app-jp", refresh_token_expires_at: 1.hour.from_now,
         )
         reused_refresh = usage.issue_refresh_token!
 
@@ -84,8 +84,8 @@ module Security
           discard_at: 1.day.from_now,
           purge_eligible_at: 2.days.from_now,
         )
-        usage = ClientRpSession.create!(
-          client_token: root_token, oidc_client_id: "core-app", refresh_token_expires_at: 1.hour.from_now,
+        usage = OpAppGrant.create!(
+          client_token: root_token, oidc_client_id: "core-app-jp", refresh_token_expires_at: 1.hour.from_now,
         )
         first_refresh = usage.issue_refresh_token!
 
@@ -383,7 +383,7 @@ class Security::Invariants::RefreshTokenReuseInvariantTest
     social_auth_state_from_response
   end
 
-  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app")
+  def assert_oidc_authorize_redirect(location, host:, client_id: "core-app-jp")
     uri = URI.parse(location)
     query = Rack::Utils.parse_nested_query(uri.query.to_s)
 

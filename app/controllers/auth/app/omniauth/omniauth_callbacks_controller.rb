@@ -296,18 +296,18 @@ module Auth
 
         def with_pending_social_sign_up_lock(provider, uid, &)
           digest = pending_social_signup_uid_digest(provider: provider, uid: uid)
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             SignUpEmailPendingGuard.with_lock(
               namespace: "sign_up:social_callback",
               address_digest: "#{provider}:#{digest}",
-              model_class: AppTicketRecord,
+              model_class: OpBaseAppRecord,
               &
             )
           end
         end
 
         def create_pending_social_sign_up_flow!(provider, pt: nil)
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             cycle = ClientSignUpFlow.create!(
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
@@ -450,11 +450,11 @@ module Auth
           if identity&.respond_to?(:uid) && identity.respond_to?(:provider) &&
               identity.uid.present? && identity.provider.present?
             digest = "#{SocialIdentifiable.normalize_provider(identity.provider)}:#{identity.uid}"
-            AppTicketRecord.connected_to(role: :writing) do
+            OpBaseAppRecord.connected_to(role: :writing) do
               SignUpEmailPendingGuard.with_lock(
                 namespace: "sign_up:social_callback",
                 address_digest: digest,
-                model_class: AppTicketRecord,
+                model_class: OpBaseAppRecord,
                 &
               )
             end
@@ -466,7 +466,7 @@ module Auth
         def create_social_sign_up_flow!(user, identity, pt: nil)
           raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless user && identity
 
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             cycle = ClientSignUpFlow.create!(
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
@@ -535,7 +535,7 @@ module Auth
             raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
           end
 
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             cycle.update!(
               principal_id: user.id,
               pending_contact_type: "social_identity",

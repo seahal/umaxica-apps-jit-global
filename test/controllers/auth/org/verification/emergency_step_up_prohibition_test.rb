@@ -132,7 +132,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "Base refuses admission for an emergency session without creating a ticket" do
-    @token.update!(authentication_context: "emergency")
+    @token.update!(authentication_context: "standby")
 
     assert_no_difference ["OperatorStepUpCeremonyTransaction.count", "OperatorStepUpSession.count"] do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
@@ -175,11 +175,11 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
       end
     end
     assert_nil @token.reload.last_step_up_at
-    assert_equal "emergency", @token.authentication_context
+    assert_equal "standby", @token.authentication_context
   end
 
   test "a direct passkey page without admission is refused and grants no emergency freshness" do
-    @token.update!(authentication_context: "emergency")
+    @token.update!(authentication_context: "standby")
     get new_auth_org_verification_passkey_path(ri: "jp")
 
     assert_response :bad_request
@@ -189,7 +189,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
   end
 
   test "a direct passkey POST without admission creates no emergency freshness" do
-    @token.update!(authentication_context: "emergency")
+    @token.update!(authentication_context: "standby")
     post auth_org_verification_passkey_path(ri: "jp"), params: {
       verification: { challenge_id: "anything", credential_json: { id: @passkey.webauthn_id }.to_json },
     }
@@ -197,7 +197,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     assert_response :bad_request
     assert_nil @token.reload.last_step_up_at
     assert_nil @token.last_step_up_scope
-    assert_equal "emergency", @token.authentication_context
+    assert_equal "standby", @token.authentication_context
     assert_nil cookies[AuthenticationCookieName.access]
     assert_nil cookies[AuthenticationCookieName.refresh]
   end
@@ -214,7 +214,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
 
     assert_predicate StepUpResolver.call(token: @token, requirement: @requirement, now: now), :satisfied?
 
-    @token.update!(authentication_context: "emergency")
+    @token.update!(authentication_context: "standby")
 
     assert_not_predicate StepUpResolver.call(token: @token.reload, requirement: @requirement, now: now), :satisfied?
   end
@@ -268,7 +268,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: transaction, ceremony_session_ref: ceremony.id.to_s,
     )
-    @token.update!(authentication_context: "emergency")
+    @token.update!(authentication_context: "standby")
 
     assert_raises(IdentityStepUpCeremonyContract::Error) do
       IdentityStepUpCeremonyFreshnessCommitter.call!(
@@ -389,7 +389,7 @@ class Auth::Org::Verification::EmergencyStepUpProhibitionTest < ActionDispatch::
 
     assert_response :redirect
 
-    @token.update!(authentication_context: "emergency")
+    @token.update!(authentication_context: "standby")
     get new_auth_org_verification_passkey_path(ri: "jp")
 
     assert_response :bad_request

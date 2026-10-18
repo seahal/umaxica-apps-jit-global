@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_tokens
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
@@ -81,7 +81,7 @@
 #  fk_customer_tokens_on_customer_token_kind_id            (visitor_token_kind_id => visitor_token_kinds.id)
 #  fk_customer_tokens_on_customer_token_status_id          (visitor_token_status_id => visitor_token_statuses.id)
 #
-class VisitorToken < ComTicketRecord
+class VisitorToken < OpBaseComRecord
   self.belongs_to_required_by_default = false
 
   include ::PublicId
@@ -106,6 +106,8 @@ class VisitorToken < ComTicketRecord
   MAX_TOTAL_SESSIONS_PER_VISITOR = 2
   session_oidc_connection_config actor_name: :visitor, connection_class: VisitorOidcConnection
 
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+
   attribute :visitor_token_status_id, default: VisitorTokenStatus::ACTIVE
   attribute :visitor_token_kind_id, default: VisitorTokenKind::BROWSER_WEB
   attribute :visitor_token_binding_method_id, default: VisitorTokenBindingMethod::NOTHING
@@ -123,7 +125,7 @@ class VisitorToken < ComTicketRecord
            foreign_key: :token_id,
            inverse_of: :token,
            dependent: :restrict_with_exception
-  has_many :visitor_rp_sessions, inverse_of: :visitor_token, dependent: :restrict_with_exception
+  has_many :op_com_grants, inverse_of: :visitor_token, dependent: :restrict_with_exception
   has_one :step_up_session,
           class_name: "VisitorStepUpSession",
           inverse_of: :visitor_token,
@@ -145,7 +147,7 @@ class VisitorToken < ComTicketRecord
     return if skip_session_limit_check
     return unless visitor_id
 
-    operation = -> { self.class.not_revoked.where(visitor_id: visitor_id, rotated_at: nil).count }
+    operation = -> { self.class.active_status.where(visitor_id: visitor_id, rotated_at: nil).count }
     count = defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
     return if count < MAX_TOTAL_SESSIONS_PER_VISITOR
 

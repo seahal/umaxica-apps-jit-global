@@ -7,7 +7,7 @@ class RpSessionTest < ActiveSupport::TestCase
   CASES = [
     {
       name: "client",
-      model: ClientRpSession,
+      model: OpAppGrant,
       root_model: ClientToken,
       root_builder: -> {
         client = Client.create!
@@ -18,7 +18,7 @@ class RpSessionTest < ActiveSupport::TestCase
     },
     {
       name: "operator",
-      model: OperatorRpSession,
+      model: OpOrgGrant,
       root_model: OperatorToken,
       root_builder: -> {
         operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
@@ -29,7 +29,7 @@ class RpSessionTest < ActiveSupport::TestCase
     },
     {
       name: "visitor",
-      model: VisitorRpSession,
+      model: OpComGrant,
       root_model: VisitorToken,
       root_builder: -> {
         VisitorStatus.ensure_defaults!
@@ -55,7 +55,7 @@ class RpSessionTest < ActiveSupport::TestCase
           ),
         )
         session = rp_session_case[:model].create!(
-          rp_session_case[:parent_label] => root, :oidc_client_id => "core-app",
+          rp_session_case[:parent_label] => root, :oidc_client_id => "core-app-jp",
           :refresh_token_expires_at => decision_time + 1.hour,
         )
         original_authority = root.attributes.slice(
@@ -82,7 +82,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -91,7 +91,7 @@ class RpSessionTest < ActiveSupport::TestCase
       assert_equal 21, session.public_id.length
       assert_predicate session.public_id, :ascii_only?
       assert_equal root.id, session.public_send(rp_session_case[:parent_key])
-      assert_equal "core-app", session.oidc_client_id
+      assert_equal "core-app-jp", session.oidc_client_id
       assert_predicate session, :active?
     end
 
@@ -99,7 +99,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       first = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -107,7 +107,7 @@ class RpSessionTest < ActiveSupport::TestCase
       assert_raises(ActiveRecord::RecordNotUnique) do
         rp_session_case[:model].create!(
           rp_session_case[:parent_label] => root,
-          :oidc_client_id => "core-app",
+          :oidc_client_id => "core-app-jp",
           :oidc_scope => "openid profile",
           :refresh_token_expires_at => 1.hour.from_now,
         )
@@ -117,7 +117,7 @@ class RpSessionTest < ActiveSupport::TestCase
 
       replacement = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid email",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -131,7 +131,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -150,7 +150,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root.save!
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -172,7 +172,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -192,7 +192,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root.update!(discard_at: absolute_expiry)
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 30.minutes.from_now,
       )
@@ -212,7 +212,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -243,7 +243,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -265,7 +265,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -281,7 +281,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -297,7 +297,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
         rp_session_case[:parent_label] => root,
-        :oidc_client_id => "core-app",
+        :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
         :refresh_token_expires_at => 2.days.from_now,
       )

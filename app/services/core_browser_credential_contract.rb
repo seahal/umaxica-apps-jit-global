@@ -63,6 +63,7 @@ module CoreBrowserCredentialContract
       issuer: AuthenticationJwtConfiguration.issuer,
       audiences: [ACCESS_AUDIENCE],
       jwt_issuer_id: core_jwt_issuer_id(resource_type),
+      authentication_context: token_record.strict_authentication_context_value.to_s,
     )
   end
 
@@ -90,16 +91,14 @@ module CoreBrowserCredentialContract
     end
   end
 
+  # The Core Browser credential is signed by the Core *surface* issuer (surface:CORE_*), which is
+  # distinct from the per-client assertion namespace (oidc_client:CORE_*_JP) of the Core RP.
   def core_jwt_issuer_id(resource_type)
-    client_id =
-      case resource_type
-      when "operator" then "core-org"
-      when "visitor" then "core-com"
-      else "core-app"
-      end
-
-    namespace = OidcClientRegistry.jwt_namespace_for(client_id)
-    namespace.present? ? "surface:#{namespace}" : nil
+    case resource_type
+    when "operator" then "surface:CORE_ORG"
+    when "visitor" then "surface:CORE_COM"
+    else "surface:CORE_APP"
+    end
   end
 
   def auth_cookie_service_options(expires_at: nil)

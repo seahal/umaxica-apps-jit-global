@@ -570,6 +570,9 @@ describe("SignInLimitationShow", () => {
     cancel_action: "/sign/in/limitation?resolution_challenge=ch_1",
     submit_label: "Revoke and continue",
     cancel_label: "Cancel sign-in",
+    continue_action: "/sign/in/limitation",
+    continue_label: "Continue sign-in",
+    can_continue: false,
     resolution: { field: "resolution_challenge", value: "ch_1" },
     sessions: [
       {
@@ -638,6 +641,21 @@ describe("SignInLimitationShow", () => {
     });
 
     expect(deleteRequest).toHaveBeenCalledWith("/sign/in/limitation?resolution_challenge=ch_1");
+  });
+
+  it("continues the bound sign-in flow with the explicit POST action", () => {
+    const element = mount(
+      <SignInLimitationShow
+        {...props}
+        can_continue
+      />,
+    );
+
+    act(() => {
+      getByRole(element, "button", { name: "Continue sign-in" }).click();
+    });
+
+    expect(post).toHaveBeenCalledWith("/sign/in/limitation");
   });
 });
 

@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class OperatorSessionLimitResolutionState < OrgTicketRecord
+class OperatorSessionLimitResolutionState < OpBaseOrgRecord
   include ReferenceRecord
 
   PENDING = 10

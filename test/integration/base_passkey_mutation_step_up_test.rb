@@ -6,9 +6,9 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
   self.fixture_table_names = []
 
   test "Base passkey rename and deletion require scoped step-up in app com and org" do
-    [[Client, ClientPasskey, ClientToken, ClientRpSession, :user_id, :client_token, "app", "client"],
-     [Visitor, VisitorPasskey, VisitorToken, VisitorRpSession, :visitor_id, :visitor_token, "com", "visitor"],
-     [Operator, OperatorPasskey, OperatorToken, OperatorRpSession, :staff_id, :operator_token,
+    [[Client, ClientPasskey, ClientToken, OpAppGrant, :user_id, :client_token, "app", "client"],
+     [Visitor, VisitorPasskey, VisitorToken, OpComGrant, :visitor_id, :visitor_token, "com", "visitor"],
+     [Operator, OperatorPasskey, OperatorToken, OpOrgGrant, :staff_id, :operator_token,
       "org", "operator",],].each do |actor_class, key_class, token_class, rp_class, owner_key, root_key, surface, type|
       actor = actor_class.create!
       token = token_class.create!(owner_key => actor.id, :root_login_established_at => Time.current)

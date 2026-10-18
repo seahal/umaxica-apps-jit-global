@@ -17,15 +17,30 @@ module Base
 
       public
 
+      # R5-WU14: the image comes from the Avatar owner; this RP only applies its cache validation.
       def show
-        # The app surface requires an Avatar, so a valid selection without one is a broken invariant.
-        avatar = switcher.selected_avatar || raise(RuntimeError, "selected app context has no Avatar")
-        authorize!(avatar, to: :show?)
+        status, body, mime_type, cache_key =
+          AvatarAuthorityClient.new(
+            surface: "app",
+            access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+            persona: Actor.selection.account_public_id,
+          ).selected_image
+        authorize!(
+          AvatarAuthorityClient::Result.new(status:, data: {}, errors: {}), to: :relay?,
+                                                                            with: AvatarRemoteResultPolicy,
+        )
+        case status
+        when :ok
+          raise RuntimeError, "stored Avatar image has an unsupported type" unless
+            AvatarImageUploader::ALLOWED_MIME_TYPES.include?(mime_type.to_s)
 
-        attachment = avatar.image
-        return send_default_image if attachment.nil?
-
-        send_stored_image(avatar, attachment)
+          # An ETag with public: false yields "max-age=0, private, must-revalidate".
+          send_data(body, type: mime_type, disposition: "inline") if stale?(etag: cache_key, public: false)
+        when :no_image then send_default_image
+        when :not_found then head(:not_found)
+        when :forbidden then head(:forbidden)
+        else head(:service_unavailable)
+        end
       end
 
       protected
@@ -51,24 +66,6 @@ module Base
         return unless stale?(etag: DEFAULT_IMAGE_ETAG, public: false)
 
         send_file(DEFAULT_IMAGE_PATH, type: "image/png", disposition: "inline")
-      end
-
-      def send_stored_image(avatar, attachment)
-        mime_type = attachment.mime_type.to_s
-        raise RuntimeError, "stored Avatar image has an unsupported type" unless
-          AvatarImageUploader::ALLOWED_MIME_TYPES.include?(mime_type)
-
-        # An ETag with public: false yields "max-age=0, private, must-revalidate": every use
-        # revalidates and no shared cache stores it.
-        return unless stale?(etag: avatar.image_cache_key, public: false)
-
-        send_data(attachment.read, type: mime_type, disposition: "inline")
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :app, principal: current_client, session: current_session,
-        )
       end
     end
   end

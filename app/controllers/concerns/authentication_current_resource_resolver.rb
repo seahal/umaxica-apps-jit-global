@@ -219,7 +219,7 @@ class AuthenticationCurrentResourceResolver
 
   def token_connection_owner
     klass = @token_class
-    return OrgTicketRecord unless klass.respond_to?(:connection_class?)
+    return OpBaseOrgRecord unless klass.respond_to?(:connection_class?)
 
     klass = klass.superclass until klass.connection_class?
     klass

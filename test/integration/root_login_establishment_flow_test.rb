@@ -1287,14 +1287,15 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
 
     assert_not_nil callback
     # The public landing page is not an authorization decision. Test the protected
-    # OP SSO operation instead: a restricted Root cannot produce an authorization code.
-    assert_no_difference(["ClientToken.count", "ClientRpSession.count", "ClientChronicle.count"]) do
+    # OP SSO operation instead: a historical status-103 Root cannot produce an authorization code.
+    state = SecureRandom.urlsafe_base64(32)
+    assert_no_difference(["ClientToken.count", "OpAppGrant.count", "ClientChronicle.count"]) do
       get "/oauth/authorize", params: {
         response_type: "code",
         client_id: client.client_id,
         redirect_uri: callback,
         scope: "openid profile",
-        state: SecureRandom.urlsafe_base64(32),
+        state: state,
         nonce: SecureRandom.urlsafe_base64(32),
         code_challenge: Base64.urlsafe_encode64(
           Digest::SHA256.digest(SecureRandom.urlsafe_base64(48)),
@@ -1306,8 +1307,14 @@ class RootLoginEstablishmentFlowTest < ActionDispatch::IntegrationTest
       }, headers: { "Authorization" => "Bearer #{access_token}" }
     end
 
-    assert_response :locked
-    assert_nil response.location
+    assert_response :found
+    callback_response = URI.parse(response.location)
+    callback_query = Rack::Utils.parse_nested_query(callback_response.query)
+
+    assert_equal URI.parse(callback).host, callback_response.host
+    assert_equal URI.parse(callback).path, callback_response.path
+    assert_equal "login_required", callback_query.fetch("error")
+    assert_equal state, callback_query.fetch("state")
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
     assert_nil cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]

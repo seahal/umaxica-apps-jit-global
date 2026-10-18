@@ -216,8 +216,8 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     }
     rp_session =
       case token
-      when ClientToken then ClientRpSession.create!(attributes.merge(client_token: token))
-      when VisitorToken then VisitorRpSession.create!(attributes.merge(visitor_token: token))
+      when ClientToken then OpAppGrant.create!(attributes.merge(client_token: token))
+      when VisitorToken then OpComGrant.create!(attributes.merge(visitor_token: token))
       end
     access = AuthenticationTokenService.encode(
       actor, host: host, resource_type: resource_type, session_public_id: token.public_id,

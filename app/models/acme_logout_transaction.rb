@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: acme_logout_transactions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                  :bigint           not null, primary key
 #  actor_ref           :string
@@ -38,7 +38,7 @@
 #  index_acme_logout_transactions_on_public_id           (public_id) UNIQUE
 #  index_acme_logout_transactions_on_status              (status)
 #
-class AcmeLogoutTransaction < AppTicketRecord
+class AcmeLogoutTransaction < OpBaseAppRecord
   include AcmeLogoutTransactionable
 
   def logout_challenge = public_id

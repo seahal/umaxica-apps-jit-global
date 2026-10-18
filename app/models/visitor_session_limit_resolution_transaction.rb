@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class VisitorSessionLimitResolutionTransaction < ComTicketRecord
+class VisitorSessionLimitResolutionTransaction < OpBaseComRecord
   include SessionLimitResolutionTransactionable
 
   self.belongs_to_required_by_default = false
@@ -28,4 +28,5 @@ class VisitorSessionLimitResolutionTransaction < ComTicketRecord
   # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
   validates :state_id,
             inclusion: { in: SessionLimitResolutionTransactionable::TRANSITIONS.keys }
+  validate :waiting_slot_matches_state
 end

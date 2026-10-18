@@ -65,7 +65,7 @@ class AcmeLogoutTransactionTest < ActiveSupport::TestCase
       transaction_attrs(
         origin_surface: "core",
         workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
-        initiating_client_id: "core-app",
+        initiating_client_id: "core-app-jp",
         expected_step: AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
       ),
     )

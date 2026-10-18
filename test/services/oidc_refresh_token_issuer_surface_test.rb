@@ -26,7 +26,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     connection = OperatorOidcConnection.create!(
       staff: operator, client_id: "org-console-rp", last_used_at: 3.days.ago,
     )
-    usage = OperatorRpSession.create!(
+    usage = OpOrgGrant.create!(
       operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -46,7 +46,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = OperatorRpSession.create!(
+    usage = OpOrgGrant.create!(
       operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     replayed = usage.issue_refresh_token!
@@ -91,7 +91,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
     connection = VisitorOidcConnection.create!(
       visitor: visitor, client_id: "com-portal-rp", last_used_at: 3.days.ago,
     )
-    usage = VisitorRpSession.create!(
+    usage = OpComGrant.create!(
       visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -111,9 +111,9 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       user_token_status_id: ClientTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = ClientRpSession.create!(
+    usage = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -138,7 +138,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = VisitorRpSession.create!(
+    usage = OpComGrant.create!(
       visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     replayed = usage.issue_refresh_token!
@@ -180,7 +180,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
-    usage = OperatorRpSession.create!(
+    usage = OpOrgGrant.create!(
       operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -194,7 +194,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
 
         if sql.match?(/\b#{Regexp.escape(OperatorToken.table_name)}\b/i)
           lock_tables << :parent
-        elsif sql.match?(/\b#{Regexp.escape(OperatorRpSession.table_name)}\b/i)
+        elsif sql.match?(/\b#{Regexp.escape(OpOrgGrant.table_name)}\b/i)
           lock_tables << :child
         end
       end

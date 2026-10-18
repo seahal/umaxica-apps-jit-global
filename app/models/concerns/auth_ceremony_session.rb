@@ -116,12 +116,12 @@ module AuthCeremonySession
     end
 
     def connection_owner
-      if self <= AppTicketRecord
-        AppTicketRecord
-      elsif self <= ComTicketRecord
-        ComTicketRecord
-      elsif self <= OrgTicketRecord
-        OrgTicketRecord
+      if self <= OpBaseAppRecord
+        OpBaseAppRecord
+      elsif self <= OpBaseComRecord
+        OpBaseComRecord
+      elsif self <= OpBaseOrgRecord
+        OpBaseOrgRecord
       else
         ActiveRecord::Base
       end

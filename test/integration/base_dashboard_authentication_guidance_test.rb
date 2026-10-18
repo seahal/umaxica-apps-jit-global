@@ -40,9 +40,9 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
             rp_resource_type = { "app" => "client",
                                  "com" => "visitor",
                                  "org" => "operator", }.fetch(rp_surface)
-            rp_model = { "app" => ClientRpSession,
-                         "com" => VisitorRpSession,
-                         "org" => OperatorRpSession, }.fetch(rp_surface)
+            rp_model = { "app" => OpAppGrant,
+                         "com" => OpComGrant,
+                         "org" => OpOrgGrant, }.fetch(rp_surface)
             rp_token_key = { "app" => :client_token,
                              "com" => :visitor_token,
                              "org" => :operator_token, }.fetch(rp_surface)

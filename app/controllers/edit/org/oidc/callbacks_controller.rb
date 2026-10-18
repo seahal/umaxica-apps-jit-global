@@ -28,7 +28,7 @@ module Edit
         end
 
         def oidc_client_id
-          "edit-org"
+          "edit-org-ww"
         end
       end
     end

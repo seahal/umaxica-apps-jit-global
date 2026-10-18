@@ -15,7 +15,7 @@ class ClientSecretClaimFinalizer
       AppZenithRecord.connected_to(role: :writing) do
         client = Client.find(credential.client_id)
         client.with_lock do
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             ClientSignInFlow.transaction do
               flow = ClientSignInFlow.find_by(public_id: credential.claim_sign_in_flow_ref)
               return :unknown unless flow

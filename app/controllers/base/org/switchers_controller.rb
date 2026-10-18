@@ -11,10 +11,14 @@ module Base
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
-      def show
-        authorize!(current_operator, to: :show?)
-        context = current_context
+      public
 
+      # R5-WU14: the context is read and switched by its owner over HTTPS (approved contract).
+      def show
+        result = relay_switcher(switcher_authority.switcher_context)
+        return unless result
+
+        context = result.data.deep_symbolize_keys
         respond_to do |format|
           format.json { render json: context }
           format.html { render inertia: true, props: switcher_page_props(context) }
@@ -22,29 +26,23 @@ module Base
       end
 
       def update
-        authorize!(current_operator, to: :update?)
-        BaseSwitcherAuthority.switch(
-          surface: :org,
-          principal: current_operator,
-          session: current_session,
-          params: switcher_params,
-        )
+        result = relay_switcher(switcher_authority.switch_context(switcher_params))
+        return unless result
 
-        respond_to do |format|
-          format.json { render json: { status: "switched", next: base_org_dashboard_path(ri: params[:ri]) } }
-          format.html { redirect_to(base_org_dashboard_path(ri: params[:ri]), status: :see_other) }
-        end
-      rescue BaseSwitcherAuthority::InvalidSwitch => e
-        context = current_context
-
-        respond_to do |format|
-          format.json do
-            render json: { status: "invalid_switch", error: e.message }, status: :unprocessable_content
+        if result.ok?
+          respond_to do |format|
+            format.json { render json: { status: "switched", next: base_org_dashboard_path(ri: params[:ri]) } }
+            format.html { redirect_to(base_org_dashboard_path(ri: params[:ri]), status: :see_other) }
           end
-          format.html do
-            render inertia: "base/org/switchers/show",
-                   props: switcher_page_props(context, error: e.message),
-                   status: :unprocessable_content
+        else
+          error = result.data.to_h["error"]
+          context = (switcher_authority.switcher_context.data || {}).deep_symbolize_keys
+          respond_to do |format|
+            format.json { render json: { status: "invalid_switch", error: }, status: :unprocessable_content }
+            format.html do
+              render inertia: "base/org/switchers/show", props: switcher_page_props(context, error:),
+                     status: :unprocessable_content
+            end
           end
         end
       end
@@ -76,12 +74,22 @@ module Base
         }
       end
 
-      def current_context
-        BaseSwitcherAuthority.current(
-          surface: :org,
-          principal: current_operator,
-          session: current_session,
+      def switcher_authority
+        @switcher_authority ||= AvatarAuthorityClient.new(
+          surface: "org",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
         )
+      end
+
+      def relay_switcher(result)
+        authorize!(result, to: :show?, with: AvatarRemoteResultPolicy)
+        if result.status == :dependency
+          head :service_unavailable
+          return
+        end
+
+        result
       end
 
       def switcher_params

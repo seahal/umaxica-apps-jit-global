@@ -15,7 +15,7 @@ class ClientSecretStorageConfirmationCommitter
         raise Denied, "Secret confirmation requires a bound Base app Client, session and issuance"
       end
 
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientToken.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor_context.subject.with_lock(requires_new: true) { confirm!(actor_context, token, issuance) }
@@ -105,7 +105,7 @@ class ClientSecretStorageConfirmationCommitter
         actor_ref: actor.public_id, resource_ref: nil, tenant_ref: nil,
       )
       now = ClientToken.database_now
-      unless token.currently_usable?(now) && !token.restricted? &&
+      unless token.active_status?(now) &&
           StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied?
         raise Denied, "Secret confirmation requires current scoped Step-Up"
       end

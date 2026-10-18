@@ -11,15 +11,18 @@ class OidcRefreshDeliveryReceipt < Data.define(
   :access_expires_at,
   :refresh_expires_at,
   :token_response,
+  :attempt_ref,
 )
   PURPOSE = "rp_refresh_delivery_receipt"
-  VERSION = 1
+  # Version 2 (R5-WU08) binds the RP's refresh attempt reference so a delivery query can only
+  # recover the exact attempt that dispatched. Receipts live five seconds, so no v1 reader is kept.
+  VERSION = 2
   TTL = 5.seconds
   TOKEN_FIELDS = %i(access_token token_type expires_in refresh_token refresh_token_expires_in id_token).freeze
   REQUIRED_TOKEN_FIELDS = %i(access_token token_type expires_in refresh_token refresh_token_expires_in).freeze
   PAYLOAD_FIELDS = %w(
     version rp_session_public_id client_id resource_type predecessor_digest generation expires_at
-    access_expires_at refresh_expires_at token_response
+    access_expires_at refresh_expires_at token_response attempt_ref
   ).freeze
 
   class Invalid < StandardError; end
@@ -28,10 +31,10 @@ class OidcRefreshDeliveryReceipt < Data.define(
     public
 
     def encrypt(rp_session_public_id:, client_id:, resource_type:, predecessor_digest:, generation:, expires_at:,
-                access_expires_at:, refresh_expires_at:, token_response:)
+                access_expires_at:, refresh_expires_at:, token_response:, attempt_ref:)
       receipt = build(
         rp_session_public_id:, client_id:, resource_type:, predecessor_digest:, generation:, expires_at:,
-        access_expires_at:, refresh_expires_at:, token_response:,
+        access_expires_at:, refresh_expires_at:, token_response:, attempt_ref:,
       )
       encryptor.encrypt_and_sign(payload_for(receipt), purpose: PURPOSE)
     rescue ActiveSupport::MessageEncryptor::InvalidMessage, ArgumentError, KeyError, TypeError => e
@@ -49,8 +52,14 @@ class OidcRefreshDeliveryReceipt < Data.define(
 
     private
 
+    # attempt_ref is nil when the caller did not supply one (an in-process OP-side reissue); such a
+    # receipt can be redelivered on the refresh endpoint but never matched by a delivery query.
     def build(rp_session_public_id:, client_id:, resource_type:, predecessor_digest:, generation:, expires_at:,
-              access_expires_at:, refresh_expires_at:, token_response:)
+              access_expires_at:, refresh_expires_at:, token_response:, attempt_ref:)
+      unless attempt_ref.nil? || (attempt_ref.is_a?(String) && attempt_ref.match?(/\A[A-Za-z0-9_-]{1,64}\z/))
+        raise ArgumentError, "RP refresh receipt attempt reference is invalid"
+      end
+
       raise ArgumentError, "RP refresh receipt session binding is missing" if rp_session_public_id.blank?
       raise ArgumentError, "RP refresh receipt client binding is missing" if client_id.blank?
       raise ArgumentError, "RP refresh receipt realm binding is missing" if resource_type.blank?
@@ -74,6 +83,7 @@ class OidcRefreshDeliveryReceipt < Data.define(
         access_expires_at: access_expires_at,
         refresh_expires_at: refresh_expires_at,
         token_response: token_response,
+        attempt_ref: attempt_ref,
       )
     end
 
@@ -92,6 +102,7 @@ class OidcRefreshDeliveryReceipt < Data.define(
         access_expires_at: Time.iso8601(payload.fetch("access_expires_at")),
         refresh_expires_at: Time.iso8601(payload.fetch("refresh_expires_at")),
         token_response: payload.fetch("token_response"),
+        attempt_ref: payload.fetch("attempt_ref"),
       )
     end
 
@@ -107,6 +118,7 @@ class OidcRefreshDeliveryReceipt < Data.define(
         "access_expires_at" => receipt.access_expires_at.iso8601(6),
         "refresh_expires_at" => receipt.refresh_expires_at.iso8601(6),
         "token_response" => receipt.token_response.stringify_keys,
+        "attempt_ref" => receipt.attempt_ref,
       }
     end
 
@@ -169,6 +181,11 @@ class OidcRefreshDeliveryReceipt < Data.define(
       secure_equal?(resource_type, self.resource_type) &&
       secure_equal?(predecessor_digest, self.predecessor_digest) &&
       generation == self.generation
+  end
+
+  # A delivery query must name the exact attempt that dispatched this rotation.
+  def attempt_matches?(attempt_ref)
+    self.attempt_ref.present? && secure_equal?(attempt_ref.to_s, self.attempt_ref)
   end
 
   # Re-delivery returns the exact issued response. Callers use the absolute

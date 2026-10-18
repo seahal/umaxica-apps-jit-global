@@ -19,7 +19,7 @@ module Security
         )
         rp_client = OidcClientRegistry.find!("base-org-ww")
         token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
-        rp_session = OperatorRpSession.create!(
+        rp_session = OpOrgGrant.create!(
           operator_token: token, oidc_client_id: rp_client.client_id,
           oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
           oidc_auth_time: Time.current, refresh_token_expires_at: 10.minutes.from_now,

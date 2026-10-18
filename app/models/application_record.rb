@@ -5,7 +5,7 @@ class ApplicationRecord < ActiveRecord::Base
   primary_abstract_class
 
   # Every domain gets its own dedicated abstract class with its own `connects_to`
-  # (PublishingRecord, AppTicketRecord, ...); nothing does business logic through
+  # (PublishingRecord, OpBaseAppRecord, ...); nothing does business logic through
   # ApplicationRecord directly. Without a connection of its own, though,
   # `ActiveRecord::Base.connection` (what any gem or Rails-provided model that skips those
   # dedicated classes ends up calling -- rails_db's dashboard, ActiveStorage, ActionMailbox)

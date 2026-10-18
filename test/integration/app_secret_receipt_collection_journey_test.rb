@@ -80,8 +80,8 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
         surface: "app", intent: "sign_in", ttl: 10.seconds, login_challenge_ttl: 10.seconds,
         params: {
           response_type: "code",
-          client_id: "core-app",
-          redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris_by_realm.fetch("client").first,
+          client_id: "core-app-jp",
+          redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch("client").first,
           code_challenge: "challenge",
           code_challenge_method: "S256",
           state: "state",

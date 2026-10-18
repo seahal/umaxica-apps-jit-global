@@ -15,11 +15,11 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "find returns client for known client_id" do
-    client = OidcClientRegistry.find("warp-app")
+    client = OidcClientRegistry.find("warp-app-jp")
 
     assert_not_nil client
-    assert_equal "warp-app", client.client_id
-    assert_equal "warp-app", client.aud
+    assert_equal "warp-app-jp", client.client_id
+    assert_equal "warp-app-jp", client.aud
     assert_equal "client", client.resource_type
     assert_equal "Warp App RP", client.name
     assert_includes client.domains,
@@ -65,14 +65,14 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "valid_redirect_uri? returns true for registered URI" do
-    client = OidcClientRegistry.find("core-app")
+    client = OidcClientRegistry.find("core-app-jp")
     uri = client.redirect_uris.first
 
-    assert OidcClientRegistry.valid_redirect_uri?("core-app", uri)
+    assert OidcClientRegistry.valid_redirect_uri?("core-app-jp", uri)
   end
 
   test "valid_redirect_uri? returns false for unregistered URI" do
-    assert_not OidcClientRegistry.valid_redirect_uri?("core-app", "https://evil.com/callback")
+    assert_not OidcClientRegistry.valid_redirect_uri?("core-app-jp", "https://evil.com/callback")
   end
 
   test "valid_redirect_uri? returns false for unknown client" do
@@ -80,7 +80,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "valid_post_logout_redirect_uri? uses exact registered uri match" do
-    client = OidcClientRegistry.find!("core-app")
+    client = OidcClientRegistry.find!("core-app-jp")
     uri = client.post_logout_redirect_uris.first
 
     assert OidcClientRegistry.valid_post_logout_redirect_uri?(
@@ -103,9 +103,9 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
   test "valid_post_logout_redirect_uri? binds registered uris to the requesting realm" do
     clients_by_realm = {
-      "client" => OidcClientRegistry.find!("core-app"),
-      "visitor" => OidcClientRegistry.find!("core-com"),
-      "operator" => OidcClientRegistry.find!("core-org"),
+      "client" => OidcClientRegistry.find!("core-app-jp"),
+      "visitor" => OidcClientRegistry.find!("core-com-jp"),
+      "operator" => OidcClientRegistry.find!("core-org-jp"),
     }
 
     clients_by_realm.each do |realm, client|
@@ -124,13 +124,13 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "client cache follows configured host changes" do
-    original_client = OidcClientRegistry.find!("core-app")
+    original_client = OidcClientRegistry.find!("core-app-jp")
     original_env = ENV["PUBLIC_CORE_SERVICE_URL"]
 
     begin
       ENV["PUBLIC_CORE_SERVICE_URL"] = "temporary-core.example.test"
 
-      assert_includes OidcClientRegistry.find!("core-app").redirect_uris,
+      assert_includes OidcClientRegistry.find!("core-app-jp").redirect_uris,
                       "https://temporary-core.example.test/oidc/callback"
     ensure
       if original_env.nil?
@@ -140,7 +140,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       end
     end
 
-    restored_client = OidcClientRegistry.find!("core-app")
+    restored_client = OidcClientRegistry.find!("core-app-jp")
 
     assert_equal original_client.redirect_uris, restored_client.redirect_uris
   end
@@ -162,11 +162,11 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "Tech operator client has its own host, key namespace, and required capability" do
-    client = OidcClientRegistry.find!("tech-org")
+    client = OidcClientRegistry.find!("tech-org-ww")
 
     assert_equal "operator", client.resource_type
-    assert_equal "tech-org", client.aud
-    assert_equal "TECH_ORG", client.jwt_namespace
+    assert_equal "tech-org-ww", client.aud
+    assert_equal "TECH_ORG_WW", client.jwt_namespace
     assert_equal OperatorCapabilityGrant::TECH_ACCESS, client.required_operator_capability
     expected_hosts =
       [ENV.fetch("PUBLIC_TECH_STAFF_URL"), ENV["PRIVATE_TECH_STAFF_URL"]].compact.map do |origin|
@@ -178,7 +178,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
   test "all expected clients are registered" do
     expected = %w(
-      core-app core-com core-org warp-app warp-com warp-org edit-org palm-app tech-org
+      core-app-jp core-com-jp core-org-jp warp-app-jp warp-com-jp warp-org-jp edit-org-ww palm-app-jp tech-org-ww
     )
 
     expected.each do |client_id|
@@ -192,15 +192,15 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
   test "clients expose explicit allowed scopes" do
     expectations = {
-      "core-app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "core-com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "core-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "warp-app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "warp-com" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "warp-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "edit-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "palm-app" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
-      "tech-org" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "core-app-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "core-com-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "core-org-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "warp-app-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "warp-com-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "warp-org-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "edit-org-ww" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "palm-app-jp" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
+      "tech-org-ww" => OidcClientRegistry::DEFAULT_ALLOWED_SCOPES,
     }
 
     expectations.each do |client_id, allowed_scopes|
@@ -211,7 +211,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "org clients have operator resource_type" do
-    %w(core-org warp-org edit-org tech-org).each do |client_id|
+    %w(core-org-jp warp-org-jp edit-org-ww tech-org-ww).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "operator", client.resource_type, "#{client_id} should be operator type"
@@ -219,7 +219,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "app clients have client resource_type" do
-    %w(core-app warp-app palm-app).each do |client_id|
+    %w(core-app-jp warp-app-jp palm-app-jp).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "client", client.resource_type, "#{client_id} should be client type"
@@ -227,7 +227,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "com clients have visitor resource_type" do
-    %w(core-com warp-com).each do |client_id|
+    %w(core-com-jp warp-com-jp).each do |client_id|
       client = OidcClientRegistry.find(client_id)
 
       assert_equal "visitor", client.resource_type, "#{client_id} should be visitor type"
@@ -235,36 +235,36 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "authenticate returns false when secret_credentials are not configured" do
-    assert_not OidcClientRegistry.authenticate("warp-app", "any_secret_credential")
+    assert_not OidcClientRegistry.authenticate("warp-app-jp", "any_secret_credential")
   end
 
   test "find resolves secret_credential from flat credential key" do
-    with_oidc_client_secret_credentials("OIDC_CLIENT_SECRETS_WARP-APP": "warp-app-secret_credential") do
-      client = OidcClientRegistry.find("warp-app")
+    with_oidc_client_secret_credentials("OIDC_CLIENT_SECRETS_WARP-APP-JP": "warp-app-secret_credential") do
+      client = OidcClientRegistry.find("warp-app-jp")
 
       assert_equal "warp-app-secret_credential", client.client_secret
     end
   end
 
   test "authenticate uses flat credential key" do
-    with_oidc_client_secret_credentials("OIDC_CLIENT_SECRETS_WARP-APP": "warp-app-secret_credential") do
-      assert OidcClientRegistry.authenticate("warp-app", "warp-app-secret_credential")
-      assert_not OidcClientRegistry.authenticate("warp-app", "wrong-secret_credential")
+    with_oidc_client_secret_credentials("OIDC_CLIENT_SECRETS_WARP-APP-JP": "warp-app-secret_credential") do
+      assert OidcClientRegistry.authenticate("warp-app-jp", "warp-app-secret_credential")
+      assert_not OidcClientRegistry.authenticate("warp-app-jp", "wrong-secret_credential")
     end
   end
 
   test "authenticate returns false for blank secret_credential" do
-    assert_not OidcClientRegistry.authenticate("warp-app", "")
-    assert_not OidcClientRegistry.authenticate("warp-app", nil)
+    assert_not OidcClientRegistry.authenticate("warp-app-jp", "")
+    assert_not OidcClientRegistry.authenticate("warp-app-jp", nil)
   end
 
   test "client_ids returns all registered client IDs" do
     ids = OidcClientRegistry.client_ids
 
-    assert_includes ids, "warp-app"
+    assert_includes ids, "warp-app-jp"
     assert_not_includes ids, "sign-rp"
     assert_not_includes ids, "base-rails-rp"
-    assert_includes ids, "palm-app"
+    assert_includes ids, "palm-app-jp"
     assert_not_includes ids, "app-ios-rp"
     assert_not_includes ids, "app-android-rp"
     AuthBoundaryAuthorityMap.first_party_rp_client_ids.each { |client_id| assert_includes ids, client_id }
@@ -272,15 +272,15 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "visitor account does not expose ambiguous token endpoint auth method" do
-    client = OidcClientRegistry.find!("warp-app")
+    client = OidcClientRegistry.find!("warp-app-jp")
 
     assert_not_respond_to client, :token_endpoint_auth_method
   end
 
   test "acme and core clients expose registered private_key_jwt namespaces" do
     expectations = {
-      "core-app" => "CORE_APP",
-      "warp-app" => "WARP_APP",
+      "core-app-jp" => "CORE_APP_JP",
+      "warp-app-jp" => "WARP_APP_JP",
     }
 
     expectations.each do |client_id, namespace|
@@ -301,9 +301,9 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
           OidcClientRegistry.validate_private_key_jwt_configuration!
         end
 
-      assert_includes error.message, "core-app(CORE_APP)"
-      assert_includes error.message, "warp-app(WARP_APP)"
-      assert_includes error.message, "palm-app(PALM_APP)"
+      assert_includes error.message, "core-app-jp(CORE_APP_JP)"
+      assert_includes error.message, "warp-app-jp(WARP_APP_JP)"
+      assert_includes error.message, "palm-app-jp(PALM_APP_JP)"
     end
   end
 
@@ -325,7 +325,7 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
       assert_nil OidcClientRegistry.find(client_id)
     end
 
-    client = OidcClientRegistry.find!("palm-app")
+    client = OidcClientRegistry.find!("palm-app-jp")
 
     assert_equal "private_key_jwt", client.registered_token_endpoint_auth_method
     assert_predicate client, :confidential_client?
@@ -341,9 +341,9 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
 
   test "core client is registered to regional redirect hosts" do
     expectations = {
-      "warp-app" => {
+      "warp-app-jp" => {
         host: ENV.fetch("PUBLIC_WARP_SERVICE_URL", "warp.app.localhost"),
-        aud: "warp-app",
+        aud: "warp-app-jp",
         resource_type: "client",
       },
     }
@@ -361,14 +361,14 @@ class OidcClientRegistryTest < ActiveSupport::TestCase
   end
 
   test "core app client is registered to the core app redirect host" do
-    client = OidcClientRegistry.find!("core-app")
+    client = OidcClientRegistry.find!("core-app-jp")
     redirect_hosts = client.redirect_uris.map { |uri| URI.parse(uri).host }
     expected_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL", "jpx.umaxica.app")
 
     assert_includes redirect_hosts, expected_host
     assert_includes client.domains, expected_host
     assert client.redirect_uris.all? { |uri| URI.parse(uri).path == "/oidc/callback" }
-    assert_equal "core-app", client.aud
+    assert_equal "core-app-jp", client.aud
     assert_equal "client", client.resource_type
   end
 

@@ -11,7 +11,8 @@ class AuthenticationLogoutCurrentSession
   end
 
   def initialize(current: nil, resource: nil, token: nil, token_class: nil, session_public_id: nil,
-                 reason: "user_logout", cascade_device_session_tokens: true, precondition: nil)
+                 reason: "user_logout", cascade_device_session_tokens: true, precondition: nil,
+                 within_commit: nil)
     @current = current
     @resource = resource
     @token = token
@@ -20,6 +21,9 @@ class AuthenticationLogoutCurrentSession
     @reason = reason
     @cascade_device_session_tokens = cascade_device_session_tokens
     @precondition = precondition
+    # R5-WU09: runs inside the same OP transaction after the revocation, so the realm logout Flow,
+    # Participants, Receipt and Outbox commit atomically with it (OpLogoutCommitter).
+    @within_commit = within_commit
   end
 
   def call
@@ -44,6 +48,7 @@ class AuthenticationLogoutCurrentSession
         cycle&.mark_access_discarded!
         cycle&.mark_logically_revoked!
         cycle&.complete_sign_out!
+        @within_commit_result = within_commit&.call(token_record)
       rescue StandardError
         fail_sign_out_flow(cycle)
         raise
@@ -55,7 +60,7 @@ class AuthenticationLogoutCurrentSession
   private
 
   attr_reader :current, :resource, :token, :token_class, :session_public_id, :reason,
-              :cascade_device_session_tokens, :precondition
+              :cascade_device_session_tokens, :precondition, :within_commit
 
   # REQ-002: a caller's authority decision is re-checked inside the revoking transaction after the
   # parent Device Session row is locked, the first lock of the Device -> root -> RP order. A
@@ -351,9 +356,9 @@ class AuthenticationLogoutCurrentSession
 
       relation =
         case token_record
-        when ClientToken then ClientRpSession
-        when VisitorToken then VisitorRpSession
-        when OperatorToken then OperatorRpSession
+        when ClientToken then OpAppGrant
+        when VisitorToken then OpComGrant
+        when OperatorToken then OpOrgGrant
         else next false
         end
       relation.exists?(device_session_id: device_session.id, revoked_at: nil)

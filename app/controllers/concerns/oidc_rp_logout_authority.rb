@@ -99,6 +99,8 @@ module OidcRpLogoutAuthority
     root_token = session_record.parent_token
     raise RpSession::IssuanceRejected, "Browser Session current root token is missing" unless root_token
 
+    committed = nil
+
     AuthenticationLogoutCurrentSession.call(
       resource: browser_rp_logout_resource(session_record),
       token: root_token,
@@ -106,8 +108,29 @@ module OidcRpLogoutAuthority
       session_public_id: root_token.public_id,
       reason: "rp_initiated_logout",
       precondition: -> { browser_rp_logout_authority_still_matches?(transaction) },
+      # The one realm OP commit owner records Flow/Participants/Receipt/Outbox in this same commit,
+      # keyed by the durable logout challenge so a lost response rereads the committed outcome.
+      within_commit: lambda do |revoked_root|
+        committed = OpLogoutCommitter.call(
+          realm: OpLogoutCommitter.realm_for(revoked_root), root_token: revoked_root,
+          idempotency_key: transaction.logout_challenge,
+          browser_binding: session.id.to_s.presence || transaction.logout_challenge,
+          audit_ref: "rp_initiated_logout:#{transaction.logout_challenge.first(16)}",
+        )
+      end,
     )
+    remember_op_logout_receipt!(committed)
     advance_browser_rp_logout!(transaction, AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED)
+  end
+
+  # The one-time browser-bound receipt for Base /sign/bye (R5-WU16). Only its nonce leaves the OP
+  # store; a replayed commit (no nonce) keeps whatever receipt this browser already holds.
+  def remember_op_logout_receipt!(committed)
+    return unless committed&.receipt_nonce
+
+    session[OpLogoutReceiptSession::KEY] = {
+      "flow" => committed.flow.public_id, "realm" => committed.flow.realm, "nonce" => committed.receipt_nonce,
+    }
   end
 
   def browser_rp_logout_authority_still_matches?(transaction)
@@ -136,9 +159,9 @@ module OidcRpLogoutAuthority
 
     expected_realm =
       case session_record
-      when ClientRpSession then "app"
-      when VisitorRpSession then "com"
-      when OperatorRpSession then "org"
+      when OpAppGrant then "app"
+      when OpComGrant then "com"
+      when OpOrgGrant then "org"
       else return false
       end
     return false unless transaction.realm == expected_realm
@@ -174,22 +197,22 @@ module OidcRpLogoutAuthority
     resource_type = OidcIssuer.resource_type_for_client(client)
     case resource_type
     when "client"
-      AppTicketRecord.connected_to(role: :writing) do
-        ClientRpSession.includes(client_device_session: :user).find_by(
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.includes(client_device_session: :user).find_by(
           public_id: transaction.session_ref,
           oidc_client_id: client.client_id,
         )
       end
     when "visitor"
-      ComTicketRecord.connected_to(role: :writing) do
-        VisitorRpSession.includes(visitor_device_session: :visitor).find_by(
+      OpBaseComRecord.connected_to(role: :writing) do
+        OpComGrant.includes(visitor_device_session: :visitor).find_by(
           public_id: transaction.session_ref,
           oidc_client_id: client.client_id,
         )
       end
     when "operator"
-      OrgTicketRecord.connected_to(role: :writing) do
-        OperatorRpSession.includes(operator_device_session: :staff).find_by(
+      OpBaseOrgRecord.connected_to(role: :writing) do
+        OpOrgGrant.includes(operator_device_session: :staff).find_by(
           public_id: transaction.session_ref,
           oidc_client_id: client.client_id,
         )
@@ -201,9 +224,9 @@ module OidcRpLogoutAuthority
 
   def browser_rp_logout_resource(session_record)
     case session_record
-    when ClientRpSession then session_record.user
-    when VisitorRpSession then session_record.visitor
-    when OperatorRpSession then session_record.staff
+    when OpAppGrant then session_record.user
+    when OpComGrant then session_record.visitor
+    when OpOrgGrant then session_record.staff
     else raise ArgumentError, "unsupported Browser RP Session class"
     end
   end

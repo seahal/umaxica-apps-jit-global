@@ -514,8 +514,8 @@ class AuthOidcEntrancesTest < ActionDispatch::IntegrationTest
   def authorize_params(screen_hint: nil)
     params = {
       response_type: "code",
-      client_id: "core-app",
-      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
+      client_id: "core-app-jp",
+      redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",

@@ -15,7 +15,7 @@ class BaseStepUpAdmissionIssuer
           transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
           %w(pending verified).include?(transaction.status) &&
           !transaction.expired?(now: transaction.class.database_now) && actor.login_allowed? &&
-          token.currently_usable?(token.class.database_now) && device_session.usable? &&
+          token.active_status?(token.class.database_now) && device_session.usable? &&
           device_session.current_refresh_token_id == token.id
         deny!("step-up conflict parent is unavailable", "invalid_admission")
       end
@@ -46,7 +46,7 @@ class BaseStepUpAdmissionIssuer
       end
 
       device_session = token.device_session_record!
-      unless actor.login_allowed? && token.currently_usable?(token.class.database_now) && device_session.usable? &&
+      unless actor.login_allowed? && token.active_status?(token.class.database_now) && device_session.usable? &&
           device_session.current_refresh_token_id == token.id
         deny!("Base session is unavailable", "session_expired")
       end
@@ -89,12 +89,12 @@ class BaseStepUpAdmissionIssuer
     def issue_under_root_locks!(actor:, token:, binding:, requirement:, return_to:, base_browser_nonce:, base_token:,
                                 restart_of:, device_session:)
       now = binding.transaction_model.database_now
-      unless token.currently_usable?(now) && device_session.usable? &&
+      unless token.active_status?(now) && device_session.usable? &&
           device_session.current_refresh_token_id == token.id
         deny!("Base session is unavailable", "session_expired")
       end
       ensure_bootstrap_session!(token, now) if requirement.purpose == "bootstrap"
-      if token.is_a?(OperatorToken) && token.emergency_authentication_context?
+      if token.is_a?(OperatorToken) && token.standby_authentication_context?
         deny!("Emergency session cannot initiate step-up", "authorization_denied")
       end
       if requirement.purpose == "credential_registration"

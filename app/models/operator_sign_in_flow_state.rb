@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-class OperatorSignInFlowState < OrgTicketRecord
+class OperatorSignInFlowState < OpBaseOrgRecord
   include ReferenceRecord
 
   PRIMARY_PENDING = 10

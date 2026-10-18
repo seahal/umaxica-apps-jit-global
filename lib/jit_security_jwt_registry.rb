@@ -32,17 +32,17 @@ module JitSecurityJwtRegistry
   OIDC_CLIENT_NAMESPACES = %w(
     AUTH_APP AUTH_COM AUTH_ORG
     ACME_APP ACME_COM ACME_ORG
-    CORE_APP CORE_COM CORE_ORG
+    CORE_APP_JP CORE_COM_JP CORE_ORG_JP
     BASE_APP BASE_COM BASE_ORG
     BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
-    WARP_APP WARP_COM WARP_ORG
-    EDIT_ORG
-    PALM_APP TECH_ORG
+    WARP_APP_JP WARP_COM_JP WARP_ORG_JP
+    EDIT_ORG_WW
+    PALM_APP_JP TECH_ORG_WW
   ).freeze
   REQUIRED_OIDC_CLIENT_NAMESPACES = %w(
     BASE_RP_APP_WW BASE_RP_COM_WW BASE_RP_ORG_WW
-    WARP_APP WARP_COM WARP_ORG
-    TECH_ORG
+    WARP_APP_JP WARP_COM_JP WARP_ORG_JP
+    TECH_ORG_WW
   ).freeze
   # Issuer metadata for surface records without Jump issuer capability. Jump issuer records take
   # JumpRtSurface's PUBLIC_* origin instead, so the record that holds a Jump signing key names the
@@ -253,13 +253,40 @@ module JitSecurityJwtRegistry
   end
 
   def require_oidc_client_key_material!(namespace, active_kid_name:, private_key_name:, active_kid:, private_key:)
-    return unless REQUIRED_OIDC_CLIENT_NAMESPACES.include?(namespace)
+    return unless required_oidc_client_namespaces.include?(namespace)
     return if active_kid.present? && private_key.present?
 
     missing = []
     missing << active_kid_name if active_kid.blank?
     missing << private_key_name if private_key.blank?
     raise ConfigurationError, "missing required OIDC client configuration: #{missing.join(", ")}"
+  end
+
+  # In an RP cell process only the records it signs with must carry a private key; every other
+  # record is verification-only there (its public keyset still loads).
+  def private_key_required?(record)
+    return true unless RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+
+    RuntimeRole.rp_private_env_names.include?(private_env_name_for(record.id))
+  end
+
+  def private_env_name_for(record_id)
+    kind, namespace = record_id.to_s.split(":", 2)
+    case kind
+    when "auth" then "AUTH_JWT_PRIVATE_KEYSET"
+    when "preference" then "PREFERENCE_JWT_PRIVATE_KEYSET"
+    when "surface" then "JWT_#{namespace}_PRIVATE_KEY"
+    when "oidc_client" then "OIDC_CLIENT_#{namespace}_PRIVATE_KEY"
+    else raise ConfigurationError, "unknown JWT issuer record #{record_id.inspect}"
+    end
+  end
+
+  # An RP cell process holds only its own client key (RuntimeRole.rp_private_env_names), so only
+  # that namespace is required there; every other process requires the full list.
+  def required_oidc_client_namespaces
+    return REQUIRED_OIDC_CLIENT_NAMESPACES unless RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+
+    [RuntimeRole.rp_private_env_names.first.delete_prefix("OIDC_CLIENT_").delete_suffix("_PRIVATE_KEY")]
   end
 
   def jump_gateway_audience
@@ -384,7 +411,9 @@ module JitSecurityJwtRegistry
     end
 
     current = record.keys.fetch(record.current_kid)
-    raise ConfigurationError, "#{record.id} active private key is missing" if current.private_key.nil?
+    if current.private_key.nil? && private_key_required?(record)
+      raise ConfigurationError, "#{record.id} active private key is missing"
+    end
     return if record.jwks.fetch(:keys).any? { |jwk| jwk.fetch("kid") == record.current_kid }
 
     raise ConfigurationError, "#{record.id} active key #{record.current_kid.inspect} is missing from JWKS"
@@ -470,6 +499,7 @@ module JitSecurityJwtRegistry
   private_class_method :build_issuers, :build_oidc_client_issuer, :require_oidc_client_key_material!,
                        :jump_gateway_audience,
                        :preference_hosts_from_boot_config, :validate_record_metadata!, :validate_active_key!,
+                       :private_key_required?, :private_env_name_for, :required_oidc_client_namespaces,
                        :validate_record_keys!, :validate_global_kid_uniqueness!, :validate_public_jwk!,
                        :validate_jump_public_keyset!, :validate_jump_issuer_records!, :validate_jump_kid!,
                        :surface_issuer_origin, :normalize_oidc_client_namespace, :insecure_default_kid?,

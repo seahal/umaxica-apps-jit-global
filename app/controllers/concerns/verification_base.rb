@@ -158,13 +158,13 @@ module VerificationBase
   # Rendered inline rather than through flash, and 403 rather than 401, because
   # the session is valid and the operation is unavailable to it.
   def reject_step_up_for_authentication_context!
-    return false unless emergency_authentication_context?
+    return false unless standby_authentication_context?
     return true if performed?
 
     Rails.logger.info(
       JitLogEvent.format(
         "auth.step_up.authentication_context_ineligible",
-        authentication_context: AuthenticationContextValue::EMERGENCY_KEY,
+        authentication_context: AuthenticationContextValue::STANDBY_KEY,
         session_public_id: current_session_token&.public_id,
       ),
     )
@@ -178,9 +178,9 @@ module VerificationBase
     true
   end
 
-  def emergency_authentication_context?
+  def standby_authentication_context?
     token = current_session_token
-    token.respond_to?(:emergency_authentication_context?) && token.emergency_authentication_context?
+    token.respond_to?(:standby_authentication_context?) && token.standby_authentication_context?
   end
 
   # Check whether the underlying refresh token record has been revoked,
@@ -189,7 +189,7 @@ module VerificationBase
   def step_up_session_revoked?
     token = current_session_token
     return true if token.nil? # no record at all - dead
-    return false if token.currently_usable? # alive
+    return false if token.active_status? # alive
 
     # Session is dead in DB - tear it down.
     log_out if respond_to?(:log_out, true)
@@ -405,13 +405,19 @@ module VerificationBase
     return @current_session_token if defined?(@current_session_token)
 
     if browser_rp_controller?
-      return @current_session_token = current_browser_session_security_context&.root_token
+      token = current_browser_session_security_context&.root_token
+      return @current_session_token = token if token&.active_status?
+
+      return @current_session_token = nil
     end
 
-    return @current_session_token = current_session if respond_to?(:current_session, true) && current_session.present?
+    if respond_to?(:current_session, true) && current_session&.active_status?
+      return @current_session_token = current_session
+    end
     return @current_session_token = nil if current_session_public_id.blank?
 
-    @current_session_token = token_class.find_by(public_id: current_session_public_id)
+    token = token_class.find_by(public_id: current_session_public_id)
+    @current_session_token = token&.active_status? ? token : nil
   end
 
   def current_actor_token
@@ -419,18 +425,18 @@ module VerificationBase
 
     if browser_rp_controller?
       token = current_browser_session_security_context&.root_token
-      return @current_actor_token = token if token&.currently_usable?
+      return @current_actor_token = token if token&.active_status?
 
       return @current_actor_token = nil
     end
 
-    if respond_to?(:current_session, true) && current_session&.currently_usable?
+    if respond_to?(:current_session, true) && current_session&.active_status?
       return @current_actor_token = current_session
     end
     return @current_actor_token = nil if current_session_public_id.blank?
 
     token = token_class.find_by(public_id: current_session_public_id)
-    return @current_actor_token = token if token&.currently_usable?
+    return @current_actor_token = token if token&.active_status?
 
     @current_actor_token = nil
   end

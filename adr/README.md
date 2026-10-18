@@ -22,21 +22,21 @@ Current Inertia decision:
   Inertia application, and leaving an origin is a `409` with `X-Inertia-Location`.
 
 - `adr/inertia-initializer-file-name.md` — the configuration stays in
-  `config/initializers/inertia_rails.rb` (gem-named); upstream's `inertia.rb` example is merged
-  into it, never added as a second file.
+  `config/initializers/inertia_rails.rb` (gem-named); upstream's `inertia.rb` example is merged into
+  it, never added as a second file.
 
 Current authentication Security Mode decision (accepted; not implemented):
 
 - `adr/authentication-security-mode.md` — `mfa_level_id` becomes `security_mode_id` with `NORMAL=3`
   and `ADVANCED=7`; owner-held mode with no Operator downgrade, per-mode step-up methods and
-  windows, passkey lifecycle without session revocation, Recovery Key/no-key recovery cases, and
-  the open decisions that remain before implementation.
+  windows, passkey lifecycle without session revocation, Recovery Key/no-key recovery cases, and the
+  open decisions that remain before implementation.
 
-- `adr/authentication-security-cycle-consolidation-2026-10-15.md` — WU-1..WU-9 cycle
-  record (`XU-N` = `WU-N`): two-passkey `ADVANCED` minimum, owner downgrade rule, ORG Emergency
-  intent and 2 hour target, `required_aal` retirement, WebAuthn race invariants; recovery, ORG
-  sign-up, `acr`/`amr`, WU-3/5/8/9 Pending or deferred. Partially supersedes the Security Mode ADR
-  above. Decisions only; not implemented.
+- `adr/authentication-security-cycle-consolidation-2026-10-15.md` — WU-1..WU-9 cycle record
+  (`XU-N` = `WU-N`): two-passkey `ADVANCED` minimum, owner downgrade rule, ORG Emergency intent and
+  2 hour target, `required_aal` retirement, WebAuthn race invariants; recovery, ORG sign-up,
+  `acr`/`amr`, WU-3/5/8/9 Pending or deferred. Partially supersedes the Security Mode ADR above.
+  Decisions only; not implemented.
 
 Current org federated sign-in decision:
 
@@ -98,6 +98,11 @@ Current sign-out decision (target contract; local runtime is partial):
   implemented; the shared global transaction is locally implemented and focused-tested, while BCL
   removal and final authority/browser acceptance remain open. The rejected design is recorded in
   `research/2026-10-13-first-party-backchannel-logout-rejected-design.md`.
+- `adr/first-party-sign-out-op-commit-and-backchannel-logout-for-separated-rp-stores.md` — Accepted
+  (2026-10-16); not implemented. For first-party RPs activated with their own session store under
+  the OP/RP separation, sign-out is established by the realm OP commit and RP sessions end by
+  durable Back-Channel Logout with a bounded residual window. It supersedes the shared-database ADR
+  above only for those separated clients.
 
 Current IdP flow lifecycle decisions (target contract; runtime not yet migrated):
 
@@ -126,6 +131,13 @@ Current configuration decision:
   every Ruby file, tests included: one-argument `ENV.fetch` for a needed variable, `ENV[...]` with
   an explicit `nil` branch for an optional one. Existing defaults are debt tracked in
   `plans/backlog/env-fetch-default-removal.md`.
+
+Current runtime secret isolation decision (deferred; not implemented):
+
+- `adr/runtime-secret-isolation-deferred.md` — R5-WU03A secret isolation is out of the current
+  cycle; development keeps the `shared` role, production/staging sharing of one secret set stays an
+  open defect, the future boundary is the pod and its secret-store policy, and `AT-R5-03A` stays
+  NOT_RUN. Follow-up: `plans/backlog/2026-10-18-production-runtime-secret-isolation.md`.
 
 Current backend transport decision:
 
@@ -259,6 +271,10 @@ Current audit / chronicle decisions:
 
 - `adr/chronicle-audit-db-consolidation.md`
 - `adr/chronicle-audit-implementation-guidance.md`
+- `adr/identity-centric-aaa-architecture.md` — accepted principle relating Authentication,
+  Authorization, and Accounting to Identity; first scope is Identity Security Accounting, with
+  Chronicle reused as its audit evidence store. Supplements the Chronicle and authority ADRs;
+  detailed design and implementation are Pending.
 
 Current account enforcement decisions:
 
@@ -273,6 +289,11 @@ Current account enforcement decisions:
 - `adr/database-trigger-usage-boundary.md` — accepted narrow trigger-usage policy; Context corrected
   2026-07-27 (five orphaned functions, not eight; no credential-table `ON DELETE CASCADE`), Decision
   unchanged.
+- `adr/declarative-database-constraints-for-integrity-and-cardinality.md` — accepted 2026-10-18
+  principle: integrity that validations cannot guarantee lives in PostgreSQL declarative
+  constraints; per-owner limits prefer finite slots (`NOT NULL` + `CHECK` range +
+  `UNIQUE (owner, slot)`) over counting triggers or callbacks. Narrows the trigger ADR for count
+  limits only; no schema, limit or callback changed.
 
 Preference decisions:
 
@@ -335,9 +356,9 @@ Current infrastructure / environment decisions:
   database backend is deferred** — FakeCloud emulates no RDS or Aurora, so it is chosen when staging
   implementation begins. PostgreSQL major version alignment is deferred; `pg_cron` is kept as an
   unused local PoC and is deliberately not wired into `config/database.yml`.
-- `adr/aurora-postgresql-minor-version-tracking.md` — development PostgreSQL follows each new
-  Aurora PostgreSQL minor release on release day, using the AWS-confirmed community version; misses
-  are recorded; production and major upgrades are decided separately.
+- `adr/aurora-postgresql-minor-version-tracking.md` — development PostgreSQL follows each new Aurora
+  PostgreSQL minor release on release day, using the AWS-confirmed community version; misses are
+  recorded; production and major upgrades are decided separately.
 - `adr/fakecloud-podman-staging-environment.md` — staging is a Podman-hosted FakeCloud environment
   provisioned with Terraform (not OpenTofu, not an AWS account); environment-agnostic
   `terraform/modules/` with all emulator specifics in `terraform/environments/<env>/`; staging owns
@@ -495,3 +516,9 @@ boundaries in this repository.
 - `sign-neutral-entry-and-logout-target-authorization.md` — neutral `/sign` entry, 403 for an
   authenticated new Sign (including Base-only sessions), and `id_token_hint` never authorizes
   revoking a session the browser does not hold. Amends `adr/logout-ceremony-boundary.md`.
+
+Current OpenAPI coverage deferral:
+
+- `adr/owner-api-openapi-description-deferred.md` — the R5 Base owner APIs (server-to-server from
+  the realm's Base Self-RP) stay out of `openapi/` for now; the coverage test skips them, and the
+  gap is revisited before any other caller uses them.

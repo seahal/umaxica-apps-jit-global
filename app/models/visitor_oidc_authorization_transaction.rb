@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_oidc_authorization_transactions
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id                         :bigint           not null, primary key
 #  acr                        :string
@@ -44,8 +44,10 @@
 #  idx_on_login_challenge_8c09aab77b            (login_challenge) UNIQUE
 #  idx_on_transaction_id_391ee3ac66             (transaction_id) UNIQUE
 #
-class VisitorOidcAuthorizationTransaction < ComTicketRecord
+class VisitorOidcAuthorizationTransaction < OpBaseComRecord
   include OidcAuthorizationTransactionable
+
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
 
   oidc_authorization_surface "com"
 end

@@ -273,8 +273,8 @@ class OrgSocialLoginBlockedTest < ActionDispatch::IntegrationTest
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "core-org",
-        redirect_uri: OidcClientRegistry.find!("core-org").redirect_uris.first,
+        client_id: "core-org-jp",
+        redirect_uri: OidcClientRegistry.find!("core-org-jp").redirect_uris.first,
         code_challenge: SecureRandom.urlsafe_base64(32),
         code_challenge_method: "S256",
         state: SecureRandom.urlsafe_base64(16),

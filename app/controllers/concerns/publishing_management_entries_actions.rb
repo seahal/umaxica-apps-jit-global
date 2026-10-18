@@ -14,84 +14,74 @@ module PublishingManagementEntriesActions
   include ::PublishingManagementCell
 
   def index
-    authorize_publishing!(current_operator, to: :index?)
+    result = authority_result!(publishing_authority.entries(page: page_number))
+    return unless result
 
-    render entries_template("index"),
-           locals: index_page_props(publishing_entries_query.page(number: page_number))
+    render entries_template("index"), locals: index_page_props(result.data)
   end
 
   def show
     entry = find_management_entry!
-    authorize_publishing!(entry, to: :show?)
+    return unless entry
 
     render entries_template("show"), locals: show_entry_props(entry)
   end
 
   def new
-    authorize_publishing!(current_operator, to: :create?)
+    # The authority answers the Operator's create permission on the collection read.
+    return unless authority_result!(publishing_authority.entries(page: 1))
 
     render entries_template("new"), locals: new_entry_props
   end
 
   def create
-    authorize_publishing!(current_operator, to: :create?)
     form = Publishing::CreateEntryForm.new(create_entry_form_attributes)
-
     unless form.valid?
+      return unless authority_result!(publishing_authority.entries(page: 1))
+
       render_new_failure(errors: form.message_hash, form: form)
       return
     end
 
-    result = Publishing::CreateEntryOperation.call(
-      entry_class: publishing_entry_class,
-      locale: form.locale,
-      slug: form.slug,
-      title: form.title,
-      summary: form.summary,
-      body: form.parsed_body,
-      operator_public_id: operator_public_id,
+    result = authority_result!(
+      publishing_authority.create_entry(
+        locale: form.locale, slug: form.slug, title: form.title, summary: form.summary, body: form.body_text,
+      ),
     )
+    return unless result
+    return render_new_failure(errors: result.errors, form: form) if result.status == :unprocessable
 
-    unless result.ok?
-      render_new_failure(errors: result.errors, form: form)
-      return
-    end
-
-    redirect_to(entry_path(result.entry, action: :show), status: :see_other)
+    redirect_to(entry_path(result.data.fetch("entry"), action: :show), status: :see_other)
   end
 
   def edit
     entry = find_management_entry!
-    authorize_publishing!(entry, to: :update?)
+    return unless entry
 
     render entries_template("edit"), locals: edit_entry_props(entry, errors: {})
   end
 
   def update
-    entry = find_management_entry!
-    authorize_publishing!(entry, to: :update?)
     form = Publishing::ReviseEntryForm.new(revise_entry_form_attributes)
-
     unless form.valid?
+      entry = find_management_entry!
+      return unless entry
+
       render_edit_failure(entry, errors: form.message_hash, form: form)
       return
     end
 
-    result = Publishing::ReviseEntryOperation.call(
-      entry: entry,
-      title: form.title,
-      summary: form.summary,
-      body: form.parsed_body,
-      lock_version: form.lock_version,
-      operator_public_id: operator_public_id,
+    result = authority_result!(
+      publishing_authority.revise_entry(
+        params.expect(:id),
+        title: form.title, summary: form.summary, body: form.body_text, lock_version: form.lock_version,
+      ),
     )
+    return unless result
+    return render_edit_failure(result.data.fetch("entry"), errors: result.errors, form: form) if
+      result.status == :unprocessable
 
-    unless result.ok?
-      render_edit_failure(entry.reload, errors: result.errors, form: form)
-      return
-    end
-
-    redirect_to(entry_path(entry, action: :show), status: :see_other)
+    redirect_to(entry_path(result.data.fetch("entry"), action: :show), status: :see_other)
   end
 
   private

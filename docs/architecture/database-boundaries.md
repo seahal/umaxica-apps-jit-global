@@ -24,17 +24,21 @@ See `docs/architecture/database-authority-placement.md` for the placement contra
 
 Surface-owned database connections use `surface_role` names.
 
-| Surface | Principal       | Ticket       | Zenith       | Signal       | Setting       |
-| ------- | --------------- | ------------ | ------------ | ------------ | ------------- |
-| `app`   | `app_principal` | `app_ticket` | `app_zenith` | `app_signal` | `app_setting` |
-| `org`   | `org_principal` | `org_ticket` | `org_zenith` | `org_signal` | `org_setting` |
-| `com`   | `com_principal` | `com_ticket` | `com_zenith` | `com_signal` | `com_setting` |
+| Surface | Principal       | Ticket        | Zenith       | Signal       | Setting       |
+| ------- | --------------- | ------------- | ------------ | ------------ | ------------- |
+| `app`   | `app_principal` | `op_base_app` | `app_zenith` | `app_signal` | `app_setting` |
+| `org`   | `org_principal` | `op_base_org` | `org_zenith` | `org_signal` | `org_setting` |
+| `com`   | `com_principal` | `op_base_com` | `com_zenith` | `com_signal` | `com_setting` |
+
+The OP authentication stores use the `op_base_*` names defined by `one.md` section 5.2. This is the
+current exception to the generic `surface_role` ticket vocabulary; the corresponding replica keys
+are `op_base_app_replica`, `op_base_org_replica`, and `op_base_com_replica`.
 
 Role meanings:
 
 - `principal`: retained connection key reserved for future regional-ready application data. Current
   semantic principal models use the matching `*_zenith` physical database.
-- `ticket`: login/session/OIDC ticket persistence.
+- `op_base`: login/session/OIDC persistence owned by the same-realm OP Base.
 - `zenith`: Zenith/RP-facing account, identity binding, and local projection state.
 - `signal`: notification-origin state for email, web push, banners, and related channels.
 - `setting`: login-independent surface setting and preference state.
@@ -46,13 +50,13 @@ The implemented target mapping is:
 | Current     | Target          |
 | ----------- | --------------- |
 | `principal` | `app_principal` |
-| `mark`      | `app_ticket`    |
+| `mark`      | `op_base_app`   |
 | `resident`  | `app_zenith`    |
 | `operator`  | `org_principal` |
-| `token`     | `org_ticket`    |
+| `token`     | `op_base_org`   |
 | `personnel` | `org_zenith`    |
 | `guest`     | `com_principal` |
-| `symbol`    | `com_ticket`    |
+| `symbol`    | `op_base_com`   |
 | `visitor`   | `com_zenith`    |
 | `setting`   | `com_setting`   |
 

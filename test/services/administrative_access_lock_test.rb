@@ -9,9 +9,9 @@ class AdministrativeAccessLockTest < ActiveSupport::TestCase
     client = clients(:one)
     operator = operators(:one)
     token = client_tokens(:one)
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
       client_token: token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )

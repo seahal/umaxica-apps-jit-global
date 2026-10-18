@@ -28,7 +28,6 @@ module Base
       include ::VerificationOperator
       include ActionPolicy::Controller
       include ::OidcSsoInitiator
-      include ::RestrictedSessionGuard
       include SurfaceRouteAliasHelper
       include ::ActorSupport
       include ::Finisher
@@ -56,7 +55,7 @@ module Base
       rescue_from ApplicationError, with: :handle_application_error
       rescue_from ActionController::InvalidCrossOriginRequest, with: :handle_csrf_failure
       rescue_from ActionPolicy::Unauthorized, with: :handle_authorization_error
-      helper_method :current_actor, :current_account, :current_session_public_id, :current_session_restricted?,
+      helper_method :current_actor, :current_account, :current_session_public_id,
                     :signed_pt_param, :current_operator, :logged_in?, :active_operator?, :logged_in_operator?
 
       allow_browser versions: :modern
@@ -90,7 +89,6 @@ module Base
       before_action :set_locale
       before_action :set_timezone
       before_action :set_color_theme
-      before_action :enforce_restricted_session_guard!
       before_action :enforce_verification_if_required
       before_action :enforce_access_policy!
       before_action :set_current_observability

@@ -30,7 +30,7 @@ class BrowserRpAuthenticationProbeController < ApplicationController
 
   protected
 
-  def browser_rp_client_id = "core-app"
+  def browser_rp_client_id = "core-app-jp"
 
   def browser_rp_resource_type = "client"
 
@@ -48,9 +48,9 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     end
     @client = clients(:one)
     @root_token = client_tokens(:one)
-    @rp_session = ClientRpSession.create!(
+    @rp_session = OpAppGrant.create!(
       client_token: @root_token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
       oidc_auth_time: 1.minute.ago,
@@ -68,7 +68,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         fv5110 = fv5116.fetch(:subject) { nil }
         fv5115 = fv5116.fetch(:base_session_public_id) { nil }
         fv5114 = fv5116.fetch(:oidc_sid) { nil }
-        fv5108 = OidcClientRegistry.find!("core-app")
+        fv5108 = OidcClientRegistry.find!("core-app-jp")
         AuthenticationTokenService.encode(
           @client,
           host: request.host,
@@ -111,7 +111,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         fv5101 = fv5107.fetch(:subject) { nil }
         fv5106 = fv5107.fetch(:base_session_public_id) { nil }
         fv5105 = fv5107.fetch(:oidc_sid) { nil }
-        fv5099 = OidcClientRegistry.find!("core-app")
+        fv5099 = OidcClientRegistry.find!("core-app-jp")
         AuthenticationTokenService.encode(
           @client,
           host: request.host,
@@ -140,7 +140,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         fv5092 = fv5098.fetch(:subject) { nil }
         fv5097 = fv5098.fetch(:base_session_public_id) { nil }
         fv5096 = fv5098.fetch(:oidc_sid) { nil }
-        fv5090 = OidcClientRegistry.find!("core-app")
+        fv5090 = OidcClientRegistry.find!("core-app-jp")
         AuthenticationTokenService.encode(
           @client,
           host: request.host,
@@ -337,9 +337,12 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   {
     "another issuer" => { issuer: "https://issuer.invalid" },
     "another audience" => { audiences: ["https://audience.invalid"] },
-    "another client" => { client_id: "warp-app" },
+    "another client" => { client_id: "warp-app-jp" },
     "another subject" => { subject: "client:another-subject" },
     "another Browser Session" => { base_session_public_id: "another-root-session" },
+    "a context different from the root session" => {
+      authentication_context: AuthenticationContextValue::STANDBY_KEY,
+    },
   }.each do |label, overrides|
     test "an access credential for #{label} is refused and detached" do
       cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
@@ -352,7 +355,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
           fv5083 = fv5089.fetch(:subject) { nil }
           fv5088 = fv5089.fetch(:base_session_public_id) { nil }
           fv5087 = fv5089.fetch(:oidc_sid) { nil }
-          fv5081 = OidcClientRegistry.find!("core-app")
+          fv5081 = OidcClientRegistry.find!("core-app-jp")
           AuthenticationTokenService.encode(
             @client,
             host: request.host,
@@ -368,6 +371,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
             jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(fv5081),
             subject: fv5083 || OidcSubject.for(@client, resource_type: "client"),
             client_id: fv5082 || fv5081.client_id,
+            authentication_context: overrides.fetch(:authentication_context, nil),
           )
         end
 
@@ -428,7 +432,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
           fv5074 = fv5080.fetch(:subject) { nil }
           fv5079 = fv5080.fetch(:base_session_public_id) { nil }
           fv5078 = fv5080.fetch(:oidc_sid) { nil }
-          fv5072 = OidcClientRegistry.find!("core-app")
+          fv5072 = OidcClientRegistry.find!("core-app-jp")
           AuthenticationTokenService.encode(
             @client,
             host: request.host,
@@ -458,7 +462,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
   test "an access credential stops authenticating as soon as its RP Session is revoked" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
-    @rp_session.update_columns(revoked_at: ClientRpSession.database_now)
+    @rp_session.update_columns(revoked_at: OpAppGrant.database_now)
 
     get :show, params: { required: "1" }
 
@@ -485,7 +489,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         fv5065 = fv5071.fetch(:subject) { nil }
         fv5070 = fv5071.fetch(:base_session_public_id) { nil }
         fv5069 = fv5071.fetch(:oidc_sid) { nil }
-        fv5063 = OidcClientRegistry.find!("core-app")
+        fv5063 = OidcClientRegistry.find!("core-app-jp")
         AuthenticationTokenService.encode(
           @client,
           host: request.host,
@@ -538,6 +542,15 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     assert_response :unauthorized
   end
 
+  test "an access credential stops authenticating as soon as its root token is historically restricted" do
+    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
+    @root_token.update!(user_token_status_id: ClientTokenStatus::RESTRICTED)
+
+    get :show, params: { required: "1" }
+
+    assert_response :unauthorized
+  end
+
   test "an access credential stops authenticating once the Browser Session points at another root token" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
     replacement = ClientToken.create!(user: @client)
@@ -579,7 +592,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
     cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE] = @refresh_token
 
-    ClientRpSession.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished, "injected" }) do
+    OpAppGrant.stub(:includes, ->(*) { raise ActiveRecord::ConnectionNotEstablished, "injected" }) do
       OidcTokenExchangeCoordinator.stub(:call, ->(**) { raise RuntimeError, "refresh must not run" }) do
         get :show, params: { required: "1" }
       end
@@ -594,7 +607,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   test "an exhausted connection pool while reading live state answers 503 and keeps the cookies" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
 
-    ClientRpSession.stub(:includes, ->(*) { raise ActiveRecord::ConnectionTimeoutError, "injected" }) do
+    OpAppGrant.stub(:includes, ->(*) { raise ActiveRecord::ConnectionTimeoutError, "injected" }) do
       get :show, params: { required: "1" }
     end
 
@@ -620,16 +633,16 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
     visitor_token = VisitorToken.create!(visitor: visitor)
     visitor_token.rotate_refresh_token!
-    visitor_client = OidcClientRegistry.find!("core-com")
-    visitor_rp_session = VisitorRpSession.create!(
+    visitor_client = OidcClientRegistry.find!("core-com-jp")
+    op_com_grant = OpComGrant.create!(
       visitor_token: visitor_token, oidc_client_id: visitor_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_auth_time: 1.minute.ago, refresh_token_expires_at: 10.minutes.from_now,
     )
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
       visitor,
       host: request.host, resource_type: "visitor", session_public_id: visitor_token.public_id,
-      base_session_public_id: visitor_token.public_id, oidc_sid: visitor_rp_session.public_id,
-      oidc_jti: visitor_rp_session.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
+      base_session_public_id: visitor_token.public_id, oidc_sid: op_com_grant.public_id,
+      oidc_jti: op_com_grant.oidc_jti, expires_at: 5.minutes.from_now, scopes: %w(openid profile),
       issuer: OidcIssuer.for_resource_type("visitor"), audiences: [visitor_client.aud],
       jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(visitor_client),
       subject: OidcSubject.for(visitor, resource_type: "visitor"), client_id: visitor_client.client_id,
@@ -656,7 +669,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
     assert_response :success
     assert_equal 5, statements.size, statements.join("\n")
-    %w(client_rp_sessions client_device_sessions clients client_tokens).each do |table|
+    %w(op_app_grants client_device_sessions clients client_tokens).each do |table|
       assert_equal 1, statements.count { |sql| sql.include?(%("#{table}")) }, table
     end
   end
@@ -675,7 +688,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
           fv5056 = fv5062.fetch(:subject) { nil }
           fv5061 = fv5062.fetch(:base_session_public_id) { nil }
           fv5060 = fv5062.fetch(:oidc_sid) { nil }
-          fv5054 = OidcClientRegistry.find!("core-app")
+          fv5054 = OidcClientRegistry.find!("core-app-jp")
           AuthenticationTokenService.encode(
             @client,
             host: request.host,
@@ -715,7 +728,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
           fv5047 = fv5053.fetch(:subject) { nil }
           fv5052 = fv5053.fetch(:base_session_public_id) { nil }
           fv5051 = fv5053.fetch(:oidc_sid) { nil }
-          fv5045 = OidcClientRegistry.find!("core-app")
+          fv5045 = OidcClientRegistry.find!("core-app-jp")
           AuthenticationTokenService.encode(
             @client,
             host: request.host,
@@ -770,7 +783,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
           fv5038 = fv5044.fetch(:subject) { nil }
           fv5043 = fv5044.fetch(:base_session_public_id) { nil }
           fv5042 = fv5044.fetch(:oidc_sid) { nil }
-          fv5036 = OidcClientRegistry.find!("core-app")
+          fv5036 = OidcClientRegistry.find!("core-app-jp")
           AuthenticationTokenService.encode(
             @client,
             host: request.host,
@@ -813,7 +826,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         fv5029 = fv5035.fetch(:subject) { nil }
         fv5034 = fv5035.fetch(:base_session_public_id) { nil }
         fv5033 = fv5035.fetch(:oidc_sid) { nil }
-        fv5027 = OidcClientRegistry.find!("core-app")
+        fv5027 = OidcClientRegistry.find!("core-app-jp")
         AuthenticationTokenService.encode(
           @client,
           host: request.host,
@@ -853,7 +866,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         fv5020 = fv5026.fetch(:subject) { nil }
         fv5025 = fv5026.fetch(:base_session_public_id) { nil }
         fv5024 = fv5026.fetch(:oidc_sid) { nil }
-        fv5018 = OidcClientRegistry.find!("core-app")
+        fv5018 = OidcClientRegistry.find!("core-app-jp")
         AuthenticationTokenService.encode(
           @client,
           host: request.host,
@@ -885,7 +898,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
           fv5011 = fv5017.fetch(:subject) { nil }
           fv5016 = fv5017.fetch(:base_session_public_id) { nil }
           fv5015 = fv5017.fetch(:oidc_sid) { nil }
-          fv5009 = OidcClientRegistry.find!("core-app")
+          fv5009 = OidcClientRegistry.find!("core-app-jp")
           AuthenticationTokenService.encode(
             @client,
             host: request.host,
@@ -939,7 +952,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
         fv5002 = fv5008.fetch(:subject) { nil }
         fv5007 = fv5008.fetch(:base_session_public_id) { nil }
         fv5006 = fv5008.fetch(:oidc_sid) { nil }
-        fv5000 = OidcClientRegistry.find!("core-app")
+        fv5000 = OidcClientRegistry.find!("core-app-jp")
         AuthenticationTokenService.encode(
           @client,
           host: request.host,

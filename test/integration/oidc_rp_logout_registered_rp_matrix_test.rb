@@ -159,9 +159,9 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
       refresh_token_expires_at: 10.minutes.from_now,
     }
     case @resource_type
-    when "client" then ClientRpSession.create!(client_token: root_token, **attributes)
-    when "visitor" then VisitorRpSession.create!(visitor_token: root_token, **attributes)
-    when "operator" then OperatorRpSession.create!(operator_token: root_token, **attributes)
+    when "client" then OpAppGrant.create!(client_token: root_token, **attributes)
+    when "visitor" then OpComGrant.create!(visitor_token: root_token, **attributes)
+    when "operator" then OpOrgGrant.create!(operator_token: root_token, **attributes)
     end
   end
 

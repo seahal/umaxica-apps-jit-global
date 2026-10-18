@@ -56,7 +56,7 @@ module Edit
           return continue_browser_rp_logout! if params[:logout_challenge].present?
 
           launch_oidc_rp_logout!(
-            client_id: "edit-org",
+            client_id: "edit-org-ww",
             issuer_resource_type: "operator",
             token_issuer: "operator",
             session_authority: :rp_session,
@@ -66,11 +66,11 @@ module Edit
         private
 
         def oidc_client_id
-          "edit-org"
+          "edit-org-ww"
         end
 
         def browser_rp_client_id
-          "edit-org"
+          "edit-org-ww"
         end
 
         def browser_rp_resource_type

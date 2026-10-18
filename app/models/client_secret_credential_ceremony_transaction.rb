@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: client_secret_credential_ceremony_transactions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                          :bigint           not null, primary key
 #  actor_ref                   :string           not null
@@ -32,7 +32,7 @@
 #  idx_on_result_jti_b20b4e2f25             (result_jti) UNIQUE WHERE (result_jti IS NOT NULL)
 #  idx_on_transaction_id_b63311dbbc         (transaction_id) UNIQUE
 #
-class ClientSecretCredentialCeremonyTransaction < AppTicketRecord
+class ClientSecretCredentialCeremonyTransaction < OpBaseAppRecord
   include SecretCredentialCeremonyTransactionable
 
   ceremony_surface "app"

@@ -6,15 +6,15 @@ require "test_helper"
 class RpSessionRevokerTest < ActiveSupport::TestCase
   setup do
     @root = ClientToken.create!(user: Client.create!)
-    @session_a = ClientRpSession.create!(
+    @session_a = OpAppGrant.create!(
       client_token: @root,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
-    @session_b = ClientRpSession.create!(
+    @session_b = OpAppGrant.create!(
       client_token: @root,
-      oidc_client_id: "warp-app",
+      oidc_client_id: "warp-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -40,7 +40,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   end
 
   test "browser_session scope revokes an unrevoked child after its refresh window expires" do
-    expired_session = ClientRpSession.create!(
+    expired_session = OpAppGrant.create!(
       client_token: @root,
       oidc_client_id: "edit-app",
       oidc_scope: "openid profile",
@@ -66,7 +66,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
 
         if sql.match?(/\b#{Regexp.escape(ClientToken.table_name)}\b/i)
           lock_tables << :parent
-        elsif sql.match?(/\b#{Regexp.escape(ClientRpSession.table_name)}\b/i)
+        elsif sql.match?(/\b#{Regexp.escape(OpAppGrant.table_name)}\b/i)
           lock_tables << :child
         end
       end
@@ -91,7 +91,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
 
         if sql.match?(/\b#{Regexp.escape(ClientToken.table_name)}\b/i)
           lock_tables << :parent
-        elsif sql.match?(/\b#{Regexp.escape(ClientRpSession.table_name)}\b/i)
+        elsif sql.match?(/\b#{Regexp.escape(OpAppGrant.table_name)}\b/i)
           lock_tables << :child
         end
       end
@@ -107,9 +107,9 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
 
   test "identity scope walks each Base Browser Session" do
     other_root = ClientToken.create!(user: Client.create!)
-    other_session = ClientRpSession.create!(
+    other_session = OpAppGrant.create!(
       client_token: other_root,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -125,9 +125,9 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
 
   test "browser_session scope revokes a visitor session's RP Sessions and the visitor token" do
     visitor_root = VisitorToken.create!(visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE))
-    visitor_session = VisitorRpSession.create!(
+    visitor_session = OpComGrant.create!(
       visitor_token: visitor_root,
-      oidc_client_id: "core-com",
+      oidc_client_id: "core-com-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -141,9 +141,9 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
 
   test "browser_session scope revokes an operator session's RP Sessions and the operator token" do
     operator_root = OperatorToken.create!(staff_id: Operator.create!(status_id: OperatorStatus::ACTIVE).id)
-    operator_session = OperatorRpSession.create!(
+    operator_session = OpOrgGrant.create!(
       operator_token: operator_root,
-      oidc_client_id: "core-org",
+      oidc_client_id: "core-org-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -161,7 +161,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
         RpSessionRevoker.call(scope: :browser_session, record: @session_a)
       end
 
-    assert_includes error.message, "ClientRpSession"
+    assert_includes error.message, "OpAppGrant"
     assert_not @session_a.reload.revoked?
   end
 

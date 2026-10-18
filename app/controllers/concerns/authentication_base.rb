@@ -324,12 +324,18 @@ module AuthenticationBase
   # Returns `{ status: :success, ... }` only for a committed session. A full
   # session limit returns `{ status: :session_limit_pending }` with nothing
   # issued; callers own the pending state (a sign-in flow or a resolution
-  # transaction), never a restricted token.
+  # transaction), never a session-limit placeholder token.
   def log_in(resource, establishment:, record_login_audit: true, token_kind_id: "BROWSER_WEB",
              require_totp_check: true, audit_context: {}, established_authentication_method: nil,
              authentication_context: nil, authentication_event_at: nil, sign_in_flow: nil,
-             oidc_authorization_transaction: nil)
+             oidc_authorization_transaction: nil, session_limit_resolution: nil,
+             session_limit_resolution_challenge: nil, session_limit_resolution_binding: nil)
     validate_login_establishment!(resource, establishment, established_authentication_method, sign_in_flow)
+    validate_session_limit_resolution_arguments!(
+      session_limit_resolution: session_limit_resolution,
+      challenge: session_limit_resolution_challenge,
+      binding: session_limit_resolution_binding,
+    )
     return { status: :access_locked } if administratively_locked_resource?(resource)
     return { status: :login_forbidden } unless resource.login_allowed?
 
@@ -349,6 +355,9 @@ module AuthenticationBase
       authentication_event_at: authentication_event_at,
       sign_in_flow: sign_in_flow,
       oidc_authorization_transaction: oidc_authorization_transaction,
+      session_limit_resolution: session_limit_resolution,
+      session_limit_resolution_challenge: session_limit_resolution_challenge,
+      session_limit_resolution_binding: session_limit_resolution_binding,
     )
     return { status: :invalid_request, reason: :flow_expired } if issuance.is_a?(FlowTransitionResult)
 
@@ -361,6 +370,8 @@ module AuthenticationBase
     )
     session[:inertia_clear_history] = true if establishment == :root_login && result[:status] == :success
     result
+  rescue SessionLimitResolutionTransactionable::WaitingSlotOccupied
+    session_limit_slot_refusal_result(resource)
   rescue ConcurrentSessionLimitExceededError
     session_limit_conflict_result(resource)
   rescue SignInFlowIssuanceRejected => e
@@ -472,6 +483,25 @@ module AuthenticationBase
     }
   end
 
+  # A live Waiting lease is an admission decision, not a dependency failure. Keep the
+  # sign-in flow resumable while refusing this additional attempt without disclosing the
+  # other flow or changing its lease, sessions, cooldown, or audit state.
+  def session_limit_slot_refusal_result(resource)
+    Rails.logger.info(
+      JitLogEvent.format(
+        "session.limit.waiting_slot_occupied",
+        "#{resource_type}_id": resource.id,
+        ip_address: request_ip_address,
+      ),
+    )
+    {
+      status: :session_limit_conflict,
+      http_status: :forbidden,
+      message: I18n.t("session_limit.login_limit_exceeded"),
+    }
+  end
+  private :session_limit_slot_refusal_result
+
   def validate_login_dpop_proof
     dpop_proof = request.headers["DPoP"]
     return { status: :success, jkt: nil } if dpop_proof.blank?
@@ -529,11 +559,14 @@ module AuthenticationBase
   # A raise (cooldown, invalid flow, database error) rolls every write back.
   def commit_login_session!(resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
                             authentication_context:, authentication_event_at:, sign_in_flow:,
-                            oidc_authorization_transaction: nil, limit_refused: false)
+                            oidc_authorization_transaction: nil, limit_refused: false,
+                            session_limit_resolution: nil, session_limit_resolution_challenge: nil,
+                            session_limit_resolution_binding: nil)
     return commit_login_session_in_ticket_transaction!(
       resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
                 authentication_context:, authentication_event_at:, sign_in_flow:,
-                oidc_authorization_transaction:, limit_refused:,
+                oidc_authorization_transaction:, limit_refused:, session_limit_resolution:,
+                session_limit_resolution_challenge:, session_limit_resolution_binding:,
     ) unless sign_in_flow
 
     unless sign_in_flow.is_a?(sign_in_flow_class_for(resource))
@@ -545,7 +578,8 @@ module AuthenticationBase
       commit_login_session_in_ticket_transaction!(
         resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
                   authentication_context:, authentication_event_at:, sign_in_flow:,
-                  oidc_authorization_transaction:, limit_refused:,
+                  oidc_authorization_transaction:, limit_refused:, session_limit_resolution:,
+                  session_limit_resolution_challenge:, session_limit_resolution_binding:,
       )
     end
   rescue FlowInvalidTransition => e
@@ -555,37 +589,56 @@ module AuthenticationBase
   def commit_login_session_in_ticket_transaction!(resource, establishment:, token_kind_id:, dpop_jkt:,
                                                   established_authentication_method:, authentication_context:,
                                                   authentication_event_at:, sign_in_flow:,
-                                                  oidc_authorization_transaction: nil, limit_refused: false)
+                                                  oidc_authorization_transaction: nil, limit_refused: false,
+                                                  session_limit_resolution: nil,
+                                                  session_limit_resolution_challenge: nil,
+                                                  session_limit_resolution_binding: nil)
     token_record_connection_owner.connected_to(role: :writing) do
       token_class.transaction(requires_new: true) do
         check_login_cooldown!(resource) if establishment == :root_login
         locked_flow = prepare_sign_in_flow_for_issuance(
-          resource,
-          establishment: establishment,
-          established_authentication_method: established_authentication_method,
-          authentication_event_at: authentication_event_at,
-          sign_in_flow: sign_in_flow,
+          resource, establishment:, established_authentication_method:, authentication_event_at:, sign_in_flow:,
         )
 
-        with_sign_in_flow_issuance_lock(locked_flow) do
-          if limit_refused || session_limit_state_for(resource) == :at_limit
+        # The one ordinary issuance every capacity outcome below may end in.
+        issue_committed_login =
+          lambda do
+            create_committed_login_issuance!(
+              resource, establishment:, token_kind_id:, dpop_jkt:, established_authentication_method:,
+                        authentication_context:, authentication_event_at:, sign_in_flow: locked_flow,
+            )
+          end
+
+        issue_pending_resolution =
+          lambda do
             issue_pending_session_limit_resolution!(
-              resource,
-              locked_flow: locked_flow,
-              established_authentication_method: established_authentication_method,
-              oidc_authorization_transaction: oidc_authorization_transaction,
+              resource, locked_flow:, established_authentication_method:, oidc_authorization_transaction:,
+            )
+          end
+
+        with_sign_in_flow_issuance_lock(locked_flow) do
+          if limit_refused && session_limit_resolution
+            ensure_session_limit_resolution_open!(session_limit_resolution)
+            issue_pending_resolution.call
+          elsif session_limit_resolution
+            resolution_outcome = finalize_session_limit_resolution_for_issuance!(
+              resource, locked_flow:, resolution: session_limit_resolution,
+                        challenge: session_limit_resolution_challenge, binding: session_limit_resolution_binding,
+                        oidc_authorization_transaction:,
+            )
+            login_result_after_resolution(
+              resolution_outcome, resolution: session_limit_resolution, locked_flow:,
+                                  challenge: session_limit_resolution_challenge,
+                                  binding: session_limit_resolution_binding, issue: issue_committed_login,
             )
           else
-            create_committed_login_issuance!(
-              resource,
-              establishment: establishment,
-              token_kind_id: token_kind_id,
-              dpop_jkt: dpop_jkt,
-              established_authentication_method: established_authentication_method,
-              authentication_context: authentication_context,
-              authentication_event_at: authentication_event_at,
-              sign_in_flow: locked_flow,
-            )
+            capacity_state = session_limit_state_within_bounds!(resource)
+
+            if limit_refused || capacity_state == :at_limit
+              issue_pending_resolution.call
+            else
+              issue_committed_login.call
+            end
           end
         end
       end
@@ -735,8 +788,6 @@ module AuthenticationBase
 
     refresh_public_id, = token_class.parse_refresh_token(refresh_plain.to_s)
     token_record = find_refresh_token_record(refresh_public_id)
-    return handle_restricted_refresh_rejected(token_record, refresh_public_id) if token_record&.restricted?
-
     return handle_refresh_idle_timeout(token_record, refresh_public_id) unless refresh_idle_allowed?(token_record)
 
     return handle_refresh_binding_denied(
@@ -1109,6 +1160,43 @@ module AuthenticationBase
       resolution_challenge: resolution.challenge,
       resolution_binding: raw_binding,
       resolution_transaction: resolution.transaction,
+      sign_in_flow_public_id: locked_flow.public_id,
+    }
+  end
+
+  def validate_session_limit_resolution_arguments!(session_limit_resolution:, challenge:, binding:)
+    present = [session_limit_resolution, challenge, binding].count(&:present?)
+    return if present.zero? || present == 3
+
+    raise ArgumentError, "session-limit resolution context is incomplete"
+  end
+
+  def finalize_session_limit_resolution_for_issuance!(resource, locked_flow:, resolution:, challenge:, binding:,
+                                                      oidc_authorization_transaction:)
+    resolution_model = SessionLimitResolutionTransactionable.model_for(resource)
+    unless resolution.is_a?(resolution_model)
+      raise SignInFlowIssuanceRejected, "session-limit resolution belongs to another realm"
+    end
+
+    resolution.finalize_for_session_issuance!(
+      actor: resource,
+      parent: locked_flow,
+      challenge: challenge,
+      browser_binding_digest: resolution_model.digest_challenge(binding),
+      authorization_transaction: oidc_authorization_transaction,
+    ) do |writer_now|
+      session_limit_state_for(resource, now: writer_now)
+    end
+  rescue FlowInvalidTransition => e
+    raise SignInFlowIssuanceRejected, e.message
+  end
+
+  def pending_session_limit_resolution_result(resolution:, locked_flow:, challenge:, binding:)
+    {
+      status: :session_limit_pending,
+      resolution_challenge: challenge,
+      resolution_binding: binding,
+      resolution_transaction: resolution,
       sign_in_flow_public_id: locked_flow.public_id,
     }
   end
@@ -1598,41 +1686,6 @@ module AuthenticationBase
     nil
   end
 
-  def handle_restricted_refresh_rejected(token_record, refresh_public_id)
-    restricted_expires_at = token_record.discard_at if token_record.respond_to?(:discard_at)
-    expired = restricted_expires_at.present? && restricted_expires_at <= Time.current
-
-    if expired && !token_record.revoked?
-      AuthenticationLogoutCurrentSession.call(
-        resource: defined?(@current_resource) ? @current_resource : nil,
-        token: token_record,
-        token_class: token_record.class,
-        session_public_id: token_record.try(:public_id),
-        reason: "restricted_session_expired",
-      )
-      Rails.logger.info(
-        JitLogEvent.format(
-          "session.restricted.expired",
-          user_token_id: token_record.public_id,
-          "#{resource_type}_id": token_record.public_send("#{token_resource_prefix}_id"),
-        ),
-      )
-    end
-
-    set_refresh_failure!(:forbidden, "restricted_session")
-
-    Rails.logger.info(
-      JitLogEvent.format(
-        "#{resource_type}.token.refresh.failed",
-        refresh_token_id: refresh_public_id,
-        reason: expired ? "restricted_expired" : "restricted_session",
-        ip_address: request_ip_address,
-      ),
-    )
-
-    nil
-  end
-
   def find_refresh_token_record(refresh_public_id)
     return nil if refresh_public_id.blank?
 
@@ -2037,7 +2090,6 @@ module AuthenticationBase
       amr: payload&.dig("amr"),
       actor_type: actor_type,
       actor_id: resource.id,
-      restricted: current_session_restricted_for_authn,
     )
     surface = CoreSurface.current(request) if respond_to?(:request, true) && request.present?
     attributes = {
@@ -2351,6 +2403,48 @@ module AuthenticationBase
     end
   end
 
+  def session_limit_state_within_bounds!(resource)
+    state = session_limit_state_for(resource)
+    raise SignInFlowIssuanceRejected, "active session count exceeds the configured limit" if state == :over_limit
+
+    state
+  end
+
+  def ensure_session_limit_resolution_open!(resolution)
+    resolution.reload
+    raise SignInFlowIssuanceRejected, "session-limit resolution is not open" unless resolution.open?
+  end
+
+  # The login outcome once a session-limit resolution has been finalized under the flow lock.
+  def login_result_after_resolution(outcome, resolution:, locked_flow:, challenge:, binding:, issue:)
+    case outcome.fetch(:status)
+    when :pending
+      pending_session_limit_resolution_result(resolution:, locked_flow:, challenge:, binding:)
+    when :expired, :invalid
+      { status: :invalid_request, reason: :session_limit_resolution_expired }
+    when :already_resolved, :resolved
+      raise SignInFlowIssuanceRejected, "resolved session-limit resolution has no capacity" if
+        outcome.fetch(:status) == :already_resolved && outcome.fetch(:capacity_state) != :within_limit
+
+      issue.call
+    else
+      raise FlowConfigurationError, "unsupported session-limit finalization status: #{outcome.fetch(:status).inspect}"
+    end
+  end
+
+  # The authentication context is the durable authority for Restricted Mode (Org Standby).
+  # It is written once, at session issue, and never updated afterwards: there is no supported
+  # transition between Normal and Standby inside a session (docs/security/org-emergency-access.md).
+  def token_authentication_context(authentication_context)
+    unless token_class.column_names.include?("authentication_context")
+      raise ArgumentError,
+            "#{token_class.name} cannot record an authentication context; " \
+            "Standby (Emergency Access) is available on surfaces with the column only"
+    end
+
+    AuthenticationContextValue.for(authentication_context).to_s
+  end
+
   def create_login_token_record(resource, token_kind_id, token_status_id: nil, dpop_jkt: nil,
                                 established_authentication_method: nil, authentication_context: nil,
                                 authentication_event_at: nil, root_login_established_at: nil)
@@ -2376,20 +2470,16 @@ module AuthenticationBase
         token_attributes[:authentication_event_at] = authentication_event_at
       end
 
-      # The authentication context is the durable authority for Restricted Mode.
-      # It is written once, at session issue, and never updated afterwards:
-      # there is no supported transition between Normal and Emergency inside a
-      # session (docs/security/org-emergency-access.md).
-      if authentication_context.present?
-        unless token_class.column_names.include?("authentication_context")
-          raise ArgumentError,
-                "#{token_class.name} cannot record an authentication context; " \
-                "Emergency Access is available on surfaces with the column only"
-        end
+      token_attributes[:authentication_context] = token_authentication_context(authentication_context) if
+        authentication_context.present?
 
-        token_attributes[:authentication_context] =
-          AuthenticationContextValue.for(authentication_context).to_s
-      end
+      # R5-WU06: a root records the actor authentication epoch and OP contract epoch it was issued
+      # under, so a later identity stop cuts off exactly this and older authority.
+      token_attributes[:authentication_epoch] = resource.authentication_epoch
+      token_attributes[:contract_epoch] =
+        { ClientToken => OpAppProtocolEpoch,
+          VisitorToken => OpComProtocolEpoch,
+          OperatorToken => OpOrgProtocolEpoch, }.fetch(token_class).current_contract_epoch
 
       token_attributes.merge!(default_status_token_attributes(token_status_id))
       token_attributes.merge!(default_dbsc_token_attributes(token_kind_id))
@@ -2530,10 +2620,10 @@ module AuthenticationBase
   end
 
   def token_reference_connection_model(model)
-    return AppTicketRecord if model <= AppTicketRecord
-    return ComTicketRecord if model <= ComTicketRecord
+    return OpBaseAppRecord if model <= OpBaseAppRecord
+    return OpBaseComRecord if model <= OpBaseComRecord
 
-    OrgTicketRecord
+    OpBaseOrgRecord
   end
 
   def login_token_reference_models
@@ -2998,11 +3088,14 @@ module AuthenticationBase
   end
 
   # Concurrent-session state for the actor. A full limit is never answered with
-  # a restricted session: the attempt stays pending in its sign-in flow or
+  # a session-limit placeholder: the attempt stays pending in its sign-in flow or
   # resolution transaction until the limit is resolved and the final issuance
   # boundary re-counts under the actor lock.
-  def session_limit_state_for(resource)
-    return :within_limit if count_active_sessions(resource) < max_sessions_for_resource(resource)
+  def session_limit_state_for(resource, now: nil)
+    count = count_active_sessions(resource, now: now)
+    max = max_sessions_for_resource(resource)
+    return :within_limit if count < max
+    return :over_limit if count > max
 
     :at_limit
   end
@@ -3020,21 +3113,22 @@ module AuthenticationBase
     end
   end
 
-  # Count active (non-revoked, non-restricted) sessions for a resource
-  def count_active_sessions(resource)
+  # Count active sessions for a resource; historical status 103 rows are not active.
+  def count_active_sessions(resource, now: nil)
+    decision_time = now || token_class_for_resource(resource).database_now
     token_record_connection_owner(token_class_for_resource(resource)).connected_to(role: :writing) do
       if resource.is_a?(::Client)
-        ::ClientToken.active_status.joins(:device_session)
+        ::ClientToken.active_status(decision_time).joins(:device_session)
           .where(user_id: resource.id, client_device_sessions: { status_id: ClientDeviceSession::STATUS_ACTIVE,
                                                                  revoked_at: nil, },)
           .count
       elsif resource.is_a?(::Operator)
-        ::OperatorToken.active_status.joins(:device_session)
+        ::OperatorToken.active_status(decision_time).joins(:device_session)
           .where(staff_id: resource.id, operator_device_sessions: { status_id: OperatorDeviceSession::STATUS_ACTIVE,
                                                                     revoked_at: nil, },)
           .count
       elsif resource.is_a?(::Visitor)
-        ::VisitorToken.active_status.joins(:device_session)
+        ::VisitorToken.active_status(decision_time).joins(:device_session)
           .where(visitor_id: resource.id, visitor_device_sessions: { status_id: VisitorDeviceSession::STATUS_ACTIVE,
                                                                      revoked_at: nil, },)
           .count
@@ -3106,7 +3200,7 @@ module AuthenticationBase
         lookup = { public_id: token_record.public_id }
         lookup[resource_foreign_key] = resource.id
         locked = token_model.lock.find_by(lookup)
-        next nil unless locked&.currently_usable?
+        next nil unless locked&.active_status?
 
         now = token_model.database_now
         refresh_plain = locked.rotate_refresh_token!(now: now)
@@ -3175,7 +3269,7 @@ module AuthenticationBase
     token_record_connection_owner(token_model).connected_to(role: :writing) do
       lookup = { public_id: public_id }
       lookup[resource_foreign_key] = resource.id
-      token_model.find_by(lookup)
+      token_model.active_status.find_by(lookup)
     end
   end
 
@@ -3190,26 +3284,11 @@ module AuthenticationBase
     device_bound_token = find_token_record_by_device_session_identifier(session_identifier)
     return device_bound_token if device_bound_token
 
-    scope = token_class.includes(:device_session).where(public_id: session_identifier)
+    scope = token_class.active_status.includes(:device_session).where(public_id: session_identifier)
     if token_record_column?("oidc_sid") && uuid_identifier?(session_identifier)
-      scope = scope.or(token_class.includes(:device_session).where(oidc_sid: session_identifier))
+      scope = scope.or(token_class.active_status.includes(:device_session).where(oidc_sid: session_identifier))
     end
     scope.first
-  end
-
-  # Check if the current session is restricted
-  def current_session_restricted?
-    actor_authn = Actor.authn if defined?(Actor)
-    return actor_authn.restricted? if actor_authn&.signed_in?
-
-    current_session&.restricted?
-  end
-
-  def current_session_restricted_for_authn
-    return @current_session.restricted? if defined?(@current_session) && @current_session.present?
-    return false if @current_session_public_id.blank?
-
-    find_token_record_by_session_identifier(@current_session_public_id)&.restricted?
   end
 
   def actor_current_resource

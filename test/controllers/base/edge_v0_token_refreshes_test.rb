@@ -183,7 +183,7 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "POST refresh rejects a restricted session on every surface" do
+  test "POST refresh rejects a restricted session as an invalid refresh token on every surface" do
     SURFACES.each do |surface|
       host = surface.fetch(:host)
       token_record = surface.fetch(:build_token).call(self)
@@ -204,12 +204,14 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_response :forbidden
-      assert_equal "restricted_session", response.parsed_body.fetch("error_code")
+      assert_response :unauthorized
+      assert_equal "invalid_refresh_token", response.parsed_body.fetch("error_code")
+      assert_equal token_record.class.token_status_model::RESTRICTED,
+                   token_record.reload.public_send(token_record.class.token_status_foreign_key)
     end
   end
 
-  test "POST refresh revokes and rejects an expired restricted session on every surface" do
+  test "POST refresh rejects an expired restricted session without changing its historical rows" do
     SURFACES.each do |surface|
       host = surface.fetch(:host)
       token_record = surface.fetch(:build_token).call(self)
@@ -231,10 +233,11 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
         as: :json,
       )
 
-      assert_response :forbidden
-      assert_equal "restricted_session", response.parsed_body.fetch("error_code")
-      assert_predicate token_record.reload, :revoked?
-      assert_predicate token_record.device_session.reload, :revoked?
+      assert_response :unauthorized
+      assert_equal "invalid_refresh_token", response.parsed_body.fetch("error_code")
+      assert_equal token_record.class.token_status_model::RESTRICTED,
+                   token_record.reload.public_send(token_record.class.token_status_foreign_key)
+      assert_not_predicate token_record.device_session.reload, :revoked?
     end
   end
 end

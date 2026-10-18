@@ -37,10 +37,10 @@ module AuthStepUpCeremonyContext
         ceremony_actor_model.find_by!(public_id: transaction.actor_ref)
       end
     unless token.public_id == transaction.session_ref && ceremony_token_owned_by?(token, actor) &&
-        token.currently_usable? && actor.login_allowed?
+        token.active_status? && actor.login_allowed?
       log_step_up_ceremony(
         "refused", transaction: transaction, outcome: "refused", stage: "auth_ceremony_context",
-                   error_code: token.currently_usable? ? "session_binding_mismatch" : "session_expired",
+                   error_code: token.active_status? ? "session_binding_mismatch" : "session_expired",
                    state_before: transaction.status,
       )
       return render_invalid_step_up_context!

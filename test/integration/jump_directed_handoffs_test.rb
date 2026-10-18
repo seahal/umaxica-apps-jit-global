@@ -74,6 +74,6 @@ class JumpDirectedHandoffsTest < ActionDispatch::IntegrationTest
     assert_equal "https", target.scheme
     assert_equal "www.umaxica.org", target.host
     assert_equal "/oauth/authorize", target.path
-    assert_equal "edit-org", Rack::Utils.parse_nested_query(target.query).fetch("client_id")
+    assert_equal "edit-org-ww", Rack::Utils.parse_nested_query(target.query).fetch("client_id")
   end
 end

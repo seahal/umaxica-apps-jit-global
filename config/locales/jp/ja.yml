@@ -632,6 +632,30 @@ ja:
   activerecord:
     actions: アクション
     attributes:
+      op_app_client_activation:
+        client_id: クライアント ID
+        contract_epoch: 契約エポック
+        enabled: 有効
+        changed_at: 変更日時
+        actor_ref: 変更者
+        audit_ref: 監査参照
+        source_manifest_digest: マニフェストのダイジェスト
+      op_com_client_activation:
+        client_id: クライアント ID
+        contract_epoch: 契約エポック
+        enabled: 有効
+        changed_at: 変更日時
+        actor_ref: 変更者
+        audit_ref: 監査参照
+        source_manifest_digest: マニフェストのダイジェスト
+      op_org_client_activation:
+        client_id: クライアント ID
+        contract_epoch: 契約エポック
+        enabled: 有効
+        changed_at: 変更日時
+        actor_ref: 変更者
+        audit_ref: 監査参照
+        source_manifest_digest: マニフェストのダイジェスト
       client_secret_credential:
         client: 利用者
         issuance: Secret の発行操作
@@ -2150,8 +2174,6 @@ ja:
           invalid: 無効なタイムゾーンが選択されました
         title: プリファレンス
   controllers:
-    restricted_session_guard:
-      blocked_message: きんそくじこうです
     sign:
       app_verification_base:
         code_expired: 確認コードの有効期限が切れました
@@ -3295,6 +3317,7 @@ ja:
       cancel: キャンセル
       cancel_logout: キャンセルしてログアウト
       cancel_logout_confirm: キャンセルしますか？ログアウトされます。
+      continue: ログインを続行
       created_at: 作成日時
       description: 同時にログインできるセッション数の上限に達しています。ログインを続行するには、無効化するセッションを選択してください。
       last_used: 最終使用
@@ -4845,7 +4868,6 @@ ja:
       errors:
         invalid_refresh_token: 無効または期限切れのリフレッシュトークンです
         missing_refresh_token: リフレッシュトークンが必要です
-        restricted_session: きんそくじこうです
         withdrawal_required: 退会処理が完了していません。
     unknown_authenticator: 不明な認証器
     withdrawal:

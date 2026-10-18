@@ -55,7 +55,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f0_key] ||
                   (f0_token.currently_usable? &&
-                    !(f0_token.device_session_id && ClientRpSession.exists?(
+                    !(f0_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f0_token.device_session_id,
                       oidc_client_id: f0_client.client_id,
                       revoked_at: nil,
@@ -63,7 +63,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f0_key]
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
-                  f0_session = ClientRpSession.create!(
+                  f0_session = OpAppGrant.create!(
                     client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -115,7 +115,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f0_client_id =
               case f0_family
               when "base" then "base-#{f0_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f0_family}-#{f0_surface}"
               end
             f0_token = ClientToken.find_by!(public_id: f0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -123,14 +123,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f0_key = [f0_client.client_id, f0_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f0_key] && f0_token.currently_usable? &&
-                !(f0_token.device_session_id && ClientRpSession.exists?(
+                !(f0_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f0_token.device_session_id,
                   oidc_client_id: f0_client.client_id,
                   revoked_at: nil,
                 ))
               f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
-              f0_session = ClientRpSession.create!(
+              f0_session = OpAppGrant.create!(
                 client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                 refresh_token_expires_at: f0_now + 10.minutes,
@@ -207,7 +207,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f1_key] ||
                   (f1_token.currently_usable? &&
-                    !(f1_token.device_session_id && ClientRpSession.exists?(
+                    !(f1_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f1_token.device_session_id,
                       oidc_client_id: f1_client.client_id,
                       revoked_at: nil,
@@ -215,7 +215,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f1_key]
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
-                  f1_session = ClientRpSession.create!(
+                  f1_session = OpAppGrant.create!(
                     client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -267,7 +267,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f1_client_id =
               case f1_family
               when "base" then "base-#{f1_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f1_family}-#{f1_surface}"
               end
             f1_token = ClientToken.find_by!(public_id: f1_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -275,14 +275,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f1_key = [f1_client.client_id, f1_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f1_key] && f1_token.currently_usable? &&
-                !(f1_token.device_session_id && ClientRpSession.exists?(
+                !(f1_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f1_token.device_session_id,
                   oidc_client_id: f1_client.client_id,
                   revoked_at: nil,
                 ))
               f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
-              f1_session = ClientRpSession.create!(
+              f1_session = OpAppGrant.create!(
                 client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                 refresh_token_expires_at: f1_now + 10.minutes,
@@ -370,7 +370,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f2_key] ||
                   (f2_token.currently_usable? &&
-                    !(f2_token.device_session_id && ClientRpSession.exists?(
+                    !(f2_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f2_token.device_session_id,
                       oidc_client_id: f2_client.client_id,
                       revoked_at: nil,
@@ -378,7 +378,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f2_key]
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
-                  f2_session = ClientRpSession.create!(
+                  f2_session = OpAppGrant.create!(
                     client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -430,7 +430,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f2_client_id =
               case f2_family
               when "base" then "base-#{f2_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f2_family}-#{f2_surface}"
               end
             f2_token = ClientToken.find_by!(public_id: f2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -438,14 +438,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f2_key = [f2_client.client_id, f2_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f2_key] && f2_token.currently_usable? &&
-                !(f2_token.device_session_id && ClientRpSession.exists?(
+                !(f2_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f2_token.device_session_id,
                   oidc_client_id: f2_client.client_id,
                   revoked_at: nil,
                 ))
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
-              f2_session = ClientRpSession.create!(
+              f2_session = OpAppGrant.create!(
                 client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,
@@ -532,7 +532,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f3_key] ||
                   (f3_token.currently_usable? &&
-                    !(f3_token.device_session_id && ClientRpSession.exists?(
+                    !(f3_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f3_token.device_session_id,
                       oidc_client_id: f3_client.client_id,
                       revoked_at: nil,
@@ -540,7 +540,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f3_key]
                   f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
-                  f3_session = ClientRpSession.create!(
+                  f3_session = OpAppGrant.create!(
                     client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                     refresh_token_expires_at: f3_now + 10.minutes,
@@ -592,7 +592,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f3_client_id =
               case f3_family
               when "base" then "base-#{f3_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f3_family}-#{f3_surface}"
               end
             f3_token = ClientToken.find_by!(public_id: f3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -600,14 +600,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f3_key = [f3_client.client_id, f3_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f3_key] && f3_token.currently_usable? &&
-                !(f3_token.device_session_id && ClientRpSession.exists?(
+                !(f3_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f3_token.device_session_id,
                   oidc_client_id: f3_client.client_id,
                   revoked_at: nil,
                 ))
               f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
-              f3_session = ClientRpSession.create!(
+              f3_session = OpAppGrant.create!(
                 client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                 refresh_token_expires_at: f3_now + 10.minutes,
@@ -695,7 +695,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f4_key] ||
                   (f4_token.currently_usable? &&
-                    !(f4_token.device_session_id && ClientRpSession.exists?(
+                    !(f4_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f4_token.device_session_id,
                       oidc_client_id: f4_client.client_id,
                       revoked_at: nil,
@@ -703,7 +703,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f4_key]
                   f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                   f4_now = Time.current
-                  f4_session = ClientRpSession.create!(
+                  f4_session = OpAppGrant.create!(
                     client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                     refresh_token_expires_at: f4_now + 10.minutes,
@@ -755,7 +755,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f4_client_id =
               case f4_family
               when "base" then "base-#{f4_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f4_family}-#{f4_surface}"
               end
             f4_token = ClientToken.find_by!(public_id: f4_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -763,14 +763,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f4_key = [f4_client.client_id, f4_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f4_key] && f4_token.currently_usable? &&
-                !(f4_token.device_session_id && ClientRpSession.exists?(
+                !(f4_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f4_token.device_session_id,
                   oidc_client_id: f4_client.client_id,
                   revoked_at: nil,
                 ))
               f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
               f4_now = Time.current
-              f4_session = ClientRpSession.create!(
+              f4_session = OpAppGrant.create!(
                 client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                 refresh_token_expires_at: f4_now + 10.minutes,
@@ -847,7 +847,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f5_key] ||
                   (f5_token.currently_usable? &&
-                    !(f5_token.device_session_id && ClientRpSession.exists?(
+                    !(f5_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f5_token.device_session_id,
                       oidc_client_id: f5_client.client_id,
                       revoked_at: nil,
@@ -855,7 +855,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f5_key]
                   f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                   f5_now = Time.current
-                  f5_session = ClientRpSession.create!(
+                  f5_session = OpAppGrant.create!(
                     client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                     refresh_token_expires_at: f5_now + 10.minutes,
@@ -907,7 +907,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f5_client_id =
               case f5_family
               when "base" then "base-#{f5_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f5_family}-#{f5_surface}"
               end
             f5_token = ClientToken.find_by!(public_id: f5_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -915,14 +915,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f5_key = [f5_client.client_id, f5_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f5_key] && f5_token.currently_usable? &&
-                !(f5_token.device_session_id && ClientRpSession.exists?(
+                !(f5_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f5_token.device_session_id,
                   oidc_client_id: f5_client.client_id,
                   revoked_at: nil,
                 ))
               f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
-              f5_session = ClientRpSession.create!(
+              f5_session = OpAppGrant.create!(
                 client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                 refresh_token_expires_at: f5_now + 10.minutes,
@@ -999,7 +999,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f6_key] ||
                   (f6_token.currently_usable? &&
-                    !(f6_token.device_session_id && ClientRpSession.exists?(
+                    !(f6_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f6_token.device_session_id,
                       oidc_client_id: f6_client.client_id,
                       revoked_at: nil,
@@ -1007,7 +1007,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f6_key]
                   f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                   f6_now = Time.current
-                  f6_session = ClientRpSession.create!(
+                  f6_session = OpAppGrant.create!(
                     client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                     refresh_token_expires_at: f6_now + 10.minutes,
@@ -1059,7 +1059,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f6_client_id =
               case f6_family
               when "base" then "base-#{f6_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f6_family}-#{f6_surface}"
               end
             f6_token = ClientToken.find_by!(public_id: f6_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -1067,14 +1067,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f6_key = [f6_client.client_id, f6_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f6_key] && f6_token.currently_usable? &&
-                !(f6_token.device_session_id && ClientRpSession.exists?(
+                !(f6_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f6_token.device_session_id,
                   oidc_client_id: f6_client.client_id,
                   revoked_at: nil,
                 ))
               f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
-              f6_session = ClientRpSession.create!(
+              f6_session = OpAppGrant.create!(
                 client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                 refresh_token_expires_at: f6_now + 10.minutes,
@@ -1151,7 +1151,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               @base_browser_rp_credentials ||= {}
               if @base_browser_rp_credentials[f7_key] ||
                   (f7_token.currently_usable? &&
-                    !(f7_token.device_session_id && ClientRpSession.exists?(
+                    !(f7_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: f7_token.device_session_id,
                       oidc_client_id: f7_client.client_id,
                       revoked_at: nil,
@@ -1159,7 +1159,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                 unless @base_browser_rp_credentials[f7_key]
                   f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                   f7_now = Time.current
-                  f7_session = ClientRpSession.create!(
+                  f7_session = OpAppGrant.create!(
                     client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                     refresh_token_expires_at: f7_now + 10.minutes,
@@ -1211,7 +1211,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f7_client_id =
               case f7_family
               when "base" then "base-#{f7_surface}-ww"
-              when "edit" then "edit-org"
+              when "edit" then "edit-org-ww"
               else "#{f7_family}-#{f7_surface}"
               end
             f7_token = ClientToken.find_by!(public_id: f7_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -1219,14 +1219,14 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
             f7_key = [f7_client.client_id, f7_token.public_id]
             @base_browser_rp_credentials ||= {}
             if !@base_browser_rp_credentials[f7_key] && f7_token.currently_usable? &&
-                !(f7_token.device_session_id && ClientRpSession.exists?(
+                !(f7_token.device_session_id && OpAppGrant.exists?(
                   device_session_id: f7_token.device_session_id,
                   oidc_client_id: f7_client.client_id,
                   revoked_at: nil,
                 ))
               f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
               f7_now = Time.current
-              f7_session = ClientRpSession.create!(
+              f7_session = OpAppGrant.create!(
                 client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                 refresh_token_expires_at: f7_now + 10.minutes,

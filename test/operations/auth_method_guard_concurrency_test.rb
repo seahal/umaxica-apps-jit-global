@@ -49,7 +49,7 @@ class AuthMethodGuardConcurrencyTest < ActiveSupport::TestCase
             AppZenithRecord.connected_to(role: :writing) do
               actor = Client.find(@client.id)
               credential = ClientPasskey.find(passkey.id)
-              AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+              OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                 session = ClientToken.find(@tokens.fetch(index).id)
                 IdentityCredentialRemovalCommitter.call!(
                   actor: actor, credential: credential, current_session: session,

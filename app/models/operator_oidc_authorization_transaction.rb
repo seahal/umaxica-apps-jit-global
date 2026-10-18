@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_oidc_authorization_transactions
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                         :bigint           not null, primary key
 #  acr                        :string
@@ -44,8 +44,10 @@
 #  idx_on_login_challenge_48fb6dd61c            (login_challenge) UNIQUE
 #  idx_on_transaction_id_45064136d6             (transaction_id) UNIQUE
 #
-class OperatorOidcAuthorizationTransaction < OrgTicketRecord
+class OperatorOidcAuthorizationTransaction < OpBaseOrgRecord
   include OidcAuthorizationTransactionable
+
+  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
 
   oidc_authorization_surface "org"
 end

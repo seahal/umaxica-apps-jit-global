@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_step_up_sessions
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id            :bigint           not null, primary key
 #  attempt_count :integer          default(0), not null
@@ -27,7 +27,7 @@
 #
 #  fk_rails_...  (user_token_id => client_tokens.id) ON DELETE => cascade
 #
-class ClientStepUpSession < AppTicketRecord
+class ClientStepUpSession < OpBaseAppRecord
   include Retainable
   include StepUpSessionConsumable
   include StepUpEmailChallenge

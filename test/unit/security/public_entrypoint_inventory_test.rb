@@ -48,7 +48,12 @@ module Security
       PUBLIC_APPLE_NOTIFICATIONS
       PUBLIC_MCP
       PUBLIC_GUID_RESOLUTION
+      PUBLIC_BASE_OWNER_API
     ).freeze
+
+    BASE_OWNER_API_PATH = %r{
+      \A/api/v0/(avatar|membership|iam|support|publishing|identity/(?:standing|selection)|tech-capability-checks)\b
+    }x
 
     RouteEntry = Struct.new(:verb, :path, :controller_path, :action, :controller_class, :mode, keyword_init: true)
 
@@ -205,7 +210,15 @@ module Security
         public_warp_settings?(entry) ||
         public_apple_notification?(entry) ||
         public_mcp?(entry) ||
-        public_guid_resolution?(entry)
+        public_guid_resolution?(entry) ||
+        public_base_owner_api?(entry)
+    end
+
+    # Base Self-RP to owner calls (R5-WU12/14/15). Browser-unreachable in practice: each call is
+    # gated by the caller's URL-bound private_key_jwt plus the actor's Access JWT, not a session.
+    def public_base_owner_api?(entry)
+      entry.controller_path.match?(%r{\Abase/(app|com|org)/api/v0/}) &&
+        entry.path.match?(BASE_OWNER_API_PATH)
     end
 
     # Base and Warp only. Auth and the content surfaces do not serve MCP, so an MCP route appearing
@@ -291,7 +304,7 @@ module Security
     end
 
     def public_sign_out?(entry)
-      entry.path.start_with?("/sign/out") || entry.controller_path.end_with?("/sign_outs", "/sign/outs")
+      entry.path.start_with?("/sign/out", "/sign/bye") || entry.controller_path.end_with?("/sign_outs", "/sign/outs")
     end
 
     def public_auth_step_up?(entry)

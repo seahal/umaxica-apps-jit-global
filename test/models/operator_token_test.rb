@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: operator_tokens
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id                                 :bigint           not null, primary key
 #  dbsc_challenge                     :text
@@ -84,8 +84,8 @@ class OperatorTokenTest < ActiveSupport::TestCase
     @token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
   end
 
-  test "inherits from OrgTicketRecord" do
-    assert_operator OperatorToken, :<, OrgTicketRecord
+  test "inherits from OpBaseOrgRecord" do
+    assert_operator OperatorToken, :<, OpBaseOrgRecord
   end
 
   test "belongs to staff" do

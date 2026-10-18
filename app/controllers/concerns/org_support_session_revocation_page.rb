@@ -72,7 +72,8 @@ module OrgSupportSessionRevocationPage
         { term: t("base.org.admin.fields.access_state"), description: target.access_state },
         {
           term: t("base.org.admin.fields.active_sessions"),
-          description: AuthenticationSessionRevoker.tokens_for(target).not_revoked.count.to_s,
+          # The Support owner supplies the live count (R5-WU12); the RP never reads OP sessions.
+          description: target.active_session_count.to_s,
         },
       ],
       effect: t("base.org.admin.revocations.effect"),

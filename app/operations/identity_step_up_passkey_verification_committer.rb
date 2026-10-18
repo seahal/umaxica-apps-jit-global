@@ -65,7 +65,7 @@ class IdentityStepUpPasskeyVerificationCommitter
           raise IdentityStepUpCeremonyContract::Error, "step-up actor type mismatch"
         end
       unless transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id &&
-          token_owned_by?(actor, token) && token.currently_usable?
+          token_owned_by?(actor, token) && token.active_status?
         raise IdentityStepUpCeremonyContract::Error, "step-up actor or session mismatch"
       end
     end
@@ -74,7 +74,7 @@ class IdentityStepUpPasskeyVerificationCommitter
       case actor
       when Client then token.user_id == actor.id
       when Visitor then token.visitor_id == actor.id
-      when Operator then token.staff_id == actor.id && !token.emergency_authentication_context?
+      when Operator then token.staff_id == actor.id && !token.standby_authentication_context?
       end
     end
 

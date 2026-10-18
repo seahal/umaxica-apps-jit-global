@@ -55,7 +55,7 @@ class ClientSecretIssuancePurger
       AppZenithRecord.connected_to(role: :writing) do
         client = Client.find(issuance.client_id)
         client.with_lock do
-          AppTicketRecord.connected_to(role: :writing) do
+          OpBaseAppRecord.connected_to(role: :writing) do
             ClientToken.transaction do
               binding = omitted_binding(issuance)
               if expected_state != :terminated_signup && binding.is_a?(ClientSignUpFlow) && !binding.sign_up_completed?

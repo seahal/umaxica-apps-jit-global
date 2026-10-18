@@ -91,7 +91,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
 
   def self.advance!(logout_challenge:, step:, now: Time.current)
     transaction = nil
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       transaction = find_by_logout_challenge!(logout_challenge)
       transaction.advance_step!(step, now: now)
     end
@@ -104,7 +104,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
 
   def self.finalize!(logout_challenge:, now: Time.current)
     transaction = nil
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       transaction = find_by_logout_challenge!(logout_challenge)
       transaction.finalize!(now: now)
     end
@@ -280,7 +280,7 @@ class AcmeLogoutTransactionCoordinator < ApplicationService
   end
 
   def self.persist_transaction!(attributes, now:, expires_in:)
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       AcmeLogoutTransaction.create!(
         **attributes,
         status: AcmeLogoutTransaction::STATUS_INITIATED,

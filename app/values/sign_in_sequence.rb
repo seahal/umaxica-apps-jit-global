@@ -56,8 +56,6 @@ class SignInSequence
 
   def session_limit_gate_id = payload["session_limit_gate_id"]
 
-  def restricted_login_public_id = payload["restricted_login_public_id"]
-
   def terminal_state = payload["terminal_state"]
 
   def created_at = parse_time(payload["created_at"])

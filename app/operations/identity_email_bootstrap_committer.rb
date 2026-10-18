@@ -75,7 +75,7 @@ class IdentityEmailBootstrapCommitter
     end
 
     def validate_ticket!(actor, token, transaction, now)
-      refuse!("bootstrap session unavailable", "session_expired") unless token.currently_usable?(now)
+      refuse!("bootstrap session unavailable", "session_expired") unless token.active_status?(now)
       unless transaction.actor_ref == actor.public_id && transaction.session_ref == token.public_id
         refuse!("email bootstrap binding mismatch", "session_binding_mismatch")
       end
@@ -101,9 +101,9 @@ class IdentityEmailBootstrapCommitter
 
     def ticket_record_class(actor)
       case actor
-      when Client then AppTicketRecord
-      when Visitor then ComTicketRecord
-      when Operator then OrgTicketRecord
+      when Client then OpBaseAppRecord
+      when Visitor then OpBaseComRecord
+      when Operator then OpBaseOrgRecord
       else refuse!("email bootstrap actor type mismatch", "session_binding_mismatch")
       end
     end

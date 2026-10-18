@@ -200,19 +200,18 @@ module Concerns
       end
     end
 
-    # Wedge: every full-lifecycle surface controller must enforce the restricted-session
-    # guard. Regression guard against core/Warp surfaces silently dropping it again.
-    test "all lifecycle application controllers enforce the restricted session guard" do
+    # Wedge: the retired session-limit placeholder must not reintroduce a controller guard.
+    test "lifecycle application controllers do not register the retired restricted-session guard" do
       lifecycle_controllers.each do |controller|
         content = controller[:content]
         controller_name = controller[:path_name]
 
-        assert_includes content, "RestrictedSessionGuard",
-                        "#{controller_name} should include RestrictedSessionGuard (guard drift)"
-        assert_match(
+        assert_not_includes content, "RestrictedSessionGuard",
+                            "#{controller_name} reintroduced the retired restricted-session guard"
+        assert_no_match(
           /before_action :enforce_restricted_session_guard!$/,
           content,
-          "#{controller_name} should run enforce_restricted_session_guard! (guard drift)",
+          "#{controller_name} reintroduced the retired restricted-session callback",
         )
       end
     end

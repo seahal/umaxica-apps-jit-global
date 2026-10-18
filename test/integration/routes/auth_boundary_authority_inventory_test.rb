@@ -14,7 +14,9 @@ class AuthBoundaryAuthorityInventoryTest < ActionDispatch::IntegrationTest
 
   test "authority map lists nine independent RPs and three separate Base self RPs without retired clients" do
     assert_equal %w(base-app-ww base-com-ww base-org-ww), AuthBoundaryAuthorityMap.base_self_rp_client_ids
-    assert_equal %w(core-app core-com core-org warp-app warp-com warp-org edit-org palm-app tech-org),
+    assert_equal %w(
+      core-app-jp core-com-jp core-org-jp warp-app-jp warp-com-jp warp-org-jp edit-org-ww palm-app-jp tech-org-ww
+    ),
                  AuthBoundaryAuthorityMap.first_party_rp_client_ids - AuthBoundaryAuthorityMap.base_self_rp_client_ids
     assert_equal 12, AuthBoundaryAuthorityMap.first_party_rp_client_ids.size
     assert_predicate AuthBoundaryAuthorityMap, :unique_client_ids?

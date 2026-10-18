@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_sign_in_flows
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                    :bigint           not null, primary key
 #  completed_at          :datetime
@@ -41,7 +41,7 @@
 #  fk_rails_...  (state_id => client_sign_in_flow_states.id)
 #  fk_rails_...  (token_id => client_tokens.id) ON DELETE => cascade
 #
-class ClientSignInFlow < AppTicketRecord
+class ClientSignInFlow < OpBaseAppRecord
   include SignInFlow
   include FlowSignIn
   include LocalAuthenticationResultDelivery

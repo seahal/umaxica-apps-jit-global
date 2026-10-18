@@ -105,7 +105,6 @@ class BranchCoverageBatch40LinePushTest < ActiveSupport::TestCase
       "safe_pt_path" => "/home",
       "mfa_challenge_id" => "mfa-1",
       "session_limit_gate_id" => "gate-1",
-      "restricted_login_public_id" => "rl-1",
     )
 
     assert_equal "passkey", sequence.method
@@ -113,6 +112,5 @@ class BranchCoverageBatch40LinePushTest < ActiveSupport::TestCase
     assert_equal "/home", sequence.safe_pt_path
     assert_equal "mfa-1", sequence.mfa_challenge_id
     assert_equal "gate-1", sequence.session_limit_gate_id
-    assert_equal "rl-1", sequence.restricted_login_public_id
   end
 end

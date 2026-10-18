@@ -410,7 +410,7 @@ module OidcRpLogoutLauncher
     )
 
     transaction =
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         AcmeLogoutTransaction.find_by(public_id: challenge.to_s)
       end
     return :stale unless browser_rp_logout_transaction_reusable?(
@@ -464,16 +464,16 @@ module OidcRpLogoutLauncher
     resource_type = OidcIssuer.resource_type_for_client(client)
     case resource_type
     when "client"
-      AppTicketRecord.connected_to(role: :writing) do
-        ClientRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpAppGrant.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
       end
     when "visitor"
-      ComTicketRecord.connected_to(role: :writing) do
-        VisitorRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+      OpBaseComRecord.connected_to(role: :writing) do
+        OpComGrant.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
       end
     when "operator"
-      OrgTicketRecord.connected_to(role: :writing) do
-        OperatorRpSession.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
+      OpBaseOrgRecord.connected_to(role: :writing) do
+        OpOrgGrant.find_by(public_id: transaction.session_ref, oidc_client_id: client.client_id)
       end
     else
       raise ArgumentError, "unsupported Browser RP logout resource type"
@@ -585,27 +585,27 @@ module OidcRpLogoutLauncher
 
   def oidc_rp_logout_session_class_for(resource_type)
     case resource_type.to_s
-    when "operator" then OperatorRpSession
-    when "visitor" then VisitorRpSession
-    when "client" then ClientRpSession
+    when "operator" then OpOrgGrant
+    when "visitor" then OpComGrant
+    when "client" then OpAppGrant
     else raise ArgumentError, "unsupported RP Session resource type"
     end
   end
 
   def oidc_rp_logout_session_relation_for(resource_type)
     case resource_type.to_s
-    when "operator" then OperatorRpSession.includes(operator_device_session: :staff)
-    when "visitor" then VisitorRpSession.includes(visitor_device_session: :visitor)
-    when "client" then ClientRpSession.includes(client_device_session: :user)
+    when "operator" then OpOrgGrant.includes(operator_device_session: :staff)
+    when "visitor" then OpComGrant.includes(visitor_device_session: :visitor)
+    when "client" then OpAppGrant.includes(client_device_session: :user)
     else raise ArgumentError, "unsupported RP Session resource type"
     end
   end
 
   def oidc_rp_logout_connection_for(resource_type)
     case resource_type.to_s
-    when "operator" then OrgTicketRecord
-    when "visitor" then ComTicketRecord
-    else AppTicketRecord
+    when "operator" then OpBaseOrgRecord
+    when "visitor" then OpBaseComRecord
+    else OpBaseAppRecord
     end
   end
 
@@ -659,8 +659,8 @@ module OidcRpLogoutLauncher
 
   def oidc_rp_logout_resource_for(session_record)
     case session_record
-    when OperatorRpSession then session_record.staff
-    when VisitorRpSession then session_record.visitor
+    when OpOrgGrant then session_record.staff
+    when OpComGrant then session_record.visitor
     else session_record.user
     end
   end

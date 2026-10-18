@@ -13,7 +13,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
   def issue_transaction
     AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "sign",
-      initiating_client_id: "core-app",
+      initiating_client_id: "core-app-jp",
       completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
         origin_surface: "sign", ri: "jp", surface: "app",
       ),
@@ -44,7 +44,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
 
     result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "warp",
-      initiating_client_id: "warp-app",
+      initiating_client_id: "warp-app-jp",
       completion_url: completion_url,
       surface: "app",
       ri: "jp",
@@ -62,7 +62,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "warp",
       workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
-      initiating_client_id: "warp-app",
+      initiating_client_id: "warp-app-jp",
       completion_url: completion_url,
       actor_ref: "actor",
       session_ref: "rp-session",
@@ -91,7 +91,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "warp",
       workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
-      initiating_client_id: "warp-app",
+      initiating_client_id: "warp-app-jp",
       completion_url: completion_url,
       session_ref: "rp-session",
     )
@@ -109,13 +109,13 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     auth_result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "sign",
       workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
-      initiating_client_id: "core-app",
+      initiating_client_id: "core-app-jp",
       completion_url: completion_url,
     )
     palm_result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "palm",
       workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
-      initiating_client_id: "palm-app",
+      initiating_client_id: "palm-app-jp",
       completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
         origin_surface: "palm", ri: "jp", surface: "app",
       ),
@@ -126,7 +126,7 @@ class AcmeLogoutTransactionCoordinatorTest < ActiveSupport::TestCase
     tech_result = AcmeLogoutTransactionCoordinator.issue!(
       origin_surface: "tech",
       workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
-      initiating_client_id: "tech-org",
+      initiating_client_id: "tech-org-ww",
       completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
         origin_surface: "tech", ri: "jp", surface: "org",
       ),

@@ -11,8 +11,8 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
     @client = clients(:one)
     @params = {
       response_type: "code",
-      client_id: "core-app",
-      redirect_uri: OidcClientRegistry.find!("core-app").redirect_uris.first,
+      client_id: "core-app-jp",
+      redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
       code_challenge: "challenge",
       code_challenge_method: "S256",
       state: "state",
@@ -33,7 +33,8 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "same-browser exact OIDC initiation retry reuses its parent and fixed admission deadline in every realm" do
-    [%w(app core-app client), %w(com core-com visitor), %w(org core-org operator)].each do |surface, client_id, realm|
+    [%w(app core-app-jp client), %w(com core-com-jp visitor),
+     %w(org core-org-jp operator),].each do |surface, client_id, realm|
       parameters = @params.merge(
         client_id: client_id,
         redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,

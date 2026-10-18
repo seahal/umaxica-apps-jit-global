@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: client_sign_out_flows
-# Database name: app_ticket
+# Database name: op_base_app
 #
 #  id                      :bigint           not null, primary key
 #  access_discarded_at     :datetime
@@ -46,7 +46,7 @@
 #  fk_rails_...  (status_id => client_sign_out_flow_statuses.id)
 #  fk_rails_...  (token_id => client_tokens.id) ON DELETE => cascade
 #
-class ClientSignOutFlow < AppTicketRecord
+class ClientSignOutFlow < OpBaseAppRecord
   include SignOutFlow
   include FlowSignOut
 

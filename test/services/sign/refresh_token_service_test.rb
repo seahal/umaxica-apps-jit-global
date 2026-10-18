@@ -124,7 +124,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
     rotated = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
 
-    AppTicketRecord.connected_to(role: :reading, prevent_writes: true) do
+    OpBaseAppRecord.connected_to(role: :reading, prevent_writes: true) do
       reuse_result = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
 
       assert_not reuse_result.success?

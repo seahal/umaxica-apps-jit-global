@@ -41,7 +41,7 @@ class EmailCredentialRegistrationOtpFormQuery
     def source_current?(actor, token, email, device_session, now)
       actor.login_allowed? && actor.accessible?(actor.class.database_now) &&
         source_available?(email) &&
-        token.currently_usable?(now) && device_session.usable? &&
+        token.active_status?(now) && device_session.usable? &&
         device_session.current_refresh_token_id == token.id
     end
 

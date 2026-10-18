@@ -7,18 +7,18 @@ module AuthBoundaryAuthorityMap
   module_function
 
   FIRST_PARTY_RP_CLIENT_IDS = %w(
-    core-app
-    core-com
-    core-org
-    warp-app
-    warp-com
-    warp-org
-    edit-org
+    core-app-jp
+    core-com-jp
+    core-org-jp
+    warp-app-jp
+    warp-com-jp
+    warp-org-jp
+    edit-org-ww
     base-app-ww
     base-com-ww
     base-org-ww
-    palm-app
-    tech-org
+    palm-app-jp
+    tech-org-ww
   ).freeze
 
   BASE_SELF_RP_CLIENT_IDS = %w(base-app-ww base-com-ww base-org-ww).freeze
@@ -39,7 +39,7 @@ module AuthBoundaryAuthorityMap
     warp-org-us
   ).freeze
 
-  APPROVED_RP_CLIENT_IDS = (REGIONAL_RP_CLIENT_IDS + %w(edit-org palm-app tech-org)).freeze
+  APPROVED_RP_CLIENT_IDS = (REGIONAL_RP_CLIENT_IDS + %w(edit-org-ww palm-app-jp tech-org-ww)).freeze
 
   APPROVED_RP_FACES = {
     "core-app-jp" => { surface: "core", face: "app", region: "jp", actor: "client" },
@@ -54,9 +54,9 @@ module AuthBoundaryAuthorityMap
     "warp-com-us" => { surface: "warp", face: "com", region: "us", actor: "visitor" },
     "warp-org-jp" => { surface: "warp", face: "org", region: "jp", actor: "operator" },
     "warp-org-us" => { surface: "warp", face: "org", region: "us", actor: "operator" },
-    "edit-org" => { surface: "edit", face: "org", region: nil, actor: "operator" },
-    "palm-app" => { surface: "palm", face: "app", region: nil, actor: "client" },
-    "tech-org" => { surface: "tech", face: "org", region: nil, actor: "operator" },
+    "edit-org-ww" => { surface: "edit", face: "org", region: nil, actor: "operator" },
+    "palm-app-jp" => { surface: "palm", face: "app", region: nil, actor: "client" },
+    "tech-org-ww" => { surface: "tech", face: "org", region: nil, actor: "operator" },
   }.freeze
 
   DEPRECATED_SHARED_BROWSER_CLIENT_IDS = %w(
@@ -74,18 +74,18 @@ module AuthBoundaryAuthorityMap
   RETIRED_AUTH_BROWSER_PATHS = %w(/dashboard).freeze
 
   RP_FACES = {
-    "core-app" => { surface: "core", face: "app", actor: "client" },
-    "core-com" => { surface: "core", face: "com", actor: "visitor" },
-    "core-org" => { surface: "core", face: "org", actor: "operator" },
-    "warp-app" => { surface: "warp", face: "app", actor: "client" },
-    "warp-com" => { surface: "warp", face: "com", actor: "visitor" },
-    "warp-org" => { surface: "warp", face: "org", actor: "operator" },
-    "edit-org" => { surface: "edit", face: "org", actor: "operator" },
+    "core-app-jp" => { surface: "core", face: "app", actor: "client" },
+    "core-com-jp" => { surface: "core", face: "com", actor: "visitor" },
+    "core-org-jp" => { surface: "core", face: "org", actor: "operator" },
+    "warp-app-jp" => { surface: "warp", face: "app", actor: "client" },
+    "warp-com-jp" => { surface: "warp", face: "com", actor: "visitor" },
+    "warp-org-jp" => { surface: "warp", face: "org", actor: "operator" },
+    "edit-org-ww" => { surface: "edit", face: "org", actor: "operator" },
     "base-app-ww" => { surface: "base", face: "app", actor: "client" },
     "base-com-ww" => { surface: "base", face: "com", actor: "visitor" },
     "base-org-ww" => { surface: "base", face: "org", actor: "operator" },
-    "palm-app" => { surface: "palm", face: "app", actor: "client" },
-    "tech-org" => { surface: "tech", face: "org", actor: "operator" },
+    "palm-app-jp" => { surface: "palm", face: "app", actor: "client" },
+    "tech-org-ww" => { surface: "tech", face: "org", actor: "operator" },
   }.freeze
 
   CANONICAL_RP_CALLBACK_PATH = "/oidc/callback"

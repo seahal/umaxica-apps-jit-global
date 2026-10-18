@@ -1,8 +1,8 @@
 # Discoverable credentials for direct app and com Passkey sign-in
 
-* Status: Accepted
-* Date: 2026-09-20
-* Scope: UMAXICA app and com direct Passkey sign-in
+- Status: Accepted
+- Date: 2026-09-20
+- Scope: UMAXICA app and com direct Passkey sign-in
 
 ## Context
 
@@ -23,8 +23,8 @@ App and com direct Passkey sign-in uses a discoverable, usernameless ceremony:
 4. Verification resolves the surface-local Passkey row by assertion credential ID and verifies the
    assertion with the saved public key. The browser `userHandle`, submitted identifier, and client
    metadata are not identity authorities.
-5. Existing credential, actor, verified-PII, session-limit, restricted-session, UV, RP/origin,
-   sign-count, risk, and audit checks remain in the verification path.
+5. Existing credential, actor, verified-PII, session-limit, historical status-103 refusal, UV,
+   RP/origin, sign-count, risk, and audit checks remain in the verification path.
 6. App and com registration require `residentKey: "required"` and `userVerification: "required"`.
    Org registration retains its current resident-key policy.
 7. Existing non-discoverable app/com credentials are intentionally not migrated or accepted through

@@ -55,7 +55,7 @@ class ClientPasskeyPolicy < ApplicationPolicy
   def management_authorized?(token:, now:)
     requirement = management_requirement(token: token)
     device = ClientDeviceSession.find(token.device_session_id)
-    user.login_allowed? && !token.restricted? && token.currently_usable?(now) && device.usable? &&
+    user.login_allowed? && token.active_status?(now) && device.usable? &&
       device.current_refresh_token_id == token.id &&
       StepUpResolver.call(token: token, requirement: requirement, now: now).satisfied? &&
       current_management_credential?(token, now)

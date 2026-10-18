@@ -127,6 +127,19 @@ development:
     args:
       - batch_size: 200
     schedule: every 15 minutes
+  # R5-WU10: durable back-channel logout delivery. The OP outbox is the source of truth; this sweep
+  # leases due rows, so a lost enqueue or crashed worker never loses a logout intent.
+  op_outbox_dispatch:
+    class: OpOutboxDispatchJob
+    queue: default
+    priority: 10
+    schedule: every minute
+  # R5-WU06: applies committed identity stop events that have no OP receipt yet (crash/lost enqueue).
+  op_identity_event_sweep:
+    class: OpIdentityEventSweepJob
+    queue: default
+    priority: 10
+    schedule: every 5 minutes
 
 test: {}
 
@@ -255,3 +268,16 @@ production:
     args:
       - batch_size: 200
     schedule: every 15 minutes
+  # R5-WU10: durable back-channel logout delivery. The OP outbox is the source of truth; this sweep
+  # leases due rows, so a lost enqueue or crashed worker never loses a logout intent.
+  op_outbox_dispatch:
+    class: OpOutboxDispatchJob
+    queue: default
+    priority: 10
+    schedule: every minute
+  # R5-WU06: applies committed identity stop events that have no OP receipt yet (crash/lost enqueue).
+  op_identity_event_sweep:
+    class: OpIdentityEventSweepJob
+    queue: default
+    priority: 10
+    schedule: every 5 minutes

@@ -24,6 +24,7 @@ class OidcRefreshDeliveryReceiptTest < ActiveSupport::TestCase
       access_expires_at: now + 5.minutes,
       refresh_expires_at: now + 1.hour,
       token_response: response,
+      attempt_ref: "attempt-1",
     )
 
     receipt = OidcRefreshDeliveryReceipt.decrypt(ciphertext)
@@ -57,6 +58,7 @@ class OidcRefreshDeliveryReceiptTest < ActiveSupport::TestCase
         access_expires_at: 5.minutes.from_now,
         refresh_expires_at: 1.minute.from_now,
         token_response: { expires_in: 300, refresh_token_expires_in: 60 },
+        attempt_ref: "attempt-1",
       )
     end
   end

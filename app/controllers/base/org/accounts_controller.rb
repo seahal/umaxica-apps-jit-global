@@ -6,31 +6,30 @@ module Base
     class AccountsController < Base::Org::ApplicationController
       include ::SurfaceInertiaPage
 
+      include ::BaseMembershipRelay
+
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
 
+      MEMBERSHIP_SURFACE = "org"
+
+      public
+
+      # R5-WU15: listed and authorized by the owner over HTTPS.
       def index
-        authorize!(current_operator, to: :show?)
-        @accounts = switcher.available_accounts
+        result = membership_result!(membership_authority.accounts)
+        return unless result
+
+        @accounts = result.data.fetch("accounts")
         render inertia: true, props: { title: "Account", body: "account", up_link: dashboard_up_link }
       end
 
       def show
-        @account = find_account!
-        authorize!(@account, to: :show?, with: AccountPolicy)
+        result = membership_result!(membership_authority.account(params.expect(:id)))
+        return unless result
+
+        @account = result.data.fetch("account")
         render inertia: true, props: { title: "Account", body: "account" }
-      end
-
-      private
-
-      def find_account!
-        switcher.find_account(params.expect(:id)) || raise(ActiveRecord::RecordNotFound)
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :org, principal: current_operator, session: current_session,
-        )
       end
     end
   end

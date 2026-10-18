@@ -66,7 +66,7 @@ class ClientSecretLifecycleJob < ApplicationJob
   end
 
   def reconcile_completed_receipts!(batch_size, after_id, through_id)
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       now = ClientSignInFlow.database_now
       scope = ClientSecretSignInReceipt.joins(:sign_in_flow)
         .where(client_sign_in_flows: { expires_at: ..now })
@@ -95,7 +95,7 @@ class ClientSecretLifecycleJob < ApplicationJob
 
     rows = scope.where(id: (after_id + 1)..through_id).order(:id).limit(batch_size).to_a
     rows.each do |issuance|
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         flow = ClientSignUpFlow.find_by(public_id: issuance.sign_up_flow_ref, principal_id: issuance.client_id)
         if flow&.sign_up_completed?
           ClientSecretPasskeyReservationIssuer.complete_sign_up!(flow: flow)

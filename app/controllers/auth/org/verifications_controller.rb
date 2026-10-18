@@ -19,7 +19,7 @@ class Auth::Org::VerificationsController < ::Auth::Org::ApplicationController
 
   def ceremony_session_token(session_record) = OperatorToken.find(session_record.staff_token_id)
 
-  def ceremony_token_owned_by?(token, actor) = token.staff_id == actor.id && !token.emergency_authentication_context?
+  def ceremony_token_owned_by?(token, actor) = token.staff_id == actor.id && !token.standby_authentication_context?
 
   def authorize_step_up_ceremony_actor!(actor)
     authorize!(actor, to: :show?, context: { user: actor })

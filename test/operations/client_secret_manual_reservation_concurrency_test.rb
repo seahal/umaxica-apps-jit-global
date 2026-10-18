@@ -61,7 +61,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
                     subject: owner, actor_type: :client, tld: :app,
                     surface: :base,
                   )
-                  AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+                  OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                     issuance =
                       if paths[index] == :manual
                         ClientSecretManualReservationIssuer.call!(
@@ -192,7 +192,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
                     subject: owner, actor_type: :client, tld: :app,
                     surface: :base,
                   )
-                  AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+                  OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                     ClientSecretManualReservationIssuer.call!(
                       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
                     )
@@ -289,7 +289,7 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
                 release.pop
                 owner = Client.find(actor.id)
                 bound = ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base)
-                AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
+                OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do
                   if index.zero?
                     ClientSecretManualIssuanceInvalidator.call!(
                       actor_context: bound, token: token, issuance: old, purge_after: 1.day,

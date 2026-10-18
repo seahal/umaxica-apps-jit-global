@@ -95,6 +95,56 @@ scope(module: :base, as: :base) do
         namespace(:v0) do
           resource(:health, only: :show, path: "health.json", format: false)
           resource(:revision, only: :show, path: "revision.json", format: false)
+          # R5-WU15 account/organization/membership owner API for the app Base Self-RP.
+          # R5-WU12 account standing owner (Enforcement) for the Base Self-RP page /identity/standing.
+          get("identity/standing", to: "identity/standings#show", as: :identity_standing)
+          get("identity/selection", to: "identity/selections#show", as: :identity_selection)
+          scope(path: "membership/app", as: :membership) do
+            get("accounts", to: "membership/directory#accounts", as: :accounts)
+            get("accounts/:ref", to: "membership/directory#account", as: :account)
+            get("organizations", to: "membership/directory#organizations", as: :organizations)
+            get("organizations/:ref", to: "membership/directory#organization", as: :organization)
+            get("organizations/:organization_ref/memberships", to: "membership/directory#memberships", as: :memberships)
+            get(
+              "organizations/:organization_ref/memberships/:id", to: "membership/directory#membership",
+                                                                 as: :membership,
+            )
+            post(
+              "organizations/:organization_ref/memberships/authorization", to: "membership/directory#authorization",
+                                                                           as: :membership_authorization,
+            )
+          end
+          # R5-WU14 Avatar owner API for the app Base Self-RP (approved contract 2026-10-17).
+          scope(path: "avatar/app", as: :avatar) do
+            get("switcher", to: "avatar/switchers#show", as: :switcher)
+            put("switcher", to: "avatar/switchers#update")
+            get("dashboard-identity", to: "avatar/dashboard_identities#show", as: :dashboard_identity)
+            get("selected-image", to: "avatar/selected_images#show", as: :selected_image)
+            resources(:avatars, only: %i(index show create update), param: :avatar_ref, controller: "avatar/avatars")
+            post(
+              "avatars/:avatar_ref/:kind", to: "avatar/social_edges#create", as: :avatar_social_edge,
+                                           constraints: { kind: /follows|blocks|mutes/ },
+            )
+            delete(
+              "avatars/:avatar_ref/:kind", to: "avatar/social_edges#destroy",
+                                           constraints: { kind: /follows|blocks|mutes/ },
+            )
+            post("ownership-transfers", to: "avatar/avatar_ownership_transfers#create", as: :ownership_transfers)
+            post(
+              "ownership-transfers/:ref/accept", to: "avatar/avatar_ownership_transfers#accept",
+                                                 as: :accept_ownership_transfer,
+            )
+            post(
+              "ownership-transfers/:ref/cancel", to: "avatar/avatar_ownership_transfers#cancel",
+                                                 as: :cancel_ownership_transfer,
+            )
+            resources(:groups, only: %i(index show create update destroy), param: :ref, controller: "avatar/groups") do
+              resources(
+                :avatar_memberships, only: %i(create update destroy), param: :ref, path: "avatar-memberships",
+                                     controller: "avatar/group_avatar_memberships",
+              )
+            end
+          end
         end
       end
 
@@ -111,6 +161,8 @@ scope(module: :base, as: :base) do
 
       # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
+        # R5-WU16 OP logout completion bound to this browser's one-time receipt.
+        resource :bye, only: %i(show create), path: "bye", controller: :sign_byes, as: :sign_bye
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
         resource :out_completion, only: %i(show create), path: "out/completion",
@@ -124,13 +176,22 @@ scope(module: :base, as: :base) do
       namespace(:oauth) do
         resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
+        # R5-WU08 read-only recovery of an indeterminate Refresh (one.md section 6.4).
+        resource(
+          :refresh_delivery_query, only: :create, path: "refresh-deliveries/query",
+                                   controller: :refresh_delivery_queries,
+        )
         resource(:userinfo, only: %i(show create), controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
       end
 
       # OIDC AS end-session and the self-RP callback.
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource(:backchannel_logout, only: :create, path: "backchannel-logout")
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -169,6 +230,7 @@ scope(module: :base, as: :base) do
       namespace :sign do
         namespace :in do
           resource :limitation, only: %i(show update destroy), controller: :limitations
+          post "limitation", to: "limitations#update", as: :limitation_continue
         end
       end
 
@@ -301,6 +363,7 @@ scope(module: :base, as: :base) do
         resource :completion, only: %i(show create)
         namespace :in do
           resource :limitation, only: %i(show update destroy), controller: :limitations
+          post "limitation", to: "limitations#update", as: :limitation_continue
         end
       end
       get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
@@ -368,6 +431,31 @@ scope(module: :base, as: :base) do
         namespace(:v0) do
           resource(:health, only: :show, path: "health.json", format: false)
           resource(:revision, only: :show, path: "revision.json", format: false)
+          # R5-WU15 account/organization/membership owner API for the com Base Self-RP.
+          # R5-WU12 account standing owner (Enforcement) for the Base Self-RP page /identity/standing.
+          get("identity/standing", to: "identity/standings#show", as: :identity_standing)
+          get("identity/selection", to: "identity/selections#show", as: :identity_selection)
+          scope(path: "membership/com", as: :membership) do
+            get("accounts", to: "membership/directory#accounts", as: :accounts)
+            get("accounts/:ref", to: "membership/directory#account", as: :account)
+            get("organizations", to: "membership/directory#organizations", as: :organizations)
+            get("organizations/:ref", to: "membership/directory#organization", as: :organization)
+            get("organizations/:organization_ref/memberships", to: "membership/directory#memberships", as: :memberships)
+            get(
+              "organizations/:organization_ref/memberships/:id", to: "membership/directory#membership",
+                                                                 as: :membership,
+            )
+            post(
+              "organizations/:organization_ref/memberships/authorization", to: "membership/directory#authorization",
+                                                                           as: :membership_authorization,
+            )
+          end
+          # R5-WU14 context switcher for the com Base Self-RP (approved contract 2026-10-17).
+          scope(path: "avatar/com", as: :avatar) do
+            get("dashboard-identity", to: "avatar/dashboard_identities#show", as: :dashboard_identity)
+            get("switcher", to: "avatar/switchers#show", as: :switcher)
+            put("switcher", to: "avatar/switchers#update")
+          end
         end
       end
 
@@ -384,6 +472,8 @@ scope(module: :base, as: :base) do
 
       # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
+        # R5-WU16 OP logout completion bound to this browser's one-time receipt.
+        resource :bye, only: %i(show create), path: "bye", controller: :sign_byes, as: :sign_bye
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
         resource :out_completion, only: %i(show create), path: "out/completion",
@@ -397,13 +487,22 @@ scope(module: :base, as: :base) do
       namespace(:oauth) do
         resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
+        # R5-WU08 read-only recovery of an indeterminate Refresh (one.md section 6.4).
+        resource(
+          :refresh_delivery_query, only: :create, path: "refresh-deliveries/query",
+                                   controller: :refresh_delivery_queries,
+        )
         resource(:userinfo, only: %i(show create), controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
       end
 
       # OIDC AS end-session and the self-RP callback.
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource(:backchannel_logout, only: :create, path: "backchannel-logout")
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -515,6 +614,7 @@ scope(module: :base, as: :base) do
         resource :completion, only: %i(show create)
         namespace :in do
           resource :limitation, only: %i(show update destroy), controller: :limitations
+          post "limitation", to: "limitations#update", as: :limitation_continue
         end
       end
       get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
@@ -592,6 +692,91 @@ scope(module: :base, as: :base) do
         namespace(:v0) do
           resource(:health, only: :show, path: "health.json", format: false)
           resource(:revision, only: :show, path: "revision.json", format: false)
+          # R5-WU15 account/organization/membership owner API for the org Base Self-RP.
+          # R5-WU12 account standing owner (Enforcement) for the Base Self-RP page /identity/standing.
+          get("identity/standing", to: "identity/standings#show", as: :identity_standing)
+          get("identity/selection", to: "identity/selections#show", as: :identity_selection)
+          scope(path: "membership/org", as: :membership) do
+            get("accounts", to: "membership/directory#accounts", as: :accounts)
+            get("accounts/:ref", to: "membership/directory#account", as: :account)
+            get("organizations", to: "membership/directory#organizations", as: :organizations)
+            get("organizations/:ref", to: "membership/directory#organization", as: :organization)
+            get("organizations/:organization_ref/memberships", to: "membership/directory#memberships", as: :memberships)
+            get(
+              "organizations/:organization_ref/memberships/:id", to: "membership/directory#membership",
+                                                                 as: :membership,
+            )
+            post(
+              "organizations/:organization_ref/memberships/authorization", to: "membership/directory#authorization",
+                                                                           as: :membership_authorization,
+            )
+          end
+          # R5-WU14 Avatar owner API for the org Base Self-RP (approved contract 2026-10-17).
+          # R5-WU12 Support owner for app Client / com Visitor administration.
+          # R5-WU17 Support landing owner for the Base Self-RP page /support.
+          get("support", to: "support/areas#index", as: :support_areas)
+          scope(path: "support/:realm", as: :support, constraints: { realm: /app|com/ }) do
+            get("accounts", to: "support/accounts#index", as: :accounts)
+            get("accounts/:ref", to: "support/accounts#show", as: :account)
+            get("accounts/:ref/revocation-screen", to: "support/accounts#revocation_screen", as: :revocation_screen)
+            post("accounts/:ref/revocations", to: "support/accounts#revoke", as: :revocations)
+            get("accounts/:ref/revocations/:event_uuid", to: "support/accounts#revocation", as: :revocation)
+          end
+          # R5-WU12 Enforcement owner: same resource shape as the Base Self-RP pages it serves; the org
+          # realm stays routed so its policy can deny it exactly as before.
+          scope(path: "support/:realm", as: :support_enforcement, constraints: { realm: /app|com|org/ }) do
+            resources(:enforcement_cases, only: %i(index show new create), controller: "support/enforcement_cases") do
+              resource(:approval, only: %i(new create), controller: "support/enforcement_cases/approvals")
+              resource(:release, only: %i(new create), controller: "support/enforcement_cases/releases")
+              resource(:appeal_review, only: %i(new create), controller: "support/enforcement_cases/appeal_reviews")
+            end
+          end
+          # R5-WU12 IAM capability grants owner for the org Base Self-RP.
+          scope(path: "iam", as: :iam) do
+            get("grants", to: "iam/grants#index", as: :grants)
+            get("grant-screen", to: "iam/grants#screen", as: :grant_screen)
+            post("grants", to: "iam/grants#create")
+            get("grants/:ref", to: "iam/grants#show", as: :grant)
+            post("grants/:ref/revocation", to: "iam/grants#revoke", as: :grant_revocation)
+          end
+          scope(path: "avatar/org", as: :avatar) do
+            get("dashboard-identity", to: "avatar/dashboard_identities#show", as: :dashboard_identity)
+            get("switcher", to: "avatar/switchers#show", as: :switcher)
+            put("switcher", to: "avatar/switchers#update")
+            get("selected-avatar", to: "avatar/selected_avatars#show", as: :selected_avatar)
+            patch("selected-avatar", to: "avatar/selected_avatars#update")
+            delete("selected-avatar", to: "avatar/selected_avatars#destroy")
+            get("selected-image", to: "avatar/selected_images#show", as: :selected_image)
+            post("ownership-transfers", to: "avatar/avatar_ownership_transfers#create", as: :ownership_transfers)
+            post(
+              "ownership-transfers/:ref/accept", to: "avatar/avatar_ownership_transfers#accept",
+                                                 as: :accept_ownership_transfer,
+            )
+            post(
+              "ownership-transfers/:ref/cancel", to: "avatar/avatar_ownership_transfers#cancel",
+                                                 as: :cancel_ownership_transfer,
+            )
+          end
+          # R5-WU11 org-authority Tech capability decision for the tech-org-ww RP (server-to-server).
+          resource(
+            :tech_capability_check, only: :create, path: "tech-capability-checks",
+                                    controller: :tech_capability_checks,
+          )
+          # R5-WU13 Publishing authority for the Edit RP; fixed cells, scoped public references.
+          scope(
+            path: "publishing/:surface/:audience", as: :publishing,
+            constraints: { surface: /docs|help|info|news/, audience: /app|com|org/ },
+          ) do
+            resources(
+              :entries, only: %i(index show create update), param: :entry_ref,
+                        controller: "publishing/entries",
+            ) do
+              resources(
+                :publications, only: %i(create destroy), param: :publication_ref, controller: "publishing/publications",
+              )
+              resource(:archive, only: %i(create destroy), controller: "publishing/archives")
+            end
+          end
         end
       end
 
@@ -650,6 +835,8 @@ scope(module: :base, as: :base) do
 
       # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
+        # R5-WU16 OP logout completion bound to this browser's one-time receipt.
+        resource :bye, only: %i(show create), path: "bye", controller: :sign_byes, as: :sign_bye
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
         resource :out_completion, only: %i(show create), path: "out/completion",
@@ -663,13 +850,22 @@ scope(module: :base, as: :base) do
       namespace(:oauth) do
         resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
         resource(:token, only: :create, controller: :tokens)
+        # R5-WU08 read-only recovery of an indeterminate Refresh (one.md section 6.4).
+        resource(
+          :refresh_delivery_query, only: :create, path: "refresh-deliveries/query",
+                                   controller: :refresh_delivery_queries,
+        )
         resource(:userinfo, only: %i(show create), controller: :userinfos)
         resource(:revocation, only: :create, path: "revoke", controller: :revocations)
       end
 
       # OIDC AS end-session and the self-RP callback.
+      # R5-WU16 matching-session RP cookie purge after OP logout.
+      post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
+        # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
+        resource(:backchannel_logout, only: :create, path: "backchannel-logout")
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 

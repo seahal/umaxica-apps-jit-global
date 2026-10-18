@@ -24,7 +24,6 @@ module Auth
       include ::VerificationVisitor
       include ActionPolicy::Controller
       include ::AuthCeremonyContext
-      include ::RestrictedSessionGuard
       include SignComRouteAliasHelper
       include ::ActorSupport
       include ::Finisher
@@ -50,7 +49,7 @@ module Auth
       rescue_from ApplicationError, with: :handle_application_error
       rescue_from ActionController::InvalidCrossOriginRequest, with: :handle_csrf_failure
       rescue_from ActionPolicy::Unauthorized, with: :handle_authorization_error
-      helper_method :current_actor, :current_account, :current_session_public_id, :current_session_restricted?,
+      helper_method :current_actor, :current_account, :current_session_public_id,
                     :signed_pt_param, :current_visitor, :logged_in?, :active_visitor?, :logged_in_visitor?,
                     :current_region_identifier
       helper_method :acme_authority_host, :base_authority_host
@@ -81,7 +80,6 @@ module Auth
       before_action :set_timezone
       before_action :set_color_theme
       before_action :enforce_withdrawal_gate!
-      before_action :enforce_restricted_session_guard!
       before_action :enforce_sign_in_selector_gate!
       before_action :enforce_verification_if_required
       before_action :enforce_access_policy!

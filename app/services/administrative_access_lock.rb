@@ -41,9 +41,11 @@ class AdministrativeAccessLock < ApplicationService
         admin_locked_reason_note: reason_note,
         token_valid_after_at: now,
       )
+      @stop_event = IdentityAuthenticationStopRecorder.call(actor: account, reason: "administrative_access_lock")
     end
 
-    revoke_sessions!
+    # Zenith committed the stop; the OP now revokes the authority issued before it (one.md 7.5).
+    OpIdentityEventInvalidator.deliver(event: @stop_event)
     create_event!(
       event_type: lock_event_type(previous_state),
       previous_state: previous_state,
@@ -101,10 +103,6 @@ class AdministrativeAccessLock < ApplicationService
     end
 
     AccountAccessEvent::EVENT_TYPE_ADMIN_LOCK
-  end
-
-  def revoke_sessions!
-    AuthenticationLogoutAllSessions.call(resource: account, reason: "administrative_access_lock")
   end
 
   def create_event!(event_type:, previous_state:, next_state:, occurred_at:)

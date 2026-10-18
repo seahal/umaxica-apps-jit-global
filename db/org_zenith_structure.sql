@@ -72,7 +72,7 @@ CREATE FUNCTION public.check_staff_identity_telephones_limit() RETURNS trigger
 CREATE FUNCTION public.enforce_operator_rotation_audit() RETURNS trigger
     LANGUAGE plpgsql
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_c788995d3604' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_c788995d3604' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
+    AS $$ BEGIN IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'identifier rotation audit is append-only'; END IF; IF NOT ((current_user = 'umaxica_org_email_hmac_definer_6dc846a24801' AND NEW.channel = 'email') OR (current_user = 'umaxica_org_telephone_hmac_definer_6dc846a24801' AND NEW.channel = 'telephone')) THEN RAISE EXCEPTION 'identifier rotation audit requires its domain function'; END IF; RETURN NEW; END; $$;
 
 
 --
@@ -91,7 +91,7 @@ CREATE FUNCTION public.prevent_operator_telephone_public_id_mutation() RETURNS t
 CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_c788995d3604' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_email_hmac_definer_6dc846a24801' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT address_digest INTO prior_digest FROM public.operator_emails WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_emails SET address_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'email', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 --
@@ -101,7 +101,7 @@ CREATE FUNCTION public.rotate_operator_emails_hmac(p_record_id bigint, p_new_dig
 CREATE FUNCTION public.rotate_operator_telephones_hmac(p_record_id bigint, p_new_digest text, p_expected_digest text, p_operation_ref uuid) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'pg_temp'
-    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_c788995d3604' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
+    AS $_$ DECLARE prior_digest text; BEGIN IF current_user <> 'umaxica_org_telephone_hmac_definer_6dc846a24801' THEN RAISE EXCEPTION 'identifier rotation function owner is invalid'; END IF; IF p_record_id IS NULL OR p_record_id <= 0 OR p_operation_ref IS NULL OR p_new_digest IS NULL OR p_new_digest !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid identifier rotation arguments'; END IF; SELECT number_digest INTO prior_digest FROM public.operator_telephones WHERE id = p_record_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'identifier rotation source is unavailable'; END IF; IF prior_digest IS DISTINCT FROM p_expected_digest THEN RAISE EXCEPTION 'identifier rotation source changed' USING ERRCODE = '40001'; END IF; IF prior_digest IS NOT DISTINCT FROM p_new_digest THEN RETURN FALSE; END IF; UPDATE public.operator_telephones SET number_digest = p_new_digest WHERE id = p_record_id; INSERT INTO public.operator_identifier_rotation_audits(operation_ref, channel, record_id, actor_role, occurred_at) VALUES (p_operation_ref, 'telephone', p_record_id, session_user, clock_timestamp()); RETURN TRUE; END; $_$;
 
 
 SET default_tablespace = '';
@@ -411,10 +411,10 @@ CREATE TABLE public.agent_ownership_transfer_requests (
     id bigint NOT NULL,
     agent_id bigint NOT NULL,
     source_operator_id bigint NOT NULL,
-    destination_operator_id bigint NOT NULL,
+    destination_operator_id bigint CONSTRAINT agent_ownership_transfer_reque_destination_operator_id_not_null NOT NULL,
     public_id character varying NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
-    expected_ownership_revision integer NOT NULL,
+    expected_ownership_revision integer CONSTRAINT agent_ownership_transfer_re_expected_ownership_revisio_not_null NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
     expires_at timestamp(6) with time zone NOT NULL,
     accepted_at timestamp(6) with time zone,
@@ -735,10 +735,10 @@ CREATE TABLE public.bureau_ownership_transfer_requests (
     id bigint NOT NULL,
     bureau_id bigint NOT NULL,
     source_operator_id bigint NOT NULL,
-    destination_operator_id bigint NOT NULL,
+    destination_operator_id bigint CONSTRAINT bureau_ownership_transfer_requ_destination_operator_id_not_null NOT NULL,
     public_id character varying NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
-    expected_ownership_revision integer NOT NULL,
+    expected_ownership_revision integer CONSTRAINT bureau_ownership_transfer_r_expected_ownership_revisio_not_null NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
     expires_at timestamp(6) with time zone NOT NULL,
     accepted_at timestamp(6) with time zone,
@@ -1107,19 +1107,58 @@ ALTER SEQUENCE public.divisions_id_seq OWNED BY public.divisions.id;
 
 
 --
+-- Name: identity_authentication_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.identity_authentication_events (
+    id bigint NOT NULL,
+    event_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    actor_ref character varying NOT NULL,
+    realm character varying(3) NOT NULL,
+    cutoff_epoch bigint NOT NULL,
+    reason character varying(64) NOT NULL,
+    scope character varying(64) NOT NULL,
+    committed_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_org_identity_authentication_events_epoch_nonnegative CHECK ((cutoff_epoch >= 0)),
+    CONSTRAINT chk_org_identity_authentication_events_realm CHECK (((realm)::text = 'org'::text))
+);
+
+
+--
+-- Name: identity_authentication_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.identity_authentication_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: identity_authentication_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.identity_authentication_events_id_seq OWNED BY public.identity_authentication_events.id;
+
+
+--
 -- Name: legacy_operator_department_accounts; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.legacy_operator_department_accounts (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
+    id bigint CONSTRAINT operators_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT operators_staff_id_not_null NOT NULL,
     department_id bigint,
-    public_id character varying NOT NULL,
+    public_id character varying CONSTRAINT operators_public_id_not_null NOT NULL,
     moniker character varying,
-    lock_version integer DEFAULT 0 NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL
+    lock_version integer DEFAULT 0 CONSTRAINT operators_lock_version_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT operators_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT operators_updated_at_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT operators_status_id_not_null NOT NULL
 );
 
 
@@ -1147,11 +1186,11 @@ ALTER SEQUENCE public.legacy_operator_department_accounts_id_seq OWNED BY public
 --
 
 CREATE TABLE public.operator_accounts (
-    id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
-    staff_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT staff_accounts_id_not_null NOT NULL,
+    public_id character varying DEFAULT ''::character varying CONSTRAINT staff_accounts_public_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_accounts_staff_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_accounts_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_accounts_updated_at_not_null NOT NULL,
     CONSTRAINT operator_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
@@ -1211,15 +1250,15 @@ ALTER SEQUENCE public.operator_authority_locks_id_seq OWNED BY public.operator_a
 --
 
 CREATE TABLE public.operator_banners (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
-    title character varying DEFAULT ''::character varying NOT NULL,
-    body text NOT NULL,
-    published boolean DEFAULT false NOT NULL,
-    starts_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    ends_at timestamp(6) with time zone DEFAULT '9999-12-31 23:59:59+00'::timestamp with time zone NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    id bigint CONSTRAINT staff_banners_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_banners_staff_id_not_null NOT NULL,
+    title character varying DEFAULT ''::character varying CONSTRAINT staff_banners_title_not_null NOT NULL,
+    body text CONSTRAINT staff_banners_body_not_null NOT NULL,
+    published boolean DEFAULT false CONSTRAINT staff_banners_published_not_null NOT NULL,
+    starts_at timestamp(6) with time zone DEFAULT CURRENT_TIMESTAMP CONSTRAINT staff_banners_starts_at_not_null NOT NULL,
+    ends_at timestamp(6) with time zone DEFAULT '9999-12-31 23:59:59+00'::timestamp with time zone CONSTRAINT staff_banners_ends_at_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_banners_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_banners_updated_at_not_null NOT NULL,
     CONSTRAINT staff_banners_ends_at_after_starts_at CHECK ((ends_at > starts_at))
 );
 
@@ -1248,14 +1287,14 @@ ALTER SEQUENCE public.operator_banners_id_seq OWNED BY public.operator_banners.i
 --
 
 CREATE TABLE public.operator_bulletins (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
-    public_id character varying(21) NOT NULL,
-    title character varying NOT NULL,
+    id bigint CONSTRAINT staff_bulletins_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_bulletins_staff_id_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT staff_bulletins_public_id_not_null NOT NULL,
+    title character varying CONSTRAINT staff_bulletins_title_not_null NOT NULL,
     body text,
     read_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    created_at timestamp(6) with time zone CONSTRAINT staff_bulletins_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_bulletins_updated_at_not_null NOT NULL
 );
 
 
@@ -1365,7 +1404,7 @@ ALTER SEQUENCE public.operator_email_histories_id_seq OWNED BY public.operator_e
 --
 
 CREATE TABLE public.operator_email_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_email_statuses_id_not_null NOT NULL
 );
 
 
@@ -1393,20 +1432,20 @@ ALTER SEQUENCE public.operator_email_statuses_id_seq OWNED BY public.operator_em
 --
 
 CREATE TABLE public.operator_emails (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
-    address character varying NOT NULL,
+    id bigint CONSTRAINT staff_emails_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_emails_staff_id_not_null NOT NULL,
+    address character varying CONSTRAINT staff_emails_address_not_null NOT NULL,
     otp_last_sent_at timestamp(6) with time zone,
-    otp_attempts_count integer DEFAULT 0 NOT NULL,
+    otp_attempts_count integer DEFAULT 0 CONSTRAINT staff_emails_otp_attempts_count_not_null NOT NULL,
     locked_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    staff_identity_email_status_id bigint DEFAULT 0 NOT NULL,
-    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
-    undeletable boolean DEFAULT false NOT NULL,
-    promotional boolean DEFAULT true NOT NULL,
-    notifiable boolean DEFAULT true NOT NULL,
-    subscribable boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_emails_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_emails_updated_at_not_null NOT NULL,
+    staff_identity_email_status_id bigint DEFAULT 0 CONSTRAINT staff_emails_staff_identity_email_status_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT staff_emails_public_id_not_null NOT NULL,
+    undeletable boolean DEFAULT false CONSTRAINT staff_emails_undeletable_not_null NOT NULL,
+    promotional boolean DEFAULT true CONSTRAINT staff_emails_promotional_not_null NOT NULL,
+    notifiable boolean DEFAULT true CONSTRAINT staff_emails_notifiable_not_null NOT NULL,
+    subscribable boolean DEFAULT true CONSTRAINT staff_emails_subscribable_not_null NOT NULL,
     address_digest character varying
 );
 
@@ -1502,17 +1541,17 @@ ALTER SEQUENCE public.operator_entra_identity_states_id_seq OWNED BY public.oper
 --
 
 CREATE TABLE public.operator_google_identities (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
-    provider character varying DEFAULT 'google_org'::character varying NOT NULL,
-    uid character varying DEFAULT ''::character varying NOT NULL,
-    token character varying DEFAULT ''::character varying NOT NULL,
-    refresh_token character varying DEFAULT ''::character varying NOT NULL,
-    token_expires_at integer NOT NULL,
-    status_id bigint DEFAULT 1 NOT NULL,
+    id bigint CONSTRAINT operator_social_googles_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT operator_social_googles_staff_id_not_null NOT NULL,
+    provider character varying DEFAULT 'google_org'::character varying CONSTRAINT operator_social_googles_provider_not_null NOT NULL,
+    uid character varying DEFAULT ''::character varying CONSTRAINT operator_social_googles_uid_not_null NOT NULL,
+    token character varying DEFAULT ''::character varying CONSTRAINT operator_social_googles_token_not_null NOT NULL,
+    refresh_token character varying DEFAULT ''::character varying CONSTRAINT operator_social_googles_refresh_token_not_null NOT NULL,
+    token_expires_at integer CONSTRAINT operator_social_googles_token_expires_at_not_null NOT NULL,
+    status_id bigint DEFAULT 1 CONSTRAINT operator_social_googles_status_id_not_null NOT NULL,
     last_authenticated_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    created_at timestamp(6) with time zone CONSTRAINT operator_social_googles_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT operator_social_googles_updated_at_not_null NOT NULL
 );
 
 
@@ -1540,7 +1579,7 @@ ALTER SEQUENCE public.operator_google_identities_id_seq OWNED BY public.operator
 --
 
 CREATE TABLE public.operator_google_identity_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT operator_social_google_statuses_id_not_null NOT NULL
 );
 
 
@@ -1603,17 +1642,17 @@ ALTER SEQUENCE public.operator_identifier_rotation_audits_id_seq OWNED BY public
 --
 
 CREATE TABLE public.operator_identities (
-    id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
-    issuer character varying NOT NULL,
-    subject character varying NOT NULL,
-    audience character varying NOT NULL,
-    source_record_id bigint NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL,
+    id bigint CONSTRAINT staff_personnels_id_not_null NOT NULL,
+    public_id character varying DEFAULT ''::character varying CONSTRAINT staff_personnels_public_id_not_null NOT NULL,
+    issuer character varying CONSTRAINT staff_personnels_issuer_not_null NOT NULL,
+    subject character varying CONSTRAINT staff_personnels_subject_not_null NOT NULL,
+    audience character varying CONSTRAINT staff_personnels_audience_not_null NOT NULL,
+    source_record_id bigint CONSTRAINT staff_personnels_source_record_id_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT staff_personnels_status_id_not_null NOT NULL,
     last_authenticated_at timestamp(6) with time zone,
-    lock_version integer DEFAULT 0 NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    lock_version integer DEFAULT 0 CONSTRAINT staff_personnels_lock_version_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_personnels_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_personnels_updated_at_not_null NOT NULL,
     CONSTRAINT operator_identities_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
 
@@ -1642,7 +1681,7 @@ ALTER SEQUENCE public.operator_identities_id_seq OWNED BY public.operator_identi
 --
 
 CREATE TABLE public.operator_identity_states (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_personnel_statuses_id_not_null NOT NULL
 );
 
 
@@ -1718,7 +1757,7 @@ ALTER SEQUENCE public.operator_lifecycle_requests_id_seq OWNED BY public.operato
 --
 
 CREATE TABLE public.operator_mfa_levels (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_multi_factors_id_not_null NOT NULL
 );
 
 
@@ -1746,7 +1785,7 @@ ALTER SEQUENCE public.operator_mfa_levels_id_seq OWNED BY public.operator_mfa_le
 --
 
 CREATE TABLE public.operator_mfa_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_multi_factor_statuses_id_not_null NOT NULL
 );
 
 
@@ -1808,7 +1847,7 @@ ALTER SEQUENCE public.operator_oidc_identity_bindings_id_seq OWNED BY public.ope
 --
 
 CREATE TABLE public.operator_passkey_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_passkey_statuses_id_not_null NOT NULL
 );
 
 
@@ -1836,16 +1875,16 @@ ALTER SEQUENCE public.operator_passkey_statuses_id_seq OWNED BY public.operator_
 --
 
 CREATE TABLE public.operator_passkeys (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
-    external_id uuid NOT NULL,
-    public_key text NOT NULL,
-    sign_count bigint DEFAULT 0 NOT NULL,
-    description character varying DEFAULT ''::character varying NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    status_id bigint DEFAULT 0 NOT NULL,
-    webauthn_id character varying DEFAULT ''::character varying NOT NULL,
+    id bigint CONSTRAINT staff_passkeys_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_passkeys_staff_id_not_null NOT NULL,
+    external_id uuid CONSTRAINT staff_passkeys_external_id_not_null NOT NULL,
+    public_key text CONSTRAINT staff_passkeys_public_key_not_null NOT NULL,
+    sign_count bigint DEFAULT 0 CONSTRAINT staff_passkeys_sign_count_not_null NOT NULL,
+    description character varying DEFAULT ''::character varying CONSTRAINT staff_passkeys_name_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_passkeys_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_passkeys_updated_at_not_null NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT staff_passkeys_staff_passkey_status_id_not_null NOT NULL,
+    webauthn_id character varying DEFAULT ''::character varying CONSTRAINT staff_passkeys_webauthn_id_not_null NOT NULL,
     last_used_at timestamp(6) with time zone,
     aaguid uuid,
     transports jsonb,
@@ -1882,7 +1921,7 @@ ALTER SEQUENCE public.operator_passkeys_id_seq OWNED BY public.operator_passkeys
 --
 
 CREATE TABLE public.operator_preference_adult_content_gate_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT operator_preference_r18_display_stopper_options_id_not_null NOT NULL
 );
 
 
@@ -1910,11 +1949,11 @@ ALTER SEQUENCE public.operator_preference_adult_content_gate_options_id_seq OWNE
 --
 
 CREATE TABLE public.operator_preference_adult_content_gates (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT operator_preference_r18_display_stoppers_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT operator_preference_r18_display_stoppers_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT operator_preference_r18_display_stoppers_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT operator_preference_r18_display_stoppers_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT operator_preference_r18_display_stoppers_updated_at_not_null NOT NULL
 );
 
 
@@ -1942,11 +1981,11 @@ ALTER SEQUENCE public.operator_preference_adult_content_gates_id_seq OWNED BY pu
 --
 
 CREATE TABLE public.operator_preference_currencies (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_currencies_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_currencies_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_currencies_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_currencies_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_currencies_updated_at_not_null NOT NULL
 );
 
 
@@ -1974,7 +2013,7 @@ ALTER SEQUENCE public.operator_preference_currencies_id_seq OWNED BY public.oper
 --
 
 CREATE TABLE public.operator_preference_currency_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_currency_options_id_not_null NOT NULL
 );
 
 
@@ -2002,7 +2041,7 @@ ALTER SEQUENCE public.operator_preference_currency_options_id_seq OWNED BY publi
 --
 
 CREATE TABLE public.operator_preference_date_format_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_date_format_options_id_not_null NOT NULL
 );
 
 
@@ -2030,11 +2069,11 @@ ALTER SEQUENCE public.operator_preference_date_format_options_id_seq OWNED BY pu
 --
 
 CREATE TABLE public.operator_preference_date_formats (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_date_formats_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_date_formats_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_date_formats_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_date_formats_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_date_formats_updated_at_not_null NOT NULL
 );
 
 
@@ -2062,11 +2101,11 @@ ALTER SEQUENCE public.operator_preference_date_formats_id_seq OWNED BY public.op
 --
 
 CREATE TABLE public.operator_preference_densities (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_densities_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_densities_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_densities_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_densities_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_densities_updated_at_not_null NOT NULL
 );
 
 
@@ -2094,7 +2133,7 @@ ALTER SEQUENCE public.operator_preference_densities_id_seq OWNED BY public.opera
 --
 
 CREATE TABLE public.operator_preference_density_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_density_options_id_not_null NOT NULL
 );
 
 
@@ -2122,7 +2161,7 @@ ALTER SEQUENCE public.operator_preference_density_options_id_seq OWNED BY public
 --
 
 CREATE TABLE public.operator_preference_language_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_language_options_id_not_null NOT NULL
 );
 
 
@@ -2150,11 +2189,11 @@ ALTER SEQUENCE public.operator_preference_language_options_id_seq OWNED BY publi
 --
 
 CREATE TABLE public.operator_preference_languages (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_languages_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_languages_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_languages_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_languages_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_languages_updated_at_not_null NOT NULL
 );
 
 
@@ -2182,7 +2221,7 @@ ALTER SEQUENCE public.operator_preference_languages_id_seq OWNED BY public.opera
 --
 
 CREATE TABLE public.operator_preference_motion_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_motion_options_id_not_null NOT NULL
 );
 
 
@@ -2210,11 +2249,11 @@ ALTER SEQUENCE public.operator_preference_motion_options_id_seq OWNED BY public.
 --
 
 CREATE TABLE public.operator_preference_motions (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_motions_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_motions_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_motions_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_motions_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_motions_updated_at_not_null NOT NULL
 );
 
 
@@ -2242,7 +2281,7 @@ ALTER SEQUENCE public.operator_preference_motions_id_seq OWNED BY public.operato
 --
 
 CREATE TABLE public.operator_preference_page_size_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_items_per_page_options_id_not_null NOT NULL
 );
 
 
@@ -2270,11 +2309,11 @@ ALTER SEQUENCE public.operator_preference_page_size_options_id_seq OWNED BY publ
 --
 
 CREATE TABLE public.operator_preference_page_sizes (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_items_per_pages_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_items_per_pages_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_items_per_pages_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_items_per_pages_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_items_per_pages_updated_at_not_null NOT NULL
 );
 
 
@@ -2302,7 +2341,7 @@ ALTER SEQUENCE public.operator_preference_page_sizes_id_seq OWNED BY public.oper
 --
 
 CREATE TABLE public.operator_preference_region_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_region_options_id_not_null NOT NULL
 );
 
 
@@ -2330,11 +2369,11 @@ ALTER SEQUENCE public.operator_preference_region_options_id_seq OWNED BY public.
 --
 
 CREATE TABLE public.operator_preference_regions (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_regions_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_regions_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_regions_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_regions_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_regions_updated_at_not_null NOT NULL
 );
 
 
@@ -2362,7 +2401,7 @@ ALTER SEQUENCE public.operator_preference_regions_id_seq OWNED BY public.operato
 --
 
 CREATE TABLE public.operator_preference_theme_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_colortheme_options_id_not_null NOT NULL
 );
 
 
@@ -2390,11 +2429,11 @@ ALTER SEQUENCE public.operator_preference_theme_options_id_seq OWNED BY public.o
 --
 
 CREATE TABLE public.operator_preference_themes (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_colorthemes_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_colorthemes_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_colorthemes_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_colorthemes_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_colorthemes_updated_at_not_null NOT NULL
 );
 
 
@@ -2422,7 +2461,7 @@ ALTER SEQUENCE public.operator_preference_themes_id_seq OWNED BY public.operator
 --
 
 CREATE TABLE public.operator_preference_time_format_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_time_format_options_id_not_null NOT NULL
 );
 
 
@@ -2450,11 +2489,11 @@ ALTER SEQUENCE public.operator_preference_time_format_options_id_seq OWNED BY pu
 --
 
 CREATE TABLE public.operator_preference_time_formats (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_time_formats_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_time_formats_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_time_formats_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_time_formats_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_time_formats_updated_at_not_null NOT NULL
 );
 
 
@@ -2482,7 +2521,7 @@ ALTER SEQUENCE public.operator_preference_time_formats_id_seq OWNED BY public.op
 --
 
 CREATE TABLE public.operator_preference_timezone_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_preference_timezone_options_id_not_null NOT NULL
 );
 
 
@@ -2510,11 +2549,11 @@ ALTER SEQUENCE public.operator_preference_timezone_options_id_seq OWNED BY publi
 --
 
 CREATE TABLE public.operator_preference_timezones (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT staff_preference_timezones_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT staff_preference_timezones_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT staff_preference_timezones_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preference_timezones_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preference_timezones_updated_at_not_null NOT NULL
 );
 
 
@@ -2542,27 +2581,27 @@ ALTER SEQUENCE public.operator_preference_timezones_id_seq OWNED BY public.opera
 --
 
 CREATE TABLE public.operator_preferences (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
-    consented boolean DEFAULT false NOT NULL,
-    functional boolean DEFAULT false NOT NULL,
-    performant boolean DEFAULT false NOT NULL,
-    targetable boolean DEFAULT false NOT NULL,
+    id bigint CONSTRAINT staff_preferences_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_preferences_staff_id_not_null NOT NULL,
+    consented boolean DEFAULT false CONSTRAINT staff_preferences_consented_not_null NOT NULL,
+    functional boolean DEFAULT false CONSTRAINT staff_preferences_functional_not_null NOT NULL,
+    performant boolean DEFAULT false CONSTRAINT staff_preferences_performant_not_null NOT NULL,
+    targetable boolean DEFAULT false CONSTRAINT staff_preferences_targetable_not_null NOT NULL,
     consented_at timestamp(6) with time zone,
     consent_version uuid,
-    language character varying DEFAULT 'ja'::character varying NOT NULL,
-    region character varying DEFAULT 'jp'::character varying NOT NULL,
-    timezone character varying DEFAULT 'Asia/Tokyo'::character varying NOT NULL,
-    theme character varying DEFAULT 'sy'::character varying NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    public_id character varying(21) NOT NULL,
-    currency character varying DEFAULT 'jpy'::character varying NOT NULL,
-    date_format character varying DEFAULT 'iso'::character varying NOT NULL,
-    time_format character varying DEFAULT '24'::character varying NOT NULL,
-    motion character varying DEFAULT 'standard'::character varying NOT NULL,
-    density character varying DEFAULT 'standard'::character varying NOT NULL,
-    page_size character varying DEFAULT 'infinity'::character varying NOT NULL,
+    language character varying DEFAULT 'ja'::character varying CONSTRAINT staff_preferences_language_not_null NOT NULL,
+    region character varying DEFAULT 'jp'::character varying CONSTRAINT staff_preferences_region_not_null NOT NULL,
+    timezone character varying DEFAULT 'Asia/Tokyo'::character varying CONSTRAINT staff_preferences_timezone_not_null NOT NULL,
+    theme character varying DEFAULT 'sy'::character varying CONSTRAINT staff_preferences_theme_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_preferences_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_preferences_updated_at_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT operator_preferences_public_id_not_null1 NOT NULL,
+    currency character varying DEFAULT 'jpy'::character varying CONSTRAINT staff_preferences_currency_not_null NOT NULL,
+    date_format character varying DEFAULT 'iso'::character varying CONSTRAINT staff_preferences_date_format_not_null NOT NULL,
+    time_format character varying DEFAULT '24'::character varying CONSTRAINT staff_preferences_time_format_not_null NOT NULL,
+    motion character varying DEFAULT 'standard'::character varying CONSTRAINT staff_preferences_motion_not_null NOT NULL,
+    density character varying DEFAULT 'standard'::character varying CONSTRAINT staff_preferences_density_not_null NOT NULL,
+    page_size character varying DEFAULT 'infinity'::character varying CONSTRAINT staff_preferences_items_per_page_not_null NOT NULL,
     explicit_fields jsonb DEFAULT '[]'::jsonb
 );
 
@@ -2591,7 +2630,7 @@ ALTER SEQUENCE public.operator_preferences_id_seq OWNED BY public.operator_prefe
 --
 
 CREATE TABLE public.operator_secret_credential_kinds (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_secret_kinds_id_not_null NOT NULL
 );
 
 
@@ -2619,7 +2658,7 @@ ALTER SEQUENCE public.operator_secret_credential_kinds_id_seq OWNED BY public.op
 --
 
 CREATE TABLE public.operator_secret_credential_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_secret_statuses_id_not_null NOT NULL
 );
 
 
@@ -2647,18 +2686,18 @@ ALTER SEQUENCE public.operator_secret_credential_statuses_id_seq OWNED BY public
 --
 
 CREATE TABLE public.operator_secret_credentials (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
+    id bigint CONSTRAINT staff_secrets_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_secrets_staff_id_not_null NOT NULL,
     password_digest character varying,
     last_used_at timestamp(6) with time zone,
-    name character varying NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    staff_identity_secret_status_id bigint DEFAULT 0 NOT NULL,
-    staff_secret_kind_id bigint DEFAULT 0 NOT NULL,
-    public_id character varying(21) NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    name character varying CONSTRAINT staff_secrets_name_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_secrets_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_secrets_updated_at_not_null NOT NULL,
+    staff_identity_secret_status_id bigint DEFAULT 0 CONSTRAINT staff_secrets_staff_identity_secret_status_id_not_null NOT NULL,
+    staff_secret_kind_id bigint DEFAULT 0 CONSTRAINT staff_secrets_staff_secret_kind_id_not_null NOT NULL,
+    public_id character varying(21) CONSTRAINT staff_secrets_public_id_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_secrets_discarded_at_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_secrets_purged_at_not_null NOT NULL,
     secret_kind character varying,
     usage_policy character varying,
     lookup_digest character varying,
@@ -2706,7 +2745,7 @@ ALTER SEQUENCE public.operator_secret_credentials_id_seq OWNED BY public.operato
 --
 
 CREATE TABLE public.operator_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_statuses_id_not_null NOT NULL
 );
 
 
@@ -2767,7 +2806,7 @@ ALTER SEQUENCE public.operator_telephone_histories_id_seq OWNED BY public.operat
 --
 
 CREATE TABLE public.operator_telephone_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_telephone_statuses_id_not_null NOT NULL
 );
 
 
@@ -2795,17 +2834,17 @@ ALTER SEQUENCE public.operator_telephone_statuses_id_seq OWNED BY public.operato
 --
 
 CREATE TABLE public.operator_telephones (
-    id bigint NOT NULL,
-    staff_id bigint NOT NULL,
-    number character varying NOT NULL,
-    otp_attempts_count integer DEFAULT 0 NOT NULL,
+    id bigint CONSTRAINT staff_telephones_id_not_null NOT NULL,
+    staff_id bigint CONSTRAINT staff_telephones_staff_id_not_null NOT NULL,
+    number character varying CONSTRAINT staff_telephones_number_not_null NOT NULL,
+    otp_attempts_count integer DEFAULT 0 CONSTRAINT staff_telephones_otp_attempts_count_not_null NOT NULL,
     locked_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    staff_identity_telephone_status_id bigint DEFAULT 0 NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staff_telephones_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staff_telephones_updated_at_not_null NOT NULL,
+    staff_identity_telephone_status_id bigint DEFAULT 0 CONSTRAINT staff_telephones_staff_identity_telephone_status_id_not_null NOT NULL,
     number_digest character varying,
     otp_last_sent_at timestamp(6) with time zone,
-    public_id character varying(25) NOT NULL
+    public_id character varying(25) CONSTRAINT operator_telephones_public_id_not_null1 NOT NULL
 );
 
 
@@ -2840,7 +2879,7 @@ ALTER SEQUENCE public.operator_telephones_id_seq OWNED BY public.operator_teleph
 --
 
 CREATE TABLE public.operator_visibilities (
-    id bigint NOT NULL
+    id bigint CONSTRAINT staff_visibilities_id_not_null NOT NULL
 );
 
 
@@ -2870,7 +2909,7 @@ ALTER SEQUENCE public.operator_visibilities_id_seq OWNED BY public.operator_visi
 CREATE TABLE public.operator_workspace_account_memberships (
     id bigint NOT NULL,
     staff_id bigint NOT NULL,
-    operator_workspace_account_id bigint NOT NULL,
+    operator_workspace_account_id bigint CONSTRAINT operator_workspace_account__operator_workspace_account_not_null NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL
 );
@@ -2900,7 +2939,7 @@ ALTER SEQUENCE public.operator_workspace_account_memberships_id_seq OWNED BY pub
 --
 
 CREATE TABLE public.operator_workspace_account_statuses (
-    id bigint NOT NULL
+    id bigint CONSTRAINT operator_statuses_id_not_null NOT NULL
 );
 
 
@@ -2965,20 +3004,20 @@ ALTER SEQUENCE public.operator_workspace_accounts_id_seq OWNED BY public.operato
 --
 
 CREATE TABLE public.operators (
-    id bigint NOT NULL,
+    id bigint CONSTRAINT staffs_id_not_null NOT NULL,
     webauthn_id character varying,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
-    public_id character varying(16) NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT staffs_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT staffs_updated_at_not_null NOT NULL,
+    public_id character varying(16) CONSTRAINT staffs_public_id_not_null NOT NULL,
     withdrawn_at timestamp(6) with time zone,
-    status_id bigint DEFAULT 0 NOT NULL,
-    mfa_level_enabled boolean DEFAULT false NOT NULL,
-    lock_version integer DEFAULT 0 NOT NULL,
-    visibility_id bigint DEFAULT 2 NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    mfa_level_id bigint DEFAULT 0 NOT NULL,
-    mfa_status_id bigint DEFAULT 5 NOT NULL,
+    status_id bigint DEFAULT 0 CONSTRAINT staffs_status_id_not_null NOT NULL,
+    mfa_level_enabled boolean DEFAULT false CONSTRAINT staffs_multi_factor_enabled_not_null NOT NULL,
+    lock_version integer DEFAULT 0 CONSTRAINT staffs_lock_version_not_null NOT NULL,
+    visibility_id bigint DEFAULT 2 CONSTRAINT staffs_visibility_id_not_null NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staffs_deletable_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staffs_discarded_at_not_null NOT NULL,
+    mfa_level_id bigint DEFAULT 0 CONSTRAINT staffs_multi_factor_id_not_null NOT NULL,
+    mfa_status_id bigint DEFAULT 5 CONSTRAINT operators_multi_factor_status_id_not_null NOT NULL,
     withdrawal_started_at timestamp(6) with time zone,
     deactivated_at timestamp(6) with time zone,
     birthdate text,
@@ -2990,8 +3029,10 @@ CREATE TABLE public.operators (
     token_valid_after_at timestamp(6) with time zone,
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
+    authentication_epoch bigint DEFAULT 0 NOT NULL,
     CONSTRAINT chk_operators_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_operators_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT chk_operators_authentication_epoch_nonnegative CHECK ((authentication_epoch >= 0)),
     CONSTRAINT chk_operators_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000))),
     CONSTRAINT chk_staffs_public_id_format CHECK (((public_id)::text ~ '^[0-9A-FGHJKMNPQRSTVWXYZ]{16}$'::text)),
     CONSTRAINT chk_staffs_public_id_length CHECK ((char_length((public_id)::text) = 16)),
@@ -3066,15 +3107,15 @@ ALTER SEQUENCE public.org_enforcement_appeals_id_seq OWNED BY public.org_enforce
 
 CREATE TABLE public.org_enforcement_authentication_method_effects (
     id bigint NOT NULL,
-    org_enforcement_case_id bigint NOT NULL,
-    principal_public_id character varying NOT NULL,
-    authentication_method character varying NOT NULL,
+    org_enforcement_case_id bigint CONSTRAINT org_enforcement_authentication_org_enforcement_case_id_not_null NOT NULL,
+    principal_public_id character varying CONSTRAINT org_enforcement_authentication_met_principal_public_id_not_null NOT NULL,
+    authentication_method character varying CONSTRAINT org_enforcement_authentication_m_authentication_method_not_null NOT NULL,
     effect character varying NOT NULL,
-    effective_at timestamp(6) with time zone NOT NULL,
+    effective_at timestamp(6) with time zone CONSTRAINT org_enforcement_authentication_method_eff_effective_at_not_null NOT NULL,
     expires_at timestamp(6) with time zone,
     ended_at timestamp(6) with time zone,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT org_enforcement_authentication_method_effec_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT org_enforcement_authentication_method_effec_updated_at_not_null NOT NULL,
     CONSTRAINT chk_org_enforcement_method_effects_effect CHECK (((effect)::text = ANY ((ARRAY['mutation_locked'::character varying, 'unusable'::character varying, 'permanently_frozen'::character varying])::text[]))),
     CONSTRAINT chk_org_enforcement_method_effects_method CHECK (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'entra'::character varying])::text[])))
 );
@@ -3172,14 +3213,14 @@ ALTER SEQUENCE public.org_enforcement_cases_id_seq OWNED BY public.org_enforceme
 
 CREATE TABLE public.org_enforcement_identifier_effects (
     id bigint NOT NULL,
-    org_enforcement_case_id bigint NOT NULL,
+    org_enforcement_case_id bigint CONSTRAINT org_enforcement_identifier_eff_org_enforcement_case_id_not_null NOT NULL,
     identifier_kind character varying NOT NULL,
     lookup_digest character varying NOT NULL,
     key_version integer NOT NULL,
     digest_version integer NOT NULL,
-    normalization_version integer NOT NULL,
+    normalization_version integer CONSTRAINT org_enforcement_identifier_effec_normalization_version_not_null NOT NULL,
     display_value text,
-    registration_blocked boolean DEFAULT false NOT NULL,
+    registration_blocked boolean DEFAULT false CONSTRAINT org_enforcement_identifier_effect_registration_blocked_not_null NOT NULL,
     attachment_blocked boolean DEFAULT false NOT NULL,
     recovery_blocked boolean DEFAULT false NOT NULL,
     effective_at timestamp(6) with time zone NOT NULL,
@@ -3216,13 +3257,13 @@ ALTER SEQUENCE public.org_enforcement_identifier_effects_id_seq OWNED BY public.
 
 CREATE TABLE public.org_enforcement_principal_effects (
     id bigint NOT NULL,
-    org_enforcement_case_id bigint NOT NULL,
+    org_enforcement_case_id bigint CONSTRAINT org_enforcement_principal_effe_org_enforcement_case_id_not_null NOT NULL,
     principal_public_id character varying NOT NULL,
     access_blocking boolean DEFAULT false NOT NULL,
     recovery_blocked boolean DEFAULT false NOT NULL,
     reactivation_blocked boolean DEFAULT false NOT NULL,
-    withdrawal_purge_blocked boolean DEFAULT false NOT NULL,
-    principal_hard_delete_blocked boolean DEFAULT false NOT NULL,
+    withdrawal_purge_blocked boolean DEFAULT false CONSTRAINT org_enforcement_principal_eff_withdrawal_purge_blocked_not_null NOT NULL,
+    principal_hard_delete_blocked boolean DEFAULT false CONSTRAINT org_enforcement_principal_e_principal_hard_delete_bloc_not_null NOT NULL,
     profile_effect character varying,
     effective_at timestamp(6) with time zone NOT NULL,
     expires_at timestamp(6) with time zone,
@@ -3257,7 +3298,7 @@ ALTER SEQUENCE public.org_enforcement_principal_effects_id_seq OWNED BY public.o
 
 CREATE TABLE public.org_enforcement_principal_links (
     id bigint NOT NULL,
-    org_enforcement_case_id bigint NOT NULL,
+    org_enforcement_case_id bigint CONSTRAINT org_enforcement_principal_link_org_enforcement_case_id_not_null NOT NULL,
     principal_kind character varying NOT NULL,
     principal_public_id character varying NOT NULL,
     relationship_kind character varying NOT NULL,
@@ -3465,8 +3506,8 @@ CREATE TABLE public.schema_migrations (
 --
 
 CREATE TABLE public.staff_identity_audit_events (
-    legacy_id character varying NOT NULL,
-    id bigint NOT NULL
+    legacy_id character varying CONSTRAINT staff_identity_audit_events_legacy_id_not_null1 NOT NULL,
+    id bigint CONSTRAINT staff_identity_audit_events_id_not_null1 NOT NULL
 );
 
 
@@ -3477,7 +3518,7 @@ CREATE TABLE public.staff_identity_audit_events (
 CREATE TABLE public.staff_identity_audits (
     id bigint NOT NULL,
     staff_id bigint NOT NULL,
-    legacy_event_id character varying NOT NULL,
+    legacy_event_id character varying CONSTRAINT staff_identity_audits_event_id_not_null NOT NULL,
     "timestamp" timestamp(6) with time zone,
     ip_address character varying,
     actor_id bigint,
@@ -3485,7 +3526,7 @@ CREATE TABLE public.staff_identity_audits (
     previous_value text,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    event_id bigint NOT NULL
+    event_id bigint CONSTRAINT staff_identity_audits_event_id_not_null1 NOT NULL
 );
 
 
@@ -3579,7 +3620,7 @@ ALTER SEQUENCE public.staff_identity_statuses_id_seq OWNED BY public.staff_ident
 CREATE TABLE public.staff_operators (
     id bigint NOT NULL,
     staff_id bigint NOT NULL,
-    operator_id bigint NOT NULL,
+    operator_id bigint CONSTRAINT staff_operators_admin_id_not_null NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL
 );
@@ -3929,6 +3970,13 @@ ALTER TABLE ONLY public.division_statuses ALTER COLUMN id SET DEFAULT nextval('p
 --
 
 ALTER TABLE ONLY public.divisions ALTER COLUMN id SET DEFAULT nextval('public.divisions_id_seq'::regclass);
+
+
+--
+-- Name: identity_authentication_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_authentication_events ALTER COLUMN id SET DEFAULT nextval('public.identity_authentication_events_id_seq'::regclass);
 
 
 --
@@ -4717,6 +4765,14 @@ ALTER TABLE ONLY public.division_statuses
 
 ALTER TABLE ONLY public.divisions
     ADD CONSTRAINT divisions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: identity_authentication_events identity_authentication_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_authentication_events
+    ADD CONSTRAINT identity_authentication_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -5726,6 +5782,20 @@ CREATE UNIQUE INDEX idx_org_entra_connections_on_org_and_tenant ON public.organi
 --
 
 CREATE UNIQUE INDEX idx_org_entra_connections_on_tenant_and_client ON public.organization_entra_connections USING btree (entra_tenant_id, entra_client_id);
+
+
+--
+-- Name: idx_org_identity_authentication_events_actor_epoch; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_org_identity_authentication_events_actor_epoch ON public.identity_authentication_events USING btree (actor_ref, cutoff_epoch);
+
+
+--
+-- Name: idx_org_identity_authentication_events_event_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_org_identity_authentication_events_event_id ON public.identity_authentication_events USING btree (event_id);
 
 
 --
@@ -6741,7 +6811,7 @@ CREATE TRIGGER operator_telephones_public_id_immutability BEFORE UPDATE OF publi
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_agent_memberships_unit_same_bureau FOREIGN KEY (bureau_unit_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
 
 
 --
@@ -6749,7 +6819,7 @@ ALTER TABLE ONLY public.agent_memberships
 --
 
 ALTER TABLE ONLY public.bureau_units
-    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_bureau_units_parent_same_bureau FOREIGN KEY (parent_id, bureau_id) REFERENCES public.bureau_units(id, bureau_id) ON DELETE RESTRICT;
 
 
 --
@@ -6765,7 +6835,7 @@ ALTER TABLE ONLY public.departments
 --
 
 ALTER TABLE ONLY public.agents
-    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_00d34c9052 FOREIGN KEY (operator_identity_id) REFERENCES public.operator_identities(id) ON DELETE RESTRICT;
 
 
 --
@@ -6789,7 +6859,7 @@ ALTER TABLE ONLY public.organization_entra_connections
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_05081537eb FOREIGN KEY (revoke_reason_id) REFERENCES public.agent_membership_revoke_reasons(id);
 
 
 --
@@ -6861,7 +6931,7 @@ ALTER TABLE ONLY public.operator_entra_identities
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_1a95fbbc46 FOREIGN KEY (membership_state_id) REFERENCES public.agent_membership_states(id);
 
 
 --
@@ -6925,7 +6995,7 @@ ALTER TABLE ONLY public.operator_capability_grants
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_27ba6b71fd FOREIGN KEY (revoked_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
 
 
 --
@@ -7069,7 +7139,7 @@ ALTER TABLE ONLY public.operator_passkeys
 --
 
 ALTER TABLE ONLY public.operator_workspace_account_memberships
-    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE NOT VALID;
+    ADD CONSTRAINT fk_rails_46775ba732 FOREIGN KEY (operator_workspace_account_id) REFERENCES public.operator_workspace_accounts(id) ON DELETE CASCADE;
 
 
 --
@@ -7141,7 +7211,7 @@ ALTER TABLE ONLY public.operators
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_598d6fdb3c FOREIGN KEY (approved_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
 
 
 --
@@ -7421,7 +7491,7 @@ ALTER TABLE ONLY public.bureau_view_grants
 --
 
 ALTER TABLE ONLY public.operator_lifecycle_requests
-    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT NOT VALID;
+    ADD CONSTRAINT fk_rails_be7647e7b5 FOREIGN KEY (requested_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
 
 
 --
@@ -7557,7 +7627,7 @@ ALTER TABLE ONLY public.agent_assignments
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ed6c87c035 FOREIGN KEY (membership_kind_id) REFERENCES public.agent_membership_kinds(id);
 
 
 --
@@ -7597,7 +7667,7 @@ ALTER TABLE ONLY public.agent_ownerships
 --
 
 ALTER TABLE ONLY public.agent_memberships
-    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_feb3a1d9a5 FOREIGN KEY (granted_by_agent_id) REFERENCES public.agents(id) ON DELETE SET NULL;
 
 
 --
@@ -7687,6 +7757,8 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261016210005'),
+('20261016210002'),
 ('20261013184127'),
 ('20261012100100'),
 ('20261012100000'),

@@ -61,8 +61,8 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
       actor: actor, token: token, transaction: transaction, requirement: requirement, result_reference: proof.reference,
     )
     client = OidcClientRegistry.find!("base-org-ww")
-    now = OperatorRpSession.database_now
-    rp_session = OperatorRpSession.create!(
+    now = OpOrgGrant.database_now
+    rp_session = OpOrgGrant.create!(
       operator_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
       refresh_token_expires_at: now + 1.hour,
@@ -134,8 +134,8 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
       actor: actor, token: token, transaction: transaction, requirement: requirement, result_reference: proof.reference,
     )
     client = OidcClientRegistry.find!("base-org-ww")
-    now = OperatorRpSession.database_now
-    rp_session = OperatorRpSession.create!(
+    now = OpOrgGrant.database_now
+    rp_session = OpOrgGrant.create!(
       operator_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
       refresh_token_expires_at: now + 1.hour,

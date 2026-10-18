@@ -14,24 +14,29 @@ module Base
 
       public
 
+      # R5-WU14: the image comes from the Avatar owner; this RP only applies its cache validation.
       def show
-        # org Avatars are optional: no Avatar, or an Avatar without an image, is a normal absence.
-        avatar = switcher.selected_avatar
-        authorize!(avatar || Avatar, to: avatar ? :show? : :index?)
-        return head(:not_found) if avatar.nil?
+        status, body, mime_type, cache_key =
+          AvatarAuthorityClient.new(
+            surface: "org",
+            access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+            persona: Actor.selection.account_public_id,
+          ).selected_image
+        authorize!(
+          AvatarAuthorityClient::Result.new(status:, data: {}, errors: {}), to: :relay?,
+                                                                            with: AvatarRemoteResultPolicy,
+        )
+        case status
+        when :ok
+          raise RuntimeError, "stored Avatar image has an unsupported type" unless
+            AvatarImageUploader::ALLOWED_MIME_TYPES.include?(mime_type.to_s)
 
-        attachment = avatar.image
-        return head(:not_found) if attachment.nil?
-
-        mime_type = attachment.mime_type.to_s
-        raise RuntimeError, "stored Avatar image has an unsupported type" unless
-          AvatarImageUploader::ALLOWED_MIME_TYPES.include?(mime_type)
-
-        # An ETag with public: false yields "max-age=0, private, must-revalidate": every use
-        # revalidates and no shared cache stores it.
-        return unless stale?(etag: avatar.image_cache_key, public: false)
-
-        send_data(attachment.read, type: mime_type, disposition: "inline")
+          # An ETag with public: false yields "max-age=0, private, must-revalidate".
+          send_data(body, type: mime_type, disposition: "inline") if stale?(etag: cache_key, public: false)
+        when :no_image, :not_found then head(:not_found)
+        when :forbidden then head(:forbidden)
+        else head(:service_unavailable)
+        end
       end
 
       protected
@@ -49,12 +54,6 @@ module Base
         return render(json: { error: "unauthorized" }, status: :unauthorized) if request.format.json?
 
         head :unauthorized
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :org, principal: current_operator, session: current_session,
-        )
       end
     end
   end

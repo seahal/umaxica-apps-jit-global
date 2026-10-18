@@ -74,20 +74,18 @@ module Base
         }
       end
 
+      # R5-WU15: the persona display name comes from its owner over HTTPS.
       def dashboard_current_identity
-        persona = switcher.find_account(Actor.selection.account_public_id)
-        raise ActiveRecord::RecordNotFound, "selected com Persona is not available to this principal" if persona.blank?
+        result = AvatarAuthorityClient.new(
+          surface: "com",
+          access_token: BrowserCredentialCookie.read(cookies, OidcRpBrowserCredentialContract::ACCESS_COOKIE),
+          persona: Actor.selection.account_public_id,
+        ).dashboard_identity
+        raise ActiveRecord::RecordNotFound, "selected com Persona is not available to this principal" if
+          result.status == :not_found
+        raise RuntimeError, "identity owner is unavailable for the dashboard identity" unless result.ok?
 
-        display_name = persona.moniker
-        raise RuntimeError, "selected com Persona has no display name" if display_name.blank?
-
-        { display_name: display_name }
-      end
-
-      def switcher
-        @switcher ||= BaseSwitcherAuthority.new(
-          surface: :com, principal: current_visitor, session: current_session,
-        )
+        { display_name: result.data.fetch("display_name") }
       end
 
       def menu_links

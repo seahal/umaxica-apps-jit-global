@@ -9,7 +9,7 @@ module Auth
           module Passkey
             # POST /sign/in/emergency/passkey/options
             class OptionsController < ::Auth::Org::ApplicationController
-              include ::SignOrgEmergencyPasskeyCeremony
+              include ::SignOrgStandbyPasskeyCeremony
               include ::AuthenticationModeSwitchGuard
 
               AUTHENTICATION_MODE = :guest

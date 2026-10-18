@@ -21,9 +21,9 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
       purge_eligible_at: 2.days.from_now,
     )
     @root.rotate_refresh_token!
-    @session = ClientRpSession.create!(
+    @session = OpAppGrant.create!(
       client_token: @root,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
@@ -33,7 +33,7 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
 
   teardown do
     ClientSignOutFlow.where(token_id: @root&.id).delete_all
-    ClientRpSession.where(id: @session&.id).delete_all
+    OpAppGrant.where(id: @session&.id).delete_all
     device_session_id = @root&.device_session_id
     ClientToken.where(id: @root&.id).delete_all
     ClientDeviceSession.where(id: device_session_id).delete_all if device_session_id
@@ -45,7 +45,7 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
     release = Queue.new
     threads = [
       Thread.new do
-        AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+        OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
           pid = connection.select_value("SELECT pg_backend_pid()")
           ready << pid
           release.pop
@@ -58,7 +58,7 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
         end
       end,
       Thread.new do
-        AppTicketRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
+        OpBaseAppRecord.connection_pool.with_connection(prevent_permanent_checkout: true) do |connection|
           pid = connection.select_value("SELECT pg_backend_pid()")
           ready << pid
           release.pop

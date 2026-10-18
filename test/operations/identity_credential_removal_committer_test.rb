@@ -420,7 +420,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "owned-key")
     token = OperatorToken.create!(staff: actor)
     foreign_token = OperatorToken.create!(staff: other)
-    emergency = OperatorToken.create!(staff: actor, authentication_context: AuthenticationContextValue::EMERGENCY_KEY)
+    emergency = OperatorToken.create!(staff: actor, authentication_context: AuthenticationContextValue::STANDBY_KEY)
 
     [[nil, credential, token], [actor, nil, token], [actor, credential, nil],
      [actor, credential, foreign_token], [actor, credential, emergency],].each do |owner, target, session|

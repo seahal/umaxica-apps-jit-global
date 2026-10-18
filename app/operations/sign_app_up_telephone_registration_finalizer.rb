@@ -43,7 +43,7 @@ class SignAppUpTelephoneRegistrationFinalizer
   def call
     user = nil
 
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       @flow.with_cycle_lock do
         @flow.reload
         Client.connection_class_for_self.connected_to(role: :writing) do

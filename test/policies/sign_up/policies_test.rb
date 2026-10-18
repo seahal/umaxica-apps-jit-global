@@ -227,21 +227,21 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
   end
 
   test "social callback policy is app social only" do
-    app_ticket = build_ticket(
+    op_base_app = build_ticket(
       ClientSignUpFlow,
       entry_method: "google",
       status_id: ClientSignUpFlowStatus::STARTED,
       step: "start",
     )
-    com_ticket = build_ticket(
+    op_base_com = build_ticket(
       VisitorSignUpFlow,
       entry_method: "email",
       status_id: VisitorSignUpFlowStatus::STARTED,
       step: "start",
     )
 
-    assert_predicate SignUp::SocialCallbackPolicy.new(policy_context(app_ticket), user: nil), :start_social_callback?
-    assert_not_predicate SignUp::SocialCallbackPolicy.new(policy_context(com_ticket), user: nil),
+    assert_predicate SignUp::SocialCallbackPolicy.new(policy_context(op_base_app), user: nil), :start_social_callback?
+    assert_not_predicate SignUp::SocialCallbackPolicy.new(policy_context(op_base_com), user: nil),
                          :start_social_callback?
   end
 

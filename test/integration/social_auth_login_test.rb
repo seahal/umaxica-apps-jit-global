@@ -169,22 +169,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -235,7 +236,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr0_client_id =
                     case rr0_family
                     when "base" then "base-#{rr0_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr0_family}-#{rr0_surface}"
                     end
                   rr0_token = ClientToken.find_by!(public_id: rr0_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -243,14 +245,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr0_key = [rr0_client.client_id, rr0_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr0_key] && rr0_token.currently_usable? &&
-                      !(rr0_token.device_session_id && ClientRpSession.exists?(
+                      !(rr0_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr0_token.device_session_id,
                         oidc_client_id: rr0_client.client_id,
                         revoked_at: nil,
                       ))
                     rr0_token.rotate_refresh_token! unless rr0_token.device_session_record.current_refresh_token_id
                     rr0_now = Time.current
-                    rr0_session = ClientRpSession.create!(
+                    rr0_session = OpAppGrant.create!(
                       client_token: rr0_token,
                       oidc_client_id: rr0_client.client_id,
                       oidc_scope: "openid profile",
@@ -617,22 +619,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -683,7 +686,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr2_client_id =
                     case rr2_family
                     when "base" then "base-#{rr2_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr2_family}-#{rr2_surface}"
                     end
                   rr2_token = ClientToken.find_by!(public_id: rr2_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -691,14 +695,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr2_key = [rr2_client.client_id, rr2_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr2_key] && rr2_token.currently_usable? &&
-                      !(rr2_token.device_session_id && ClientRpSession.exists?(
+                      !(rr2_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr2_token.device_session_id,
                         oidc_client_id: rr2_client.client_id,
                         revoked_at: nil,
                       ))
                     rr2_token.rotate_refresh_token! unless rr2_token.device_session_record.current_refresh_token_id
                     rr2_now = Time.current
-                    rr2_session = ClientRpSession.create!(
+                    rr2_session = OpAppGrant.create!(
                       client_token: rr2_token,
                       oidc_client_id: rr2_client.client_id,
                       oidc_scope: "openid profile",
@@ -1030,22 +1034,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -1096,7 +1101,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr3_client_id =
                     case rr3_family
                     when "base" then "base-#{rr3_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr3_family}-#{rr3_surface}"
                     end
                   rr3_token = ClientToken.find_by!(public_id: rr3_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -1104,14 +1110,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr3_key = [rr3_client.client_id, rr3_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr3_key] && rr3_token.currently_usable? &&
-                      !(rr3_token.device_session_id && ClientRpSession.exists?(
+                      !(rr3_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr3_token.device_session_id,
                         oidc_client_id: rr3_client.client_id,
                         revoked_at: nil,
                       ))
                     rr3_token.rotate_refresh_token! unless rr3_token.device_session_record.current_refresh_token_id
                     rr3_now = Time.current
-                    rr3_session = ClientRpSession.create!(
+                    rr3_session = OpAppGrant.create!(
                       client_token: rr3_token,
                       oidc_client_id: rr3_client.client_id,
                       oidc_scope: "openid profile",
@@ -1503,22 +1509,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -1569,7 +1576,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr4_client_id =
                     case rr4_family
                     when "base" then "base-#{rr4_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr4_family}-#{rr4_surface}"
                     end
                   rr4_token = ClientToken.find_by!(public_id: rr4_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -1577,14 +1585,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr4_key = [rr4_client.client_id, rr4_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr4_key] && rr4_token.currently_usable? &&
-                      !(rr4_token.device_session_id && ClientRpSession.exists?(
+                      !(rr4_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr4_token.device_session_id,
                         oidc_client_id: rr4_client.client_id,
                         revoked_at: nil,
                       ))
                     rr4_token.rotate_refresh_token! unless rr4_token.device_session_record.current_refresh_token_id
                     rr4_now = Time.current
-                    rr4_session = ClientRpSession.create!(
+                    rr4_session = OpAppGrant.create!(
                       client_token: rr4_token,
                       oidc_client_id: rr4_client.client_id,
                       oidc_scope: "openid profile",
@@ -1755,22 +1763,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -1821,7 +1830,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr5_client_id =
                     case rr5_family
                     when "base" then "base-#{rr5_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr5_family}-#{rr5_surface}"
                     end
                   rr5_token = ClientToken.find_by!(public_id: rr5_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -1829,14 +1839,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr5_key = [rr5_client.client_id, rr5_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr5_key] && rr5_token.currently_usable? &&
-                      !(rr5_token.device_session_id && ClientRpSession.exists?(
+                      !(rr5_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr5_token.device_session_id,
                         oidc_client_id: rr5_client.client_id,
                         revoked_at: nil,
                       ))
                     rr5_token.rotate_refresh_token! unless rr5_token.device_session_record.current_refresh_token_id
                     rr5_now = Time.current
-                    rr5_session = ClientRpSession.create!(
+                    rr5_session = OpAppGrant.create!(
                       client_token: rr5_token,
                       oidc_client_id: rr5_client.client_id,
                       oidc_scope: "openid profile",
@@ -2173,22 +2183,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -2239,7 +2250,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr6_client_id =
                     case rr6_family
                     when "base" then "base-#{rr6_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr6_family}-#{rr6_surface}"
                     end
                   rr6_token = ClientToken.find_by!(public_id: rr6_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -2247,14 +2259,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr6_key = [rr6_client.client_id, rr6_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr6_key] && rr6_token.currently_usable? &&
-                      !(rr6_token.device_session_id && ClientRpSession.exists?(
+                      !(rr6_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr6_token.device_session_id,
                         oidc_client_id: rr6_client.client_id,
                         revoked_at: nil,
                       ))
                     rr6_token.rotate_refresh_token! unless rr6_token.device_session_record.current_refresh_token_id
                     rr6_now = Time.current
-                    rr6_session = ClientRpSession.create!(
+                    rr6_session = OpAppGrant.create!(
                       client_token: rr6_token,
                       oidc_client_id: rr6_client.client_id,
                       oidc_scope: "openid profile",
@@ -2842,22 +2854,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -2908,7 +2921,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr7_client_id =
                     case rr7_family
                     when "base" then "base-#{rr7_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr7_family}-#{rr7_surface}"
                     end
                   rr7_token = ClientToken.find_by!(public_id: rr7_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -2916,14 +2930,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr7_key = [rr7_client.client_id, rr7_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr7_key] && rr7_token.currently_usable? &&
-                      !(rr7_token.device_session_id && ClientRpSession.exists?(
+                      !(rr7_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr7_token.device_session_id,
                         oidc_client_id: rr7_client.client_id,
                         revoked_at: nil,
                       ))
                     rr7_token.rotate_refresh_token! unless rr7_token.device_session_record.current_refresh_token_id
                     rr7_now = Time.current
-                    rr7_session = ClientRpSession.create!(
+                    rr7_session = OpAppGrant.create!(
                       client_token: rr7_token,
                       oidc_client_id: rr7_client.client_id,
                       oidc_scope: "openid profile",
@@ -3312,22 +3326,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -3378,7 +3393,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr8_client_id =
                     case rr8_family
                     when "base" then "base-#{rr8_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr8_family}-#{rr8_surface}"
                     end
                   rr8_token = ClientToken.find_by!(public_id: rr8_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -3386,14 +3402,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr8_key = [rr8_client.client_id, rr8_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr8_key] && rr8_token.currently_usable? &&
-                      !(rr8_token.device_session_id && ClientRpSession.exists?(
+                      !(rr8_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr8_token.device_session_id,
                         oidc_client_id: rr8_client.client_id,
                         revoked_at: nil,
                       ))
                     rr8_token.rotate_refresh_token! unless rr8_token.device_session_record.current_refresh_token_id
                     rr8_now = Time.current
-                    rr8_session = ClientRpSession.create!(
+                    rr8_session = OpAppGrant.create!(
                       client_token: rr8_token,
                       oidc_client_id: rr8_client.client_id,
                       oidc_scope: "openid profile",
@@ -3790,22 +3806,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -3856,7 +3873,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr9_client_id =
                     case rr9_family
                     when "base" then "base-#{rr9_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr9_family}-#{rr9_surface}"
                     end
                   rr9_token = ClientToken.find_by!(public_id: rr9_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -3864,14 +3882,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr9_key = [rr9_client.client_id, rr9_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr9_key] && rr9_token.currently_usable? &&
-                      !(rr9_token.device_session_id && ClientRpSession.exists?(
+                      !(rr9_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr9_token.device_session_id,
                         oidc_client_id: rr9_client.client_id,
                         revoked_at: nil,
                       ))
                     rr9_token.rotate_refresh_token! unless rr9_token.device_session_record.current_refresh_token_id
                     rr9_now = Time.current
-                    rr9_session = ClientRpSession.create!(
+                    rr9_session = OpAppGrant.create!(
                       client_token: rr9_token,
                       oidc_client_id: rr9_client.client_id,
                       oidc_scope: "openid profile",
@@ -4271,22 +4289,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -4337,7 +4356,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr10_client_id =
                     case rr10_family
                     when "base" then "base-#{rr10_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr10_family}-#{rr10_surface}"
                     end
                   rr10_token = ClientToken.find_by!(public_id: rr10_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -4345,14 +4365,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr10_key = [rr10_client.client_id, rr10_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr10_key] && rr10_token.currently_usable? &&
-                      !(rr10_token.device_session_id && ClientRpSession.exists?(
+                      !(rr10_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr10_token.device_session_id,
                         oidc_client_id: rr10_client.client_id,
                         revoked_at: nil,
                       ))
                     rr10_token.rotate_refresh_token! unless rr10_token.device_session_record.current_refresh_token_id
                     rr10_now = Time.current
-                    rr10_session = ClientRpSession.create!(
+                    rr10_session = OpAppGrant.create!(
                       client_token: rr10_token,
                       oidc_client_id: rr10_client.client_id,
                       oidc_scope: "openid profile",
@@ -4715,22 +4735,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -4781,7 +4802,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr11_client_id =
                     case rr11_family
                     when "base" then "base-#{rr11_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr11_family}-#{rr11_surface}"
                     end
                   rr11_token = ClientToken.find_by!(public_id: rr11_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -4789,14 +4811,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr11_key = [rr11_client.client_id, rr11_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr11_key] && rr11_token.currently_usable? &&
-                      !(rr11_token.device_session_id && ClientRpSession.exists?(
+                      !(rr11_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr11_token.device_session_id,
                         oidc_client_id: rr11_client.client_id,
                         revoked_at: nil,
                       ))
                     rr11_token.rotate_refresh_token! unless rr11_token.device_session_record.current_refresh_token_id
                     rr11_now = Time.current
-                    rr11_session = ClientRpSession.create!(
+                    rr11_session = OpAppGrant.create!(
                       client_token: rr11_token,
                       oidc_client_id: rr11_client.client_id,
                       oidc_scope: "openid profile",
@@ -5164,22 +5186,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -5230,7 +5253,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr12_client_id =
                     case rr12_family
                     when "base" then "base-#{rr12_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr12_family}-#{rr12_surface}"
                     end
                   rr12_token = ClientToken.find_by!(public_id: rr12_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -5238,14 +5262,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr12_key = [rr12_client.client_id, rr12_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr12_key] && rr12_token.currently_usable? &&
-                      !(rr12_token.device_session_id && ClientRpSession.exists?(
+                      !(rr12_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr12_token.device_session_id,
                         oidc_client_id: rr12_client.client_id,
                         revoked_at: nil,
                       ))
                     rr12_token.rotate_refresh_token! unless rr12_token.device_session_record.current_refresh_token_id
                     rr12_now = Time.current
-                    rr12_session = ClientRpSession.create!(
+                    rr12_session = OpAppGrant.create!(
                       client_token: rr12_token,
                       oidc_client_id: rr12_client.client_id,
                       oidc_scope: "openid profile",
@@ -5631,22 +5655,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -5697,7 +5722,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr13_client_id =
                     case rr13_family
                     when "base" then "base-#{rr13_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr13_family}-#{rr13_surface}"
                     end
                   rr13_token = ClientToken.find_by!(public_id: rr13_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -5705,14 +5731,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr13_key = [rr13_client.client_id, rr13_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr13_key] && rr13_token.currently_usable? &&
-                      !(rr13_token.device_session_id && ClientRpSession.exists?(
+                      !(rr13_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr13_token.device_session_id,
                         oidc_client_id: rr13_client.client_id,
                         revoked_at: nil,
                       ))
                     rr13_token.rotate_refresh_token! unless rr13_token.device_session_record.current_refresh_token_id
                     rr13_now = Time.current
-                    rr13_session = ClientRpSession.create!(
+                    rr13_session = OpAppGrant.create!(
                       client_token: rr13_token,
                       oidc_client_id: rr13_client.client_id,
                       oidc_scope: "openid profile",
@@ -6135,22 +6161,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -6201,7 +6228,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr14_client_id =
                     case rr14_family
                     when "base" then "base-#{rr14_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr14_family}-#{rr14_surface}"
                     end
                   rr14_token = ClientToken.find_by!(public_id: rr14_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -6209,14 +6237,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr14_key = [rr14_client.client_id, rr14_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr14_key] && rr14_token.currently_usable? &&
-                      !(rr14_token.device_session_id && ClientRpSession.exists?(
+                      !(rr14_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr14_token.device_session_id,
                         oidc_client_id: rr14_client.client_id,
                         revoked_at: nil,
                       ))
                     rr14_token.rotate_refresh_token! unless rr14_token.device_session_record.current_refresh_token_id
                     rr14_now = Time.current
-                    rr14_session = ClientRpSession.create!(
+                    rr14_session = OpAppGrant.create!(
                       client_token: rr14_token,
                       oidc_client_id: rr14_client.client_id,
                       oidc_scope: "openid profile",
@@ -6564,22 +6592,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rp_client_id =
                       case rp_family
                       when "base" then "base-#{rp_surface}-ww"
-                      when "edit" then "edit-org"
-                      else "#{rp_family}-#{rp_surface}"
+                      when "edit" then "edit-org-ww"
+                      when "tech" then "tech-org-ww"
+                      else "#{rp_family}-#{rp_surface}-jp"
                       end
                     rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                     rp_client = OidcClientRegistry.find!(rp_client_id)
                     rp_key = [rp_client.client_id, rp_token.public_id]
                     @base_browser_rp_credentials ||= {}
                     if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                        !(rp_token.device_session_id && ClientRpSession.exists?(
+                        !(rp_token.device_session_id && OpAppGrant.exists?(
                           device_session_id: rp_token.device_session_id,
                           oidc_client_id: rp_client.client_id,
                           revoked_at: nil,
                         ))
                       rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                       rp_now = Time.current
-                      rp_session = ClientRpSession.create!(
+                      rp_session = OpAppGrant.create!(
                         client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                         oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                         refresh_token_expires_at: rp_now + 10.minutes,
@@ -6629,7 +6658,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                 rr15_client_id =
                   case rr15_family
                   when "base" then "base-#{rr15_surface}-ww"
-                  when "edit" then "edit-org"
+                  when "edit" then "edit-org-ww"
+                  when "tech" then "tech-org-ww"
                   else "#{rr15_family}-#{rr15_surface}"
                   end
                 rr15_token = ClientToken.find_by!(public_id: rr15_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -6637,14 +6667,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                 rr15_key = [rr15_client.client_id, rr15_token.public_id]
                 @base_browser_rp_credentials ||= {}
                 if !@base_browser_rp_credentials[rr15_key] && rr15_token.currently_usable? &&
-                    !(rr15_token.device_session_id && ClientRpSession.exists?(
+                    !(rr15_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: rr15_token.device_session_id,
                       oidc_client_id: rr15_client.client_id,
                       revoked_at: nil,
                     ))
                   rr15_token.rotate_refresh_token! unless rr15_token.device_session_record.current_refresh_token_id
                   rr15_now = Time.current
-                  rr15_session = ClientRpSession.create!(
+                  rr15_session = OpAppGrant.create!(
                     client_token: rr15_token,
                     oidc_client_id: rr15_client.client_id,
                     oidc_scope: "openid profile",
@@ -6763,22 +6793,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rp_client_id =
                       case rp_family
                       when "base" then "base-#{rp_surface}-ww"
-                      when "edit" then "edit-org"
-                      else "#{rp_family}-#{rp_surface}"
+                      when "edit" then "edit-org-ww"
+                      when "tech" then "tech-org-ww"
+                      else "#{rp_family}-#{rp_surface}-jp"
                       end
                     rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                     rp_client = OidcClientRegistry.find!(rp_client_id)
                     rp_key = [rp_client.client_id, rp_token.public_id]
                     @base_browser_rp_credentials ||= {}
                     if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                        !(rp_token.device_session_id && ClientRpSession.exists?(
+                        !(rp_token.device_session_id && OpAppGrant.exists?(
                           device_session_id: rp_token.device_session_id,
                           oidc_client_id: rp_client.client_id,
                           revoked_at: nil,
                         ))
                       rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                       rp_now = Time.current
-                      rp_session = ClientRpSession.create!(
+                      rp_session = OpAppGrant.create!(
                         client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                         oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                         refresh_token_expires_at: rp_now + 10.minutes,
@@ -6828,7 +6859,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                 rr16_client_id =
                   case rr16_family
                   when "base" then "base-#{rr16_surface}-ww"
-                  when "edit" then "edit-org"
+                  when "edit" then "edit-org-ww"
+                  when "tech" then "tech-org-ww"
                   else "#{rr16_family}-#{rr16_surface}"
                   end
                 rr16_token = ClientToken.find_by!(public_id: rr16_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -6836,14 +6868,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                 rr16_key = [rr16_client.client_id, rr16_token.public_id]
                 @base_browser_rp_credentials ||= {}
                 if !@base_browser_rp_credentials[rr16_key] && rr16_token.currently_usable? &&
-                    !(rr16_token.device_session_id && ClientRpSession.exists?(
+                    !(rr16_token.device_session_id && OpAppGrant.exists?(
                       device_session_id: rr16_token.device_session_id,
                       oidc_client_id: rr16_client.client_id,
                       revoked_at: nil,
                     ))
                   rr16_token.rotate_refresh_token! unless rr16_token.device_session_record.current_refresh_token_id
                   rr16_now = Time.current
-                  rr16_session = ClientRpSession.create!(
+                  rr16_session = OpAppGrant.create!(
                     client_token: rr16_token,
                     oidc_client_id: rr16_client.client_id,
                     oidc_scope: "openid profile",
@@ -6987,22 +7019,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -7053,7 +7086,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr18_client_id =
                     case rr18_family
                     when "base" then "base-#{rr18_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr18_family}-#{rr18_surface}"
                     end
                   rr18_token = ClientToken.find_by!(public_id: rr18_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -7061,14 +7095,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr18_key = [rr18_client.client_id, rr18_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr18_key] && rr18_token.currently_usable? &&
-                      !(rr18_token.device_session_id && ClientRpSession.exists?(
+                      !(rr18_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr18_token.device_session_id,
                         oidc_client_id: rr18_client.client_id,
                         revoked_at: nil,
                       ))
                     rr18_token.rotate_refresh_token! unless rr18_token.device_session_record.current_refresh_token_id
                     rr18_now = Time.current
-                    rr18_session = ClientRpSession.create!(
+                    rr18_session = OpAppGrant.create!(
                       client_token: rr18_token,
                       oidc_client_id: rr18_client.client_id,
                       oidc_scope: "openid profile",
@@ -7445,22 +7479,23 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_client_id =
                         case rp_family
                         when "base" then "base-#{rp_surface}-ww"
-                        when "edit" then "edit-org"
-                        else "#{rp_family}-#{rp_surface}"
+                        when "edit" then "edit-org-ww"
+                        when "tech" then "tech-org-ww"
+                        else "#{rp_family}-#{rp_surface}-jp"
                         end
                       rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
                       rp_client = OidcClientRegistry.find!(rp_client_id)
                       rp_key = [rp_client.client_id, rp_token.public_id]
                       @base_browser_rp_credentials ||= {}
                       if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-                          !(rp_token.device_session_id && ClientRpSession.exists?(
+                          !(rp_token.device_session_id && OpAppGrant.exists?(
                             device_session_id: rp_token.device_session_id,
                             oidc_client_id: rp_client.client_id,
                             revoked_at: nil,
                           ))
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
-                        rp_session = ClientRpSession.create!(
+                        rp_session = OpAppGrant.create!(
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -7511,7 +7546,8 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr19_client_id =
                     case rr19_family
                     when "base" then "base-#{rr19_surface}-ww"
-                    when "edit" then "edit-org"
+                    when "edit" then "edit-org-ww"
+                    when "tech" then "tech-org-ww"
                     else "#{rr19_family}-#{rr19_surface}"
                     end
                   rr19_token = ClientToken.find_by!(public_id: rr19_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
@@ -7519,14 +7555,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr19_key = [rr19_client.client_id, rr19_token.public_id]
                   @base_browser_rp_credentials ||= {}
                   if !@base_browser_rp_credentials[rr19_key] && rr19_token.currently_usable? &&
-                      !(rr19_token.device_session_id && ClientRpSession.exists?(
+                      !(rr19_token.device_session_id && OpAppGrant.exists?(
                         device_session_id: rr19_token.device_session_id,
                         oidc_client_id: rr19_client.client_id,
                         revoked_at: nil,
                       ))
                     rr19_token.rotate_refresh_token! unless rr19_token.device_session_record.current_refresh_token_id
                     rr19_now = Time.current
-                    rr19_session = ClientRpSession.create!(
+                    rr19_session = OpAppGrant.create!(
                       client_token: rr19_token,
                       oidc_client_id: rr19_client.client_id,
                       oidc_scope: "openid profile",

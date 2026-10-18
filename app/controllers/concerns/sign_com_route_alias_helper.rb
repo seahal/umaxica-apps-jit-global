@@ -23,6 +23,7 @@ module SignComRouteAliasHelper
         target_helper_name = helper_name.to_s.sub(source_prefix, target_prefix)
         next unless Rails.application.routes.url_helpers.public_method_defined?(target_helper_name.to_sym)
 
+        # FIXME: do not use define_method!
         base.define_method(helper_name) do |*args, **kwargs, &block|
           public_send(target_helper_name, *args, **kwargs, &block)
         end

@@ -80,7 +80,7 @@ module RpSession
     return false if refresh_token_expires_at > token.discard_at
 
     decision_time = now || self.class.database_now
-    return false unless token.currently_usable?(decision_time)
+    return false unless token.active_status?(decision_time)
 
     activity_at = token.last_used_at
     activity_at = token.created_at if activity_at.nil?
@@ -250,9 +250,9 @@ module RpSession
   def parent_device_session
     association_name, device_session_class =
       case self
-      when ClientRpSession then [:client_device_session, ClientDeviceSession]
-      when VisitorRpSession then [:visitor_device_session, VisitorDeviceSession]
-      when OperatorRpSession then [:operator_device_session, OperatorDeviceSession]
+      when OpAppGrant then [:client_device_session, ClientDeviceSession]
+      when OpComGrant then [:visitor_device_session, VisitorDeviceSession]
+      when OpOrgGrant then [:operator_device_session, OperatorDeviceSession]
       else raise IssuanceRejected, "unsupported RP Session class"
       end
 

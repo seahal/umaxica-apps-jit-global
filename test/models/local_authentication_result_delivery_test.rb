@@ -102,8 +102,8 @@ class LocalAuthenticationResultDeliveryTest < ActiveSupport::TestCase
       end
       assert_nil flow.reload.authentication_event_at
     end
-    flow.record_local_authentication_evidence!(method: "passkey", authentication_context: "emergency")
+    flow.record_local_authentication_evidence!(method: "passkey", authentication_context: "standby")
 
-    assert_equal "emergency", flow.reload.authentication_context
+    assert_equal "standby", flow.reload.authentication_context
   end
 end

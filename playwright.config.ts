@@ -30,6 +30,7 @@ const chromiumExecutablePath = process.env["PLAYWRIGHT_CHROMIUM_EXECUTABLE"];
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/rails/**",
   // Service worker install and activation are ordered against a single origin's registration, so
   // running these files in parallel against the same browser profile would make them interfere.
   fullyParallel: false,

@@ -19,6 +19,7 @@ module SignOutInertiaPages
   included do
     # Captured at include time so the sign-out controller keeps naming pages from its own surface controller_path.
     prefix = controller_path
+    # FIXME: do not use define_method!
     define_method(:sign_out_page_prefix) { prefix }
     private :sign_out_page_prefix
   end

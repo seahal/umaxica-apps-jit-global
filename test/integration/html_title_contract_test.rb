@@ -620,7 +620,7 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
   private
 
   REALM_BY_SURFACE = { "app" => "client", "com" => "visitor", "org" => "operator" }.freeze
-  CLIENT_ID_BY_SURFACE = { "app" => "core-app", "com" => "core-com", "org" => "core-org" }.freeze
+  CLIENT_ID_BY_SURFACE = { "app" => "core-app-jp", "com" => "core-com-jp", "org" => "core-org-jp" }.freeze
 
   # Issues a real transaction and redeems it through `BaseAuthAdmissionCoordinator`, the same path
   # `AuthOidcEntrancesTest` and `AuthRegionContractTest` use, so the code carries a genuine

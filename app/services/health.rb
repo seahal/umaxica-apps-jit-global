@@ -252,7 +252,7 @@ module Health
       surface_label: "sign app",
       record_classes: [
         AppPrincipalRecord,
-        AppTicketRecord,
+        OpBaseAppRecord,
         AppSettingRecord,
       ],
     )
@@ -262,7 +262,7 @@ module Health
       surface_label: "sign com",
       record_classes: [
         ComPrincipalRecord,
-        ComTicketRecord,
+        OpBaseComRecord,
         ComSettingRecord,
       ],
     )
@@ -272,7 +272,7 @@ module Health
       surface_label: "sign org",
       record_classes: [
         OrgPrincipalRecord,
-        OrgTicketRecord,
+        OpBaseOrgRecord,
         OrgSettingRecord,
       ],
     )

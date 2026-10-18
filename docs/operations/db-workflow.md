@@ -159,9 +159,9 @@ preference identities with separate, named PostgreSQL checks:
 Each pair of migrations first adds `char_length(public_id) <= 25` as `NOT VALID`, then validates the
 check in a non-transactional migration. Existing identifiers are not shortened or regenerated;
 normal issuance remains NanoID-21. A direct or bulk writer that bypasses Rails validation must still
-be rejected by PostgreSQL, and the focused contract test exercises that boundary inside a
-savepoint. The validation migration's down path restores the unvalidated check so reversing the
-additive migration remains explicit and ordered.
+be rejected by PostgreSQL, and the focused contract test exercises that boundary inside a savepoint.
+The validation migration's down path restores the unvalidated check so reversing the additive
+migration remains explicit and ordered.
 
 This is a per-column P12a capacity slice. It does not authorize a global `change_column`, identify
 the remaining unbounded columns as safe, or apply anything to shared or production data. Rebuild a
@@ -169,44 +169,44 @@ run-owned disposable database from migrations and run the focused contract plus 
 setting-model tests before relying on the check; include both full suites at the normal Gate 2.
 
 The same staged method applies to the clearly owned app/com principal identities
-`app_zenith.clients.public_id` and `com_zenith.visitors.public_id`. Migrations
-`20261012091000` add the unvalidated named checks and `20261012091001` validates them. The direct
-SQL contract test attempts an oversized update inside a savepoint, so a bypass writer cannot
-silently store a value beyond the 25-character capacity. The checks preserve the existing string
-type and issued values; `org_zenith.operators.public_id` is a separate 16-character human code and
-is not included. Rebuild and rehearse these migrations only on an owned disposable database before
-any future retained-data application.
+`app_zenith.clients.public_id` and `com_zenith.visitors.public_id`. Migrations `20261012091000` add
+the unvalidated named checks and `20261012091001` validates them. The direct SQL contract test
+attempts an oversized update inside a savepoint, so a bypass writer cannot silently store a value
+beyond the 25-character capacity. The checks preserve the existing string type and issued values;
+`org_zenith.operators.public_id` is a separate 16-character human code and is not included. Rebuild
+and rehearse these migrations only on an owned disposable database before any future retained-data
+application.
 
 The next P12a capacity slice applies the same staged method to the explicitly classified
 self-controlled tables in `CAPACITY_TABLES` in
 [`test/models/public_id_capacity_contract_test.rb`](../../test/models/public_id_capacity_contract_test.rb).
-The owning database migrations are the paired `202610120920xx_add_owned_public_id_capacity_checks_to_*.rb`
-and `202610120921xx_validate_owned_public_id_capacity_checks_to_*.rb` files under
-`db/app_zenith_migrate`, `db/com_zenith_migrate`, `db/org_zenith_migrate`,
-`db/app_tickets_migrate`, `db/app_signals_migrate`, `db/com_signals_migrate`,
-`db/org_signals_migrate` and `db/avatars_migrate`. The first migration adds each named
-`char_length(public_id) <= 25` check as `NOT VALID`; the second validates it without a migration
-transaction. A direct/bulk oversized write must be rejected by PostgreSQL, and the down path must
-return to the explicitly unvalidated state before the additive check is removed. Rebuild a
-run-owned disposable database, run the metadata/direct-write contract, rehearse every pair down and
-up, and regenerate each affected structure dump before relying on this slice. Do not narrow a
-column, rewrite an issued value, or include a provider/protocol ID, the ORG human code, or an
-unclassified inventory candidate by analogy.
-The current disposable focused and Gate 2 result is recorded in
+The owning database migrations are the paired
+`202610120920xx_add_owned_public_id_capacity_checks_to_*.rb` and
+`202610120921xx_validate_owned_public_id_capacity_checks_to_*.rb` files under
+`db/app_zenith_migrate`, `db/com_zenith_migrate`, `db/org_zenith_migrate`, `db/op_base_app_migrate`,
+`db/app_signals_migrate`, `db/com_signals_migrate`, `db/org_signals_migrate` and
+`db/avatars_migrate`. The first migration adds each named `char_length(public_id) <= 25` check as
+`NOT VALID`; the second validates it without a migration transaction. A direct/bulk oversized write
+must be rejected by PostgreSQL, and the down path must return to the explicitly unvalidated state
+before the additive check is removed. Rebuild a run-owned disposable database, run the
+metadata/direct-write contract, rehearse every pair down and up, and regenerate each affected
+structure dump before relying on this slice. Do not narrow a column, rewrite an issued value, or
+include a provider/protocol ID, the ORG human code, or an unclassified inventory candidate by
+analogy. The current disposable focused and Gate 2 result is recorded in
 [`N9K4`](../../evidence/2026-10-12-public-id-capacity-gate-N9K4.md).
 
 The same P12a boundary also covers the four remaining clearly self-controlled unbounded columns
 selected by the semantic inventory: `app_zenith.members.public_id`,
-`app_ticket.logout_transactions.public_id`, and `avatar.post_versions.public_id` plus
+`op_base_app.logout_transactions.public_id`, and `avatar.post_versions.public_id` plus
 `avatar.posts.public_id`. Migrations `20261012093000`/`20261012093100`,
-`20261012093001`/`20261012093101` and `20261012093002`/`20261012093102` add and validate the
-named checks. The app-principal pair runs through the `app_zenith` database task because
+`20261012093001`/`20261012093101` and `20261012093002`/`20261012093102` add and validate the named
+checks. The app-principal pair runs through the `app_zenith` database task because
 `db/app_principals_migrate` is one of its migration paths. Rehearse those pairs on the same owned
 disposable database and run the applicable Member/LogoutTransaction model coverage; do not include
 the retired `legacy_replaced_clients` and `legacy_operator_department_accounts` tables until their
-consumer and retention meaning is reviewed. Their empty disposable-run row counts do not prove
-that retained foreign-key or historical-data obligations are absent.
-The focused and full-gate result for this extension is recorded in
+consumer and retention meaning is reviewed. Their empty disposable-run row counts do not prove that
+retained foreign-key or historical-data obligations are absent. The focused and full-gate result for
+this extension is recorded in
 [`V2J6`](../../evidence/2026-10-12-public-id-capacity-extension-V2J6.md).
 
 ## Cluster role creation evidence
@@ -224,11 +224,11 @@ permission to adopt or delete an unknown cluster role.
 
 The applied identifier-HMAC maintenance migrations are not a safe shared-cluster rollback path:
 their historical `down` implementations contain unconditional `DROP ROLE` statements after the
-database objects are removed. Do not roll those migrations back in a shared or development
-cluster, and do not treat a database drop as role ownership evidence. A future repair must be
-forward-only or must establish and verify creation ownership, role attributes, memberships and
-dependencies before any role deletion can be considered. The run-owned rebuild command above is
-the only current deletion path, and it refuses missing or mismatched creation receipts.
+database objects are removed. Do not roll those migrations back in a shared or development cluster,
+and do not treat a database drop as role ownership evidence. A future repair must be forward-only or
+must establish and verify creation ownership, role attributes, memberships and dependencies before
+any role deletion can be considered. The run-owned rebuild command above is the only current
+deletion path, and it refuses missing or mismatched creation receipts.
 
 For a fresh run, first verify that its unique database and role names are absent, create its owned
 databases, and record their OIDs/owner/comment. Run normal migrations from source, retain the actual
@@ -352,15 +352,15 @@ Before consumer deployment, complete the following controlled sequence:
    after writer/drain verification deploy consumers generating public-ID links and bindings.
    Existing numeric management URLs have the bounded owner-scoped ID-3b contract; new links do not
    expose PKs. A failed public lookup never retries by PK.
-5. After the inventory, bounded backfill, proof drain, writer control and consumer-readiness
-   checks, apply the reviewed final-constraint migrations
+5. After the inventory, bounded backfill, proof drain, writer control and consumer-readiness checks,
+   apply the reviewed final-constraint migrations
    `20261012081257_add_not_null_check_to_operator_telephone_public_ids.rb` and
-   `20261012081301_validate_operator_telephone_public_id_not_null.rb`. The first adds a
-   `NOT VALID` `public_id IS NOT NULL` check; the second validates the existing nonblank and
-   not-null checks before changing the column metadata and removing the transitional checks. A
-   stale NULL or whitespace value fails the transition; the migration never invents or rewrites an
-   identifier. The current run-owned test schema has rehearsed this sequence, but no production or
-   shared-data cutover is claimed. The approved immutability trigger remains in
+   `20261012081301_validate_operator_telephone_public_id_not_null.rb`. The first adds a `NOT VALID`
+   `public_id IS NOT NULL` check; the second validates the existing nonblank and not-null checks
+   before changing the column metadata and removing the transitional checks. A stale NULL or
+   whitespace value fails the transition; the migration never invents or rewrites an identifier. The
+   current run-owned test schema has rehearsed this sequence, but no production or shared-data
+   cutover is claimed. The approved immutability trigger remains in
    `20261011024019_protect_operator_telephone_public_id.rb`.
 
 Pre-cutover failure leaves the additive column and assigned IDs intact; stop and resume the
@@ -381,16 +381,16 @@ Use the explicit `PublicIdNullOnlyBackfillOperation` with a bounded relation and
 when a pre-cutover NULL row is genuinely present. It locks each row, assigns only when `public_id`
 is NULL, preserves all other attributes and timestamps, retries only the named public-ID unique
 constraint within its finite bound, and is safe to repeat. It is not a normal request-time repair
-path. If inventory reports no missing rows, record the zero-row result and proceed without
-inventing a backfill.
+path. If inventory reports no missing rows, record the zero-row result and proceed without inventing
+a backfill.
 
 Apply the owning database's two migrations in order:
 
 1. `20261012083817_add_not_null_checks_to_client_public_ids.rb` for APP, or the corresponding
    single-table migration for COM/ORG, which adds `NOT VALID` not-null and nonblank checks.
-2. `20261012083823_validate_client_public_id_not_null.rb` for APP, or the corresponding
-   single-table validation migration for COM/ORG, which validates both checks, changes the column
-   to `NOT NULL`, and removes the temporary checks.
+2. `20261012083823_validate_client_public_id_not_null.rb` for APP, or the corresponding single-table
+   validation migration for COM/ORG, which validates both checks, changes the column to `NOT NULL`,
+   and removes the temporary checks.
 
 The validation migration deliberately uses `disable_ddl_transaction!`; Strong Migrations rejects
 check validation inside a transaction that blocks writes. A down/up rehearsal must show that the
@@ -403,9 +403,9 @@ does not authorize production/shared-data changes, consumer cutover, or a broad 
 The ORG identity-audit catalogue uses an identity-preserving staged mapping because its existing
 event key is a string and `staff_identity_audits.event_id` references that string. Do not drop the
 tables, truncate rows, force-cast the old key, or edit an applied migration. The additive migration
-`20261012085039_convert_staff_identity_audit_events_to_bigint.rb` adds `legacy_id`, `id_bigint`
-and `event_id_bigint`, together with the reviewed indexes. Before the final cutover, run the
-operation in dry-run mode with an explicit bounded batch size, then run it only after its aggregate
+`20261012085039_convert_staff_identity_audit_events_to_bigint.rb` adds `legacy_id`, `id_bigint` and
+`event_id_bigint`, together with the reviewed indexes. Before the final cutover, run the operation
+in dry-run mode with an explicit bounded batch size, then run it only after its aggregate
 missing/unresolved counts and ownership are understood:
 
 ```ruby
@@ -416,9 +416,9 @@ StaffIdentityAuditEventBigintBackfillOperation.call(dry_run: false, batch_size: 
 The operation locks each bounded batch, preserves the old code in `legacy_id`, assigns a bigint
 mapping without reusing an existing mapping, and maps audit references only when the corresponding
 event mapping exists. It raises on conflicting legacy values, missing event mappings, schema
-incompleteness or bigint exhaustion. Repeating it after success is a no-op for already mapped
-rows; a dry run writes nothing. Never use it as a request-time repair or against production/shared
-data. Confirm the result from the catalog and aggregate counts without exporting event contents.
+incompleteness or bigint exhaustion. Repeating it after success is a no-op for already mapped rows;
+a dry run writes nothing. Never use it as a request-time repair or against production/shared data.
+Confirm the result from the catalog and aggregate counts without exporting event contents.
 
 After mapping is complete, run the two cutover migrations in order:
 
@@ -426,12 +426,12 @@ After mapping is complete, run the two cutover migrations in order:
 bundle exec rails db:migrate:org_zenith
 ```
 
-`20261012100000_cut_over_staff_identity_audit_event_bigint_keys.rb` installs a staged bigint
-foreign key, validates complete correspondence before swapping authority, retains the legacy code
-columns and performs the narrow primary-key promotion. It then reattaches the foreign key to the
-new bigint primary key. `20261012100100_validate_staff_identity_audit_event_bigint_foreign_key.rb`
-validates the checks and FK, sets `legacy_id` and `event_id` non-null and removes the temporary
-checks. The old string FK is not retained as a fallback.
+`20261012100000_cut_over_staff_identity_audit_event_bigint_keys.rb` installs a staged bigint foreign
+key, validates complete correspondence before swapping authority, retains the legacy code columns
+and performs the narrow primary-key promotion. It then reattaches the foreign key to the new bigint
+primary key. `20261012100100_validate_staff_identity_audit_event_bigint_foreign_key.rb` validates
+the checks and FK, sets `legacy_id` and `event_id` non-null and removes the temporary checks. The
+old string FK is not retained as a fallback.
 
 For a disposable rollback rehearsal, run the validation migration down first, then the structural
 migration down, and finally migrate back through both versions. Use the repository's versioned
@@ -442,6 +442,6 @@ unchanged after the round trip. Never use this as a request-time repair or again
 data.
 
 The final schema has `staff_identity_audit_events.id` and `staff_identity_audits.event_id` as
-non-null bigint keys, with the legacy codes retained as required correspondence values. The
-fixed catalogue does not gain a sequence merely because its key is bigint; IDs come from the
-reviewed mapping. In the final schema the retained backfill operation returns an explicit no-op.
+non-null bigint keys, with the legacy codes retained as required correspondence values. The fixed
+catalogue does not gain a sequence merely because its key is bigint; IDs come from the reviewed
+mapping. In the final schema the retained backfill operation returns an explicit no-op.

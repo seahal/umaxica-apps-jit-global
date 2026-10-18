@@ -275,8 +275,8 @@ class ComSocialLoginBlockedTest < ActionDispatch::IntegrationTest
       intent: "sign_in",
       params: {
         response_type: "code",
-        client_id: "core-com",
-        redirect_uri: OidcClientRegistry.find!("core-com").redirect_uris.first,
+        client_id: "core-com-jp",
+        redirect_uri: OidcClientRegistry.find!("core-com-jp").redirect_uris.first,
         code_challenge: SecureRandom.urlsafe_base64(32),
         code_challenge_method: "S256",
         state: SecureRandom.urlsafe_base64(16),

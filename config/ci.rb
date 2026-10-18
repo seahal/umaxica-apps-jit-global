@@ -12,7 +12,11 @@ CI.run do
        "POSTGRESQL_TEST_PREPARE_DATABASES=" \
        "test_primary_db,test_publishing_db,test_app_zenith_db,test_com_zenith_db," \
        "test_org_zenith_db,test_app_setting_db,test_com_setting_db,test_org_setting_db," \
-       "test_app_ticket_db,test_com_ticket_db,test_org_ticket_db,test_app_signal_db," \
+       "test_op_base_app_db,test_op_base_com_db,test_op_base_org_db,test_app_signal_db," \
+       "test_rp_base_app_db,test_rp_core_app_jp_db,test_rp_warp_app_jp_db,test_rp_palm_app_jp_db," \
+       "test_rp_base_com_db,test_rp_core_com_jp_db,test_rp_warp_com_jp_db," \
+       "test_rp_base_org_db,test_rp_core_org_jp_db,test_rp_warp_org_jp_db," \
+       "test_rp_edit_org_db,test_rp_tech_org_db," \
        "test_com_signal_db,test_org_signal_db,test_avatar_db,test_chronicle_db," \
        "test_occurrence_db,test_queue_db,test_search_db,test_storage_db " \
        "env RAILS_ENV=test bin/rails db:test:prepare"

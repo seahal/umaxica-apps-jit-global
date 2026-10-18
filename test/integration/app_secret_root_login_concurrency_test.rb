@@ -448,7 +448,7 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
           end
 
           assert_not_equal Client.lease_connection.select_value("SELECT pg_backend_pid()"), pid
-          AppTicketRecord.transaction do
+          OpBaseAppRecord.transaction do
             flow.lock!
             if outcome == :cancellation
               flow.halt_sign_in!

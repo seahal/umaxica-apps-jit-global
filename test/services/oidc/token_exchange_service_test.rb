@@ -15,7 +15,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       Digest::SHA256.digest(@code_verifier),
       padding: false,
     )
-    @client = OidcClientRegistry.find("core-app")
+    @client = OidcClientRegistry.find("core-app-jp")
     @redirect_uri = @client.redirect_uris.first
     @client_secret = "test_secret_credential_for_core_app"
   end
@@ -29,7 +29,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -88,7 +88,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     code_payload = Valkey::AuthState::AuthorizationCodeStore.new.read(code_record.code)
 
     assert_equal "issued", code_payload.fetch("state")
-    assert_nil ClientRpSession.find_by(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    assert_nil OpAppGrant.find_by(client_token: @user_session_token, oidc_client_id: @client.client_id)
   end
 
   test "refresh grant refuses to extend a root with an unbounded expiry" do
@@ -127,7 +127,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       end
 
     assert_predicate initial_result, :success?
-    usage = ClientRpSession.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+    usage = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
     original_digest = usage.refresh_token_digest
     original_generation = usage.refresh_generation
     @user_session_token.update!(discard_at: Float::INFINITY)
@@ -192,7 +192,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       end
 
     assert_predicate first_result, :success?
-    assert_equal 1, ClientRpSession.where(client_token_id: @user_session_token.id).count
+    assert_equal 1, OpAppGrant.where(client_token_id: @user_session_token.id).count
     assert_predicate transaction.reload.authorization_grant_redeemed_at, :present?
 
     second_result =
@@ -202,7 +202,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not second_result.success?
     assert_equal "invalid_grant", second_result.error
-    assert_equal 1, ClientRpSession.where(client_token_id: @user_session_token.id).count
+    assert_equal 1, OpAppGrant.where(client_token_id: @user_session_token.id).count
   end
 
   test "transaction-bound grant claim rolls back when token issuance fails" do
@@ -232,7 +232,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       { status: :success, browser_session_ref: @user_session_token.public_id }
     end
     code_record = issue_code_for_transaction!(transaction)
-    rp_session_count = ClientRpSession.count
+    rp_session_count = OpAppGrant.count
 
     result =
       AuthenticationTokenService.stub(:encode, nil) do
@@ -244,7 +244,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "server_error", result.error
     assert_nil result.token_response
-    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal rp_session_count, OpAppGrant.count
     assert_nil transaction.reload.authorization_grant_redeemed_at
     assert_equal "issued", authorization_code_store.read(code_record.code).fetch("state")
   end
@@ -253,13 +253,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     code_record = issue_code!
     database_now = Time.utc(2026, 9, 21, 13, 14, 15, 123_456)
 
-    AppTicketRecord.stub(:database_now, database_now) do
+    OpBaseAppRecord.stub(:database_now, database_now) do
       with_authenticated_client do
         result = OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -271,7 +271,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       end
     end
 
-    connection = ClientOidcConnection.find_by!(user_id: @user.id, client_id: "core-app")
+    connection = ClientOidcConnection.find_by!(user_id: @user.id, client_id: "core-app-jp")
 
     assert_equal database_now, connection.last_used_at
   end
@@ -287,7 +287,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -303,7 +303,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: initial_result.token_response.fetch(:refresh_token),
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -333,6 +333,152 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_operator access_payload.fetch("iat"), :>, authentication_event_at.to_i
   end
 
+  test "an exchanged Access JWT carries the OP protocol epoch and verifies under the RP public JWKS verifier" do
+    code_record = issue_code!
+    result =
+      with_authenticated_client do
+        OidcTokenExchangeCoordinator.call(
+          grant_type: "authorization_code", code: code_record.code, redirect_uri: @redirect_uri,
+          client_id: "core-app-jp", client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+          client_assertion: "test-client-assertion", token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+          code_verifier: @code_verifier, expected_resource_type: "client",
+        )
+      end
+
+    assert_predicate result, :success?
+    access_token = result.token_response.fetch(:access_token)
+    issuer_id = OidcIssuer.jwt_issuer_id_for_client(@client)
+    # The RP sees exactly the public JWKS document the OP publishes for this issuer.
+    published = JitSecurityJwtRegistry.jwks_for(issuer_id).to_json
+    jwks = OidcOpJwksClient.new(
+      jwks_uri: "https://base.example/.well-known/jwks.json",
+      fetcher: -> { published }, clock: -> { Time.current },
+    )
+    verify =
+      lambda do |epoch|
+        OidcOpAccessTokenVerifier.new(
+          access_token:, client_id: "core-app-jp", realm: "app", issuer: OidcIssuer.for_client(@client),
+          audience: @client.aud, contract_epoch: epoch, jwks_client: jwks,
+        ).call
+      end
+    current_epoch = OpAppProtocolEpoch.find(1).contract_epoch
+
+    assert_predicate verify.call(current_epoch), :success?
+    # A token is bound to the epoch it was minted under; a later release profile refuses it.
+    assert_not_predicate verify.call(current_epoch + 1), :success?
+
+    id_result = OidcOpIdTokenVerifier.new(
+      id_token: result.token_response.fetch(:id_token), client_id: "core-app-jp", realm: "app",
+      issuer: OidcIssuer.for_client(@client), expected_nonce: code_record.nonce, jwks_client: jwks,
+    ).call
+
+    assert_predicate id_result, :success?
+  end
+
+  test "an identity stop that advances the actor epoch cuts off Refresh for authority issued before it" do
+    @user_session_token.update_columns(authentication_epoch: 0)
+    code_record = issue_code!
+    initial = exchange_issued_code(code_record)
+
+    assert_predicate initial, :success?
+    grant = OpAppGrant.find_by!(oidc_client_id: "core-app-jp", client_token_id: @user_session_token.id)
+
+    assert_equal [0, OpAppProtocolEpoch.current_contract_epoch], [grant.authentication_epoch, grant.contract_epoch]
+
+    # Same epoch: rotation continues.
+    rotated = refresh_with(initial.token_response.fetch(:refresh_token))
+
+    assert_predicate rotated, :success?
+
+    @user.update_columns(authentication_epoch: 1)
+    stopped = refresh_with(rotated.token_response.fetch(:refresh_token))
+
+    assert_not_predicate stopped, :success?
+    assert_equal "invalid_grant", stopped.error
+  end
+
+  test "a root without a recorded epoch is refused once any identity stop has advanced the actor" do
+    @user_session_token.update_columns(authentication_epoch: nil)
+    initial = exchange_issued_code(issue_code!)
+
+    assert_predicate initial, :success?
+    @user.update_columns(authentication_epoch: 1)
+
+    assert_equal "invalid_grant", refresh_with(initial.token_response.fetch(:refresh_token)).error
+  end
+
+  test "a Grant from before the current OP contract epoch cannot Refresh into the new profile" do
+    initial = exchange_issued_code(issue_code!)
+
+    assert_predicate initial, :success?
+    grant = OpAppGrant.find_by!(oidc_client_id: "core-app-jp", client_token_id: @user_session_token.id)
+    current = OpAppProtocolEpoch.current_contract_epoch
+    rotated = refresh_with(initial.token_response.fetch(:refresh_token))
+
+    assert_predicate rotated, :success?, "a Grant at the current epoch keeps rotating"
+
+    # A pre-R5 family has no recorded epoch; it must not be stamped with the current one on Refresh.
+    grant.update_columns(contract_epoch: nil)
+
+    assert_equal "invalid_grant", refresh_with(rotated.token_response.fetch(:refresh_token)).error
+
+    # The realm cut over to the next epoch: a Grant minted one epoch below is refused.
+    grant.update_columns(contract_epoch: current)
+    OpAppProtocolEpoch.find(1).update_columns(contract_epoch: current + 1)
+
+    assert_equal "invalid_grant", refresh_with(rotated.token_response.fetch(:refresh_token)).error
+    assert_nil grant.reload.revoked_at, "a refused cutover Refresh does not rewrite the Grant"
+  end
+
+  test "the delivery query returns the exact rotation for its attempt and nothing else" do
+    initial = exchange_issued_code(issue_code!)
+    predecessor = initial.token_response.fetch(:refresh_token)
+    rotated = refresh_with(predecessor, attempt_ref: "attempt-1")
+
+    assert_predicate rotated, :success?
+    query =
+      lambda do |attempt_ref, refresh_token: predecessor|
+        OidcRefreshDeliveryQuery.call(
+          refresh_token:, attempt_ref:, client_id: "core-app-jp", client_assertion: "assertion",
+          endpoint_uri: OidcIssuer.refresh_delivery_query_endpoint("client"), resource_type: "client",
+        )
+      end
+    OidcClientRegistry.stub(:authenticate_assertion, true) do
+      recovered = query.call("attempt-1")
+
+      assert_predicate recovered, :success?
+      assert_equal rotated.token_response.fetch(:refresh_token), recovered.token_response[:refresh_token]
+      assert_equal rotated.token_response.fetch(:access_token), recovered.token_response[:access_token]
+      assert_equal "invalid_grant", query.call("attempt-2").error
+      assert_equal "invalid_grant", query.call("").error
+
+      # The receipt window is judged on the OP database clock, so move that clock past it.
+      after_window = OpAppGrant.database_now + OidcRefreshDeliveryReceipt::TTL + 1.second
+
+      OpAppGrant.stub(:database_now, after_window) do
+        assert_equal "invalid_grant", query.call("attempt-1").error
+      end
+    end
+  end
+
+  test "the delivery query refuses a failed client assertion and a stopped actor" do
+    initial = exchange_issued_code(issue_code!)
+    predecessor = initial.token_response.fetch(:refresh_token)
+    refresh_with(predecessor, attempt_ref: "attempt-1")
+    query =
+      lambda do
+        OidcRefreshDeliveryQuery.call(
+          refresh_token: predecessor, attempt_ref: "attempt-1", client_id: "core-app-jp", client_assertion: "x",
+          endpoint_uri: OidcIssuer.refresh_delivery_query_endpoint("client"), resource_type: "client",
+        )
+      end
+
+    OidcClientRegistry.stub(:authenticate_assertion, false) { assert_equal "invalid_client", query.call.error }
+    @user.update_columns(authentication_epoch: @user.authentication_epoch + 1)
+
+    OidcClientRegistry.stub(:authenticate_assertion, true) { assert_equal "invalid_grant", query.call.error }
+  end
+
   test "refresh grant rejects a different registered client without rotating the usage" do
     @user_session_token.update!(authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
     code_record = issue_code!
@@ -342,7 +488,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -358,7 +504,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       result = OidcTokenExchangeCoordinator.call(
         grant_type: "refresh_token",
         refresh_token: refresh_token,
-        client_id: "warp-app",
+        client_id: "warp-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "different-client-assertion",
         token_endpoint_uri: "https://warp.app.localhost/oauth/token",
@@ -374,7 +520,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: refresh_token,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -386,9 +532,9 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "refresh grant fails closed when the RP session has no authentication event" do
-    usage = ClientRpSession.create!(
+    usage = OpAppGrant.create!(
       client_token: @user_session_token,
-      oidc_client_id: "core-app",
+      oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid,
       oidc_nonce: "refresh_nonce",
@@ -401,7 +547,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: refresh_token,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -419,7 +565,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       with_authenticated_client do
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -437,7 +583,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: "not-a-refresh-token",
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -457,7 +603,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: issue_code!.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -465,7 +611,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           expected_resource_type: "client",
         )
       end
-    usage = ClientRpSession.find_by!(client_token: @user_session_token, oidc_client_id: "core-app")
+    usage = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: "core-app-jp")
     usage.update!(oidc_scope: "profile")
 
     result =
@@ -473,7 +619,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: initial_result.token_response.fetch(:refresh_token),
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -494,7 +640,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: issue_code!.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -509,7 +655,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: initial_result.token_response.fetch(:refresh_token),
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -533,7 +679,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
             grant_type: "authorization_code",
             code: code_record.code,
             redirect_uri: @redirect_uri,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
             client_assertion: "test-client-assertion",
             token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -552,7 +698,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_client(@client),
       )
       id_token = JWT.decode(result.token_response.fetch(:id_token), nil, false).first
-      usage = ClientRpSession.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
+      usage = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: @client.client_id)
 
       assert_operator Time.zone.at(access_token.fetch("exp")), :<=, absolute_expiry
       assert_operator Time.zone.at(id_token.fetch("exp")), :<=, absolute_expiry
@@ -565,14 +711,14 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     code_record = issue_code!
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-app", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       result = OidcTokenExchangeCoordinator.call(
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: assertion,
         code_verifier: @code_verifier,
@@ -588,9 +734,9 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "rejects private_key_jwt client assertion with wrong token endpoint audience" do
     code_record = issue_code!
 
-    with_oidc_client_key("CORE_APP") do
+    with_oidc_client_key("CORE_APP_JP") do
       assertion = OidcClientAssertionJwt.issue(
-        client_id: "core-app",
+        client_id: "core-app-jp",
         token_url: "https://log.umaxica.app/oauth/token",
       )
 
@@ -598,7 +744,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: assertion,
         code_verifier: @code_verifier,
@@ -616,14 +762,14 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     second_code_record = issue_code!
     token_url = "https://log.umaxica.app/oauth/token"
 
-    with_oidc_client_key("CORE_APP") do
-      assertion = OidcClientAssertionJwt.issue(client_id: "core-app", token_url: token_url)
+    with_oidc_client_key("CORE_APP_JP") do
+      assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
 
       first_result = OidcTokenExchangeCoordinator.call(
         grant_type: "authorization_code",
         code: first_code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: assertion,
         code_verifier: @code_verifier,
@@ -634,7 +780,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: second_code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: assertion,
         code_verifier: @code_verifier,
@@ -650,7 +796,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "rejects client assertion unless private_key_jwt is explicitly registered" do
     unconfigured_client = visitor_account(
-      client_id: "core-app",
+      client_id: "core-app-jp",
       redirect_uris: [@redirect_uri],
       redirect_uris_by_realm: { "client" => [@redirect_uri] },
       registered_token_endpoint_auth_method: nil,
@@ -661,13 +807,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     result =
       OidcClientRegistry.stub(
         :find,
-        ->(client_id) { (client_id == "core-app") ? unconfigured_client : nil },
+        ->(client_id) { (client_id == "core-app-jp") ? unconfigured_client : nil },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "assertion",
           code_verifier: @code_verifier,
@@ -689,7 +835,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_secret: @client_secret,
         code_verifier: @code_verifier,
         expected_resource_type: "client",
@@ -709,7 +855,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "assertion",
         code_verifier: @code_verifier,
@@ -730,7 +876,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "test-client-assertion",
         token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -754,7 +900,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -766,7 +912,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "invalid_grant", result.error
     assert_code_unconsumed(code_record)
-    assert_empty ClientRpSession.where(client_token: @user_session_token)
+    assert_empty OpAppGrant.where(client_token: @user_session_token)
   end
 
   test "revalidates the Base Browser Session after code consumption before issuing RP credentials" do
@@ -788,7 +934,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -802,7 +948,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_grant", result.error
     assert_nil result.token_response
     assert_equal "consumed", delegate.read(code_record.code).fetch("state")
-    assert_empty ClientRpSession.where(client_token: @user_session_token)
+    assert_empty OpAppGrant.where(client_token: @user_session_token)
   end
 
   test "fails for wrong grant_type" do
@@ -814,7 +960,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "implicit",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_secret: @client_secret,
           code_verifier: @code_verifier,
           expected_resource_type: "client",
@@ -834,7 +980,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_secret: "wrong_secret_credential",
           code_verifier: @code_verifier,
           expected_resource_type: "client",
@@ -852,7 +998,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       grant_type: "authorization_code",
       code: code_record.code,
       redirect_uri: @redirect_uri,
-      client_id: "core-app",
+      client_id: "core-app-jp",
       code_verifier: @code_verifier,
       expected_resource_type: "client",
     )
@@ -870,7 +1016,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1093,17 +1239,17 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "token exchange rejects a core-app code whose stored redirect_uri belongs to a different realm than " \
+  test "token exchange rejects a core-app-jp code whose stored redirect_uri belongs to a different realm than " \
        "the code's resource_type" do
-    org_redirect_uri = OidcClientRegistry.find!("core-org").redirect_uris_by_realm.fetch("operator").first
-    code_record = issue_code!(client_id: "core-app", redirect_uri: org_redirect_uri)
+    org_redirect_uri = OidcClientRegistry.find!("core-org-jp").redirect_uris_by_realm.fetch("operator").first
+    code_record = issue_code!(client_id: "core-app-jp", redirect_uri: org_redirect_uri)
 
     with_authenticated_client do
       result = OidcTokenExchangeCoordinator.call(
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: org_redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "test-client-assertion",
         token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1167,7 +1313,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1274,7 +1420,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       grant_type: "authorization_code",
       code: code_record.code,
       redirect_uri: @redirect_uri,
-      client_id: "core-app",
+      client_id: "core-app-jp",
       code_verifier: @code_verifier,
       expected_resource_type: "client",
     )
@@ -1290,7 +1436,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: "nonexistent_code",
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1313,7 +1459,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
             grant_type: "authorization_code",
             code: code_record.code,
             redirect_uri: @redirect_uri,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
             client_assertion: "test-client-assertion",
             token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1337,7 +1483,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1366,14 +1512,14 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     )
 
     result =
-      ClientRpSession.stub(:find_by, Object.new) do
+      OpAppGrant.stub(:find_by, Object.new) do
         RpSessionRevoker.stub(:call, ->(**) { raise ActiveRecord::ConnectionNotEstablished }) do
           with_authenticated_client do
             OidcTokenExchangeCoordinator.call(
               grant_type: "authorization_code",
               code: code_record.code,
               redirect_uri: @redirect_uri,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
               client_assertion: "test-client-assertion",
               token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1407,14 +1553,14 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     )
 
     result =
-      ClientRpSession.stub(:find_by, Object.new) do
+      OpAppGrant.stub(:find_by, Object.new) do
         RpSessionRevoker.stub(:call, ->(**) { }) do
           with_authenticated_client do
             OidcTokenExchangeCoordinator.call(
               grant_type: "authorization_code",
               code: code_record.code,
               redirect_uri: @redirect_uri,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
               client_assertion: "test-client-assertion",
               token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1447,14 +1593,14 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     revoke_calls = 0
 
     result =
-      ClientRpSession.stub(:find_by, Object.new) do
+      OpAppGrant.stub(:find_by, Object.new) do
         RpSessionRevoker.stub(:call, ->(**) { revoke_calls += 1 }) do
           with_authenticated_client do
             OidcTokenExchangeCoordinator.call(
               grant_type: "authorization_code",
               code: code_record.code,
               redirect_uri: @redirect_uri,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
               client_assertion: "test-client-assertion",
               token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1487,14 +1633,14 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     revoke_calls = 0
 
     result =
-      ClientRpSession.stub(:where, ->(*) { flunk("family metadata must not select RP sessions") }) do
+      OpAppGrant.stub(:where, ->(*) { flunk("family metadata must not select RP sessions") }) do
         RpSessionRevoker.stub(:call, ->(**) { revoke_calls += 1 }) do
           with_authenticated_client do
             OidcTokenExchangeCoordinator.call(
               grant_type: "authorization_code",
               code: code_record.code,
               redirect_uri: @redirect_uri,
-              client_id: "core-app",
+              client_id: "core-app-jp",
               client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
               client_assertion: "test-client-assertion",
               token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1527,7 +1673,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1553,7 +1699,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       delegate.consume!(**arguments)
     end
     code_store.define_singleton_method(:link_family!) { |**| invalid_link }
-    rp_session_count = ClientRpSession.count
+    rp_session_count = OpAppGrant.count
 
     result =
       with_authenticated_client do
@@ -1561,7 +1707,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1574,7 +1720,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "server_error", result.error
     assert_nil result.token_response
-    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal rp_session_count, OpAppGrant.count
     assert_equal "consumed", delegate.read(code_record.code).fetch("state")
   end
 
@@ -1589,7 +1735,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     code_store.define_singleton_method(:link_family!) do |**|
       raise Umaxica::Valkey::Unavailable, "authorization code family link unavailable"
     end
-    rp_session_count = ClientRpSession.count
+    rp_session_count = OpAppGrant.count
 
     result =
       with_authenticated_client do
@@ -1597,7 +1743,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1610,7 +1756,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "server_error", result.error
     assert_nil result.token_response
-    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal rp_session_count, OpAppGrant.count
     assert_equal "consumed", delegate.read(code_record.code).fetch("state")
   end
 
@@ -1622,7 +1768,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1633,26 +1779,26 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     assert_predicate owner_result, :success?
 
-    owner_session = ClientRpSession.order(:created_at).last
+    owner_session = OpAppGrant.order(:created_at).last
     owner_session_id = owner_session.id
     owner_public_id = owner_session.public_id
     owner_refresh_digest = owner_session.refresh_token_digest
     @user_session_token.reload
     root_family_id = @user_session_token.refresh_token_family_id
     root_discard_at = @user_session_token.discard_at
-    warp_client = OidcClientRegistry.find("warp-app")
+    warp_client = OidcClientRegistry.find("warp-app-jp")
     warp_redirect_uri = warp_client.redirect_uris.first
 
     replay_result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(cid, assertion, token_url:) { cid == "warp-app" && assertion.present? && token_url.present? },
+        ->(cid, assertion, token_url:) { cid == "warp-app-jp" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: warp_redirect_uri,
-          client_id: "warp-app",
+          client_id: "warp-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "warp-app-client-assertion",
           token_endpoint_uri: "https://warp.app.localhost/oauth/token",
@@ -1689,7 +1835,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       delegate.mark_replay!(raw_code: raw_code)
       delegate.link_family!(raw_code: raw_code, **arguments)
     end
-    rp_session_count = ClientRpSession.count
+    rp_session_count = OpAppGrant.count
 
     result =
       with_authenticated_client do
@@ -1697,7 +1843,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1710,7 +1856,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "invalid_grant", result.error
     assert_nil result.token_response
-    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal rp_session_count, OpAppGrant.count
     assert_predicate delegate.read(code_record.code).fetch("replay_detected_at"), :present?
   end
 
@@ -1724,7 +1870,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       delegate.consume!(**arguments)
     end
     code_store.define_singleton_method(:link_family!) { |**| unknown_link }
-    rp_session_count = ClientRpSession.count
+    rp_session_count = OpAppGrant.count
 
     result =
       with_authenticated_client do
@@ -1732,7 +1878,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1745,7 +1891,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "server_error", result.error
     assert_nil result.token_response
-    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal rp_session_count, OpAppGrant.count
     assert_equal "consumed", delegate.read(code_record.code).fetch("state")
   end
 
@@ -1762,7 +1908,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
                 grant_type: "authorization_code",
                 code: code_record.code,
                 redirect_uri: @redirect_uri,
-                client_id: "core-app",
+                client_id: "core-app-jp",
                 client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
                 client_assertion: "test-client-assertion-#{index}",
                 token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1784,7 +1930,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_operator denials.size, :>=, 1
     denials.each { |denial| assert_equal "invalid_grant", denial.error }
     assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
-    sessions = ClientRpSession.where(oidc_client_id: "core-app", client_token_id: @user_session_token.id)
+    sessions = OpAppGrant.where(oidc_client_id: "core-app-jp", client_token_id: @user_session_token.id)
 
     assert_operator sessions.count, :<=, 1
     assert sessions.none?(&:active?)
@@ -1798,7 +1944,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1808,7 +1954,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       end
 
     assert_predicate first, :success?
-    usage = ClientRpSession.order(:created_at).last
+    usage = OpAppGrant.order(:created_at).last
     digest = usage.refresh_token_digest
 
     lost_response_retry =
@@ -1817,7 +1963,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1833,7 +1979,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     usage.reload
 
     assert_equal digest, usage.refresh_token_digest
-    assert_equal 1, ClientRpSession.where(client_token_id: @user_session_token.id, oidc_client_id: "core-app").count
+    assert_equal 1, OpAppGrant.where(client_token_id: @user_session_token.id, oidc_client_id: "core-app-jp").count
   end
 
   test "a new authorization code cannot replace an unretired RP session" do
@@ -1844,7 +1990,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: first_code.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1854,7 +2000,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       end
 
     assert_predicate first_result, :success?
-    usage = ClientRpSession.find_by!(client_token: @user_session_token, oidc_client_id: "core-app")
+    usage = OpAppGrant.find_by!(client_token: @user_session_token, oidc_client_id: "core-app-jp")
     original_jti = usage.oidc_jti
     original_scope = usage.oidc_scope
     second_code = issue_code!(scope: "openid email")
@@ -1865,7 +2011,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: second_code.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1883,7 +2029,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "fails closed and rolls back the rp session when token issuance fails after consume" do
     code_record = issue_code!
-    rp_session_count = ClientRpSession.count
+    rp_session_count = OpAppGrant.count
 
     result =
       AuthenticationTokenService.stub(:encode, nil) do
@@ -1892,7 +2038,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
             grant_type: "authorization_code",
             code: code_record.code,
             redirect_uri: @redirect_uri,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
             client_assertion: "test-client-assertion",
             token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1906,7 +2052,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "server_error", result.error
     assert_equal "token issuance failed", result.error_description
     assert_nil result.token_response
-    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal rp_session_count, OpAppGrant.count
     assert_equal "consumed", authorization_code_store.read(code_record.code).fetch("state")
   end
 
@@ -1919,7 +2065,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: "http://wrong.host/callback",
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1940,7 +2086,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1963,7 +2109,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -1980,13 +2126,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     code_record = issue_code!
 
     assert_no_difference "ClientToken.count" do
-      assert_difference "ClientRpSession.count", 1 do
+      assert_difference "OpAppGrant.count", 1 do
         with_authenticated_client do
           OidcTokenExchangeCoordinator.call(
             grant_type: "authorization_code",
             code: code_record.code,
             redirect_uri: @redirect_uri,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
             client_assertion: "test-client-assertion",
             token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2006,7 +2152,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "test-client-assertion",
         token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2015,13 +2161,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       )
     end
 
-    connection = ClientOidcConnection.find_by!(user_id: @user.id, client_id: "core-app")
-    usage = ClientRpSession.order(:created_at).last
+    connection = ClientOidcConnection.find_by!(user_id: @user.id, client_id: "core-app-jp")
+    usage = OpAppGrant.order(:created_at).last
 
     assert_equal "openid profile email", connection.scope
     assert_nil connection.revoked_at
     assert_equal @user_session_token.id, usage.client_token_id
-    assert_equal "core-app", usage.oidc_client_id
+    assert_equal "core-app-jp", usage.oidc_client_id
     assert_equal "openid profile email", usage.oidc_scope
     assert_predicate usage.oidc_jti, :present?
   end
@@ -2029,7 +2175,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "reactivates existing user RP connection on token exchange" do
     connection = ClientOidcConnection.create!(
       user: @user,
-      client_id: "core-app",
+      client_id: "core-app-jp",
       scope: "openid",
       last_used_at: 1.day.ago,
       revoked_at: 1.hour.ago,
@@ -2041,7 +2187,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: @redirect_uri,
-        client_id: "core-app",
+        client_id: "core-app-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "test-client-assertion",
         token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2061,27 +2207,27 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     now = Time.current
     connection = ClientOidcConnection.create!(
       user: @user,
-      client_id: "core-app",
+      client_id: "core-app-jp",
       scope: "openid",
       last_used_at: 1.hour.ago,
       revoked_at: now,
     )
     code_record = plant_authorization_code!(
-      client_id: "core-app",
+      client_id: "core-app-jp",
       redirect_uri: @redirect_uri,
       code_challenge: @code_challenge,
       code_challenge_method: "S256",
       issued_at: now - 1.second,
     )
 
-    assert_no_difference "ClientRpSession.count" do
+    assert_no_difference "OpAppGrant.count" do
       result =
         with_authenticated_client do
           OidcTokenExchangeCoordinator.call(
             grant_type: "authorization_code",
             code: code_record.code,
             redirect_uri: @redirect_uri,
-            client_id: "core-app",
+            client_id: "core-app-jp",
             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
             client_assertion: "test-client-assertion",
             token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2107,7 +2253,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2116,7 +2262,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         )
       end
 
-    connection = ClientOidcConnection.find_by!(user_id: @user.id, client_id: "core-app")
+    connection = ClientOidcConnection.find_by!(user_id: @user.id, client_id: "core-app-jp")
     previous_last_used_at = connection.last_used_at
     rotated = nil
     travel 1.minute do
@@ -2128,7 +2274,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     replacement = rotated[:token]
 
     assert_equal @user_session_token.id, replacement.client_token_id
-    assert_equal "core-app", replacement.oidc_client_id
+    assert_equal "core-app-jp", replacement.oidc_client_id
     assert_equal "openid profile", replacement.oidc_scope
     assert_operator connection.reload.last_used_at, :>, previous_last_used_at
   end
@@ -2138,24 +2284,24 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "exchanges valid operator code for tokens with OperatorToken" do
     staff = operators(:one)
     staff_session_token = OperatorToken.create!(staff: staff)
-    org_client = OidcClientRegistry.find!("core-org")
+    org_client = OidcClientRegistry.find!("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
     staff_secret_credential = "test_secret_credential_for_core_org"
 
     code_record = issue_code!(
-      client_id: "core-org",
+      client_id: "core-org-jp",
       redirect_uri: org_redirect_uri,
       resource: staff,
       session_token: staff_session_token,
     )
 
     result =
-      with_authenticated_org_client(staff_secret_credential, client_id: "core-org") do
+      with_authenticated_org_client(staff_secret_credential, client_id: "core-org-jp") do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: org_redirect_uri,
-          client_id: "core-org",
+          client_id: "core-org-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-staff-client-assertion",
           token_endpoint_uri: "https://log.umaxica.org/oauth/token",
@@ -2173,10 +2319,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "refreshes an operator RP session without changing auth_time" do
     staff = operators(:one)
     staff_session_token = OperatorToken.create!(staff: staff, authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
-    org_client = OidcClientRegistry.find!("core-org")
+    org_client = OidcClientRegistry.find!("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
     code_record = issue_code!(
-      client_id: "core-org",
+      client_id: "core-org-jp",
       redirect_uri: org_redirect_uri,
       resource: staff,
       session_token: staff_session_token,
@@ -2185,13 +2331,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     initial_result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-org" && assertion.present? && token_url.present? },
+        ->(client_id, assertion, token_url:) { client_id == "core-org-jp" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: org_redirect_uri,
-          client_id: "core-org",
+          client_id: "core-org-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-staff-client-assertion",
           token_endpoint_uri: "https://log.umaxica.org/oauth/token",
@@ -2203,12 +2349,12 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     refreshed_result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-org" && assertion.present? && token_url.present? },
+        ->(client_id, assertion, token_url:) { client_id == "core-org-jp" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: initial_result.token_response.fetch(:refresh_token),
-          client_id: "core-org",
+          client_id: "core-org-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-staff-refresh-assertion",
           token_endpoint_uri: "https://log.umaxica.org/oauth/token",
@@ -2225,25 +2371,25 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "creates staff token record for org client" do
     staff = operators(:one)
     staff_session_token = OperatorToken.create!(staff: staff)
-    org_client = OidcClientRegistry.find("core-org")
+    org_client = OidcClientRegistry.find("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
     staff_secret_credential = "test_secret_credential_for_core_org"
 
     code_record = issue_code!(
-      client_id: "core-org",
+      client_id: "core-org-jp",
       redirect_uri: org_redirect_uri,
       resource: staff,
       session_token: staff_session_token,
     )
 
     assert_no_difference "OperatorToken.count" do
-      assert_difference "OperatorRpSession.count", 1 do
+      assert_difference "OpOrgGrant.count", 1 do
         with_authenticated_org_client(staff_secret_credential) do
           OidcTokenExchangeCoordinator.call(
             grant_type: "authorization_code",
             code: code_record.code,
             redirect_uri: org_redirect_uri,
-            client_id: "core-org",
+            client_id: "core-org-jp",
             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
             client_assertion: "test-staff-client-assertion",
             token_endpoint_uri: "https://log.umaxica.org/oauth/token",
@@ -2258,10 +2404,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "records staff RP connection" do
     staff = operators(:one)
     staff_session_token = OperatorToken.create!(staff: staff)
-    org_client = OidcClientRegistry.find("core-org")
+    org_client = OidcClientRegistry.find("core-org-jp")
     staff_secret_credential = "test_secret_credential_for_core_org"
     code_record = issue_code!(
-      client_id: "core-org",
+      client_id: "core-org-jp",
       redirect_uri: org_client.redirect_uris_by_realm.fetch("operator").first,
       resource: staff,
       session_token: staff_session_token,
@@ -2272,7 +2418,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: org_client.redirect_uris_by_realm.fetch("operator").first,
-        client_id: "core-org",
+        client_id: "core-org-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "test-staff-client-assertion",
         token_endpoint_uri: "https://log.umaxica.org/oauth/token",
@@ -2281,36 +2427,36 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       )
     end
 
-    connection = OperatorOidcConnection.find_by!(staff_id: staff.id, client_id: "core-org")
-    usage = OperatorRpSession.order(:created_at).last
+    connection = OperatorOidcConnection.find_by!(staff_id: staff.id, client_id: "core-org-jp")
+    usage = OpOrgGrant.order(:created_at).last
 
     assert_equal "openid profile email", connection.scope
     assert_equal staff_session_token.id, usage.operator_token_id
-    assert_equal "core-org", usage.oidc_client_id
+    assert_equal "core-org-jp", usage.oidc_client_id
     assert_equal "openid profile email", usage.oidc_scope
   end
 
   test "exchanges valid visitor code for tokens with VisitorToken" do
     visitor = create_visitor!
     visitor_session_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    com_client = OidcClientRegistry.find!("core-com")
+    com_client = OidcClientRegistry.find!("core-com-jp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
     visitor_secret_credential = "test_secret_credential_for_core_com"
 
     code_record = issue_code!(
-      client_id: "core-com",
+      client_id: "core-com-jp",
       redirect_uri: com_redirect_uri,
       resource: visitor,
       session_token: visitor_session_token,
     )
 
     result =
-      with_authenticated_com_client(visitor_secret_credential, client_id: "core-com") do
+      with_authenticated_com_client(visitor_secret_credential, client_id: "core-com-jp") do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: com_redirect_uri,
-          client_id: "core-com",
+          client_id: "core-com-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-visitor-client-assertion",
           token_endpoint_uri: "https://log.umaxica.com/oauth/token",
@@ -2333,10 +2479,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         2026, 1, 2, 3, 4, 5,
       ),
     )
-    com_client = OidcClientRegistry.find!("core-com")
+    com_client = OidcClientRegistry.find!("core-com-jp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
     code_record = issue_code!(
-      client_id: "core-com",
+      client_id: "core-com-jp",
       redirect_uri: com_redirect_uri,
       resource: visitor,
       session_token: visitor_session_token,
@@ -2345,13 +2491,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     initial_result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-com" && assertion.present? && token_url.present? },
+        ->(client_id, assertion, token_url:) { client_id == "core-com-jp" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: com_redirect_uri,
-          client_id: "core-com",
+          client_id: "core-com-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-visitor-client-assertion",
           token_endpoint_uri: "https://log.umaxica.com/oauth/token",
@@ -2363,12 +2509,12 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     refreshed_result =
       OidcClientRegistry.stub(
         :authenticate_assertion,
-        ->(client_id, assertion, token_url:) { client_id == "core-com" && assertion.present? && token_url.present? },
+        ->(client_id, assertion, token_url:) { client_id == "core-com-jp" && assertion.present? && token_url.present? },
       ) do
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: initial_result.token_response.fetch(:refresh_token),
-          client_id: "core-com",
+          client_id: "core-com-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-visitor-refresh-assertion",
           token_endpoint_uri: "https://log.umaxica.com/oauth/token",
@@ -2385,25 +2531,25 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "creates visitor token record for com client" do
     visitor = create_visitor!
     visitor_session_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    com_client = OidcClientRegistry.find("core-com")
+    com_client = OidcClientRegistry.find("core-com-jp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
     visitor_secret_credential = "test_secret_credential_for_core_com"
 
     code_record = issue_code!(
-      client_id: "core-com",
+      client_id: "core-com-jp",
       redirect_uri: com_redirect_uri,
       resource: visitor,
       session_token: visitor_session_token,
     )
 
     assert_no_difference "VisitorToken.count" do
-      assert_difference "VisitorRpSession.count", 1 do
+      assert_difference "OpComGrant.count", 1 do
         with_authenticated_com_client(visitor_secret_credential) do
           OidcTokenExchangeCoordinator.call(
             grant_type: "authorization_code",
             code: code_record.code,
             redirect_uri: com_redirect_uri,
-            client_id: "core-com",
+            client_id: "core-com-jp",
             client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
             client_assertion: "test-visitor-client-assertion",
             token_endpoint_uri: "https://log.umaxica.com/oauth/token",
@@ -2418,10 +2564,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "records visitor RP connection" do
     visitor = create_visitor!
     visitor_session_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    com_client = OidcClientRegistry.find("core-com")
+    com_client = OidcClientRegistry.find("core-com-jp")
     visitor_secret_credential = "test_secret_credential_for_core_com"
     code_record = issue_code!(
-      client_id: "core-com",
+      client_id: "core-com-jp",
       redirect_uri: com_client.redirect_uris_by_realm.fetch("visitor").first,
       resource: visitor,
       session_token: visitor_session_token,
@@ -2432,7 +2578,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         grant_type: "authorization_code",
         code: code_record.code,
         redirect_uri: com_client.redirect_uris_by_realm.fetch("visitor").first,
-        client_id: "core-com",
+        client_id: "core-com-jp",
         client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
         client_assertion: "test-visitor-client-assertion",
         token_endpoint_uri: "https://log.umaxica.com/oauth/token",
@@ -2441,12 +2587,12 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       )
     end
 
-    connection = VisitorOidcConnection.find_by!(visitor_id: visitor.id, client_id: "core-com")
-    usage = VisitorRpSession.order(:created_at).last
+    connection = VisitorOidcConnection.find_by!(visitor_id: visitor.id, client_id: "core-com-jp")
+    usage = OpComGrant.order(:created_at).last
 
     assert_equal "openid profile email", connection.scope
     assert_equal visitor_session_token.id, usage.visitor_token_id
-    assert_equal "core-com", usage.oidc_client_id
+    assert_equal "core-com-jp", usage.oidc_client_id
     assert_equal "openid profile email", usage.oidc_scope
   end
 
@@ -2464,7 +2610,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           code_verifier: @code_verifier,
@@ -2481,7 +2627,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     ClientToken.last
 
-    assert_predicate ClientRpSession.last.dpop_jkt, :present?
+    assert_predicate OpAppGrant.last.dpop_jkt, :present?
   end
 
   test "issues Bearer token when no DPoP proof is provided" do
@@ -2493,7 +2639,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2504,7 +2650,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     assert_predicate result, :success?
     assert_equal "Bearer", result.token_response[:token_type]
-    assert_nil ClientRpSession.last.dpop_jkt
+    assert_nil OpAppGrant.last.dpop_jkt
   end
 
   test "fails when DPoP proof has wrong htm" do
@@ -2519,7 +2665,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           code_verifier: @code_verifier,
@@ -2546,7 +2692,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           code_verifier: @code_verifier,
@@ -2574,7 +2720,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           code_verifier: @code_verifier,
@@ -2587,7 +2733,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     assert_predicate initial_result, :success?
     assert_equal "DPoP", initial_result.token_response[:token_type]
-    usage = ClientRpSession.order(:created_at).last
+    usage = OpAppGrant.order(:created_at).last
     refresh_digest = usage.refresh_token_digest
 
     result =
@@ -2595,7 +2741,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         OidcTokenExchangeCoordinator.call(
           grant_type: "refresh_token",
           refresh_token: initial_result.token_response.fetch(:refresh_token),
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: token_endpoint,
@@ -2624,7 +2770,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     code_store.define_singleton_method(:link_family!) do |**|
       raise Umaxica::Valkey::OperationError, "authorization code family link timed out"
     end
-    rp_session_count = ClientRpSession.count
+    rp_session_count = OpAppGrant.count
 
     result =
       with_authenticated_client do
@@ -2632,7 +2778,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2645,7 +2791,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_not result.success?
     assert_equal "server_error", result.error
     assert_nil result.token_response
-    assert_equal rp_session_count, ClientRpSession.count
+    assert_equal rp_session_count, OpAppGrant.count
     assert_equal "consumed", delegate.read(code_record.code).fetch("state")
   end
 
@@ -2658,7 +2804,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2671,7 +2817,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     id_token = OidcIdTokenVerifier.call(
       id_token: result.token_response.fetch(:id_token),
-      client_id: "core-app",
+      client_id: "core-app-jp",
       resource_type: "client",
       expected_nonce: "test_nonce",
       issuer: OidcIssuer.for_client(@client),
@@ -2689,11 +2835,11 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_predicate id_token, :success?
     assert_equal OidcIssuer.for_client(@client), id_token.payload.fetch("iss")
     assert_equal OidcSubject.for(@user, resource_type: "client"), id_token.payload.fetch("sub")
-    assert_equal ["core-app"], id_token.payload.fetch("aud")
+    assert_equal ["core-app-jp"], id_token.payload.fetch("aud")
     assert_equal OidcIssuer.for_client(@client), access_token.fetch("iss")
     assert_equal OidcSubject.for(@user, resource_type: "client"), access_token.fetch("sub")
     assert_equal [@client.aud], Array(access_token.fetch("aud"))
-    assert_equal "core-app", access_token.fetch("client_id")
+    assert_equal "core-app-jp", access_token.fetch("client_id")
     assert_equal @user_session_token.public_id, access_token.fetch("umx_base_sid")
     assert_equal "openid profile", access_token.fetch("scope")
     assert_predicate access_token.fetch("auth_time"), :present?
@@ -2717,7 +2863,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2747,7 +2893,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     auth_time = Time.utc(2026, 1, 2, 3, 4, 5)
     issued_at = Time.current
     code_record = plant_authorization_code!(
-      client_id: "core-app",
+      client_id: "core-app-jp",
       redirect_uri: @redirect_uri,
       code_challenge: @code_challenge,
       code_challenge_method: "S256",
@@ -2761,7 +2907,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2788,7 +2934,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "rejects an authorization code without an authentication event time before consuming it" do
     code_record = plant_authorization_code!(
-      client_id: "core-app",
+      client_id: "core-app-jp",
       redirect_uri: @redirect_uri,
       code_challenge: @code_challenge,
       code_challenge_method: "S256",
@@ -2801,7 +2947,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2846,7 +2992,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "token exchange rejects a code_challenge_method of plain even with a matching verifier" do
     code_record = plant_authorization_code!(
-      client_id: "core-app",
+      client_id: "core-app-jp",
       redirect_uri: @redirect_uri,
       code_challenge: @code_challenge,
       code_challenge_method: "plain",
@@ -2859,7 +3005,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2895,7 +3041,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
           grant_type: "authorization_code",
           code: code_record.code,
           redirect_uri: @redirect_uri,
-          client_id: "core-app",
+          client_id: "core-app-jp",
           client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
           client_assertion: "test-client-assertion",
           token_endpoint_uri: "https://log.umaxica.app/oauth/token",
@@ -2909,7 +3055,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_code_unconsumed(code_record)
   end
 
-  def issue_code!(client_id: "core-app", redirect_uri: @redirect_uri, scope: "openid profile email",
+  def issue_code!(client_id: "core-app-jp", redirect_uri: @redirect_uri, scope: "openid profile email",
                   resource: nil, session_token: nil, authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
     resource ||= @user
     session_token ||= @user_session_token
@@ -3034,17 +3180,38 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   end
 
   # Stub ClientRegistry.authenticate to bypass secret_credential resolution in tests
+  def exchange_issued_code(code_record)
+    with_authenticated_client do
+      OidcTokenExchangeCoordinator.call(
+        grant_type: "authorization_code", code: code_record.code, redirect_uri: @redirect_uri,
+        client_id: "core-app-jp", client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE,
+        client_assertion: "test-client-assertion", token_endpoint_uri: "https://log.umaxica.app/oauth/token",
+        code_verifier: @code_verifier, expected_resource_type: "client",
+      )
+    end
+  end
+
+  def refresh_with(refresh_token, attempt_ref: nil)
+    with_authenticated_client do
+      OidcTokenExchangeCoordinator.call(
+        grant_type: "refresh_token", refresh_token:, client_id: "core-app-jp", attempt_ref:,
+        client_assertion_type: OidcClientAssertionJwt::ASSERTION_TYPE, client_assertion: "test-client-assertion",
+        token_endpoint_uri: "https://log.umaxica.app/oauth/token", expected_resource_type: "client",
+      )
+    end
+  end
+
   def with_authenticated_client(&block)
     OidcClientRegistry.stub(
       :authenticate_assertion, ->(cid, assertion, token_url:) {
-                                 cid == "core-app" && assertion.present? && token_url.present?
+                                 cid == "core-app-jp" && assertion.present? && token_url.present?
                                },
     ) do
       block.call
     end
   end
 
-  def with_authenticated_org_client(_secret_credential, client_id: "core-org", &block)
+  def with_authenticated_org_client(_secret_credential, client_id: "core-org-jp", &block)
     OidcClientRegistry.stub(
       :authenticate_assertion, ->(cid, assertion, token_url:) {
                                  cid == client_id && assertion.present? && token_url.present?
@@ -3054,7 +3221,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  def with_authenticated_com_client(_secret_credential, client_id: "core-com", &block)
+  def with_authenticated_com_client(_secret_credential, client_id: "core-com-jp", &block)
     OidcClientRegistry.stub(
       :authenticate_assertion, ->(cid, assertion, token_url:) {
                                  cid == client_id && assertion.present? && token_url.present?

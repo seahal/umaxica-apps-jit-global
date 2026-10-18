@@ -14,8 +14,8 @@ class Palm::App::DashboardsControllerTest < ActionDispatch::IntegrationTest
   test "authenticated Palm browser credentials render the protected dashboard" do
     client = clients(:one)
     root_token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    oidc_client = OidcClientRegistry.find!("palm-app")
-    rp_session = ClientRpSession.create!(
+    oidc_client = OidcClientRegistry.find!("palm-app-jp")
+    rp_session = OpAppGrant.create!(
       client_token: root_token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

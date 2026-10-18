@@ -40,7 +40,7 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
                   confirm_policy: "1", confirm_using_mfa: "1",
                 )
               end
-            [owner, root, candidate, AppZenithRecord, AppTicketRecord,
+            [owner, root, candidate, AppZenithRecord, OpBaseAppRecord,
              (channel == :email) ? ClientEmailCeremonyTransaction : ClientTelephoneCeremonyTransaction,]
           when :com
             owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
@@ -57,7 +57,7 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
                   confirm_policy: "1", confirm_using_mfa: "1",
                 )
               end
-            [owner, root, candidate, ComZenithRecord, ComTicketRecord,
+            [owner, root, candidate, ComZenithRecord, OpBaseComRecord,
              (channel == :email) ? VisitorEmailCeremonyTransaction : VisitorTelephoneCeremonyTransaction,]
           end
         token.rotate_refresh_token!
@@ -251,6 +251,16 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
           token.device_session.revoke!
         end
         actor.reload.discard_now!(purge_after: 1.day) if actor&.persisted?
+        # Soft discard leaves committed rows behind; a later class reloading the owner fixtures
+        # would then fail foreign-key verification, so erase this test's rows physically.
+        flow_model.where(id: transaction.id).delete_all if transaction
+        contact.class.where(id: contact.id).delete_all if contact
+        if token
+          device_session = token.device_session
+          token.class.where(id: token.id).delete_all
+          device_session&.class&.where(id: device_session.id)&.delete_all
+        end
+        actor.class.where(id: actor.id).delete_all if actor
       end
     end
   end

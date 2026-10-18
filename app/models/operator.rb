@@ -83,6 +83,8 @@ class Operator < OrgPrincipalRecord
 
   attribute :status_id, default: OperatorStatus::NOTHING
 
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+
   belongs_to :staff_status, class_name: "OperatorStatus", foreign_key: :status_id,
                             inverse_of: :staffs
   belongs_to :mfa_level,

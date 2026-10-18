@@ -75,8 +75,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         fv5226 = token
         fv5340 = base_host
         fv5344 = OidcClientRegistry.find!("base-app-ww")
-        fv5346 = ClientRpSession.database_now
-        fv5341 = ClientRpSession.create!(
+        fv5346 = OpAppGrant.database_now
+        fv5341 = OpAppGrant.create!(
+          contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
           client_token: fv5226,
           oidc_client_id: fv5344.client_id,
           oidc_scope: "openid profile",
@@ -122,22 +123,24 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
           rp_client_id =
             case rp_family
             when "base" then "base-#{rp_surface}-ww"
-            when "edit" then "edit-org"
-            else "#{rp_family}-#{rp_surface}"
+            when "edit" then "edit-org-ww"
+            when "tech" then "tech-org-ww"
+            else "#{rp_family}-#{rp_surface}-jp"
             end
           rp_token = ClientToken.find_by!(public_id: rp_headers.fetch("X-TEST-SESSION-PUBLIC-ID"))
           rp_client = OidcClientRegistry.find!(rp_client_id)
           rp_key = [rp_client.client_id, rp_token.public_id]
           @base_browser_rp_credentials ||= {}
           if !@base_browser_rp_credentials[rp_key] && rp_token.currently_usable? &&
-              !(rp_token.device_session_id && ClientRpSession.exists?(
+              !(rp_token.device_session_id && OpAppGrant.exists?(
                 device_session_id: rp_token.device_session_id, oidc_client_id: rp_client.client_id, revoked_at: nil,
               ))
             rp_device_session = ClientDeviceSession.find(rp_token.device_session_id)
             rp_token.rotate_refresh_token! unless rp_device_session.current_refresh_token_id
             rp_actor = Client.find(rp_token.user_id)
             rp_now = Time.current
-            rp_session = ClientRpSession.create!(
+            rp_session = OpAppGrant.create!(
+              contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -570,8 +573,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         fv5270 = token
         fv5263 = base_host
         fv5267 = OidcClientRegistry.find!("base-app-ww")
-        fv5269 = ClientRpSession.database_now
-        fv5264 = ClientRpSession.create!(
+        fv5269 = OpAppGrant.database_now
+        fv5264 = OpAppGrant.create!(
+          contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
           client_token: fv5270,
           oidc_client_id: fv5267.client_id,
           oidc_scope: "openid profile",
@@ -687,7 +691,8 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       ),
     ), :satisfied?
     base_client = OidcClientRegistry.find!("base-app-ww")
-    base_rp_session = ClientRpSession.create!(
+    base_rp_session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
       client_token: token, oidc_client_id: base_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: token.root_login_established_at,
       refresh_token_expires_at: 10.minutes.from_now,
@@ -1125,7 +1130,8 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       auth_time: authorization.authenticated_at,
     )
     rp_client = OidcClientRegistry.find!("base-app-ww")
-    rp_session = ClientRpSession.create!(
+    rp_session = OpAppGrant.create!(
+      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
       client_token: root,
       oidc_client_id: rp_client.client_id,
       oidc_scope: "openid profile",
@@ -1150,8 +1156,8 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       subject: OidcSubject.for(actor, resource_type: "client"),
       client_id: rp_client.client_id,
     )
-    token_result = OidcRpTokenClient::Result.new(
-      success: true,
+    token_result = OidcOpTokenClient::Result.new(
+      outcome: :success,
       token_response: {
         access_token: rp_access_token,
         refresh_token: rp_session.issue_refresh_token!,
@@ -1161,14 +1167,14 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       },
       error: nil,
     )
-    userinfo_result = OidcRpUserInfoClient::Result.new(
+    userinfo_result = OidcOpUserInfoClient::Result.new(
       success: true,
       claims: { "sub" => OidcSubject.for(actor, resource_type: "client") },
       error: nil,
       dependency_failure: false,
     )
-    OidcRpTokenClient.stub(:call, token_result) do
-      OidcRpUserInfoClient.stub(:call, userinfo_result) do
+    OidcOpTokenClient.stub(:authorization_code, token_result) do
+      OidcOpUserInfoClient.stub(:call, userinfo_result) do
         base.get(callback_uri.request_uri, headers: { "Host" => callback_uri.host })
       end
     end

@@ -258,7 +258,7 @@ module Auth
 
           def bind_sign_up_flow_to_telephone!(telephone)
             cycle = current_sign_up_flow
-            ComTicketRecord.connected_to(role: :writing) do
+            OpBaseComRecord.connected_to(role: :writing) do
               cycle.update!(
                 principal_id: telephone.visitor_id,
                 pending_contact_type: "telephone",

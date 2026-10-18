@@ -18,6 +18,7 @@ class OrgOperatorLifecycleExecute
     return failure("Requester cannot execute their own lifecycle request") if requested_by_actor?
 
     invitation = nil
+    @stop_events = []
     OrgPrincipalRecord.transaction do
       invitation = execute_action!
       request.update!(
@@ -27,6 +28,8 @@ class OrgOperatorLifecycleExecute
         invitation_id: invitation&.id,
       )
     end
+    # The org Zenith commit recorded the stop; the OP revokes older authority after it (one.md 7.5).
+    @stop_events.each { |event| OpIdentityEventInvalidator.deliver(event:) }
 
     OrgOperatorLifecycleResult.new(success: true, request: request, error: nil, invitation: invitation)
   rescue ActiveRecord::RecordInvalid => e
@@ -138,14 +141,11 @@ class OrgOperatorLifecycleExecute
     )
   end
 
+  # Advances the operator's authentication epoch and records the stop event in this Zenith
+  # transaction; the OP applies it after commit (R5-WU06).
   def revoke_target_sessions!(target)
-    target.staff_tokens.not_revoked.find_each do |token|
-      AuthenticationLogoutCurrentSession.call(
-        resource: target,
-        token: token,
-        reason: "operator_lifecycle_#{request.action}",
-      )
-    end
+    target.lock!
+    @stop_events << IdentityAuthenticationStopRecorder.call(actor: target, reason: "operator_#{request.action}")
   end
 
   # Logical delete: the row keeps (tid, oid), the protocol evidence, and

@@ -48,7 +48,7 @@ class ExternalAuthenticationUnlinkUseCase
       provider: identity.provider,
       subject: identity.subject,
     )
-    AppTicketRecord.connected_to(role: :writing) do
+    OpBaseAppRecord.connected_to(role: :writing) do
       ClientSocialCeremonyTransaction.transaction do
         transactions = ClientSocialCeremonyTransaction.lock.where(
           actor_ref: user.public_id,

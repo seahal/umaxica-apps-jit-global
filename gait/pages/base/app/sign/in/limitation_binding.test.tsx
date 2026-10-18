@@ -44,6 +44,9 @@ const props = {
   cancel_action: "/sign/in/limitation",
   submit_label: "Revoke and continue",
   cancel_label: "Cancel sign-in",
+  continue_action: "/sign/in/limitation",
+  continue_label: "Continue sign-in",
+  can_continue: false,
   sessions: [
     {
       session_ref: "ref_1",

@@ -16,6 +16,7 @@ module Base
           include ::OrgAdministrationPage
           include ::OrgAdministrativeAudit
           include ::OrgSupportSessionRevocationPage
+          include ::OrgAdminRelay
 
           AUTHENTICATION_MODE = :private
           REALM = "app"
@@ -23,97 +24,85 @@ module Base
           declare_authentication_mode! :private
 
           before_action :no_store
-          before_action :set_client
-          before_action :authorize_revocation!, only: :new
-          before_action :authorize_result!, only: :show
-          before_action :require_revocation_step_up!, only: :new
 
           public
 
           def show
-            chronicle = recorded_revocation!(@client)
-            render inertia: "base/org/support/revocations/show",
-                   props: revocation_result_props(
-                     chronicle: chronicle,
-                     target: @client,
-                     realm: REALM,
-                     up_link: { label: @client.public_id, href: base_org_support_client_path(@client.public_id) },
-                   )
+            result = org_admin_result!(org_admin_authority.get("#{account_path}/revocations/#{ERB::Util.url_encode(params.expect(:id))}"))
+            return unless result
+
+            data = result.data
+            render inertia: "base/org/support/revocations/show", props: {
+              title: t("base.org.admin.revocations.show_title"),
+              up_link: { label: account_ref, href: base_org_support_client_path(account_ref) },
+              context: admin_context(realm: REALM),
+              notices: data.fetch("notices").map(&:symbolize_keys),
+              fields: [
+                { term: t("base.org.admin.fields.operation_id"), description: data.fetch("event_uuid") },
+                { term: t("base.org.admin.fields.result"), description: data.fetch("result_label") },
+                { term: t("base.org.admin.fields.target"), description: account_ref },
+                { term: t("base.org.admin.fields.performed_by"),
+                  description: data["performed_by"] || t("base.org.admin.values.none"), },
+                { term: t("base.org.admin.fields.reason_code"), description: data["reason_code"].to_s },
+                { term: t("base.org.admin.fields.ticket_id"),
+                  description: data["ticket_id"] || t("base.org.admin.values.none"), },
+                { term: t("base.org.admin.fields.occurred_at"),
+                  description: admin_time(data["occurred_at"] && Time.zone.parse(data["occurred_at"])), },
+                { term: t("base.org.admin.fields.revoked_count"), description: data["revoked_count"].to_s },
+              ],
+              actions: [],
+              sections: [],
+            }
           end
 
           def new
-            render inertia: "base/org/support/revocations/new", props: confirmation_props
+            result = org_admin_result!(org_admin_authority.get("#{account_path}/revocation-screen"))
+            return unless result
+
+            render inertia: "base/org/support/revocations/new", props: confirmation_props(result.data.fetch("account"))
           end
 
           def create
-            authorize!(@client, to: :revoke_sessions?, with: SupportClientPolicy)
-            return unless require_revocation_step_up!
-
-            reason_code, ticket_id, operation_id = revocation_input!
-            chronicle =
-              audited_administrative_operation(
-                operation_id: operation_id,
-                action: AUDIT_ACTION,
-                subject: @client,
-                reason_code: reason_code,
-                metadata: revocation_audit_metadata(target: @client, realm: REALM, ticket_id: ticket_id),
-                changeset: revocation_audit_changeset(@client),
-              ) do
-                result = AccountSessionRevocation.purge!(
-                  account: @client, operator: current_operator, reason_code: reason_code, ticket_id: ticket_id,
-                )
-                { revoked_count: result.revoked_count, account_access_event_id: result.event.id }
-              end
-            redirect_to(
-              base_org_support_client_revocation_path(@client.public_id, chronicle.event_uuid),
-              status: :see_other,
+            keys = %i(reason_code ticket_id operation_id)
+            result = org_admin_result!(
+              org_admin_authority.post(
+                "#{account_path}/revocations",
+                params.slice(*keys).permit(*keys).to_h,
+              ),
             )
-          rescue InvalidRevocationInput => e
-            render inertia: "base/org/support/revocations/new",
-                   props: confirmation_props(errors: e.errors, values: submitted_values),
-                   status: :unprocessable_content
-          rescue OrgAdministrativeAudit::OperationConflictError
-            render inertia: "base/org/support/revocations/new",
-                   props: confirmation_props(errors: { operation_id: t("base.org.admin.errors.conflict") }),
-                   status: :conflict
-          rescue OrgAdministrativeAudit::IntentUnavailableError
-            render inertia: "base/org/support/revocations/new",
-                   props: confirmation_props(errors: { base: t("base.org.admin.errors.audit_unavailable") }),
-                   status: :service_unavailable
+            return unless result
+
+            if result.ok?
+              redirect_to(
+                base_org_support_client_revocation_path(account_ref, result.data.fetch("event_uuid")),
+                status: :see_other,
+              )
+            else
+              account = org_admin_authority.get(account_path).data.to_h.fetch("account", { "public_id" => account_ref })
+              values = (result.status == :unprocessable) ? submitted_values : {}
+              render inertia: "base/org/support/revocations/new",
+                     props: confirmation_props(account, errors: result.errors, values:),
+                     status: org_admin_status(result)
+            end
           end
 
           private
+
+          def account_ref = params.expect(:client_id)
+
+          def account_path = "/support/app/accounts/#{ERB::Util.url_encode(account_ref)}"
 
           def no_store
             response.headers["Cache-Control"] = "private, no-store"
           end
 
-          def set_client
-            @client = Client.find_by!(public_id: params.expect(:client_id))
-          end
-
-          def authorize_revocation!
-            authorize!(@client, to: :revoke_sessions?, with: SupportClientPolicy)
-          end
-
-          def authorize_result!
-            authorize!(@client, to: :show?, with: SupportClientPolicy)
-          end
-
-          # True when Step-Up is satisfied; otherwise the Step-Up response has been rendered.
-          def require_revocation_step_up!
-            require_step_up!(scope: STEP_UP_SCOPE)
-            !performed?
-          end
-
-          def confirmation_props(errors: {}, values: {})
+          def confirmation_props(account, errors: {}, values: {})
+            target = Struct.new(:public_id, :access_state, :active_session_count)
+              .new(account.fetch("public_id"), account["access_state"], account["active_sessions"])
             revocation_confirmation_props(
-              target: @client,
-              realm: REALM,
-              errors: errors,
-              values: values,
-              action_path: base_org_support_client_revocations_path(@client.public_id),
-              up_link: { label: @client.public_id, href: base_org_support_client_path(@client.public_id) },
+              target:, realm: REALM, errors:, values:,
+              action_path: base_org_support_client_revocations_path(account_ref),
+              up_link: { label: account_ref, href: base_org_support_client_path(account_ref) },
             )
           end
 

@@ -18,7 +18,7 @@ module Base
         def local_login_success_path = base_org_dashboard_path(ri: params[:ri])
 
         def local_login_flow(public_id)
-          OrgTicketRecord.connected_to(role: :writing) { OperatorSignInFlow.find_by!(public_id: public_id) }
+          OpBaseOrgRecord.connected_to(role: :writing) { OperatorSignInFlow.find_by!(public_id: public_id) }
         end
 
         def local_login_actor(flow)

@@ -58,14 +58,14 @@ class ClientSecretAuditOutboxPurger
       return true if ClientSecretCredential.exists?(claim_operation_id: event.operation_ref)
       return true if ClientSecretIssuance.exists?(origin_operation_id: event.operation_ref)
 
-      AppTicketRecord.connected_to(role: :writing) do
+      OpBaseAppRecord.connected_to(role: :writing) do
         ClientSecretSignInReceipt.exists?(operation_id: event.operation_ref)
       end
     end
 
     def with_ticket_replay_barrier_lock
-      AppTicketRecord.connected_to(role: :writing) do
-        AppTicketRecord.transaction(requires_new: true) { yield }
+      OpBaseAppRecord.connected_to(role: :writing) do
+        OpBaseAppRecord.transaction(requires_new: true) { yield }
       end
     end
 

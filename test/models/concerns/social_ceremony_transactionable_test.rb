@@ -184,19 +184,19 @@ class SocialCeremonyTransactionableTest < ActiveSupport::TestCase
         include SocialCeremonyTransactionable
       end
 
-    assert_equal AppTicketRecord, ClientSocialCeremonyTransaction.connection_owner
+    assert_equal OpBaseAppRecord, ClientSocialCeremonyTransaction.connection_owner
 
     org_transaction_class =
-      Class.new(OrgTicketRecord) do
+      Class.new(OpBaseOrgRecord) do
         include SocialCeremonyTransactionable
       end
     com_transaction_class =
-      Class.new(ComTicketRecord) do
+      Class.new(OpBaseComRecord) do
         include SocialCeremonyTransactionable
       end
 
     assert_equal ActiveRecord::Base, generic_transaction_class.connection_owner
-    assert_equal OrgTicketRecord, org_transaction_class.connection_owner
-    assert_equal ComTicketRecord, com_transaction_class.connection_owner
+    assert_equal OpBaseOrgRecord, org_transaction_class.connection_owner
+    assert_equal OpBaseComRecord, com_transaction_class.connection_owner
   end
 end

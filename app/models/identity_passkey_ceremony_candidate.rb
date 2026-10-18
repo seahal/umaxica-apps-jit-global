@@ -4,7 +4,7 @@
 # A Passkey that Auth verified for one registration permission and Base has not yet turned into a
 # credential. The material is public, but its integrity decides which key is trusted, so the digest
 # is recomputed when Base consumes the row.
-class IdentityPasskeyCeremonyCandidate < AppTicketRecord
+class IdentityPasskeyCeremonyCandidate < OpBaseAppRecord
   include IdentityCeremonyCandidateRecord
 
   validates :step_up_ceremony_transaction_ref, :webauthn_id, :public_key, :description, presence: true

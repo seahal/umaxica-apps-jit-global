@@ -59,10 +59,10 @@ invariants are in `docs/security/webauthn-security-invariants.md`; RP boundaries
 ## Emergency Access
 
 The org surface has a second sign-in ceremony, Emergency Access, which reuses the operator's
-existing passkeys under its own challenge purpose and produces a restricted session. It shares this
-entire implementation; only the ceremony purpose, the actor source, the eligibility decision, and
-the resulting authentication context differ. Duplicating any of the mechanics above into an
-Emergency-specific verifier is prohibited. See `docs/security/org-emergency-access.md`.
+existing passkeys under its own challenge purpose and produces an Emergency-context session. It
+shares this entire implementation; only the ceremony purpose, the actor source, the eligibility
+decision, and the resulting authentication context differ. Duplicating any of the mechanics above
+into an Emergency-specific verifier is prohibited. See `docs/security/org-emergency-access.md`.
 
 ## Password Fallback
 

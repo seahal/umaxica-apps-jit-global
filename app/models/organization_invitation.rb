@@ -5,7 +5,7 @@
 # == Schema Information
 #
 # Table name: organization_invitations
-# Database name: org_ticket
+# Database name: op_base_org
 #
 #  id              :bigint           not null, primary key
 #  code            :string(32)       not null
@@ -26,7 +26,7 @@
 #  index_organization_invitations_on_organization_id  (organization_id)
 #
 
-class OrganizationInvitation < OrgTicketRecord
+class OrganizationInvitation < OpBaseOrgRecord
   belongs_to :invited_by,
              class_name: "Operator",
              primary_key: :id

@@ -122,8 +122,15 @@ module OidcClientRegistry
   end
 
   def validate_private_key_jwt_configuration!
+    # An RP cell process holds only its own client key (RuntimeRole.rp_private_env_names).
+    checked_ids =
+      if RuntimeRole::RP_ROLES.include?(RuntimeRole.current)
+        [RpCellBinding.fetch(RuntimeRole.cell_connection).client_id]
+      else
+        client_ids
+      end
     missing =
-      client_ids.filter_map do |client_id|
+      checked_ids.filter_map do |client_id|
         client = find(client_id)
         next unless client&.private_key_jwt_client?
         next if client.jwt_namespace.present? &&

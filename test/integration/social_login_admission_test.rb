@@ -156,7 +156,7 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_not_nil token.root_login_established_at
     assert_equal token.public_id, authorization_transaction_for_test(binding).reload.browser_session_ref
     assert_predicate authorization_transaction_for_test(binding), :consumed?
-    assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
+    assert_equal 0, OpAppGrant.where(client_token_id: token.id).count
   end
   test "an admitted Apple callback records Auth evidence and Base issues the original OIDC root" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
@@ -292,7 +292,7 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_not_nil token.root_login_established_at
     assert_equal token.public_id, authorization_transaction_for_test(binding).reload.browser_session_ref
     assert_predicate authorization_transaction_for_test(binding), :consumed?
-    assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
+    assert_equal 0, OpAppGrant.where(client_token_id: token.id).count
   end
   test "an existing Google subject started at signup records Auth evidence and Base issues the original OIDC root" do
     actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
@@ -428,7 +428,7 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_not_nil token.root_login_established_at
     assert_equal token.public_id, authorization_transaction_for_test(binding).reload.browser_session_ref
     assert_predicate authorization_transaction_for_test(binding), :consumed?
-    assert_equal 0, ClientRpSession.where(client_token_id: token.id).count
+    assert_equal 0, OpAppGrant.where(client_token_id: token.id).count
   end
   test "an unknown signup completes its bound source graph before Base issues the original OIDC root" do
     subject = "new-social-#{SecureRandom.hex(8)}"

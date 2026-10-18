@@ -80,7 +80,7 @@ class HealthTest < ActiveSupport::TestCase
     assert_equal [AppRpRecord, AppSettingRecord, AppSignalRecord, AvatarRecord, OccurrenceRecord],
                  Health::Profiles::App.record_classes
     assert_equal [OrgRpRecord, OrgSettingRecord, OrgSignalRecord], Health::Profiles::Org.record_classes
-    assert_equal [AppPrincipalRecord, AppTicketRecord, AppSettingRecord], Health::Profiles::SignApp.record_classes
+    assert_equal [AppPrincipalRecord, OpBaseAppRecord, AppSettingRecord], Health::Profiles::SignApp.record_classes
   end
 
   test "liveness check never touches dependencies" do

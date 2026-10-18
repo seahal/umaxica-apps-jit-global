@@ -33,10 +33,10 @@ class IdentityCredentialRemovalCommitter
             current_session.with_lock do
               credential.lock!
               validate_binding!
-              unless current_session.currently_usable?(current_session.class.database_now)
+              unless current_session.active_status?(current_session.class.database_now)
                 raise ArgumentError, "credential removal session is unavailable"
               end
-              if current_session.is_a?(OperatorToken) && current_session.emergency_authentication_context?
+              if current_session.is_a?(OperatorToken) && current_session.standby_authentication_context?
                 raise ArgumentError, "credential removal requires a Normal session"
               end
               return false if terminal? || (contact? && !credential.binding_effective?) || !removable?

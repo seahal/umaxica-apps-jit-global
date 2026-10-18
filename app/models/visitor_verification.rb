@@ -4,7 +4,7 @@
 # == Schema Information
 #
 # Table name: visitor_verifications
-# Database name: com_ticket
+# Database name: op_base_com
 #
 #  id               :bigint           not null, primary key
 #  discard_at     :datetime         default(Infinity), not null
@@ -24,7 +24,7 @@
 #
 #  fk_rails_...  (visitor_token_id => visitor_tokens.id)
 #
-class VisitorVerification < ComTicketRecord
+class VisitorVerification < OpBaseComRecord
   include Retainable
   include RefreshTokenShared
   include VerificationCookieable

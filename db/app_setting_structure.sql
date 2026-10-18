@@ -56,7 +56,7 @@ SET default_table_access_method = heap;
 --
 
 CREATE TABLE public.app_preference_adult_content_gate_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT app_preference_r18_display_stopper_options_id_not_null NOT NULL
 );
 
 
@@ -84,11 +84,11 @@ ALTER SEQUENCE public.app_preference_adult_content_gate_options_id_seq OWNED BY 
 --
 
 CREATE TABLE public.app_preference_adult_content_gates (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT app_preference_r18_display_stoppers_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT app_preference_r18_display_stoppers_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT app_preference_r18_display_stoppers_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT app_preference_r18_display_stoppers_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT app_preference_r18_display_stoppers_updated_at_not_null NOT NULL
 );
 
 
@@ -509,7 +509,7 @@ ALTER SEQUENCE public.app_preference_motions_id_seq OWNED BY public.app_preferen
 --
 
 CREATE TABLE public.app_preference_page_size_options (
-    id bigint NOT NULL
+    id bigint CONSTRAINT app_preference_items_per_page_options_id_not_null NOT NULL
 );
 
 
@@ -537,11 +537,11 @@ ALTER SEQUENCE public.app_preference_page_size_options_id_seq OWNED BY public.ap
 --
 
 CREATE TABLE public.app_preference_page_sizes (
-    id bigint NOT NULL,
-    preference_id bigint NOT NULL,
-    option_id bigint NOT NULL,
-    created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    id bigint CONSTRAINT app_preference_items_per_pages_id_not_null NOT NULL,
+    preference_id bigint CONSTRAINT app_preference_items_per_pages_preference_id_not_null NOT NULL,
+    option_id bigint CONSTRAINT app_preference_items_per_pages_option_id_not_null NOT NULL,
+    created_at timestamp(6) with time zone CONSTRAINT app_preference_items_per_pages_created_at_not_null NOT NULL,
+    updated_at timestamp(6) with time zone CONSTRAINT app_preference_items_per_pages_updated_at_not_null NOT NULL
 );
 
 
@@ -852,8 +852,8 @@ CREATE TABLE public.app_preferences (
     used_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
-    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
+    purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT app_preferences_purged_at_not_null NOT NULL,
+    discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT app_preferences_discarded_at_not_null NOT NULL,
     explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT app_preferences_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
 );
@@ -1595,7 +1595,7 @@ ALTER TABLE ONLY public.app_preference_timezones
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.app_preference_binding_methods(id) NOT VALID;
+    ADD CONSTRAINT fk_app_preferences_on_binding_method_id FOREIGN KEY (binding_method_id) REFERENCES public.app_preference_binding_methods(id);
 
 
 --
@@ -1603,7 +1603,7 @@ ALTER TABLE ONLY public.app_preferences
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.app_preference_dbsc_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_app_preferences_on_dbsc_status_id FOREIGN KEY (dbsc_status_id) REFERENCES public.app_preference_dbsc_statuses(id);
 
 
 --
@@ -1611,7 +1611,7 @@ ALTER TABLE ONLY public.app_preferences
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_app_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.app_preference_statuses(id) NOT VALID;
+    ADD CONSTRAINT fk_app_preferences_on_status_id FOREIGN KEY (status_id) REFERENCES public.app_preference_statuses(id);
 
 
 --
@@ -1627,7 +1627,7 @@ ALTER TABLE ONLY public.app_preference_motions
 --
 
 ALTER TABLE ONLY public.app_preference_cookies
-    ADD CONSTRAINT fk_rails_1e767a1c3f FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_1e767a1c3f FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
 
 
 --
@@ -1643,7 +1643,7 @@ ALTER TABLE ONLY public.app_preference_motions
 --
 
 ALTER TABLE ONLY public.app_preference_timezones
-    ADD CONSTRAINT fk_rails_3a83164d61 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_3a83164d61 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
 
 
 --
@@ -1651,7 +1651,7 @@ ALTER TABLE ONLY public.app_preference_timezones
 --
 
 ALTER TABLE ONLY public.app_preferences
-    ADD CONSTRAINT fk_rails_40612c8731 FOREIGN KEY (replaced_by_id) REFERENCES public.app_preferences(id) ON DELETE SET NULL NOT VALID;
+    ADD CONSTRAINT fk_rails_40612c8731 FOREIGN KEY (replaced_by_id) REFERENCES public.app_preferences(id) ON DELETE SET NULL;
 
 
 --
@@ -1683,7 +1683,7 @@ ALTER TABLE ONLY public.app_preference_densities
 --
 
 ALTER TABLE ONLY public.app_preference_languages
-    ADD CONSTRAINT fk_rails_74e24f1ed5 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_74e24f1ed5 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
 
 
 --
@@ -1723,7 +1723,7 @@ ALTER TABLE ONLY public.app_preference_densities
 --
 
 ALTER TABLE ONLY public.app_preference_themes
-    ADD CONSTRAINT fk_rails_b65e40e97b FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_b65e40e97b FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
 
 
 --
@@ -1755,7 +1755,7 @@ ALTER TABLE ONLY public.app_preference_currencies
 --
 
 ALTER TABLE ONLY public.app_preference_regions
-    ADD CONSTRAINT fk_rails_ebeda50e04 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id) NOT VALID;
+    ADD CONSTRAINT fk_rails_ebeda50e04 FOREIGN KEY (preference_id) REFERENCES public.app_preferences(id);
 
 
 --
