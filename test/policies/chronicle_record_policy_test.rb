@@ -158,6 +158,19 @@ class ChronicleRecordPolicyTest < ActiveSupport::TestCase
     assert_equal "[FILTERED]", result["unsafe_reason_code"]
   end
 
+  test "sanitize preserves a valid external UUID reference" do
+    external_id = "550e8400-e29b-41d4-a716-446655440000"
+
+    result = ChronicleRecordPolicy.sanitize(external_id, key: :external_id)
+
+    assert_equal external_id, result
+  end
+
+  test "sanitize filters malformed and secret-like external references" do
+    assert_equal "[FILTERED]", ChronicleRecordPolicy.sanitize("not-a-uuid", key: :external_id)
+    assert_equal "[FILTERED]", ChronicleRecordPolicy.sanitize("a" * 40, key: :external_id)
+  end
+
   test "sanitize filters reserved context keys" do
     input = { "request_id" => "123", "ip_address" => "127.0.0.1", "user_agent" => "Chrome", "custom" => "ok" }
     result = ChronicleRecordPolicy.sanitize(input)

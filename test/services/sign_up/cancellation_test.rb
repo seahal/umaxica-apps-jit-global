@@ -87,8 +87,7 @@ class SignUpCancellationTest < ActiveSupport::TestCase
     assert_equal ClientSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
     assert_equal ClientPasskeyStatus::ACTIVE, existing_passkey.reload.status_id
     assert_predicate existing_passkey.discard_at, :infinite?
-    assert_equal ClientPasskeyStatus::DELETED, pending_passkey.reload.status_id
-    assert_operator pending_passkey.discard_at, :<=, Time.current
+    assert_raises(ActiveRecord::RecordNotFound) { pending_passkey.reload }
     assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_telephone_status_id
   end
 

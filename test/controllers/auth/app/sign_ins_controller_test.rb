@@ -278,7 +278,11 @@ module Auth
           method.fetch("key")
         }
         assert_equal %w(google apple), inertia_props.fetch("social_providers").map { |provider| provider.fetch("key") }
-        assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+        # This page is admitted for an OIDC parent and is still its first page: Cancel and Switch are
+        # offered as POST forms, and the plain Auth-to-Auth link to Sign Up is not (D06/D09).
+        assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("cancel_form").fetch("action")
+        assert_equal "sign_up", inertia_props.fetch("switch_form").fetch("to")
+        assert_nil inertia_props.fetch("registration_link")
       end
 
       test "should get new with existing preference refresh cookie" do
@@ -1004,8 +1008,10 @@ module Auth
         follow_redirect!
 
         assert_response :success
-        assert_equal "/sign/up?ri=jp", inertia_props.fetch("registration_link").fetch("href")
-        assert_not_includes inertia_props.fetch("registration_link").fetch("href"), "pt=abc"
+        # An OIDC-bound page moves to Sign Up only through the Switch form, which carries no pt:
+        # the parent authorization already fixes where the user returns.
+        assert_nil inertia_props.fetch("registration_link")
+        assert_equal "/sign/switch?ri=jp", inertia_props.fetch("switch_form").fetch("action")
       end
 
       test "sign up link includes only ri when pt is absent" do
@@ -1241,8 +1247,10 @@ module Auth
         follow_redirect!
 
         assert_response :success
-        assert_equal "/sign/up?ri=jp", inertia_props.fetch("registration_link").fetch("href")
-        assert_not_includes inertia_props.fetch("registration_link").fetch("href"), "pt="
+        # An OIDC-bound page moves to Sign Up only through the Switch form, which carries no pt:
+        # the parent authorization already fixes where the user returns.
+        assert_nil inertia_props.fetch("registration_link")
+        assert_equal "/sign/switch?ri=jp", inertia_props.fetch("switch_form").fetch("action")
       end
 
       test "sign up link preserves encoded-like pt value safely" do
@@ -1479,8 +1487,10 @@ module Auth
         follow_redirect!
 
         assert_response :success
-        assert_equal "/sign/up?ri=jp", inertia_props.fetch("registration_link").fetch("href")
-        assert_not_includes inertia_props.fetch("registration_link").fetch("href"), "pt="
+        # An OIDC-bound page moves to Sign Up only through the Switch form, which carries no pt:
+        # the parent authorization already fixes where the user returns.
+        assert_nil inertia_props.fetch("registration_link")
+        assert_equal "/sign/switch?ri=jp", inertia_props.fetch("switch_form").fetch("action")
       end
 
       test "should render in english when lx=en" do
@@ -1717,7 +1727,7 @@ module Auth
 
         assert_response :success
         assert_select "html[lang=en]"
-        assert_match(/Need an account/, inertia_props.fetch("registration_link").fetch("label"))
+        assert_match(/Need an account/, inertia_props.fetch("switch_form").fetch("label"))
       end
 
       test "shows social login buttons" do
@@ -2496,7 +2506,9 @@ module Auth
 
       private
 
-      def login_challenge(intent: "sign_in")
+      # core-app-jp is a first-party RP, so Base issues its parent with the neutral authentication
+      # intent; a fixed sign_in intent is not reachable for a registered client.
+      def login_challenge(intent: "authentication")
         transaction = OidcAuthorizationTransactionCoordinator.issue!(
           surface: "app",
           intent: intent,

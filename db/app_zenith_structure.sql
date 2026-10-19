@@ -1392,6 +1392,48 @@ ALTER SEQUENCE public.client_oidc_identity_bindings_id_seq OWNED BY public.clien
 
 
 --
+-- Name: client_passkey_audit_outboxes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_passkey_audit_outboxes (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    event_type character varying NOT NULL,
+    surface character varying NOT NULL,
+    external_id uuid NOT NULL,
+    actor_ref character varying,
+    operation_ref character varying,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    acknowledged_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT client_passkey_audit_acknowledgment CHECK (((acknowledged_at IS NULL) OR (acknowledged_at >= occurred_at))),
+    CONSTRAINT client_passkey_audit_event CHECK (((event_type)::text = ANY ((ARRAY['passkey.registered.signup'::character varying, 'passkey.registered.settings'::character varying, 'passkey.description_changed'::character varying, 'passkey.removed'::character varying, 'passkey.revoked'::character varying, 'passkey.registration_cancelled'::character varying, 'passkey.purged'::character varying])::text[]))),
+    CONSTRAINT client_passkey_audit_surface CHECK (((surface)::text = 'app'::text))
+);
+
+
+--
+-- Name: client_passkey_audit_outboxes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.client_passkey_audit_outboxes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: client_passkey_audit_outboxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.client_passkey_audit_outboxes_id_seq OWNED BY public.client_passkey_audit_outboxes.id;
+
+
+--
 -- Name: client_passkey_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3399,6 +3441,8 @@ CREATE TABLE public.clients (
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
     authentication_epoch bigint DEFAULT 0 NOT NULL,
+    recovery_available_at timestamp(6) with time zone,
+    early_termination_available_at timestamp(6) with time zone,
     CONSTRAINT chk_clients_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_clients_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
     CONSTRAINT chk_clients_authentication_epoch_nonnegative CHECK ((authentication_epoch >= 0)),
@@ -4722,6 +4766,13 @@ ALTER TABLE ONLY public.client_oidc_identity_bindings ALTER COLUMN id SET DEFAUL
 
 
 --
+-- Name: client_passkey_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_passkey_audit_outboxes ALTER COLUMN id SET DEFAULT nextval('public.client_passkey_audit_outboxes_id_seq'::regclass);
+
+
+--
 -- Name: client_passkey_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5665,6 +5716,14 @@ ALTER TABLE ONLY public.client_oidc_identity_bindings
 
 
 --
+-- Name: client_passkey_audit_outboxes client_passkey_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_passkey_audit_outboxes
+    ADD CONSTRAINT client_passkey_audit_outboxes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: client_passkey_statuses client_passkey_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6403,6 +6462,13 @@ CREATE UNIQUE INDEX client_emails_effective_digest ON public.client_emails USING
 --
 
 CREATE UNIQUE INDEX client_emails_effective_owner ON public.client_emails USING btree (user_id) WHERE ((binding_finalized_at IS NOT NULL) AND (binding_released_at IS NULL));
+
+
+--
+-- Name: client_passkey_audit_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX client_passkey_audit_pending ON public.client_passkey_audit_outboxes USING btree (id) WHERE (acknowledged_at IS NULL);
 
 
 --
@@ -7260,10 +7326,24 @@ CREATE INDEX index_client_oidc_identity_bindings_on_client_identity_id ON public
 
 
 --
+-- Name: index_client_passkey_audit_outboxes_on_event_uuid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_passkey_audit_outboxes_on_event_uuid ON public.client_passkey_audit_outboxes USING btree (event_uuid);
+
+
+--
 -- Name: index_client_passkeys_on_discard_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_client_passkeys_on_discard_at ON public.client_passkeys USING btree (discard_at);
+
+
+--
+-- Name: index_client_passkeys_on_external_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_client_passkeys_on_external_id ON public.client_passkeys USING btree (external_id);
 
 
 --
@@ -7841,6 +7921,13 @@ CREATE INDEX index_clients_on_discard_at ON public.clients USING btree (discard_
 
 
 --
+-- Name: index_clients_on_early_termination_available_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_clients_on_early_termination_available_at ON public.clients USING btree (early_termination_available_at) WHERE (early_termination_available_at IS NOT NULL);
+
+
+--
 -- Name: index_clients_on_mfa_level_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7866,6 +7953,13 @@ CREATE UNIQUE INDEX index_clients_on_public_id ON public.clients USING btree (pu
 --
 
 CREATE INDEX index_clients_on_purge_eligible_at ON public.clients USING btree (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL);
+
+
+--
+-- Name: index_clients_on_recovery_available_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_clients_on_recovery_available_at ON public.clients USING btree (recovery_available_at) WHERE (recovery_available_at IS NOT NULL);
 
 
 --
@@ -9495,6 +9589,9 @@ ALTER TABLE ONLY public.client_preference_timezones
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261019120004'),
+('20261019120002'),
+('20261019120000'),
 ('20261016210003'),
 ('20261016210000'),
 ('20261012093100'),

@@ -7,6 +7,7 @@ import Page from "@/components/ui/Page";
 // finished URL. `suspended_notice` means the `sign_up_suspended_<surface>` kill switch is on: the
 // screen shows the notice instead of entry points that would start a registration the guard is
 // about to reject anyway.
+import EntryExitForm, { type EntryExitFormProps } from "../EntryExitForm";
 import SocialProviderButton, { type AppleSignInLogos } from "./SocialProviderButton";
 
 export type SignUpMethodLink = {
@@ -27,8 +28,10 @@ export type SignUpMethodChoiceProps = {
   suspended_notice: string | null;
   methods: SignUpMethodLink[];
   social_providers: SignUpSocialProvider[];
+  /** A local entry's links; empty on an OIDC-bound page, which moves only by Switch. */
   links: SignUpMethodLink[];
-  cancel_label?: string;
+  cancel_form: EntryExitFormProps | null;
+  switch_form: EntryExitFormProps | null;
 };
 
 export default function SignUpMethodChoice({
@@ -37,7 +40,8 @@ export default function SignUpMethodChoice({
   methods,
   social_providers: socialProviders,
   links,
-  cancel_label: cancelLabel,
+  cancel_form: cancelForm,
+  switch_form: switchForm,
 }: SignUpMethodChoiceProps) {
   if (suspendedNotice) {
     return (
@@ -108,7 +112,20 @@ export default function SignUpMethodChoice({
           </a>
         </p>
       ))}
-      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
+      {switchForm !== null && (
+        <EntryExitForm
+          form={switchForm}
+          testId="sign-entry-switch"
+          tone="default"
+        />
+      )}
+      {cancelForm !== null && (
+        <EntryExitForm
+          form={cancelForm}
+          testId="sign-entry-cancel"
+          tone="muted"
+        />
+      )}
     </Page>
   );
 }

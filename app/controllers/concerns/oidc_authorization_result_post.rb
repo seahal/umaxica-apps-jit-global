@@ -13,6 +13,8 @@ module OidcAuthorizationResultPost
 
   def render_oidc_result_continuation!
     apply_base_browser_continuation_headers!
+    return render_oidc_exit_continuation! if params[:cancellation_ref].present? || params[:switch_handoff].present?
+
     result_reference = params[:result_ref]
     transaction_reference = params[:transaction_ref]
     unless result_reference.is_a?(String) &&
@@ -37,6 +39,9 @@ module OidcAuthorizationResultPost
     if params[:ceremony_action].present?
       return start_authorization_from_post!
     end
+
+    return cancel_authorization_from_post! if params[:cancellation_ref].present?
+    return switch_authorization_from_post! if params[:switch_handoff].present?
 
     if params[:result_ref].present? || params[:transaction_ref].present?
       return complete_authorization_from_post!
@@ -103,6 +108,62 @@ module OidcAuthorizationResultPost
     session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = browser_nonce
   end
 
+  # D09/D06: Auth's first-page Cancel or Switch arrives as a cross-site GET; Base commits it only
+  # through this same-origin POST from the browser that started the parent authorization.
+  def render_oidc_exit_continuation!
+    fields =
+      if params[:switch_handoff].present?
+        { "switch_handoff" => params.expect(:switch_handoff) }
+      else
+        transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+          surface: oidc_result_surface, transaction_id: params.expect(:transaction_ref),
+        )
+        validate_base_result_browser_binding!(transaction)
+        { "cancellation_ref" => params.expect(:cancellation_ref), "transaction_ref" => transaction.transaction_id }
+      end
+    region = RequestContextContract.normalize_region(params[:ri])
+    fields = fields.merge("ri" => region) if region.present?
+    render "base/shared/authorization_exit_continuation", layout: false,
+                                                          locals: { action_url: request.path, fields: fields }
+  end
+
+  def cancel_authorization_from_post!
+    raise ArgumentError unless params[:cancellation_ref].is_a?(String) && params[:transaction_ref].is_a?(String)
+
+    transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
+      surface: oidc_result_surface, transaction_id: params[:transaction_ref],
+    )
+    validate_base_result_browser_binding!(transaction)
+    validate_authorization_request!(transaction.authorize_params)
+    handoff = transaction.cancellation_handoff_ciphertext
+    raise ArgumentError, "cancellation reference mismatch" unless
+      transaction.cancellation_handoff_ref.present? && transaction.cancellation_handoff_ref == params[:cancellation_ref]
+
+    BaseAuthAdmissionCoordinator.read_authorization_cancellation_handoff!(
+      handoff:, surface: oidc_result_surface, transaction_ref: transaction.transaction_id,
+    )
+    transaction.cancel!(cancellation_handoff_digest: BaseAuthAdmissionCoordinator.cancellation_handoff_digest(handoff))
+    redirect_to_same_origin_or_jump_url(
+      ::OidcAuthorizeCoordinator.error_redirect_url(
+        redirect_uri: transaction.redirect_uri, resource_type: resource_type, error: "access_denied",
+        state: transaction.state,
+      ),
+      status: :see_other,
+    )
+  end
+
+  def switch_authorization_from_post!
+    transaction, target = BaseAuthAdmissionCoordinator.read_switch_handoff!(
+      handoff: params[:switch_handoff], surface: oidc_result_surface,
+    )
+    validate_base_result_browser_binding!(transaction)
+    validate_authorization_request!(transaction.authorize_params)
+    handoff = BaseAuthAdmissionCoordinator.issue_switch_admission!(
+      transaction:, base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token, target:,
+    )
+    redirect_to_jump_url(authorization_switch_url(target:, entry_ref: handoff.reference), status: :see_other)
+  end
+
   def render_authorization_ceremony_start!
     # The region is display context, not an authorization input, but the start POST builds the
     # Auth entry URL from it; dropping it here sends the ceremony to the credential gateway
@@ -134,6 +195,7 @@ module OidcAuthorizationResultPost
     raise ArgumentError, "authorization transaction is not ready"
   end
 
+  # Includers also define authorization_switch_url(target:, entry_ref:) and resource_type.
   def oidc_result_surface
     raise NotImplementedError, "#{self.class} must define #oidc_result_surface"
   end

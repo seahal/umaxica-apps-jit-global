@@ -295,7 +295,9 @@ class BaseStepUpIntentAuthorityTest < ActionDispatch::IntegrationTest
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         ).finalize_binding!
       end
-      actor.public_send(passkeys).create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
+      actor.public_send(passkeys).create!(
+        webauthn_id: SecureRandom.hex(32), public_key: "public-key",
+      )
       owner_key = { "app" => :user, "com" => :visitor, "org" => :staff }.fetch(surface)
       token = token_class.create!(owner_key => actor)
       host = ENV.fetch(host_key)

@@ -14,7 +14,7 @@ ruby_files =
     next false unless File.file?(path)
     next false if EXCLUDED_PREFIXES.any? { |prefix| path.start_with?(prefix) }
     next false if path == "db/schema.rb" || path.match?(%r{\Adb/[^/]+_schema\.rb\z})
-    next false if %w(bin/dev bin/setup-diagnostic-env).include?(path)
+    next false if %w(bin/dev).include?(path)
     next true unless path.start_with?("bin/")
 
     File.foreach(path).first.to_s.include?("ruby")

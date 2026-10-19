@@ -28,7 +28,10 @@ class WithdrawalPersonalDataAnonymizer
     ClientEmail.where(user_id: actor.id).find_each(&:retire_for_withdrawal!)
     ClientTelephone.where(user_id: actor.id).find_each(&:retire_for_withdrawal!)
     revoke_records(
-      ClientPasskey.where(user_id: actor.id), status_column: :status_id, revoked_status: ClientPasskeyStatus::REVOKED,
+      ClientPasskey.where(user_id: actor.id),
+      status_column: :status_id,
+      revoked_status: ClientPasskeyStatus::REVOKED,
+      purge_at: actor.purge_eligible_at,
     )
     actor.with_lock do
       credentials = ClientSecretCredential.where(client_id: actor.id)
@@ -54,7 +57,10 @@ class WithdrawalPersonalDataAnonymizer
     VisitorEmail.where(visitor_id: actor.id).find_each(&:retire_for_withdrawal!)
     VisitorTelephone.where(visitor_id: actor.id).find_each(&:retire_for_withdrawal!)
     revoke_records(
-      VisitorPasskey.where(visitor_id: actor.id), status_column: :status_id, revoked_status: VisitorPasskeyStatus::REVOKED,
+      VisitorPasskey.where(visitor_id: actor.id),
+      status_column: :status_id,
+      revoked_status: VisitorPasskeyStatus::REVOKED,
+      purge_at: actor.purge_eligible_at,
     )
     revoke_records(
       VisitorSecretCredential.where(visitor_id: actor.id),
@@ -62,11 +68,44 @@ class WithdrawalPersonalDataAnonymizer
     )
   end
 
-  def revoke_records(scope, status_column:, revoked_status:)
+  def revoke_records(scope, status_column:, revoked_status:, purge_at: nil)
     scope.find_each do |record|
-      attrs = { status_column => revoked_status }
-      attrs[:discard_at] = Time.current if record.respond_to?(:discard_at=)
-      record.update!(attrs)
+      record.class.transaction do
+        record.lock!
+        was_revoked = record.public_send(status_column) == revoked_status
+        if !was_revoked && (record.is_a?(ClientPasskey) || record.is_a?(VisitorPasskey))
+          PasskeyAuditOutbox.record_for!(
+            passkey: record,
+            event_type: "passkey.revoked",
+            surface: surface_for(actor),
+            actor_ref: nil,
+            operation_ref: "withdrawal:#{actor.public_id}",
+            occurred_at: record.class.database_now,
+            metadata: { reason: "withdrawal" },
+          )
+        end
+
+        attrs = { status_column => revoked_status }
+        attrs[:discard_at] = record.class.database_now if record.respond_to?(:discard_at=)
+        if purge_at && record.respond_to?(:purge_eligible_at=)
+          existing = record.purge_eligible_at
+          attrs[:purge_eligible_at] =
+            if existing.respond_to?(:infinite?) && existing.infinite?
+              purge_at
+            else
+              [existing, purge_at].compact.min
+            end
+        end
+        record.update!(attrs)
+      end
+    end
+  end
+
+  def surface_for(actor)
+    case actor
+    when Client then "app"
+    when Visitor then "com"
+    else raise ArgumentError, "unsupported passkey withdrawal actor"
     end
   end
 

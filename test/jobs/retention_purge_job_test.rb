@@ -90,6 +90,38 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     end
   end
 
+  test "continues after one retained model fails and re-raises the failure" do
+    processed = []
+    reported = []
+    first_model = RetentionPurgeJob::RETAINABLE_MODELS.first
+    failure = ActiveRecord::RecordNotDestroyed.new("retention target failed")
+    job = RetentionPurgeJob.new
+
+    SignUpArtifactCleanup.stub(:cleanup_pending!, nil) do
+      ClientSecretIssuance.stub(:exists?, false) do
+        ClientSecretCredential.stub(:exists?, false) do
+          ClientSecretAuditOutbox.stub(:exists?, false) do
+            job.stub(
+              :purge_retained_model,
+              lambda { |klass, batch_size:|
+                processed << [klass, batch_size]
+                raise failure if klass == first_model
+              },
+            ) do
+              Rails.error.stub(:report, lambda { |error, **context| reported << [error, context] }) do
+                assert_raises(ActiveRecord::RecordNotDestroyed) { job.perform(batch_size: 1) }
+              end
+            end
+          end
+        end
+      end
+    end
+
+    assert_equal RetentionPurgeJob::RETAINABLE_MODELS.length, processed.length
+    assert_equal failure, reported.fetch(0).fetch(0)
+    assert_equal first_model.name, reported.fetch(0).fetch(1).fetch(:context).fetch(:retained_model)
+  end
+
   test "anonymizes account records where purge_eligible_at is in the past" do
     user_to_purge = Client.create!(
       public_id: "purge_#{SecureRandom.uuid}".chars.first(16).join, status_id: ClientStatus::ACTIVE,

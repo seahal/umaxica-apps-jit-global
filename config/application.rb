@@ -95,25 +95,6 @@ module Jit
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults(8.2)
 
-    # Select this process's credentials bundle from its trusted runtime role before anything reads
-    # `Rails.app.creds` (lib/runtime_role.rb, docs/security/role-secret-isolation.md). A non-shared
-    # role can decrypt only its own bundle; a missing bundle or key stops boot here.
-    role_credentials = RuntimeRole.credentials_paths(env: Rails.env, root: config.root)
-    if role_credentials
-      # Rails treats a missing credentials file as an empty bundle, which would let a role boot with
-      # no secrets and fail later in an unrelated place. Refuse to boot instead. The key may come
-      # from RAILS_MASTER_KEY (which Rails prefers over key_path); it must then be this role's key.
-      unless File.exist?(role_credentials.fetch(:content_path))
-        raise RuntimeRole::UnknownRole, "missing credentials bundle for role #{RuntimeRole.current}"
-      end
-      unless ENV["RAILS_MASTER_KEY"] || File.exist?(role_credentials.fetch(:key_path))
-        raise RuntimeRole::UnknownRole, "missing credentials key for role #{RuntimeRole.current}"
-      end
-
-      config.credentials.content_path = role_credentials.fetch(:content_path)
-      config.credentials.key_path = role_credentials.fetch(:key_path)
-    end
-
     # Raw email content is not application logging data. Keep the Rails delivery
     # mechanism and its notifications intact while disabling ActionMailer's
     # logger across every environment.

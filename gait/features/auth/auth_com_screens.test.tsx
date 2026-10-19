@@ -83,18 +83,32 @@ describe("AuthMethodChoice", () => {
     suspended_notice: null,
     methods: [{ key: "email", label: "メール", href: "/sign/in/email/new" }],
     links: [{ key: "registration", label: "登録", href: "/sign/up" }],
+    cancel_form: null,
+    switch_form: null,
   };
 
-  it("appends text-only Cancel on com sign-up", () => {
+  it("renders Switch and Cancel as POST forms on an OIDC-bound com sign-up page", () => {
     const markup = renderToStaticMarkup(
       <AuthMethodChoice
         {...props}
-        cancel_label="Cancel"
+        links={[]}
+        switch_form={{
+          label: "ログイン",
+          action: "/sign/switch",
+          to: "sign_in",
+          authenticity_token: "csrf-value",
+        }}
+        cancel_form={{
+          label: "Cancel",
+          action: "/sign/cancellation",
+          to: null,
+          authenticity_token: "csrf-value",
+        }}
       />,
     );
-    expect(markup).toMatch(/<p[^>]*>Cancel<\/p><\/div>$/u);
-    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu)!;
-    expect(controls.some((control) => control.includes("Cancel"))).toBe(false);
+    expect(markup).toMatch(/action="\/sign\/switch".*action="\/sign\/cancellation"/su);
+    expect(markup).toContain('name="to" value="sign_in"');
+    expect(markup).not.toContain('href="/sign/up"');
   });
 
   it("lists the methods and the trailing links the server resolved", () => {

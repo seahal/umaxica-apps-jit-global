@@ -8,9 +8,9 @@
 
 ## Status
 
-PRE_DEPLOYMENT_SCOPE_REOPENED. Phase 0 is complete as an initial inventory. The observability correction,
-dashboard reachability, URL policy, OIDC delivery failure classification, explicit Solid Queue
-configuration, Phase 1 vocabulary migration, the Phase 2 authority schema foundation, static
+PRE_DEPLOYMENT_SCOPE_REOPENED. Phase 0 is complete as an initial inventory. The observability
+correction, dashboard reachability, URL policy, OIDC delivery failure classification, explicit Solid
+Queue configuration, Phase 1 vocabulary migration, the Phase 2 authority schema foundation, static
 RP-session realm/revocation hardening, enforcement appeal recovery, sign-up guardrail enforcement,
 OTP resend serialization, and one-time OTP consumption are implemented as local slices. Historical
 focused Rails runs for the authority vocabulary/schema and creator/concurrency contracts are
@@ -18,10 +18,10 @@ recorded. The occurrence migration/seed paths and a bounded test Solid Queue wor
 historical evidence, not current-process acceptance evidence. A subsequent local Compose-backed
 recheck completed the CF-011 migration, structure-load, focused, and full Rails acceptance checks;
 the later local Compose-backed CF-005 runtime recheck also verified scheduler enqueue, dispatcher/
-worker execution, expected database mutation, and controlled failure handling. Production worker topology,
-production recurring scheduler execution, migration rollback proofs,
-and provider delivery remain unverified. `CF-002` is closed for the isolated local test boundary;
-production worker/runtime and external-service checks remain separate conflicts. The adopted
+worker execution, expected database mutation, and controlled failure handling. Production worker
+topology, production recurring scheduler execution, migration rollback proofs, and provider delivery
+remain unverified. `CF-002` is closed for the isolated local test boundary; production
+worker/runtime and external-service checks remain separate conflicts. The adopted
 Persona/Organization redesign is not enabled until its source-owner inventory, connection proof,
 lifecycle gates, and migration gates are complete. The Rails-side JSON body-size boundary for #845
 is now verified; external edge limits, compressed-input policy, and non-JSON upload limits remain
@@ -30,25 +30,25 @@ under the closure amendment below; external RP registration/key deployment and l
 acceptance remain separate. The neutral browser RP entry now also refuses a second flow when the
 same RP's valid access credential is present, while preserving cross-surface cookie isolation.
 
-Status precedence: dated sections explicitly labeled historical record the state at the time of
-that verification. The current status and latest dated resolution above take precedence over
-earlier handoff wording; historical blocker entries are not reopened by their preserved text.
+Status precedence: dated sections explicitly labeled historical record the state at the time of that
+verification. The current status and latest dated resolution above take precedence over earlier
+handoff wording; historical blocker entries are not reopened by their preserved text.
 
 ### Approved CF-003/CF-004 and CF-007 decision amendment (2026-09-23)
 
 The human decisions recorded in the current blocker-input document are approved and supersede the
 earlier decision-request wording below. They authorize pre-deployment repository work; they do not
-authorize production data access, external registration, key generation, deployed-caller changes,
-or live cutover.
+authorize production data access, external registration, key generation, deployed-caller changes, or
+live cutover.
 
-For `CF-003/CF-004`, the six surface-local explicit ownership relations are the sole owner
-authority after a resource-family cutover:
+For `CF-003/CF-004`, the six surface-local explicit ownership relations are the sole owner authority
+after a resource-family cutover:
 
-| Surface | Principal | Resource families |
-| --- | --- | --- |
-| `app` | `Client` | `Client -> Persona`, `Client -> Enterprise` |
-| `com` | `Visitor` | `Visitor -> Individual`, `Visitor -> Company` |
-| `org` | `Operator` | `Operator -> Agent`, `Operator -> Bureau` |
+| Surface | Principal  | Resource families                             |
+| ------- | ---------- | --------------------------------------------- |
+| `app`   | `Client`   | `Client -> Persona`, `Client -> Enterprise`   |
+| `com`   | `Visitor`  | `Visitor -> Individual`, `Visitor -> Company` |
+| `org`   | `Operator` | `Operator -> Agent`, `Operator -> Bureau`     |
 
 Memberships, assignments, administrator relations, identity bindings, legacy owner fields, and
 legacy `Organization` hierarchy data are migration evidence only. `Organization` is not `Bureau`.
@@ -70,8 +70,8 @@ each `app`, `com`, and `org` JP/US cell, plus global `edit-org`:
 Each cell requires independent client binding, audience semantics, exact redirect/logout/backchannel
 bindings, private-key-JWT namespace, and RP Session binding. The current seven-client registry and
 `core-next-rp` compatibility path remain during expand-and-contract migration. Regional URIs and
-audiences must come from an existing canonical repository source; no missing value may be guessed
-or derived from an arbitrary Host header. Real Base registration, credential fingerprints, deployed
+audiences must come from an existing canonical repository source; no missing value may be guessed or
+derived from an arbitrary Host header. Real Base registration, credential fingerprints, deployed
 caller confirmation, and retirement are later deployment gates.
 
 The approved decisions change the blocker state from decision-gated to implementation-gated. The
@@ -86,23 +86,23 @@ The repository review identified the current owner-specific consumers without ch
 access semantics. `AccountPolicy` is staged on each account-family cutover marker. The two quota
 policies and the six concrete creator operations use the configured surface-local ownership and
 lifecycle relation for owner-specific quota decisions. `OrganizationPolicy`,
-`BaseSelectorAuthority`, and `BaseSwitcherAuthority` remain membership/act-as contracts and are
-not owner consumers; replacing them with owner-only reads would be an unapproved authorization
-change. The persisted family marker, immutable marker model, post-marker backfill rejection, and
+`BaseSelectorAuthority`, and `BaseSwitcherAuthority` remain membership/act-as contracts and are not
+owner consumers; replacing them with owner-only reads would be an unapproved authorization change.
+The persisted family marker, immutable marker model, post-marker backfill rejection, and
 post-cutover AccountPolicy test provide the forward-only boundary; no ownership-transfer acceptance
 route is enabled because its recipient authentication, step-up, lifecycle, quota, and locked
 transaction contract is explicitly deferred in the authority ADR.
 
 The approved regional matrix and independent logical key namespaces are present in
 `AuthBoundaryAuthorityMap` and `RegionalRpClientMatrix`. Exact Core JP/US, existing Side JP, and
-global Edit URI bindings are derived only from repository sources. The repository has no
-independent Side US canonical host source and no regional audience SSOT for the new IDs, so the
-active seven-client registry remains unchanged and the regional activation path fails closed.
-Those missing inputs are not filled from a request Host header or a guessed client-id audience.
+global Edit URI bindings are derived only from repository sources. The repository has no independent
+Side US canonical host source and no regional audience SSOT for the new IDs, so the active
+seven-client registry remains unchanged and the regional activation path fails closed. Those missing
+inputs are not filled from a request Host header or a guessed client-id audience.
 
 This review changes neither acceptance scope nor external deployment gates. The current process
-could not run the DB-backed acceptance because `primary` and `valkey-kvs` were not resolvable;
-the exact command and full error are recorded in the current evidence record.
+could not run the DB-backed acceptance because `primary` and `valkey-kvs` were not resolvable; the
+exact command and full error are recorded in the current evidence record.
 
 ### Approved-decision implementation slice (2026-09-23)
 
@@ -110,16 +110,16 @@ The repository now has a read-only inventory view of explicit ownership rows and
 `AuthorityOwnerDirectBindingBackfillOperation` for one unambiguous direct identity binding. The
 operation is surface-local, lock-protected, idempotent, and conflict-rejecting; membership,
 administrator, legacy-organization, inactive, and ambiguous cases are not promoted. The approved
-13-cell RP target is recorded in `AuthBoundaryAuthorityMap` as a migration contract while the
-active seven-client registry remains unchanged.
+13-cell RP target is recorded in `AuthBoundaryAuthorityMap` as a migration contract while the active
+seven-client registry remains unchanged.
 
 The operation requires an explicitly reviewed surface-local `owner_public_id` for every backfill
 mutation, including a resource with an otherwise unambiguous legacy identity binding. It never
 derives that owner from identity binding, membership, administrator, assignment, or legacy
 Organization data, and rejects a principal from another surface. A read-only
 `AuthorityOwnerCutoverGuard` checks the family inventory and refuses readiness when the resource
-model has no explicit lifecycle contract; absence of lifecycle columns is not interpreted as
-active. It also requires an explicit `lifecycle_active?` result before a family can be ready and
+model has no explicit lifecycle contract; absence of lifecycle columns is not interpreted as active.
+It also requires an explicit `lifecycle_active?` result before a family can be ready and
 distinguishes inactive authoritative resources from inactive principals. Membership inventory
 classifies multiple candidates as ambiguous and never promotes membership-only evidence.
 `AuthorityOwnerPredeploymentBackfillOperation` composes the reviewed owner and lifecycle inputs in
@@ -129,28 +129,27 @@ unit only. It does not infer candidates or switch an authorization consumer. The
 `AuthorityOwnerFamilyCutoverOperation` acquires the same family resource-table lock, rechecks the
 guard, and creates one immutable surface-local singleton marker; after that point all reviewed
 backfill paths reject and bootstrap refuses to create an authority-incomplete resource. The marker
-is the persisted point of no return; recovery after it is forward-only.
-The read-only `authority:cutover_guard` task now evaluates all six approved families through the
-same guard and writes only a public-identifier readiness report. It performs no backfill, consumer
-switch, or cutover mutation.
-The read-only `auth:regional_rp_contract` task evaluates all 13 approved client IDs against the
-same canonical URI and registry binding checks. Missing hosts, missing audiences, and invalid
-registrations are reported as incomplete; the task never activates a client or generates a key.
-`RegionalRpClientMatrix` derives exact Core JP/US callback, logout, and backchannel URIs from
+is the persisted point of no return; recovery after it is forward-only. The read-only
+`authority:cutover_guard` task now evaluates all six approved families through the same guard and
+writes only a public-identifier readiness report. It performs no backfill, consumer switch, or
+cutover mutation. The read-only `auth:regional_rp_contract` task evaluates all 13 approved client
+IDs against the same canonical URI and registry binding checks. Missing hosts, missing audiences,
+and invalid registrations are reported as incomplete; the task never activates a client or generates
+a key. `RegionalRpClientMatrix` derives exact Core JP/US callback, logout, and backchannel URIs from
 `RegionalRootUrlRegistry`, derives the already-established global `edit-org` host from
-`PUBLIC_EDIT_STAFF_URL`, provides independent logical key namespaces and RP-session bindings,
-and refuses missing Side host sources instead of inventing them.
+`PUBLIC_EDIT_STAFF_URL`, provides independent logical key namespaces and RP-session bindings, and
+refuses missing Side host sources instead of inventing them.
 
 The selector bootstrap uses the six concrete creator operations only when a newly created resource
 has an eligible active principal. Such a resource receives its explicit ownership and `active`
-lifecycle row in the same surface-local transaction; the existing assignment/membership rows
-remain separate relationship data. Withdrawal, inactive, or access-restricted legacy bootstrap
-flows retain their legacy graph construction because that graph is still required before family
-cutover. Existing legacy resources are not inferred or repaired by bootstrap and remain subject to
-the reviewed inventory/backfill and family cutover gates. After the family marker exists, a new
-ineligible resource is rejected instead of entering the legacy-only path; an eligible new resource
-continues through the concrete owner/lifecycle creator. The marker is immutable and establishes the
-point of no return for that family.
+lifecycle row in the same surface-local transaction; the existing assignment/membership rows remain
+separate relationship data. Withdrawal, inactive, or access-restricted legacy bootstrap flows retain
+their legacy graph construction because that graph is still required before family cutover. Existing
+legacy resources are not inferred or repaired by bootstrap and remain subject to the reviewed
+inventory/backfill and family cutover gates. After the family marker exists, a new ineligible
+resource is rejected instead of entering the legacy-only path; an eligible new resource continues
+through the concrete owner/lifecycle creator. The marker is immutable and establishes the point of
+no return for that family.
 
 The bootstrap now acquires the existing surface-local authority lock for the complete graph
 transaction before checking or creating the RP account, identity, resource, collective, membership,
@@ -160,9 +159,9 @@ serialization mechanism only; it is not an owner or access grant.
 
 Owner-specific quota policies now apply the approved lifecycle boundary without changing delegated
 selector/switcher access: they count only explicitly `active` owned resources, reject an ineligible
-principal, and fail closed when any resource in the evaluated scope has no lifecycle row. This is
-an owner-policy slice, not a family-wide authorization cutover; legacy candidate graphs remain
-separate until a named consumer and family cutover contract are accepted.
+principal, and fail closed when any resource in the evaluated scope has no lifecycle row. This is an
+owner-policy slice, not a family-wide authorization cutover; legacy candidate graphs remain separate
+until a named consumer and family cutover contract are accepted.
 
 The owner-specific quota consumer now reads through `AuthorityOwnerResourceScopeQuery`, which
 accepts only the configured surface-local principal/resource family and has no legacy fallback. This
@@ -176,30 +175,30 @@ itself satisfy the separate family-wide authorization consumer cutover gate.
 
 All six concrete resource creator operations now call the corresponding owner-scoped quota policy
 inside the existing surface-local principal lock and transaction. They no longer count ownership
-rows directly, so inactive lifecycle resources do not consume a slot and an ownership row without
-an explicit lifecycle row blocks creation. The creator still writes its resource, active lifecycle,
-and ownership rows atomically. This closes the quota-policy/creator-path discrepancy; it does not
-switch selector/switcher access or constitute the family-wide authorization cutover.
+rows directly, so inactive lifecycle resources do not consume a slot and an ownership row without an
+explicit lifecycle row blocks creation. The creator still writes its resource, active lifecycle, and
+ownership rows atomically. This closes the quota-policy/creator-path discrepancy; it does not switch
+selector/switcher access or constitute the family-wide authorization cutover.
 
 #### Adversarial boundary review: owner authority versus act-as context (2026-09-23)
 
 The approved owner mapping does not authorize a blanket replacement of the selector/switcher
 candidate graph. `BaseSelectorAuthority` and `BaseSwitcherAuthority` resolve act-as context through
 the existing surface-local identity, assignment, membership, and avatar contracts; those relations
-can represent legitimate delegated or member access and are not owner authority. Replacing that
-path with an owner-only query would be an unapproved access-contract change. The ownership tables
-remain the sole source for owner-specific decisions, including the quota policies and the reviewed
-backfill/cutover gate. Any future consumer switch must name an owner-specific authorization
-consumer and pass its own access/delegation review before it changes selector behavior.
+can represent legitimate delegated or member access and are not owner authority. Replacing that path
+with an owner-only query would be an unapproved access-contract change. The ownership tables remain
+the sole source for owner-specific decisions, including the quota policies and the reviewed
+backfill/cutover gate. Any future consumer switch must name an owner-specific authorization consumer
+and pass its own access/delegation review before it changes selector behavior.
 
 The inventory and cutover guard also distinguish an ownership fact from current authority
-eligibility. An ownership row with an inactive or access-blocked principal remains retained data
-but is unresolved for family cutover; row presence alone cannot satisfy the cutover gate.
+eligibility. An ownership row with an inactive or access-blocked principal remains retained data but
+is unresolved for family cutover; row presence alone cannot satisfy the cutover gate.
 
 ### Pre-deployment continuation: fail-closed boundaries (2026-09-23)
 
-The owner backfill now treats a non-global `public_id` collision across concrete principal
-surfaces as `manual_review` rather than selecting the principal in the requested surface. Principal
+The owner backfill now treats a non-global `public_id` collision across concrete principal surfaces
+as `manual_review` rather than selecting the principal in the requested surface. Principal
 classification distinguishes inactive status from a suspended/access-blocked principal; neither is
 an eligible authority candidate, and neither causes transfer or revival. The approved six mapping
 table is fixed by an explicit inventory regression contract. Legacy identity bindings remain
@@ -215,65 +214,64 @@ activated. A complete registered binding also now requires the registry account 
 audience isolation, namespace, and RP-session client binding. This preserves the approved
 fail-closed contract while the matrix contradiction remains open.
 
-The current acceptance gaps are explicit: the six resource families now have concrete,
-surface-local lifecycle tables, explicit lifecycle-state backfill, and creator-path insertion of an
-`active` row, but complete reviewed backfill and family-level consumer cutover are still absent.
-The existing canonical Side JP host can be derived, but no independent Side US host source or
-regional audience semantics exists in the repository. These are not production-evidence
-requirements, but they are repository implementation/contract prerequisites and therefore keep
-`CF-007` open. `CF-003/CF-004` remains open for the separate family-level authorization consumer
-switch and forward-recovery proof. Detailed evidence is recorded in
-`evidence/2026-09-23-cf003-cf007-continuation-T6U7.md`, the later Side JP source check in
-`evidence/2026-09-23-cf007-side-jp-source-Q2S3.md`, and the current lifecycle implementation
-evidence.
+The current acceptance gaps are explicit: the six resource families now have concrete, surface-local
+lifecycle tables, explicit lifecycle-state backfill, and creator-path insertion of an `active` row,
+but complete reviewed backfill and family-level consumer cutover are still absent. The existing
+canonical Side JP host can be derived, but no independent Side US host source or regional audience
+semantics exists in the repository. These are not production-evidence requirements, but they are
+repository implementation/contract prerequisites and therefore keep `CF-007` open. `CF-003/CF-004`
+remains open for the separate family-level authorization consumer switch and forward-recovery proof.
+Detailed evidence is recorded in `evidence/2026-09-23-cf003-cf007-continuation-T6U7.md`, the later
+Side JP source check in `evidence/2026-09-23-cf007-side-jp-source-Q2S3.md`, and the current
+lifecycle implementation evidence.
 
 The pre-deployment backfill unit is now atomic per resource: an explicitly reviewed owner and
-explicit lifecycle state are committed together or neither is committed. The unit is idempotent
-for the same reviewed pair and rejects lifecycle conflicts without leaving a newly created owner
-row behind. This advances the isolated backfill contract but does not close `CF-003/CF-004`, because
-the complete reviewed mapping, family-level consumer switch, and post-cutover forward-recovery
-proof are still not implemented.
+explicit lifecycle state are committed together or neither is committed. The unit is idempotent for
+the same reviewed pair and rejects lifecycle conflicts without leaving a newly created owner row
+behind. This advances the isolated backfill contract but does not close `CF-003/CF-004`, because the
+complete reviewed mapping, family-level consumer switch, and post-cutover forward-recovery proof are
+still not implemented.
 
 The approved six-family owner mapping is now also the Ruby-level SSOT for the account and
-organization quota consumers. `AuthorityOwnerMigrationInventory::RESOURCE_KIND_BY_CATEGORY`
-resolves the app/com/org account and organization resource kinds, and both quota policies derive
-their ownership and lifecycle relations from the corresponding inventory configuration. This
-removes a second policy-local mapping without changing the delegated selector/switcher graph.
-This is a consumer consistency slice, not the family-level cutover or point-of-no-return marker.
-Evidence: `evidence/2026-09-23-owner-mapping-ssot-M2N3.md`.
+organization quota consumers. `AuthorityOwnerMigrationInventory::RESOURCE_KIND_BY_CATEGORY` resolves
+the app/com/org account and organization resource kinds, and both quota policies derive their
+ownership and lifecycle relations from the corresponding inventory configuration. This removes a
+second policy-local mapping without changing the delegated selector/switcher graph. This is a
+consumer consistency slice, not the family-level cutover or point-of-no-return marker. Evidence:
+`evidence/2026-09-23-owner-mapping-ssot-M2N3.md`.
 
-This slice still does not close either blocker. Complete reviewed backfill and family-level
-consumer cutover, post-cutover forward-recovery proof, exact regional audience mapping, active
-regional registry entries, caller/RP-session migration, and `core-next-rp` retirement procedure
-remain implementation work. Evidence for this slice is recorded in the next dated pre-deployment
-evidence record.
+This slice still does not close either blocker. Complete reviewed backfill and family-level consumer
+cutover, post-cutover forward-recovery proof, exact regional audience mapping, active regional
+registry entries, caller/RP-session migration, and `core-next-rp` retirement procedure remain
+implementation work. Evidence for this slice is recorded in the next dated pre-deployment evidence
+record.
 
 ### Current-process pre-deployment acceptance recheck (2026-09-23)
 
-The required Compose-backed test preflight was rerun with the explicit
-`.env.devcontainer.example` environment. The test credential key was present, all required
-PostgreSQL/Valkey variables were present without printing their values, `primary` and
-`valkey-kvs` resolved, PostgreSQL 17.7 was reachable, and Valkey 7.2.4 returned PONG for the
-rate-limit and auth-state logical databases. The disposable local test databases and stale
-parallel worker clones were rebuilt only as test infrastructure; no production or shared data was
-changed.
+The required Compose-backed test preflight was rerun with the explicit `.env.container.devcontainer`
+environment. The test credential key was present, all required PostgreSQL/Valkey variables were
+present without printing their values, `primary` and `valkey-kvs` resolved, PostgreSQL 17.7 was
+reachable, and Valkey 7.2.4 returned PONG for the rate-limit and auth-state logical databases. The
+disposable local test databases and stale parallel worker clones were rebuilt only as test
+infrastructure; no production or shared data was changed.
 
-The complete CF-003/CF-004 authority acceptance set passed with `97 runs / 690 assertions / 0
-failures / 0 errors / 0 skips`. It covers the six approved mappings, lifecycle and conflict
-dispositions, idempotent and atomic backfill, unique-owner enforcement, family-level cutover,
-immutable point-of-no-return behavior, post-marker backfill rejection, and post-cutover explicit
-ownership reads. The full Rails suite then passed with `11,672 runs / 74,218 assertions / 0
-failures / 0 errors / 8 skips`. Targeted syntax, RuboCop, and `git diff --check` also passed.
+The complete CF-003/CF-004 authority acceptance set passed with
+`97 runs / 690 assertions / 0 failures / 0 errors / 0 skips`. It covers the six approved mappings,
+lifecycle and conflict dispositions, idempotent and atomic backfill, unique-owner enforcement,
+family-level cutover, immutable point-of-no-return behavior, post-marker backfill rejection, and
+post-cutover explicit ownership reads. The full Rails suite then passed with
+`11,672 runs / 74,218 assertions / 0 failures / 0 errors / 8 skips`. Targeted syntax, RuboCop, and
+`git diff --check` also passed.
 
-The earlier current-process wording that called the isolated acceptance unverified is superseded
-by this recheck. `CF-003/CF-004` is now `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`. The
-immutable marker and post-marker rejection are the repository proof of forward-only recovery: the
-old authority cannot be restored through the normal backfill path. Production row inventory,
-actual cutover, and operational recovery rehearsal remain later deployment gates.
+The earlier current-process wording that called the isolated acceptance unverified is superseded by
+this recheck. `CF-003/CF-004` is now `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`. The immutable
+marker and post-marker rejection are the repository proof of forward-only recovery: the old
+authority cannot be restored through the normal backfill path. Production row inventory, actual
+cutover, and operational recovery rehearsal remain later deployment gates.
 
-`CF-007` remains `OPEN — CONTRACT CONTRADICTION`: its approved 13-cell matrix and isolation
-tests are present, but the repository still has no canonical Side US host source or regional
-audience SSOT. No value was guessed, activated, or derived from a Host header.
+`CF-007` remains `OPEN — CONTRACT CONTRADICTION`: its approved 13-cell matrix and isolation tests
+are present, but the repository still has no canonical Side US host source or regional audience
+SSOT. No value was guessed, activated, or derived from a Host header.
 
 Evidence: `evidence/2026-09-23-cf003-cf007-predeployment-acceptance-F7G8.md`.
 
@@ -282,8 +280,8 @@ complete reviewed mapping for one resource family is validated for explicit owne
 and duplicate resource entries, then applied in one surface-local transaction. A rejected or
 conflicting row rolls back earlier rows from that reviewed batch; an identical complete batch is
 idempotent. `AuthorityOwnerFamilyCutoverOperation` separately rechecks the family guard while
-holding the same resource-table lock and records one immutable surface-local singleton marker.
-After that marker, all reviewed backfill paths reject and bootstrap cannot create a new
+holding the same resource-table lock and records one immutable surface-local singleton marker. After
+that marker, all reviewed backfill paths reject and bootstrap cannot create a new
 authority-incomplete resource. The remaining family-level authorization consumer switch and its
 forward-recovery proof remain open.
 
@@ -295,10 +293,10 @@ deployment gate.
 
 ### Current pre-deployment scope correction (2026-09-23)
 
-The repository is not deployed to production. Production runtime, production data, deployed
-callers, Base deployment registry state, credential fingerprints, and provider end-to-end delivery
-are therefore not prerequisites for closing the current repository cycle. They remain mandatory
-later gates under `PRE-DEPLOYMENT / DEPLOYMENT ACCEPTANCE GATE`; they are not deleted or weakened.
+The repository is not deployed to production. Production runtime, production data, deployed callers,
+Base deployment registry state, credential fingerprints, and provider end-to-end delivery are
+therefore not prerequisites for closing the current repository cycle. They remain mandatory later
+gates under `PRE-DEPLOYMENT / DEPLOYMENT ACCEPTANCE GATE`; they are not deleted or weakened.
 
 The current cycle uses only approved design, repository behavior, and isolated development/test
 evidence. No local queue run, expected registry manifest, or fake adapter may be reported as
@@ -306,21 +304,22 @@ production/provider evidence. The current blocker vocabulary is:
 
 - `OPEN — DECISION REQUIRED`: an approved design input is missing.
 - `OPEN — CONTRACT CONTRADICTION`: the approved design requires a binding input, but the repository
-  has no authoritative SSOT from which that input can be derived; no guessed value may be introduced.
+  has no authoritative SSOT from which that input can be derived; no guessed value may be
+  introduced.
 - `OPEN — IMPLEMENTATION REQUIRED`: repository behavior is incomplete.
 - `OPEN — EVIDENCE REQUIRED`: repository behavior exists but the required local proof is missing.
-- `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`: repository/design/isolated-environment
-  acceptance is complete; later deployment/provider gates remain open.
+- `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`: repository/design/isolated-environment acceptance
+  is complete; later deployment/provider gates remain open.
 
 Current dispositions:
 
-| Blocker | Pre-deployment disposition |
-| --- | --- |
+| Blocker         | Pre-deployment disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CF-003/CF-004` | `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`: the six approved surface-local mappings, lifecycle/conflict dispositions, atomic/idempotent backfill, unique-owner enforcement, family-level gate, immutable point of no return, post-marker backfill rejection, and post-cutover explicit ownership consumers are covered by the isolated PostgreSQL acceptance set. Ownership-transfer acceptance remains intentionally disabled rather than guessed; production inventory/cutover and operational forward-recovery rehearsal remain deployment gates. |
-| `CF-005` | `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`: configuration validation, recurring scheduler enqueue, dispatcher/worker pickup, expected database mutation, and controlled failure evidence are complete in the isolated local environment. Production runtime remains a later deployment gate. |
-| `CF-007` | `OPEN — CONTRACT CONTRADICTION`: the 13-cell regional matrix and isolation policy are approved, and the repository now exposes one expected registry contract for all 13 cells. The exact Side US host source and regional audience SSOT are still absent, so the active registry/caller/bridge migration must not guess those values or derive them from Host headers. |
-| `CF-008` | `BLOCKS_SLICE`: the adopted scrub contract still lacks an approved per-model/per-attribute inventory and an isolated, reversible validation for the distinct Client/Visitor anonymization and Operator purge paths. No destructive scrub, lifecycle reinterpretation, encryption backfill, or new dry-run/preview API is required or enabled by this status. |
-| `CF-011` | `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`: provider-neutral state, receipt, idempotency, retry/permanent-failure, recovery, and DB-backed regression evidence passed in the isolated Compose environment. Provider authentication and provider E2E remain deployment/provider gates. |
+| `CF-005`        | `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`: configuration validation, recurring scheduler enqueue, dispatcher/worker pickup, expected database mutation, and controlled failure evidence are complete in the isolated local environment. Production runtime remains a later deployment gate.                                                                                                                                                                                                                                                         |
+| `CF-007`        | `OPEN — CONTRACT CONTRADICTION`: the 13-cell regional matrix and isolation policy are approved, and the repository now exposes one expected registry contract for all 13 cells. The exact Side US host source and regional audience SSOT are still absent, so the active registry/caller/bridge migration must not guess those values or derive them from Host headers.                                                                                                                                                                                  |
+| `CF-008`        | `BLOCKS_SLICE`: the adopted scrub contract still lacks an approved per-model/per-attribute inventory and an isolated, reversible validation for the distinct Client/Visitor anonymization and Operator purge paths. No destructive scrub, lifecycle reinterpretation, encryption backfill, or new dry-run/preview API is required or enabled by this status.                                                                                                                                                                                             |
+| `CF-011`        | `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`: provider-neutral state, receipt, idempotency, retry/permanent-failure, recovery, and DB-backed regression evidence passed in the isolated Compose environment. Provider authentication and provider E2E remain deployment/provider gates.                                                                                                                                                                                                                                                                |
 
 The approved-decision continuation and its current verification are recorded in
 `evidence/2026-09-23-cf003-cf007-approved-continuation-Z8V9.md`.
@@ -331,10 +330,10 @@ An adversarial review found that the existing retention job had an explicit defa
 did not constrain a direct caller-supplied `batch_size`. `RetentionPurgeJob` now rejects values
 outside the inclusive `1..500` range, including fractional, zero, negative, missing, and oversized
 values, before the kill-switch branch or destructive work. Integral strings remain accepted for
-Active Job argument compatibility. This strengthens the existing bounded-batch contract and adds
-no dry-run, preview, simulation, audit-only, or schema interface. CF-008 remains blocked because
-the broader scrub/lifecycle data contract is still not approved; this change does not reinterpret
-the Operator purge path or claim complete erasure. Evidence:
+Active Job argument compatibility. This strengthens the existing bounded-batch contract and adds no
+dry-run, preview, simulation, audit-only, or schema interface. CF-008 remains blocked because the
+broader scrub/lifecycle data contract is still not approved; this change does not reinterpret the
+Operator purge path or claim complete erasure. Evidence:
 `evidence/2026-09-23-retention-batch-boundary-Q5R6.md`.
 
 ### Lifecycle cutover gate correction (2026-09-23)
@@ -347,9 +346,9 @@ authorization remains unavailable. The guard now excludes those explicit non-aut
 resource states from its unresolved set while continuing to block an active resource, a missing or
 unknown lifecycle state, an ineligible authoritative owner, or any resource without the required
 explicit lifecycle proof. This does not change selector/switcher act-as behavior or create an
-automatic owner. The new regression covers inactive and discarded resource states through the
-public cutover guard. Rails execution remains unverified in the current process because the
-required `primary` and `valkey-kvs` service names were not resolvable.
+automatic owner. The new regression covers inactive and discarded resource states through the public
+cutover guard. Rails execution remains unverified in the current process because the required
+`primary` and `valkey-kvs` service names were not resolvable.
 
 For `CF-003/CF-004`, pre-deployment acceptance will use isolated migration/backfill fixtures,
 idempotency, unique-owner enforcement, conflict rejection, and rollback/forward-recovery tests;
@@ -363,9 +362,9 @@ authentication and E2E remain later gates. The latest pre-deployment recheck is 
 `evidence/2026-09-23-cf011-parallel-seed-recheck-M7N8.md`.
 
 The approved CF-003/CF-004 and CF-007 decisions, their implementation boundary, and their minimum
-acceptance evidence are recorded in
-`plans/backlog/2026-09-23-critical-blocker-decision-inputs.md`. Its earlier choice tables are
-historical decision-input records; the approved amendment above is the current authority.
+acceptance evidence are recorded in `plans/backlog/2026-09-23-critical-blocker-decision-inputs.md`.
+Its earlier choice tables are historical decision-input records; the approved amendment above is the
+current authority.
 
 The approved-decision continuation adds two repository-side guards without activating external
 state. The migration inventory now records administrator grant public identifiers and classifies an
@@ -381,13 +380,13 @@ and regional audience SSOT before registry activation.
 ### Test boot dependency reclassification (2026-09-23)
 
 The current source and a Compose-backed preflight were rechecked against the resumed blocker
-contract. `config/environments/test.rb` uses an in-process `MemoryStore` for the application
-cache, but deliberately constructs a Valkey-backed rate-limit store and loads the Auth-state
-store. `test/test_helper.rb` also cleans those two namespaces through the configured KVS service.
+contract. `config/environments/test.rb` uses an in-process `MemoryStore` for the application cache,
+but deliberately constructs a Valkey-backed rate-limit store and loads the Auth-state store.
+`test/test_helper.rb` also cleans those two namespaces through the configured KVS service.
 `config/database.yml` requires the configured test PostgreSQL host for the `primary` connection.
 
 When the required variables and service network are absent, the repository preflight stops before
-application checks. With the explicit `.env.devcontainer.example` selected inside the local
+application checks. With the explicit `.env.container.devcontainer` selected inside the local
 Compose network, PostgreSQL and Valkey both resolve and the preflight reports PostgreSQL 17.7 and
 Valkey 7.2.4 with successful PINGs for test logical DBs 4 and 6. This classifies the outside-network
 failure as `ENVIRONMENT_UNAVAILABLE`, not `CONFIGURATION_BUG`; no repository fallback, hostname
@@ -445,9 +444,10 @@ Evidence: `evidence/2026-09-23-processor-migration-rollback-fix-T2U3.md`.
 An adversarial review found that `ProcessorErasureRetryPolicy#retry_at` rejected non-positive
 attempt numbers while `#exhausted?` accepted them. Both operations now share the same positive
 attempt-number normalization. The inclusive exhaustion boundary and maximum-policy boundaries are
-covered by a pure value-object regression (`3 runs / 11 assertions / 0 failures / 0 errors / 0
-skips`). This does not alter persisted attempt limits or provider behavior; PostgreSQL-backed
-verification remains subject to the reachable Compose test environment.
+covered by a pure value-object regression
+(`3 runs / 11 assertions / 0 failures / 0 errors / 0 skips`). This does not alter persisted attempt
+limits or provider behavior; PostgreSQL-backed verification remains subject to the reachable Compose
+test environment.
 
 Evidence: `evidence/2026-09-23-processor-retry-boundary-fix-V4W5.md`.
 
@@ -456,9 +456,9 @@ Evidence: `evidence/2026-09-23-processor-retry-boundary-fix-V4W5.md`.
 The provider-neutral receipt and dispatch value objects now have pure public-contract coverage for
 missing/empty bindings, zero generation, invalid digest format, success without a verified receipt,
 and failure without an error code. Valid integer/string normalization remains covered only for
-permitted values. The focused value set passed with `3 runs / 14 assertions / 0 failures / 0
-errors / 0 skips`; this does not replace PostgreSQL-backed receipt application or concurrency
-verification.
+permitted values. The focused value set passed with
+`3 runs / 14 assertions / 0 failures / 0 errors / 0 skips`; this does not replace PostgreSQL-backed
+receipt application or concurrency verification.
 
 Evidence: `evidence/2026-09-23-processor-receipt-value-boundary-W6X7.md`.
 
@@ -468,9 +468,9 @@ An adversarial value-boundary review found that a nil or numeric adapter outcome
 `NoMethodError` while the public dispatch-result contract requires explicit rejection of unsupported
 outcomes. The constructor now normalizes only values that expose `to_sym` and rejects nil, numeric,
 and other unsupported outcomes with `ArgumentError`; successful receipt and failure classification
-semantics are unchanged. The RED/green value test passed with `3 runs / 16 assertions / 0 failures /
-0 errors / 0 skips`, and targeted RuboCop plus `git diff --check` passed. Evidence:
-`evidence/2026-09-23-processor-dispatch-null-boundary-Y8Z9.md`.
+semantics are unchanged. The RED/green value test passed with
+`3 runs / 16 assertions / 0 failures / 0 errors / 0 skips`, and targeted RuboCop plus
+`git diff --check` passed. Evidence: `evidence/2026-09-23-processor-dispatch-null-boundary-Y8Z9.md`.
 
 ### CF-011 processor error-message secret boundary (2026-09-23)
 
@@ -485,11 +485,11 @@ also passed. Evidence: `evidence/2026-09-23-processor-error-message-sanitization
 
 An additional adversarial review found that the dispatch-result value object accepted arbitrary
 failure error-code strings and that direct public construction could bypass the normal factory's
-message sanitization. Failure codes are now restricted to the existing safe categorical form
-(`a-z`, followed by up to 63 lowercase letters, digits, dots, underscores, or hyphens), and the
-constructor sanitizes error messages for every construction path. This rejects token-shaped values
-as error codes without changing the provider-neutral outcome taxonomy. The value-boundary suite now
-passes with `5 runs / 23 assertions / 0 failures / 0 errors / 0 skips`; full RuboCop, Brakeman, and
+message sanitization. Failure codes are now restricted to the existing safe categorical form (`a-z`,
+followed by up to 63 lowercase letters, digits, dots, underscores, or hyphens), and the constructor
+sanitizes error messages for every construction path. This rejects token-shaped values as error
+codes without changing the provider-neutral outcome taxonomy. The value-boundary suite now passes
+with `5 runs / 23 assertions / 0 failures / 0 errors / 0 skips`; full RuboCop, Brakeman, and
 `git diff --check` also pass. PostgreSQL/Valkey-backed acceptance remains subject to the reachable
 Compose environment and is not claimed by this value-only check.
 
@@ -503,9 +503,10 @@ persist caller-supplied error metadata directly, bypassing the value-object boun
 transitions and the locked failure recorder now use the same safe error-code normalization and
 sensitive-message sanitization before updating attempt or notification rows. Regression tests cover
 unsafe-code rejection for both retryable and permanent transitions without a state change, and
-sanitization at the direct state-transition boundary. They are added but remain unexecuted because the current process cannot resolve the
-required PostgreSQL service; this is an evidence gap, not a reason to weaken the test or database
-contract. Pure value tests, full RuboCop, Brakeman, syntax, and diff checks pass.
+sanitization at the direct state-transition boundary. They are added but remain unexecuted because
+the current process cannot resolve the required PostgreSQL service; this is an evidence gap, not a
+reason to weaken the test or database contract. Pure value tests, full RuboCop, Brakeman, syntax,
+and diff checks pass.
 
 Evidence: `evidence/2026-09-23-processor-state-metadata-boundary-C3D4.md`.
 
@@ -514,10 +515,10 @@ Evidence: `evidence/2026-09-23-processor-state-metadata-boundary-C3D4.md`.
 An adversarial review found that generating a new idempotency digest for every retry would allow an
 ambiguous processor response to be retried as a distinct external request. The pre-deployment
 implementation now stores one digest-only request identity per delivery generation and reuses it for
-all retry attempts in that generation. Authorized manual recovery advances the generation and creates
-a new identity. Attempt number remains unique and monotonic; its lookup index is non-unique because
-the same generation-scoped request identity is intentionally reused. Receipt validation remains bound
-to notification, processor, generation, and that identity. Evidence:
+all retry attempts in that generation. Authorized manual recovery advances the generation and
+creates a new identity. Attempt number remains unique and monotonic; its lookup index is non-unique
+because the same generation-scoped request identity is intentionally reused. Receipt validation
+remains bound to notification, processor, generation, and that identity. Evidence:
 `evidence/2026-09-23-cf011-idempotency-recheck-R4S5.md`.
 
 The former resumption table below is historical for its production/provider prerequisites. The
@@ -528,38 +529,38 @@ activation requirement, not as a current blocker.
 
 The following evidence remains mandatory before actual activation:
 
-| Gate | Later evidence |
-| --- | --- |
-| `CF-003/CF-004` | Production row inventory, reviewed disposition, real cutover, post-cutover single-source proof, and rollback/forward-recovery rehearsal. |
-| `CF-005` | Production worker, dispatcher, scheduler, queue database, DB connections, heartbeat/monitoring, recurring execution, and operational rollback proof. |
-| `CF-007` | Real Base registry records, credential/key fingerprints, deployed caller mapping, and `core-next-rp` migration/retirement against the actual deployment. |
-| `CF-011` | Provider authentication, provider credentials, authenticated receipt protocol, retry/exhaustion/permanent-failure behavior, manual recovery, and provider E2E evidence. |
+| Gate            | Later evidence                                                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CF-003/CF-004` | Production row inventory, reviewed disposition, real cutover, post-cutover single-source proof, and rollback/forward-recovery rehearsal.                                |
+| `CF-005`        | Production worker, dispatcher, scheduler, queue database, DB connections, heartbeat/monitoring, recurring execution, and operational rollback proof.                    |
+| `CF-007`        | Real Base registry records, credential/key fingerprints, deployed caller mapping, and `core-next-rp` migration/retirement against the actual deployment.                |
+| `CF-011`        | Provider authentication, provider credentials, authenticated receipt protocol, retry/exhaustion/permanent-failure behavior, manual recovery, and provider E2E evidence. |
 
 No item in this gate may be satisfied by local configuration, a fake adapter, or an expected
 registry manifest alone.
 
 ### Historical readiness re-audit (2026-09-22; superseded by the provider-neutral contract)
 
-The local Compose-backed verification boundary remains healthy. The CF-010/CF-011 focused set
-passed with `161 runs / 711 assertions / 0 failures / 0 errors / 6 skips`, and the complete Rails
-suite passed with `11536 runs / 73426 assertions / 0 failures / 0 errors / 8 skips`. `RAILS_ENV=test
-bin/jobs check` passed with the repository's explicit `.env.devcontainer.example`, confirming the
-local Solid Queue configuration. These checks do not prove production worker topology or provider
-delivery.
+The local Compose-backed verification boundary remains healthy. The CF-010/CF-011 focused set passed
+with `161 runs / 711 assertions / 0 failures / 0 errors / 6 skips`, and the complete Rails suite
+passed with `11536 runs / 73426 assertions / 0 failures / 0 errors / 8 skips`.
+`RAILS_ENV=test bin/jobs check` passed with the repository's explicit `.env.container.devcontainer`,
+confirming the local Solid Queue configuration. These checks do not prove production worker topology
+or provider delivery.
 
 The current read-only owner inventory was rerun against the disposable test topology. It reported
 `authority_schema_state=applied`, `resources_scanned=0`, and an empty classification set. This is
-evidence that the test database contains no owner data to classify; it is not evidence for an
-owner mapping or permission to backfill production data. CF-003/CF-004 therefore remain blocked on
+evidence that the test database contains no owner data to classify; it is not evidence for an owner
+mapping or permission to backfill production data. CF-003/CF-004 therefore remain blocked on
 authoritative source data and an approved migration/cutover contract.
 
 CF-011 remains open because the repository still has no concrete processor adapter, authenticated
-receipt contract, bounded retry-exhaustion policy, or approved permanent-failure state. The
-success allowlist remains empty, and unsupported processor notifications remain explicit failures.
-CF-007 remains open because regional RP IDs, exact URI matrices, credentials, deployed-caller
-migration, and Base-side registrations are not established by repository evidence. No external
-service was contacted and no security boundary was weakened to make these gates appear complete.
-Evidence: `evidence/2026-09-22-cf010-cf011-revalidation-A7B8.md`,
+receipt contract, bounded retry-exhaustion policy, or approved permanent-failure state. The success
+allowlist remains empty, and unsupported processor notifications remain explicit failures. CF-007
+remains open because regional RP IDs, exact URI matrices, credentials, deployed-caller migration,
+and Base-side registrations are not established by repository evidence. No external service was
+contacted and no security boundary was weakened to make these gates appear complete. Evidence:
+`evidence/2026-09-22-cf010-cf011-revalidation-A7B8.md`,
 `evidence/2026-09-22-solid-queue-local-recheck-C1D2.md`, and
 `evidence/2026-09-22-authority-owner-inventory-recheck-J4K5.md`.
 
@@ -571,75 +572,75 @@ repository preflight. The read-only owner inventory reported `authority_schema_s
 `140 runs / 602 assertions / 0 failures / 0 errors / 6 skips`. No external service or shared data
 was contacted or changed. Evidence: `evidence/2026-09-23-resumed-readiness-audit-V2W3.md`.
 
-This revalidation does not change the remaining decisions. CF-003/CF-004 still require
-authoritative owner data and an approved migration/cutover contract; CF-007 still requires the
-regional RP registration and credential matrix plus deployed-caller/Base registration evidence;
-CF-011 still requires an approved processor adapter, receipt, retry-exhaustion, and
-permanent-failure contract; and CF-005 still lacks production worker/scheduler proof. No safe
-local implementation can close those boundaries without inventing an authority, destructive data
-operation, external registration, or provider contract.
+This revalidation does not change the remaining decisions. CF-003/CF-004 still require authoritative
+owner data and an approved migration/cutover contract; CF-007 still requires the regional RP
+registration and credential matrix plus deployed-caller/Base registration evidence; CF-011 still
+requires an approved processor adapter, receipt, retry-exhaustion, and permanent-failure contract;
+and CF-005 still lacks production worker/scheduler proof. No safe local implementation can close
+those boundaries without inventing an authority, destructive data operation, external registration,
+or provider contract.
 
 ### Owner-inventory regression and full-suite revalidation (2026-09-23)
 
 The public `AuthorityOwnerMigrationInventory` contract now has regression coverage for direct app,
 com, and org resources with inactive identity bindings, missing principals, multiple active
-memberships, and the prohibition on exposing database-local identifiers. The focused inventory
-test passed with `6 runs / 85 assertions / 0 failures / 0 errors / 0 skips`; the related authority
+memberships, and the prohibition on exposing database-local identifiers. The focused inventory test
+passed with `6 runs / 85 assertions / 0 failures / 0 errors / 0 skips`; the related authority
 schema/model set passed with `50 runs / 448 assertions / 0 failures / 0 errors / 0 skips`.
 
 The full Rails suite was then rerun using the explicit Compose-backed test environment and passed
 with `11539 runs / 73460 assertions / 0 failures / 0 errors / 8 skips`. This is repository-side
 verification only. The isolated inventory still reports `authority_schema_state=applied` and
-`resources_scanned=0`; it does not authorize owner mapping, backfill, migration, or cutover.
-No external service, shared database, production credential, or provider was contacted or changed.
+`resources_scanned=0`; it does not authorize owner mapping, backfill, migration, or cutover. No
+external service, shared database, production credential, or provider was contacted or changed.
 Evidence: `evidence/2026-09-23-owner-inventory-contract-X4Y5.md`.
 
 The inventory regression was then extended with active identity bindings whose principals are
 inactive on app, com, and org. All remain `inactive_principal`, `manual_review`, and
-non-authoritative candidates. The focused inventory test passed with `7 runs / 97 assertions`,
-the related authority/schema/model set with `51 runs / 460 assertions`, and the subsequent full
-Rails suite with `11540 runs / 73472 assertions / 0 failures / 0 errors / 8 skips`. This adds
+non-authoritative candidates. The focused inventory test passed with `7 runs / 97 assertions`, the
+related authority/schema/model set with `51 runs / 460 assertions`, and the subsequent full Rails
+suite with `11540 runs / 73472 assertions / 0 failures / 0 errors / 8 skips`. This adds
 classification coverage only; it does not authorize an owner mapping or cutover.
 
 ### Unblocked-slice re-audit (2026-09-23)
 
-The current Rails controllers, models, services, jobs, routes, library code, and security tests
-were re-audited for unfinished local implementation that could be completed without inventing a
-contract. `OutageService` and `TokenEmergencyService` remain explicit placeholders with no
-production call site or approved state, authorization, and audit contract; they remain
-`NEXT_CYCLE / CONTRACT_UNDEFINED`. The Base/Side `/web/v0` preference FIXME markers still denote
-an unapproved compatibility migration, and the GUID/actor-observability comments do not identify
-a current security defect. No implementation was inferred from those markers.
+The current Rails controllers, models, services, jobs, routes, library code, and security tests were
+re-audited for unfinished local implementation that could be completed without inventing a contract.
+`OutageService` and `TokenEmergencyService` remain explicit placeholders with no production call
+site or approved state, authorization, and audit contract; they remain
+`NEXT_CYCLE / CONTRACT_UNDEFINED`. The Base/Side `/web/v0` preference FIXME markers still denote an
+unapproved compatibility migration, and the GUID/actor-observability comments do not identify a
+current security defect. No implementation was inferred from those markers.
 
 The regional RP, processor-delivery, owner-cutover, and production-worker gates remain critical
 because they require external registration state, an approved provider contract, authoritative
-source data, or production topology evidence. The local queue configuration check, targeted
-RuboCop, and `git diff --check` passed. Full Rails, frontend, and static quality results remain
-recorded in the dated evidence files. This re-audit therefore found no additional safe local
-implementation slice; it does not close any of the critical gates. Evidence:
+source data, or production topology evidence. The local queue configuration check, targeted RuboCop,
+and `git diff --check` passed. Full Rails, frontend, and static quality results remain recorded in
+the dated evidence files. This re-audit therefore found no additional safe local implementation
+slice; it does not close any of the critical gates. Evidence:
 `evidence/2026-09-23-unblocked-slice-reaudit-C3D4.md`.
 
 The follow-up marker scan confirmed that `OutageService` and `TokenEmergencyService` remain
-contract-undefined placeholders with no production call site, while the base OTP/notice adapters
-and external-notification ports remain the explicit CF-011 delivery boundary. No fallback,
-provider, outage state machine, or emergency-token authority was invented to remove the markers.
-This preserves fail-closed behavior and records the unresolved contract rather than treating a
+contract-undefined placeholders with no production call site, while the base OTP/notice adapters and
+external-notification ports remain the explicit CF-011 delivery boundary. No fallback, provider,
+outage state machine, or emergency-token authority was invented to remove the markers. This
+preserves fail-closed behavior and records the unresolved contract rather than treating a
 placeholder as an implementation defect that can be safely filled in locally.
 
 ### Historical resumption contract for the four critical gates (2026-09-23; superseded by the approved pre-deployment scope)
 
 The following table records the earlier blocked-state inputs and is retained for audit history. It
-is superseded by the approved decisions recorded in the 2026-09-23 amendments above. It MUST NOT
-be read as requiring production, deployed-caller, provider, or external-registration evidence
-before repository-side pre-deployment implementation can proceed. Those facts remain later
+is superseded by the approved decisions recorded in the 2026-09-23 amendments above. It MUST NOT be
+read as requiring production, deployed-caller, provider, or external-registration evidence before
+repository-side pre-deployment implementation can proceed. Those facts remain later
 deployment/provider gates.
 
-| Gate | Required input before implementation | Minimum acceptance evidence |
-| --- | --- | --- |
-| `CF-003/CF-004` owner mapping and cutover | An approved source-to-owner mapping for app, com, and org; lifecycle/conflict rules; authoritative source data access; migration, backfill, cutover, and rollback procedure | A read-only inventory against the approved authoritative data with every candidate classified; an approved disposition for inactive, ambiguous, legacy, and unowned rows; isolated migration proof before any destructive or production operation; post-cutover proof that exactly one approved relation is authoritative for each owned resource, dual ownership/source disagreement is rejected or explicitly ownerless, and all consumers use that same source of truth |
-| `CF-005` production queue runtime | The production worker, dispatcher, scheduler, queue, database, and environment topology owned by operations | A non-destructive operational check showing the intended worker and scheduler topology, queue pickup, recurrence, failure/retry behavior, and rollback/runbook path, including one production-equivalent end-to-end job execution; local `bin/jobs check` alone is insufficient |
-| `CF-007` regional RP identity | Historical requirement: an approved JP/US client-ID and host matrix, global-RP exceptions, independent key/credential mapping, Base registry entries, deployed caller inventory, and `core-next-rp` migration/retirement order | Historical requirement: repository contract tests plus controlled evidence that corresponding Base and deployed registrations agree; the approved 13-cell matrix now authorizes repository-side contract work, while external registration and deployed-caller evidence remain deployment gates |
-| `CF-011` processor delivery | An approved processor adapter and authentication contract; request idempotency; authenticated receipt; transient/permanent failure taxonomy; bounded retry/exhaustion policy; explicit terminal permanent-failure state; audit and manual-recovery contract | Contract tests using an approved fake/adapter, including receipt forgery, duplicate delivery, retry exhaustion, permanent failure, and recovery; each state transition must be observable and terminal states immutable; production/provider verification only under separately authorized operational access |
+| Gate                                      | Required input before implementation                                                                                                                                                                                                                        | Minimum acceptance evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CF-003/CF-004` owner mapping and cutover | An approved source-to-owner mapping for app, com, and org; lifecycle/conflict rules; authoritative source data access; migration, backfill, cutover, and rollback procedure                                                                                 | A read-only inventory against the approved authoritative data with every candidate classified; an approved disposition for inactive, ambiguous, legacy, and unowned rows; isolated migration proof before any destructive or production operation; post-cutover proof that exactly one approved relation is authoritative for each owned resource, dual ownership/source disagreement is rejected or explicitly ownerless, and all consumers use that same source of truth |
+| `CF-005` production queue runtime         | The production worker, dispatcher, scheduler, queue, database, and environment topology owned by operations                                                                                                                                                 | A non-destructive operational check showing the intended worker and scheduler topology, queue pickup, recurrence, failure/retry behavior, and rollback/runbook path, including one production-equivalent end-to-end job execution; local `bin/jobs check` alone is insufficient                                                                                                                                                                                            |
+| `CF-007` regional RP identity             | Historical requirement: an approved JP/US client-ID and host matrix, global-RP exceptions, independent key/credential mapping, Base registry entries, deployed caller inventory, and `core-next-rp` migration/retirement order                              | Historical requirement: repository contract tests plus controlled evidence that corresponding Base and deployed registrations agree; the approved 13-cell matrix now authorizes repository-side contract work, while external registration and deployed-caller evidence remain deployment gates                                                                                                                                                                            |
+| `CF-011` processor delivery               | An approved processor adapter and authentication contract; request idempotency; authenticated receipt; transient/permanent failure taxonomy; bounded retry/exhaustion policy; explicit terminal permanent-failure state; audit and manual-recovery contract | Contract tests using an approved fake/adapter, including receipt forgery, duplicate delivery, retry exhaustion, permanent failure, and recovery; each state transition must be observable and terminal states immutable; production/provider verification only under separately authorized operational access                                                                                                                                                              |
 
 At the time of this historical record, those inputs were absent. The current approved scope is
 defined by the amendments above: owner migration remains fail-closed, queue checks do not claim
@@ -648,18 +649,18 @@ notifications do not become `NOTIFIED`; repository-side work may proceed where t
 pre-deployment contract and isolated evidence are sufficient.
 
 The 2026-09-23 closure audit applied this table without implementing any of the four blocked
-changes. The focused owner/RP/processor set passed with `151 runs / 981 assertions / 0 failures /
-0 errors / 0 skips`, and the full Rails suite passed with `11540 runs / 73472 assertions / 0
-failures / 0 errors / 8 skips`. These results verify repository-side regression health only; they
-do not satisfy the data, deployment, regional-registration, or processor-contract evidence above.
-All four gates therefore remain open. Evidence:
-`evidence/2026-09-23-critical-gate-closure-audit-H7J8.md`.
+changes. The focused owner/RP/processor set passed with
+`151 runs / 981 assertions / 0 failures / 0 errors / 0 skips`, and the full Rails suite passed with
+`11540 runs / 73472 assertions / 0 failures / 0 errors / 8 skips`. These results verify
+repository-side regression health only; they do not satisfy the data, deployment,
+regional-registration, or processor-contract evidence above. All four gates therefore remain open.
+Evidence: `evidence/2026-09-23-critical-gate-closure-audit-H7J8.md`.
 
 As a cleanup within the same authentication-boundary review, the generic authorization-code store
 test was canonicalized from retired `core-app-rp`/`/sign/in/callback` examples to the current
-`core-app`/`/sign/callback` contract. This changed no production code or store behavior; the
-focused Valkey store test passed with `8 runs / 34 assertions / 0 failures / 0 errors / 0 skips`.
-The separately retained `core-next-rp` bridge references were not changed. Evidence:
+`core-app`/`/sign/callback` contract. This changed no production code or store behavior; the focused
+Valkey store test passed with `8 runs / 34 assertions / 0 failures / 0 errors / 0 skips`. The
+separately retained `core-next-rp` bridge references were not changed. Evidence:
 `evidence/2026-09-23-authorization-code-fixture-canonicalization-D4E5.md`.
 
 The same audit then canonicalized two additional RP-session/result test fixtures from retired
@@ -667,17 +668,15 @@ The same audit then canonicalized two additional RP-session/result test fixtures
 historical-reading rule to superseded authority documentation. The related focused set passed with
 `15 runs / 71 assertions / 0 failures / 0 errors / 0 skips`, followed by the unchanged full Rails
 suite with `11540 runs / 73472 assertions / 0 failures / 0 errors / 8 skips`. This remains a
-test/documentation cleanup only; regional registration, external keys, and the `core-next-rp`
-bridge migration remain `CF-007`. Evidence:
-`evidence/2026-09-23-retired-rp-reference-cleanup-E5F6.md`.
+test/documentation cleanup only; regional registration, external keys, and the `core-next-rp` bridge
+migration remain `CF-007`. Evidence: `evidence/2026-09-23-retired-rp-reference-cleanup-E5F6.md`.
 
 The same adversarial document review found vendor-facing identity package documents, the OIDC
 discovery/downstream-token security references, and the partially superseded Base lobby ADR that
 could still be read as current Acme/Sign authority or shared-RP instructions. They now carry
 explicit historical/supersession warnings pointing to the Base/Auth ADR and current sign-in
 sequence. Historical tables were retained; no route, registry, issuer, key, or authority behavior
-changed. Evidence:
-`evidence/2026-09-23-vendor-identity-doc-supersession-F6G7.md`.
+changed. Evidence: `evidence/2026-09-23-vendor-identity-doc-supersession-F6G7.md`.
 
 ### Final adversarial security scan (2026-09-22)
 
@@ -687,22 +686,22 @@ first-party neutral OIDC intent, and reviewed credential-related diagnostic logg
 public-boundary set passed with `149 runs / 813 assertions / 0 failures / 0 errors / 0 skips`.
 App/com options disclose no stored credential descriptors and create actor-unbound challenges;
 actor-bound descriptor results remain only in the ceremonies that require a known actor. TOTP
-`REVOKED` remains terminal and the failure counter is bounded. No new Critical or High finding
-was identified. This scan does not close external RP deployment, production worker topology,
-provider delivery, or unresolved owner-mapping gates. Evidence:
+`REVOKED` remains terminal and the failure counter is bounded. No new Critical or High finding was
+identified. This scan does not close external RP deployment, production worker topology, provider
+delivery, or unresolved owner-mapping gates. Evidence:
 `evidence/2026-09-22-final-adversarial-security-scan-P1Q2.md`.
 
 ### CF-010 closure amendment (2026-09-22)
 
-`CF-010` is closed for the approved Base/Auth OIDC finalization contract. Auth remains ceremony-only;
-the three surface-local Base authorization-transaction tables are the durable lifecycle authority.
-They persist only result digest/generation/expiry and finalization references, never raw result or
-authorization-code values. Auth-to-Base result transport is short-lived Valkey state and is read
-only after server-side transaction validation; a valid result may be retried while its transport
-TTL remains. The result generation is rechecked under the locked PostgreSQL transaction row before
-the finalization block runs, so an older result cannot win after a newer result was issued.
-PostgreSQL row locking makes Base Browser Session finalization idempotent and creates at most one
-root Browser Session for the transaction.
+`CF-010` is closed for the approved Base/Auth OIDC finalization contract. Auth remains
+ceremony-only; the three surface-local Base authorization-transaction tables are the durable
+lifecycle authority. They persist only result digest/generation/expiry and finalization references,
+never raw result or authorization-code values. Auth-to-Base result transport is short-lived Valkey
+state and is read only after server-side transaction validation; a valid result may be retried while
+its transport TTL remains. The result generation is rechecked under the locked PostgreSQL
+transaction row before the finalization block runs, so an older result cannot win after a newer
+result was issued. PostgreSQL row locking makes Base Browser Session finalization idempotent and
+creates at most one root Browser Session for the transaction.
 
 Authorization-code aliases carry the transaction reference and exact OIDC binding. In the same
 surface ticket-database transaction that creates or resolves the RP Session, Base atomically claims
@@ -717,22 +716,22 @@ across PostgreSQL and Valkey, live external RP registration/key deployment, or p
 Tunnel verification. Those remain separately bounded operational or deployment checks.
 
 The obsolete, unreferenced `BaseAuthAdmissionCoordinator.consume_result!` one-shot compatibility
-method was removed after a repository-wide production call-site audit. The current OIDC result
-POST uses `read_result!`; PostgreSQL transaction generation/finalization remains the durable
-authority. The separate ceremony transaction `consume_result!` methods are unrelated and remain
-unchanged. Focused verification passed with `162 runs / 774 assertions / 0 failures / 0 errors / 6
-skips`; the unchanged full Rails suite passed with `11536 runs / 73426 assertions / 0 failures / 0
-errors / 8 skips`. Evidence:
+method was removed after a repository-wide production call-site audit. The current OIDC result POST
+uses `read_result!`; PostgreSQL transaction generation/finalization remains the durable authority.
+The separate ceremony transaction `consume_result!` methods are unrelated and remain unchanged.
+Focused verification passed with `162 runs / 774 assertions / 0 failures / 0 errors / 6 skips`; the
+unchanged full Rails suite passed with
+`11536 runs / 73426 assertions / 0 failures / 0 errors / 8 skips`. Evidence:
 `evidence/2026-09-22-oidc-result-one-shot-retirement-U7V8.md`.
 
 The remaining active security-document references to the retired Sign/Acme signed one-shot result
 vocabulary were labeled as historical and linked to the current Base/Auth contract. This was a
-documentation-only clarification; it did not introduce a signed-result API, alter CSRF behavior,
-or change the Auth ceremony/session boundary. The same evidence records the affected documents.
+documentation-only clarification; it did not introduce a signed-result API, alter CSRF behavior, or
+change the Auth ceremony/session boundary. The same evidence records the affected documents.
 
-The current checkout was then revalidated with the CF-010 focused set (`162 runs / 774 assertions /
-0 failures / 0 errors / 6 skips`) followed by the full Rails suite (`11536 runs / 73429 assertions /
-0 failures / 0 errors / 8 skips`). Evidence:
+The current checkout was then revalidated with the CF-010 focused set
+(`162 runs / 774 assertions / 0 failures / 0 errors / 6 skips`) followed by the full Rails suite
+(`11536 runs / 73429 assertions / 0 failures / 0 errors / 8 skips`). Evidence:
 `evidence/2026-09-22-oidc-result-doc-boundary-recheck-W8X9.md`.
 
 The unimplemented `OutageService` and `TokenEmergencyService` placeholders were also audited. No
@@ -744,27 +743,29 @@ into existence or deleted. They are recorded as `NEXT_CYCLE / CONTRACT_UNDEFINED
 
 The previously environment-blocked Auth ceremony admission rotation tests now run against the
 Compose-backed services. The public rotation, rollback, terminal-transition, and independent
-connection concurrency contracts pass with `36 runs / 219 assertions / 0 failures / 0 errors / 0
-skips`. The related first-party OIDC registry and local-keyset tests also pass together with one
-worker (`13 runs / 220 assertions / 0 failures / 0 errors / 0 skips`).
+connection concurrency contracts pass with
+`36 runs / 219 assertions / 0 failures / 0 errors / 0 skips`. The related first-party OIDC registry
+and local-keyset tests also pass together with one worker
+(`13 runs / 220 assertions / 0 failures / 0 errors / 0 skips`).
 
 One parallel full-suite run first exposed a single, non-reproduced `CORE_APP` private-key assertion
-failure in the registry test. The failing file passed alone, the related registry/local-keyset
-group passed with one worker, and a second unchanged full-suite run passed with `11536 runs /
-73426 assertions / 0 failures / 0 errors / 8 skips`. The first failure is retained as an
-unresolved parallel-test shared-state suspicion rather than hidden or treated as a production
+failure in the registry test. The failing file passed alone, the related registry/local-keyset group
+passed with one worker, and a second unchanged full-suite run passed with
+`11536 runs / 73426 assertions / 0 failures / 0 errors / 8 skips`. The first failure is retained as
+an unresolved parallel-test shared-state suspicion rather than hidden or treated as a production
 failure; no tests were weakened or skipped. Evidence:
 `evidence/2026-09-22-auth-ceremony-rotation-runtime-revalidation-S3T4.md` and
 `evidence/2026-09-22-auth-ceremony-full-suite-revalidation-T4U5.md`.
 
 ### Latest final-suite and content-RP revalidation (2026-09-22)
 
-After the local content-RP test cleanup, the Compose-backed checkout completed the final Rails
-suite with `11529 runs, 73419 assertions, 0 failures, 0 errors, 8 skips`. The focused OIDC registry,
+After the local content-RP test cleanup, the Compose-backed checkout completed the final Rails suite
+with `11529 runs, 73419 assertions, 0 failures, 0 errors, 8 skips`. The focused OIDC registry,
 token-exchange, assertion, and surface-lookup set passed with `154 runs, 816 assertions`; the
 read-only content route/API and registry set passed with `55 runs, 591 assertions`; and the final
-test-only cleanup set passed with `107 runs, 476 assertions`. Targeted RuboCop and `git diff --check`
-also passed. Evidence: `evidence/2026-09-22-content-rp-final-revalidation-H8J9.md`.
+test-only cleanup set passed with `107 runs, 476 assertions`. Targeted RuboCop and
+`git diff --check` also passed. Evidence:
+`evidence/2026-09-22-content-rp-final-revalidation-H8J9.md`.
 
 The static registry does not contain `docs_*`, `news_*`, or `help_*` OIDC clients, while the
 read-only content routes and APIs remain available. The `side-rails-rp`, `sign-rp`, and
@@ -772,18 +773,18 @@ read-only content routes and APIs remain available. The `side-rails-rp`, `sign-r
 surface-specific call-path and test audit. The local registry negative tests, face-specific realm
 tests, callback, logout, token-exchange, and browser-flow tests now pass. `core-next-rp` remains a
 local compatibility registration because the live `CoreRpBridge` still references it. External RP
-registration/key retirement, deployed callers outside this repository, and the core-next bridge
-data migration remain separate gates; this local slice does not claim those external gates closed.
+registration/key retirement, deployed callers outside this repository, and the core-next bridge data
+migration remain separate gates; this local slice does not claim those external gates closed.
 
-The side-shared-client retirement slice then passed its focused contract set with `67 runs, 430
-assertions, 0 failures, 0 errors, 0 skips`, targeted RuboCop and `git diff --check`, and a complete
-Rails suite with `11530 runs, 73418 assertions, 0 failures, 0 errors, 8 skips`. A later full-suite
-recheck exposed a false-positive assertion in the cross-realm OIDC logout redirect test: a short
-state value happened to occur in a random CSP nonce. The test was narrowed to the public Inertia
-props contract, the focused file passed with `7 runs, 37 assertions`, and the subsequent full
-suite passed with `11530 runs, 73419 assertions, 0 failures, 0 errors, 8 skips`. The current local
-Rails suite is therefore green; the earlier failure remains historical evidence of the test
-observation defect. Evidence: `evidence/2026-09-22-side-shared-client-retirement-K1L2.md`,
+The side-shared-client retirement slice then passed its focused contract set with
+`67 runs, 430 assertions, 0 failures, 0 errors, 0 skips`, targeted RuboCop and `git diff --check`,
+and a complete Rails suite with `11530 runs, 73418 assertions, 0 failures, 0 errors, 8 skips`. A
+later full-suite recheck exposed a false-positive assertion in the cross-realm OIDC logout redirect
+test: a short state value happened to occur in a random CSP nonce. The test was narrowed to the
+public Inertia props contract, the focused file passed with `7 runs, 37 assertions`, and the
+subsequent full suite passed with `11530 runs, 73419 assertions, 0 failures, 0 errors, 8 skips`. The
+current local Rails suite is therefore green; the earlier failure remains historical evidence of the
+test observation defect. Evidence: `evidence/2026-09-22-side-shared-client-retirement-K1L2.md`,
 `evidence/2026-09-22-full-suite-regression-recheck-E6F7.md`, and
 `evidence/2026-09-22-final-local-quality-gates-G7H8.md`.
 
@@ -807,12 +808,12 @@ OTPs. The public ceremony tests cover successful verification immediately before
 boundary and rejection at the boundary. No workflow-ticket lifetime was shortened merely to satisfy
 the OTP secret lifetime, and no dry-run, preview, or simulation path was added.
 
-The focused ceremony/delivery set passed with `15 runs / 77 assertions / 0 failures / 0 errors / 0
-skips`; the broader app/com signup OTP controller set passed with `47 runs / 298 assertions / 0
-failures / 0 errors / 0 skips`; and the complete Rails suite passed with `11536 runs / 73426
-assertions / 0 failures / 0 errors / 8 skips`. RuboCop, Ruby syntax checks, and `git diff --check`
-also passed. The eight suite skips were pre-existing. Evidence:
-`evidence/2026-09-22-oob-otp-lifetime-revalidation-M7N8.md` and
+The focused ceremony/delivery set passed with
+`15 runs / 77 assertions / 0 failures / 0 errors / 0 skips`; the broader app/com signup OTP
+controller set passed with `47 runs / 298 assertions / 0 failures / 0 errors / 0 skips`; and the
+complete Rails suite passed with `11536 runs / 73426 assertions / 0 failures / 0 errors / 8 skips`.
+RuboCop, Ruby syntax checks, and `git diff --check` also passed. The eight suite skips were
+pre-existing. Evidence: `evidence/2026-09-22-oob-otp-lifetime-revalidation-M7N8.md` and
 `plans/backlog/out-of-band-otp-lifetime.md`.
 
 This closes only the repository-owned OOB OTP lifetime contract. The accepted email transport
@@ -823,22 +824,22 @@ contract remain independent boundaries.
 
 The application-side backend transport guards remain present: production PostgreSQL configuration
 requires `verify-full`, and production Valkey responsibility URLs require `rediss://`. The focused
-Valkey/settings/environment/database configuration set passed with `28 runs / 174 assertions / 0
-failures / 0 errors / 0 skips`. Provider values and live TLS handshakes remain deployment checks;
-no external endpoint was contacted. Evidence:
+Valkey/settings/environment/database configuration set passed with
+`28 runs / 174 assertions / 0 failures / 0 errors / 0 skips`. Provider values and live TLS
+handshakes remain deployment checks; no external endpoint was contacted. Evidence:
 `evidence/2026-09-22-backend-transport-tls-revalidation-N8P9.md`.
 
 The historical public-controller CSRF plan named controller classes that are absent from the current
 tree. It is now marked `STALE_REQUIREMENT`; the active replacement is the surface-controller and
 repository-wide Rails 8.2 strategy inventory. Base/Auth public boundary, explicit strategy, and
-approved exception tests passed with `20 runs / 38 assertions / 0 failures / 0 errors / 0 skips`.
-No Rails CSRF protection was weakened, and no production route/controller was added. Evidence:
+approved exception tests passed with `20 runs / 38 assertions / 0 failures / 0 errors / 0 skips`. No
+Rails CSRF protection was weakened, and no production route/controller was added. Evidence:
 `evidence/2026-09-22-csrf-public-boundary-revalidation-Q1R2.md`.
 
 ### F8 discoverable Passkey client cleanup (2026-09-22)
 
-The app/com direct Passkey contract is implemented as an anonymous discoverable ceremony: options
-do not select an account or return real credential descriptors, and verification resolves the
+The app/com direct Passkey contract is implemented as an anonymous discoverable ceremony: options do
+not select an account or return real credential descriptors, and verification resolves the
 surface-local credential by assertion credential ID before applying the existing public-key, UV,
 RP/origin, sign-count, credential-state, owner-state, verified-PII, rate-limit, Turnstile, and
 session checks. App/com registration requires discoverable credentials; org normal, Emergency, MFA,
@@ -876,25 +877,24 @@ with `42 runs / 243 assertions / 0 failures / 0 errors / 0 skips`, and the subse
 suite passed with `11531 runs / 73411 assertions / 0 failures / 0 errors / 8 skips`. Evidence:
 `evidence/2026-09-22-first-party-screen-hint-neutrality-V1W2.md`.
 
-The shared first-party RP initiator was then tightened by removing its unused `screen_hint`
-keyword and query emission. This prevents a future Core/Side/Edit caller from restoring the
-retired RP-level sign-in/sign-up choice through the common browser-flow helper. The TDD RED run
-observed the obsolete query parameter; the focused SSO/browser-flow set then passed with
+The shared first-party RP initiator was then tightened by removing its unused `screen_hint` keyword
+and query emission. This prevents a future Core/Side/Edit caller from restoring the retired RP-level
+sign-in/sign-up choice through the common browser-flow helper. The TDD RED run observed the obsolete
+query parameter; the focused SSO/browser-flow set then passed with
 `35 runs / 434 assertions / 0 failures / 0 errors / 0 skips`, followed by a full suite of
-`11531 runs / 73409 assertions / 0 failures / 0 errors / 8 skips`. Auth internal ceremony routes
-and the explicitly retained `core-next-rp` compatibility branch were not changed. Evidence:
+`11531 runs / 73409 assertions / 0 failures / 0 errors / 8 skips`. Auth internal ceremony routes and
+the explicitly retained `core-next-rp` compatibility branch were not changed. Evidence:
 `evidence/2026-09-22-screen-hint-emission-removal-X3Y4.md`.
 
 ### Historical OIDC document boundary revalidation (2026-09-22)
 
-The local application and registry search found no remaining production Ruby/configuration call
-site for `sign-rp`, `base-rails-rp`, or `side-rails-rp`. A small set of superseded ADRs and
+The local application and registry search found no remaining production Ruby/configuration call site
+for `sign-rp`, `base-rails-rp`, or `side-rails-rp`. A small set of superseded ADRs and
 architecture/security references still contained historical client statements without an equally
 visible current-contract warning. Supersession notes now point those readers to
 `adr/base-auth-ceremony-and-seven-rp-boundary.md` and explicitly prevent treating the historical
-client list as a registration instruction. No route, registry, migration, external registration,
-or key changed in this slice. Evidence:
-`evidence/2026-09-22-oidc-historical-doc-boundary-M1N2.md`.
+client list as a registration instruction. No route, registry, migration, external registration, or
+key changed in this slice. Evidence: `evidence/2026-09-22-oidc-historical-doc-boundary-M1N2.md`.
 
 ### Retention acceptance scope clarification (2026-09-21)
 
@@ -910,9 +910,8 @@ Here, `bounded` means that each database selection/deletion operation is an expl
 `in_batches(of: batch_size)` scope. The public batch argument is validated to the inclusive `1..500`
 range before any destructive work begins. A run may process successive eligible batches until its
 current allowlisted scope is exhausted; this is not a requirement for a new total-row cap, preview
-count, or simulation interface. The recurring retention entry supplies `batch_size: 500`, and
-direct callers must use the existing explicit batch argument rather than an unbounded set-based
-delete.
+count, or simulation interface. The recurring retention entry supplies `batch_size: 500`, and direct
+callers must use the existing explicit batch argument rather than an unbounded set-based delete.
 
 The contract does not infer archive eligibility. Data that must remain available under a separate,
 approved archive or legal-retention policy is outside this Retainable purge contract until that
@@ -922,48 +921,46 @@ archive-semantic model must not be added to the allowlist without that separate 
 
 The remaining dry-run/preview wording in this plan is classified as follows:
 
-| Reference | Classification | Contractual effect |
-| --- | --- | --- |
-| Former `Current source-to-owner dry-run inventory` label and its required report | Investigation/decision gate for the future Persona/Organization owner mapping; it is read-only inventory work, not retention execution. | It does not require or imply a `RetentionPurgeJob` preview API. |
-| Isolated data-transformation dry run before encryption/backfill or other migration work | Safety gate for a separately approved data transformation. | It applies only when that transformation is approved; it does not add a retention purge interface. |
-| Promotional unsubscribe preview | Optional, scoped to a separate bearer-capability UX and explicitly deferrable. | It is not a retention requirement and must not be implemented merely because the word `preview` appears here. |
-| Historical `audit and dry-run` phase wording | Corrected for retention to `audit and retention-safety verification`; historical source-owner and transformation references retain their separate meanings above. | No new retention feature is implied. |
+| Reference                                                                               | Classification                                                                                                                                                    | Contractual effect                                                                                            |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Former `Current source-to-owner dry-run inventory` label and its required report        | Investigation/decision gate for the future Persona/Organization owner mapping; it is read-only inventory work, not retention execution.                           | It does not require or imply a `RetentionPurgeJob` preview API.                                               |
+| Isolated data-transformation dry run before encryption/backfill or other migration work | Safety gate for a separately approved data transformation.                                                                                                        | It applies only when that transformation is approved; it does not add a retention purge interface.            |
+| Promotional unsubscribe preview                                                         | Optional, scoped to a separate bearer-capability UX and explicitly deferrable.                                                                                    | It is not a retention requirement and must not be implemented merely because the word `preview` appears here. |
+| Historical `audit and dry-run` phase wording                                            | Corrected for retention to `audit and retention-safety verification`; historical source-owner and transformation references retain their separate meanings above. | No new retention feature is implied.                                                                          |
 
 ### Request-body limit status clarification (2026-09-22)
 
-`CF-009` is closed for the Rails-owned JSON origin boundary. The existing
-`RequestBodySizeLimit` Rack middleware is inserted before application routing and parameter
-parsing, applies only to JSON and structured `+json` media types, rejects bodies above the
-explicit 1 MiB limit, bounds reads when `Content-Length` is absent or unusable, rejects malformed
-or negative declared lengths, and rejects compressed JSON without an approved bounded-decompression
-contract. Its focused middleware and Core API tests, including exact-size, chunked oversize,
-malformed-length, and unsupported-encoding cases, are recorded in
-`evidence/2026-09-22-request-body-limit-revalidation-B3C4.md`.
+`CF-009` is closed for the Rails-owned JSON origin boundary. The existing `RequestBodySizeLimit`
+Rack middleware is inserted before application routing and parameter parsing, applies only to JSON
+and structured `+json` media types, rejects bodies above the explicit 1 MiB limit, bounds reads when
+`Content-Length` is absent or unusable, rejects malformed or negative declared lengths, and rejects
+compressed JSON without an approved bounded-decompression contract. Its focused middleware and Core
+API tests, including exact-size, chunked oversize, malformed-length, and unsupported-encoding cases,
+are recorded in `evidence/2026-09-22-request-body-limit-revalidation-B3C4.md`.
 
 No additional global limit, upload limit, compressed-input implementation, or external edge
-configuration is required by this local closure. Cloudflare/proxy/server-ingress limits and
-non-JSON upload contracts remain separate operational decisions and must not be represented as
-verified merely because the Rails middleware is present.
+configuration is required by this local closure. Cloudflare/proxy/server-ingress limits and non-JSON
+upload contracts remain separate operational decisions and must not be represented as verified
+merely because the Rails middleware is present.
 
 ### Current execution revalidation (2026-09-21; latest verification 2026-09-22)
 
 The historical environment-blocker notes below remain historical records and are not the current
 test status. In the earlier Compose-backed execution context, `primary` and `valkey-kvs` resolved,
-the repository test preflight succeeded with the explicitly selected `.env.devcontainer.example`,
-and the Rails suite was executable. The latest complete Rails result including the current
-RP-entry cookie guard (2026-09-22) is `11,507 runs, 73,317 assertions, 0 failures, 0 errors, 5
-skips`; the skips were pre-existing and no test was weakened or added solely to obtain that result.
-The RP-entry result is recorded in `evidence/2026-09-22-rp-entry-authenticated-cookie-guard-Q7R8.md`;
-the retry-window slice and its initial environment retry are recorded in
-`evidence/2026-09-22-processor-notification-retry-window-H4J5.md`. A prior current-checkout runtime record is in
-`evidence/2026-09-22-runtime-revalidation-J7K8.md`. Focused retention, authentication, OIDC/RP-session, WebAuthn,
-TOTP, Core BFF, schema/retention, and historical blocked-slice groups also passed in that
-Compose-backed revalidation environment. The occurrence migration and schema-load/seed
-reconstruction proofs are recorded in
-the dated occurrence evidence below. JavaScript tests/checks, repository-wide RuboCop, Zeitwerk,
-Solid Queue configuration, the bounded test worker pickup, `git diff --check`, and Brakeman pass as
-recorded in the dated evidence files. The worker smoke does not establish production topology or
-external delivery.
+the repository test preflight succeeded with the explicitly selected `.env.container.devcontainer`,
+and the Rails suite was executable. The latest complete Rails result including the current RP-entry
+cookie guard (2026-09-22) is `11,507 runs, 73,317 assertions, 0 failures, 0 errors, 5 skips`; the
+skips were pre-existing and no test was weakened or added solely to obtain that result. The RP-entry
+result is recorded in `evidence/2026-09-22-rp-entry-authenticated-cookie-guard-Q7R8.md`; the
+retry-window slice and its initial environment retry are recorded in
+`evidence/2026-09-22-processor-notification-retry-window-H4J5.md`. A prior current-checkout runtime
+record is in `evidence/2026-09-22-runtime-revalidation-J7K8.md`. Focused retention, authentication,
+OIDC/RP-session, WebAuthn, TOTP, Core BFF, schema/retention, and historical blocked-slice groups
+also passed in that Compose-backed revalidation environment. The occurrence migration and
+schema-load/seed reconstruction proofs are recorded in the dated occurrence evidence below.
+JavaScript tests/checks, repository-wide RuboCop, Zeitwerk, Solid Queue configuration, the bounded
+test worker pickup, `git diff --check`, and Brakeman pass as recorded in the dated evidence files.
+The worker smoke does not establish production topology or external delivery.
 
 Coverage remains below the repository's existing threshold and is intentionally not a release gate
 for this revalidation, per the current task instruction; the threshold, exclusions, assertions, and
@@ -982,10 +979,10 @@ from the core service before accepting a new database-backed change.
 
 After the CF-010 cross-store finalization slice, an earlier Compose-backed checkout completed the
 full Rails suite with `11529 runs, 73449 assertions, 0 failures, 0 errors, 8 skips`. The focused
-authority schema/owner-inventory/security boundary set completed with `10 runs, 276 assertions,
-0 failures, 0 errors, 0 skips`. JavaScript tests passed with 85 files and 1065 tests; the
-repository JavaScript check passed. Brakeman reported 0 errors and 0 security warnings, and
-repository-wide RuboCop inspected 4755 files with no offenses. Evidence:
+authority schema/owner-inventory/security boundary set completed with
+`10 runs, 276 assertions, 0 failures, 0 errors, 0 skips`. JavaScript tests passed with 85 files and
+1065 tests; the repository JavaScript check passed. Brakeman reported 0 errors and 0 security
+warnings, and repository-wide RuboCop inspected 4755 files with no offenses. Evidence:
 `evidence/2026-09-22-integrated-hardening-quality-gates-M7N8.md`.
 
 The later final local revalidation supersedes that run and also passed the Rails suite, Zeitwerk,
@@ -1000,29 +997,29 @@ delivery/retry/permanent-failure, or live external-network gates.
 
 The first recheck exposed a false-positive test assertion: the cross-realm OIDC logout test searched
 the complete HTML for the short value `xyz`, which can occur by chance in a random CSP nonce. The
-test now checks the rendered Inertia props JSON instead. No production logout behavior changed.
-The corrected Base com OIDC logout file passed with `7 runs, 37 assertions, 0 failures, 0 errors,
-0 skips`, and the subsequent Compose-backed full Rails suite passed with `11530 runs, 73419
-assertions, 0 failures, 0 errors, 8 skips`. Evidence:
+test now checks the rendered Inertia props JSON instead. No production logout behavior changed. The
+corrected Base com OIDC logout file passed with
+`7 runs, 37 assertions, 0 failures, 0 errors, 0 skips`, and the subsequent Compose-backed full Rails
+suite passed with `11530 runs, 73419 assertions, 0 failures, 0 errors, 8 skips`. Evidence:
 `evidence/2026-09-22-full-suite-regression-recheck-E6F7.md`.
 
 #### RP Session and refresh revalidation (2026-09-22)
 
 The previously unverified repository-side RP Session/revocation slice was rerun against the
-Compose-backed test services. The focused collection passed with `81 runs, 367 assertions,
-0 failures, 0 errors, 0 skips`. It covers RP-session and parent-scope revocation, parent-first
-locking, stateless Access JWT behavior, refresh rotation/reuse, realm/surface lookup, and
-concurrent refresh attempts. This strengthens local evidence only; it does not close regional
-external RP registration, production topology, authority-owner cutover/backfill, provider
-delivery, or live external-network acceptance. Evidence:
+Compose-backed test services. The focused collection passed with
+`81 runs, 367 assertions, 0 failures, 0 errors, 0 skips`. It covers RP-session and parent-scope
+revocation, parent-first locking, stateless Access JWT behavior, refresh rotation/reuse,
+realm/surface lookup, and concurrent refresh attempts. This strengthens local evidence only; it does
+not close regional external RP registration, production topology, authority-owner cutover/backfill,
+provider delivery, or live external-network acceptance. Evidence:
 `evidence/2026-09-22-rp-session-revocation-revalidation-D5E6.md`.
 
 #### Historical follow-up: occurrence catalog reconstruction gap (2026-09-21)
 
 - The isolated `test_occurrence_db` has migration marker `20260918150000`, but a direct read found
-  zero `AUTH_CLIENT_*`, `AUTH_OPERATOR_*`, and `AUTH_VISITOR_*` reference rows. The subscriber
-  tests remain green because they create representative catalog rows in their own test transactions;
-  that does not prove a fresh schema-load/seed path has the required catalog.
+  zero `AUTH_CLIENT_*`, `AUTH_OPERATOR_*`, and `AUTH_VISITOR_*` reference rows. The subscriber tests
+  remain green because they create representative catalog rows in their own test transactions; that
+  does not prove a fresh schema-load/seed path has the required catalog.
 - `db/seeds.rb` does not currently seed the JWT anomaly catalog. Calling the existing migration
   inserter from a runner while `OccurrenceRecord` is connected still made the migration inspect the
   primary connection and failed with `JWT anomaly reference tables must exist`; no connection
@@ -1036,9 +1033,9 @@ delivery, or live external-network acceptance. Evidence:
 
 - The current JWT anomaly reference writer now accepts an explicit occurrence-database writer
   connection. It remains idempotent, preserves historical rows, fails closed for a partial schema,
-  and keeps the fixed status IDs and current `AUTH_CLIENT`/`AUTH_OPERATOR`/`AUTH_VISITOR` catalog
-  on the occurrence database. `db/seeds.rb` invokes that writer only when the occurrence tables
-  exist, so an empty pre-migration bootstrap is still distinguishable from a partial schema.
+  and keeps the fixed status IDs and current `AUTH_CLIENT`/`AUTH_OPERATOR`/`AUTH_VISITOR` catalog on
+  the occurrence database. `db/seeds.rb` invokes that writer only when the occurrence tables exist,
+  so an empty pre-migration bootstrap is still distinguishable from a partial schema.
 - A clean migration-path verification created a uniquely named disposable test database, applied
   every `db/occurrences_migrate` migration, and observed five status rows and 78 current catalog
   rows. A separate schema-load-path verification loaded `occurrence_structure.sql`, observed zero
@@ -1184,32 +1181,31 @@ are explicitly prohibited because they would hide the collision instead of migra
 
 ### Current source-to-owner inventory (separate read-only decision gate)
 
-| Surface / resource        | Current owner-like source                                                                                                 | What the source actually proves                                                                                                             | Migration status                                         |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| app `Persona`             | `personas.client_identity_id`, unique and non-null; `ClientIdentity` has one `persona`.                                   | One RP binding is linked to one concrete resource; it does not prove that the linked `Client` is the adopted owner principal.               | `BLOCKED`; isolated inventory completed with zero rows; authoritative source data remains absent. |
-| app `Enterprise`          | No owner column. `PersonaMembership` links Personas to an Enterprise and unit; `primary` applies to a Persona membership. | Membership/primary state is not a single owner relation.                                                                                    | `BLOCKED`; isolated inventory completed with zero rows; never auto-promote a membership or first row. |
-| com `Individual`          | `individuals.visitor_identity_id`, unique and non-null; `VisitorIdentity` has one `individual`.                           | One RP binding is linked to one concrete resource; it does not prove an adopted `Visitor` owner row.                                        | `BLOCKED`; isolated inventory completed with zero rows; authoritative source data remains absent. |
-| com `Company`             | No owner column. `IndividualMembership` links Individuals to a Company and unit.                                          | Membership/primary state is not a single owner relation.                                                                                    | `BLOCKED`; isolated inventory completed with zero rows; no owner guess. |
-| org `Agent`               | `agents.operator_identity_id`, unique and non-null; `OperatorIdentity` has one `agent`.                                   | One RP binding is linked to one concrete resource; it does not prove an adopted `Operator` owner row.                                       | `BLOCKED`; isolated inventory completed with zero rows; authoritative source data remains absent. |
-| org `Bureau`              | No owner column. `AgentMembership` links Agents to a Bureau and unit.                                                     | Membership/primary state is not a single owner relation.                                                                                    | `BLOCKED`; isolated inventory completed with zero rows; no owner guess. |
+| Surface / resource        | Current owner-like source                                                                                                 | What the source actually proves                                                                                                             | Migration status                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| app `Persona`             | `personas.client_identity_id`, unique and non-null; `ClientIdentity` has one `persona`.                                   | One RP binding is linked to one concrete resource; it does not prove that the linked `Client` is the adopted owner principal.               | `BLOCKED`; isolated inventory completed with zero rows; authoritative source data remains absent.                  |
+| app `Enterprise`          | No owner column. `PersonaMembership` links Personas to an Enterprise and unit; `primary` applies to a Persona membership. | Membership/primary state is not a single owner relation.                                                                                    | `BLOCKED`; isolated inventory completed with zero rows; never auto-promote a membership or first row.              |
+| com `Individual`          | `individuals.visitor_identity_id`, unique and non-null; `VisitorIdentity` has one `individual`.                           | One RP binding is linked to one concrete resource; it does not prove an adopted `Visitor` owner row.                                        | `BLOCKED`; isolated inventory completed with zero rows; authoritative source data remains absent.                  |
+| com `Company`             | No owner column. `IndividualMembership` links Individuals to a Company and unit.                                          | Membership/primary state is not a single owner relation.                                                                                    | `BLOCKED`; isolated inventory completed with zero rows; no owner guess.                                            |
+| org `Agent`               | `agents.operator_identity_id`, unique and non-null; `OperatorIdentity` has one `agent`.                                   | One RP binding is linked to one concrete resource; it does not prove an adopted `Operator` owner row.                                       | `BLOCKED`; isolated inventory completed with zero rows; authoritative source data remains absent.                  |
+| org `Bureau`              | No owner column. `AgentMembership` links Agents to a Bureau and unit.                                                     | Membership/primary state is not a single owner relation.                                                                                    | `BLOCKED`; isolated inventory completed with zero rows; no owner guess.                                            |
 | legacy org `Organization` | Nullable `organizations.operator_id` plus legacy hierarchy and `user_organizations`.                                      | A legacy operator reference may exist, but its principal/table/approval semantics are not equivalent to the adopted Operator ownership row. | `BLOCKED`; isolated inventory completed with zero rows; consumer and authoritative data inventory remain required. |
 
 The separate read-only source-owner inventory run must report counts and opaque identifiers for
-missing owners, multiple candidates, disabled principals, cross-surface mismatches, duplicate
-public IDs, and inconsistent assignments. This is an investigation gate for the unapproved
-Persona/Organization authority cutover, not a RetentionPurgeJob mode or API. The latest isolated
-run completed with an applied schema but zero resource rows, so it cannot supply an owner mapping.
-There is no safe basis to select the first assignment, promote an administrator, or silently skip
-an ambiguous row.
+missing owners, multiple candidates, disabled principals, cross-surface mismatches, duplicate public
+IDs, and inconsistent assignments. This is an investigation gate for the unapproved
+Persona/Organization authority cutover, not a RetentionPurgeJob mode or API. The latest isolated run
+completed with an applied schema but zero resource rows, so it cannot supply an owner mapping. There
+is no safe basis to select the first assignment, promote an administrator, or silently skip an
+ambiguous row.
 
-The classification contract is now covered by a disposable-data regression across all three
-direct surfaces: inactive identity bindings and missing principals are classified without exposing
+The classification contract is now covered by a disposable-data regression across all three direct
+surfaces: inactive identity bindings and missing principals are classified without exposing
 database-local identifiers. This strengthens the read-only tool only; the current real inventory
 still has zero rows, so owner mapping and authority cutover remain blocked. Evidence:
-`evidence/2026-09-23-owner-inventory-contract-X4Y5.md`.
-The same regression also verifies across app/com/org that multiple or active organization
-memberships remain `membership_not_ownership` candidates requiring `manual_review`; no membership
-is promoted to an owner.
+`evidence/2026-09-23-owner-inventory-contract-X4Y5.md`. The same regression also verifies across
+app/com/org that multiple or active organization memberships remain `membership_not_ownership`
+candidates requiring `manual_review`; no membership is promoted to an owner.
 
 ### Connection and transaction inventory
 
@@ -1258,10 +1254,10 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
   never select a resource owner automatically.
 - Current state: `ClientPersona`, `Individual`, and `Agent` have legacy RP-identity bindings;
   `Enterprise`, `Company`, and `Bureau` have membership relationships but no proven single owner.
-  The new authority migrations are authored but have not been enabled for cutover. The isolated
-  test inventory reports an applied schema with zero resource rows; an explicit development
-  inventory reports four local rows classified as two `inactive_principal` and two
-  `membership_not_ownership`. Neither result is authoritative production ownership data.
+  The new authority migrations are authored but have not been enabled for cutover. The isolated test
+  inventory reports an applied schema with zero resource rows; an explicit development inventory
+  reports four local rows classified as two `inactive_principal` and two `membership_not_ownership`.
+  Neither result is authoritative production ownership data.
 - Target state: `AuthorityOwnerMigrationInventory` covers all six concrete resource kinds and all
   three surfaces, reports the explicit authority-schema state, emits only public/opaque identifiers,
   classifies inactive or missing binding candidates, and marks every legacy source as
@@ -1278,14 +1274,15 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
 - Performance: resources and memberships are read in bounded batches with preloaded associations and
   one principal lookup per batch; the query does not issue one principal/membership query per
   resource. The eventual due-work and migration locks remain separate design gates.
-- Tests: the focused inventory contract passes with `7 runs / 97 assertions / 0 failures / 0
-  errors / 0 skips`; the related authority/schema/model regression set passes with `51 runs / 460
-  assertions / 0 failures / 0 errors / 0 skips`; scoped RuboCop and `git diff --check` pass. The
-  read-only Rake inventory runs against the isolated test topology and reports an applied schema
-  with zero resource rows. No development or production datastore fallback was used.
+- Tests: the focused inventory contract passes with
+  `7 runs / 97 assertions / 0 failures / 0 errors / 0 skips`; the related authority/schema/model
+  regression set passes with `51 runs / 460 assertions / 0 failures / 0 errors / 0 skips`; scoped
+  RuboCop and `git diff --check` pass. The read-only Rake inventory runs against the isolated test
+  topology and reports an applied schema with zero resource rows. No development or production
+  datastore fallback was used.
 - Documentation: this section records the implementation boundary; CF-003 remains blocked until
-  authoritative source data and ambiguous rows are reviewed. Evidence records the runtime
-  inventory and disposable-data classification coverage:
+  authoritative source data and ambiguous rows are reviewed. Evidence records the runtime inventory
+  and disposable-data classification coverage:
   `evidence/2026-09-23-owner-inventory-contract-X4Y5.md`.
 - Completion criteria: static implementation checks pass, the isolated report produces counts and
   opaque identifiers for every surface/resource kind, an approved mapping resolves all ambiguous
@@ -1294,23 +1291,23 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
 
 ## Requirement ledger
 
-| Requirement group                        | Repository evidence                                                                                                                                                                                                                                                                                                       | Current decision                                                                                                                                                                                                                                                                                   | Planned position                                                                                                                                         |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dashboard reachability                   | Base root pages are the signed-in dashboards. They linked to identity, accounts/organizations, selector/switcher, and machine protocol endpoints. `BasePreferenceIndexPage` omitted calendar, clock, and currency. The identity hubs already expose surface-local human-facing children.                                  | GO for the missing intentional links and Preference hub links; remove machine protocol links and keep child pages under their hubs. Exclude mutation-only, callback, ceremony, and bearer-capability URLs.                                                                                         | Phase 2 implementation is complete; the selected repository runtime reachability subset and full Rails suite pass. Live deployment and external sign-out reachability remain unverified. |
-| Identity hub                             | `base/app`, `base/com`, and `base/org` identity controllers already have surface-local sections and routes.                                                                                                                                                                                                               | GO for only verified omissions; no dashboard deep-link dump.                                                                                                                                                                                                                                       | Phase 2 audit and tests.                                                                                                                                 |
-| Avatar                                   | Org Avatar has `show`, `edit`, `update`, and `destroy`; the current show props do not yet prove a show-to-edit link. The adopted Persona prompt explicitly excludes Avatar design/RBAC/lifecycle work.                                                                                                                    | Do not expand Avatar behavior in the Persona slice. Any navigation-only change must remain isolated and be re-evaluated against that exclusion.                                                                                                                                                    | Conflict CF-006; no enabling change until scoped.                                                                                                        |
-| Promotional unsubscribe                  | Tokenized unsubscribe capability is a real bearer capability. No dashboard token embedding is permitted.                                                                                                                                                                                                                  | No real token in HTML. A preview is optional and must be a development/test-only read-only mechanism; otherwise defer.                                                                                                                                                                             | Phase 2 security review; likely deferred unless an existing preview is found.                                                                            |
-| Offline page                             | Rails PWA offline routes exist on Base/Side/Auth/Palm surfaces and are GET-only framework routes.                                                                                                                                                                                                                         | Base app/com/org offline links are safe if exact helpers exist; never link the service worker as a human page.                                                                                                                                                                                     | Phase 2.                                                                                                                                                 |
-| Solid Queue                              | The original `config/queue.yml` used YAML anchors and `queues: "*"`; recurring entries omitted explicit queue/priority/args and development/production sets differed. Concrete jobs and gem defaults have now been inventoried.                                                                                           | Exact environment mappings, workers, dispatcher/scheduler values, recurring entries, and retention isolation are implemented. `bin/jobs check` and a bounded test worker pickup pass; production worker topology, recurring scheduler execution, and provider delivery remain unverified.       | Phase 3 implementation is complete for repository configuration and test pickup; production runtime verification remains separate.                         |
-| OTel correlation                         | `ActorSupport#set_current_observability` and Core Browser API installed `request.request_id` as `trace_id`; Lograge emitted only `request_id` and `host`.                                                                                                                                                                 | A small resolver now reads only a valid OTel SpanContext, Actor and Lograge use it, and request ID remains separate. OTel remains disabled in test and opt-in in development. The configured Lograge callable and Actor/invariant tests pass; deployed lifecycle remains outside this environment. | Phase 1 implementation complete; deployed/runtime collector verification remains unverified.                                                             |
-| URL reserved characters                  | The current prompt allocates `@` only to Core Avatar handles and reserves `~`, `$` in URLs, `#`, `?`, `/`, `\\`, and `!`.                                                                                                                                                                                                 | Document and test the policy without introducing routes or changing Avatar. Search current routes/identifiers for conflicts first.                                                                                                                                                                 | Phase 4 documentation/static contract slice.                                                                                                             |
-| RP/session hardening                     | Current repository uses surface-local principals, tokens, RP records, Valkey ceremony state, and multiple auth boundaries. The adopted contract requires parent-session/RP uniqueness, explicit realm/client binding, PostgreSQL revocation authority, and no request-time RP lookup.                                     | Security-critical; no guessed migration or compatibility fallback. Build an evidence-backed session/RP matrix and add regression tests before any schema change.                                                                                                                                   | Phase 5; blocked until connection/contract inventory is complete.                                                                                        |
-| OTP/signup/enforcement/body limits       | Existing ceremony, enforcement, request parsing, and rate-limit code is distributed across controllers, concerns, values, and jobs.                                                                                                                                                                                       | #841 guardrail bypass is fixed for contact-verified email/telephone tickets; the state machine and policies require the guardrail before checkpoint. Social callback completion remains its existing separate path. Other OTP/body-limit claims require path-specific evidence.                    | Phase 5, separate vertical slices; guardrail sub-slice implemented.                                                                                      |
-| Expired signup cleanup                   | `SignUpTermination` and `SignUpArtifactCleanup` already provide the domain boundary; no expiry sweep was wired at the historical reference.                                                                                                                                                                               | `SignUpExpiryJob` now re-discovers expired app/com flows on `retention`, delegates terminalization and cleanup, and is explicitly scheduled in development/production. Request-time expiry remains authoritative. A stale-row interleaving proof now confirms that a completed flow cannot be terminalized from an older instance; bounded worker pickup, production worker topology, and exact live completion/expiry concurrency remain unverified. | Phase 3 implementation is verified for the repository-side stale-row contract; production runtime and full worker race verification remain separate.                                    |
+| Requirement group                        | Repository evidence                                                                                                                                                                                                                                                                                                       | Current decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Planned position                                                                                                                                                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Dashboard reachability                   | Base root pages are the signed-in dashboards. They linked to identity, accounts/organizations, selector/switcher, and machine protocol endpoints. `BasePreferenceIndexPage` omitted calendar, clock, and currency. The identity hubs already expose surface-local human-facing children.                                  | GO for the missing intentional links and Preference hub links; remove machine protocol links and keep child pages under their hubs. Exclude mutation-only, callback, ceremony, and bearer-capability URLs.                                                                                                                                                                                                                                                                                                                                | Phase 2 implementation is complete; the selected repository runtime reachability subset and full Rails suite pass. Live deployment and external sign-out reachability remain unverified.                     |
+| Identity hub                             | `base/app`, `base/com`, and `base/org` identity controllers already have surface-local sections and routes.                                                                                                                                                                                                               | GO for only verified omissions; no dashboard deep-link dump.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Phase 2 audit and tests.                                                                                                                                                                                     |
+| Avatar                                   | Org Avatar has `show`, `edit`, `update`, and `destroy`; the current show props do not yet prove a show-to-edit link. The adopted Persona prompt explicitly excludes Avatar design/RBAC/lifecycle work.                                                                                                                    | Do not expand Avatar behavior in the Persona slice. Any navigation-only change must remain isolated and be re-evaluated against that exclusion.                                                                                                                                                                                                                                                                                                                                                                                           | Conflict CF-006; no enabling change until scoped.                                                                                                                                                            |
+| Promotional unsubscribe                  | Tokenized unsubscribe capability is a real bearer capability. No dashboard token embedding is permitted.                                                                                                                                                                                                                  | No real token in HTML. A preview is optional and must be a development/test-only read-only mechanism; otherwise defer.                                                                                                                                                                                                                                                                                                                                                                                                                    | Phase 2 security review; likely deferred unless an existing preview is found.                                                                                                                                |
+| Offline page                             | Rails PWA offline routes exist on Base/Side/Auth/Palm surfaces and are GET-only framework routes.                                                                                                                                                                                                                         | Base app/com/org offline links are safe if exact helpers exist; never link the service worker as a human page.                                                                                                                                                                                                                                                                                                                                                                                                                            | Phase 2.                                                                                                                                                                                                     |
+| Solid Queue                              | The original `config/queue.yml` used YAML anchors and `queues: "*"`; recurring entries omitted explicit queue/priority/args and development/production sets differed. Concrete jobs and gem defaults have now been inventoried.                                                                                           | Exact environment mappings, workers, dispatcher/scheduler values, recurring entries, and retention isolation are implemented. `bin/jobs check` and a bounded test worker pickup pass; production worker topology, recurring scheduler execution, and provider delivery remain unverified.                                                                                                                                                                                                                                                 | Phase 3 implementation is complete for repository configuration and test pickup; production runtime verification remains separate.                                                                           |
+| OTel correlation                         | `ActorSupport#set_current_observability` and Core Browser API installed `request.request_id` as `trace_id`; Lograge emitted only `request_id` and `host`.                                                                                                                                                                 | A small resolver now reads only a valid OTel SpanContext, Actor and Lograge use it, and request ID remains separate. OTel remains disabled in test and opt-in in development. The configured Lograge callable and Actor/invariant tests pass; deployed lifecycle remains outside this environment.                                                                                                                                                                                                                                        | Phase 1 implementation complete; deployed/runtime collector verification remains unverified.                                                                                                                 |
+| URL reserved characters                  | The current prompt allocates `@` only to Core Avatar handles and reserves `~`, `$` in URLs, `#`, `?`, `/`, `\\`, and `!`.                                                                                                                                                                                                 | Document and test the policy without introducing routes or changing Avatar. Search current routes/identifiers for conflicts first.                                                                                                                                                                                                                                                                                                                                                                                                        | Phase 4 documentation/static contract slice.                                                                                                                                                                 |
+| RP/session hardening                     | Current repository uses surface-local principals, tokens, RP records, Valkey ceremony state, and multiple auth boundaries. The adopted contract requires parent-session/RP uniqueness, explicit realm/client binding, PostgreSQL revocation authority, and no request-time RP lookup.                                     | Security-critical; no guessed migration or compatibility fallback. Build an evidence-backed session/RP matrix and add regression tests before any schema change.                                                                                                                                                                                                                                                                                                                                                                          | Phase 5; blocked until connection/contract inventory is complete.                                                                                                                                            |
+| OTP/signup/enforcement/body limits       | Existing ceremony, enforcement, request parsing, and rate-limit code is distributed across controllers, concerns, values, and jobs.                                                                                                                                                                                       | #841 guardrail bypass is fixed for contact-verified email/telephone tickets; the state machine and policies require the guardrail before checkpoint. Social callback completion remains its existing separate path. Other OTP/body-limit claims require path-specific evidence.                                                                                                                                                                                                                                                           | Phase 5, separate vertical slices; guardrail sub-slice implemented.                                                                                                                                          |
+| Expired signup cleanup                   | `SignUpTermination` and `SignUpArtifactCleanup` already provide the domain boundary; no expiry sweep was wired at the historical reference.                                                                                                                                                                               | `SignUpExpiryJob` now re-discovers expired app/com flows on `retention`, delegates terminalization and cleanup, and is explicitly scheduled in development/production. Request-time expiry remains authoritative. A stale-row interleaving proof now confirms that a completed flow cannot be terminalized from an older instance; bounded worker pickup, production worker topology, and exact live completion/expiry concurrency remain unverified.                                                                                     | Phase 3 implementation is verified for the repository-side stale-row contract; production runtime and full worker race verification remain separate.                                                         |
 | Chronicle/audit/retention                | Chronicle and fallback writers exist across DB boundaries; retention uses explicit model lists and cross-database cleanup.                                                                                                                                                                                                | Preserve accepted non-atomic audit gap; no new transactional outbox. Retention purge disposition is `ACCEPTED_AS_EXISTING_IMPLEMENTATION`: the existing retention safety contract is explicit, allowlisted, batch/scope-bounded, writer-clock based, hold-aware, enforcement-aware, and stoppable by the kill switch. It does not infer archive eligibility; models with separate archive/legal-retention semantics remain outside the allowlist until an approved model-specific rule or hold exists. No dry-run or preview is required. | Phase 5/6 audit and retention-safety verification slices; Retention blocker for the dry-run interpretation is CLOSED. Notification delivery/receipt/retry/permanent-failure remains an independent contract. |
-| Persona/Organization vocabulary          | Current concrete `Persona`, `Individual`, and `Agent` include `Account` and reference RP Identity records. Current `Organization` is a separate org-principal hierarchy model; `Enterprise`, `Company`, and `Bureau` include `Collective`. Existing assignment/membership tables use identity and resource-specific keys. | The adopted rename/interface contract is a major migration, not a mechanical rename. It is blocked for enabling until the complete rename/reference matrix, source-owner mapping, schema proposal, and serialization/cutover plan are reviewed.                                                    | Phase 7, after independent safe slices.                                                                                                                  |
-| Authority tables/RBAC/ownership/transfer | The Phase 2A source now explicitly authors 33 concrete authority tables plus three surface-local principal lock tables. Existing assignment/membership graph is not equivalent and remains the runtime path.                                                                                                              | The schema foundation and unexposed creation contracts are GO for static verification; ownership rows also reject independent Active Record deletion. Authorization cutover, transfer acceptance, lifecycle gates, and owner backfill remain blocked.                                              | Phase 2A foundation now; policy/cutover in Phase 7/8.                                                                                                    |
-| Lifecycle/scrub/encryption               | Existing principal models use `deactivated_at`, `discarded_at`, `purged_at`, `terminated_at`, and withdrawal concerns; current anonymizer inventory is narrower than the adopted scrub contract and Operator deletion requires review.                                                                                    | Do not reinterpret existing clocks or run destructive deletion. First inventory exact attributes, holds, jobs, and backup limits; then implement reversible decision state and idempotent scrub jobs.                                                                                              | Phase 6/7; destructive execution remains blocked.                                                                                                        |
+| Persona/Organization vocabulary          | Current concrete `Persona`, `Individual`, and `Agent` include `Account` and reference RP Identity records. Current `Organization` is a separate org-principal hierarchy model; `Enterprise`, `Company`, and `Bureau` include `Collective`. Existing assignment/membership tables use identity and resource-specific keys. | The adopted rename/interface contract is a major migration, not a mechanical rename. It is blocked for enabling until the complete rename/reference matrix, source-owner mapping, schema proposal, and serialization/cutover plan are reviewed.                                                                                                                                                                                                                                                                                           | Phase 7, after independent safe slices.                                                                                                                                                                      |
+| Authority tables/RBAC/ownership/transfer | The Phase 2A source now explicitly authors 33 concrete authority tables plus three surface-local principal lock tables. Existing assignment/membership graph is not equivalent and remains the runtime path.                                                                                                              | The schema foundation and unexposed creation contracts are GO for static verification; ownership rows also reject independent Active Record deletion. Authorization cutover, transfer acceptance, lifecycle gates, and owner backfill remain blocked.                                                                                                                                                                                                                                                                                     | Phase 2A foundation now; policy/cutover in Phase 7/8.                                                                                                                                                        |
+| Lifecycle/scrub/encryption               | Existing principal models use `deactivated_at`, `discarded_at`, `purged_at`, `terminated_at`, and withdrawal concerns; current anonymizer inventory is narrower than the adopted scrub contract and Operator deletion requires review.                                                                                    | Do not reinterpret existing clocks or run destructive deletion. First inventory exact attributes, holds, jobs, and backup limits; then implement reversible decision state and idempotent scrub jobs.                                                                                                                                                                                                                                                                                                                                     | Phase 6/7; destructive execution remains blocked.                                                                                                                                                            |
 
 ## Implementation units
 
@@ -1515,22 +1512,22 @@ generic lock manager, authority table, cross-surface transaction, or retry loop 
 - The Auth OIDC-started branch now records only ceremony authentication evidence; it does not call
   `log_in`, rotate the Auth Rails session, or create a root Browser Session. Base remains the owner
   of Browser Session creation during the result/resume handoff. The complete Base-only issuer
-  contract still lacked the fully verified browser binding, result generation, issuer/realm, AAL/AMR,
-  session-limit, stale-result, and rollback semantics needed for a safe end-to-end relocation at
-  the time of this historical review. The later CF-010 closure amendment supplies those
-  boundaries; the earlier source-level blocker remains historical evidence and is not the current
-  status.
+  contract still lacked the fully verified browser binding, result generation, issuer/realm,
+  AAL/AMR, session-limit, stale-result, and rollback semantics needed for a safe end-to-end
+  relocation at the time of this historical review. The later CF-010 closure amendment supplies
+  those boundaries; the earlier source-level blocker remains historical evidence and is not the
+  current status.
 
 #### Follow-up: Auth-side root-session authority regression (2026-09-21)
 
 - The public OIDC browser-flow regression now asserts that the ClientToken count is unchanged
   immediately after the Auth-to-Base result handoff. The same flow verifies that Base creates the
   Browser Session only while resuming the authenticated authorization transaction.
-- Focused verification passed with 13 runs / 119 assertions. The full Rails suite passed with
-  11,500 runs / 73,296 assertions / 0 failures / 0 errors / 5 skips. RuboCop and `git diff --check`
-  passed for the changed test. At that time this closed only the Auth-side root-session creation
-  proof; the later CF-010 closure amendment supersedes the open-status wording for the approved
-  Base/Auth finalization contract.
+- Focused verification passed with 13 runs / 119 assertions. The full Rails suite passed with 11,500
+  runs / 73,296 assertions / 0 failures / 0 errors / 5 skips. RuboCop and `git diff --check` passed
+  for the changed test. At that time this closed only the Auth-side root-session creation proof; the
+  later CF-010 closure amendment supersedes the open-status wording for the approved Base/Auth
+  finalization contract.
 - Evidence: `evidence/2026-09-21-auth-base-root-session-regression-Y3Z4.md`.
 
 #### Follow-up: real PostgreSQL authorization-transaction race proof (2026-09-21)
@@ -1578,8 +1575,8 @@ migration, key change, deterministic search contract, or backfill is required fo
 Evidence: `evidence/2026-09-23-reason-note-encryption-recheck-A1B2.md`.
 
 This `ALREADY_SATISFIED` result does not close the separate Persona/Organization name-encryption,
-broader lifecycle scrub, or destructive retention gates, which still require an approved data
-shape and operational contract.
+broader lifecycle scrub, or destructive retention gates, which still require an approved data shape
+and operational contract.
 
 ### Phase 7 — Persona/Organization vocabulary and authority migration
 
@@ -1590,8 +1587,9 @@ shape and operational contract.
 - Target state: interfaces are real concerns/contracts, concrete table mappings are explicit,
   authority tables are surface-local, one ownership row is enforced, roles are independent, and old
   authority paths are retired only after validated cutover.
-- Dependencies: complete rename/reference matrix, read-only source-owner inventory, schema shape approval,
-  connection/lock proof, authorization matrix, encrypted-name cutover, and migration approvals.
+- Dependencies: complete rename/reference matrix, read-only source-owner inventory, schema shape
+  approval, connection/lock proof, authorization matrix, encrypted-name cutover, and migration
+  approvals.
 - Likely files: model/concern/association/policy/operation paths, surface-local migrations/models,
   selectors/jobs/GlobalID registries, fixtures/tests, docs and deployment runbook.
 - Security: no alias constants, shared/poly tables, ownerless intervals, guessed owners, dual
@@ -1655,10 +1653,10 @@ shape and operational contract.
 - Purpose: reconcile implementation, evidence, docs, conflicts, and deployment readiness.
 - Current state: the bundled PostgreSQL adapter is available (`pg 1.6.3`). The Compose-backed
   PostgreSQL/Valkey services and complete primary test topology are available for local Rails
-  verification when `.env.devcontainer.example` is selected explicitly. The non-Bundler preflight
+  verification when `.env.container.devcontainer` is selected explicitly. The non-Bundler preflight
   script still cannot load `pg` when invoked with the system Ruby; this is an invocation/tooling
-  boundary, not the status of the Bundler-backed Rails suite. Production worker topology,
-  external services, and live network acceptance remain separate.
+  boundary, not the status of the Bundler-backed Rails suite. Production worker topology, external
+  services, and live network acceptance remain separate.
 - Target state: current-session tests, queue checks, frontend checks, static/security checks,
   coverage, and isolated integration verification are recorded separately as
   pass/fail/blocked/unverified.
@@ -1682,8 +1680,8 @@ shape and operational contract.
    navigation-only show-to-edit action. Machine protocol links were removed. The selected
    reachability subset passes with 110 runs / 2,957 assertions. The previously unavailable
    Valkey-backed sign-out notice path was revalidated in the Compose-backed test environment with
-   the three Base surface sign-out controllers: 22 runs / 116 assertions / 0 failures / 0 errors /
-   0 skips. The signed-in Menu/Primary section ordering and context propagation revalidation is
+   the three Base surface sign-out controllers: 22 runs / 116 assertions / 0 failures / 0 errors / 0
+   skips. The signed-in Menu/Primary section ordering and context propagation revalidation is
    recorded in `evidence/2026-09-22-dashboard-menu-links-revalidation-B8C9.md`; the sign-out notice
    revalidation is recorded in `evidence/2026-09-22-dashboard-signout-notice-revalidation-C4D5.md`.
 3. Queue and recurring configuration is explicit, queue workers are exact, recurring task arguments
@@ -1701,83 +1699,80 @@ shape and operational contract.
    use the same operation; the focused public-operation lock-order regressions pass. Independent
    PostgreSQL concurrency, rollback, worker execution, and external logout behavior remain
    unverified.
-7. `CF-009` is closed for the Rails-side JSON body-size middleware and pre-parser boundary for
-   #845. External edge and non-JSON contracts remain separate and unverified. `CF-010` is closed
-   for the approved Base/Auth cross-store finalization contract; external RP registration/key
-   deployment, issuer cutover, and live runtime acceptance remain separate gates and are not
-   implied by that closure.
-8. The JWT anomaly occurrence catalog now reproduces through both the full occurrence migration
-   path and the schema-load plus standard-seed path. The current catalog has 78 rows and five fixed
+7. `CF-009` is closed for the Rails-side JSON body-size middleware and pre-parser boundary for #845.
+   External edge and non-JSON contracts remain separate and unverified. `CF-010` is closed for the
+   approved Base/Auth cross-store finalization contract; external RP registration/key deployment,
+   issuer cutover, and live runtime acceptance remain separate gates and are not implied by that
+   closure.
+8. The JWT anomaly occurrence catalog now reproduces through both the full occurrence migration path
+   and the schema-load plus standard-seed path. The current catalog has 78 rows and five fixed
    status rows in both clean paths; rerunning the seed is stable and historical rows are retained.
    `CF-013` is closed for catalog reconstruction and persistence. Notification delivery/receipt/
    retry/permanent-failure remains independent and is not closed by this slice.
 9. The previously environment-blocked authentication, RP Session, OTP, authority, enforcement,
    queue, dashboard, and observability focused suites now run against the Compose-backed test
-   services: 487 runs / 2,879 assertions /
-   0 failures / 0 errors / 3 skips. This reopens local verification for those contracts without
-   changing the external RP, provider, production-worker, Auth/Base issuer, or authority-cutover
-   boundaries. Evidence: `evidence/2026-09-22-auth-otp-authority-revalidation-R5S6.md`.
+   services: 487 runs / 2,879 assertions / 0 failures / 0 errors / 3 skips. This reopens local
+   verification for those contracts without changing the external RP, provider, production-worker,
+   Auth/Base issuer, or authority-cutover boundaries. Evidence:
+   `evidence/2026-09-22-auth-otp-authority-revalidation-R5S6.md`.
 10. The read-only `authority:owner_inventory` task now runs under Rails deprecation-as-error after
     replacing a deprecated connection accessor with `lease_connection`. Its isolated test run
     reports an applied schema but zero resource rows, so owner mapping and cutover remain blocked;
     it is not treated as evidence of a completed migration. Evidence:
-    `evidence/2026-09-22-authority-owner-inventory-revalidation-T7U8.md`.
-    A current Compose-backed invocation on this checkout also completed with
-    `authority_schema_state: applied`, `resources_scanned: 0`, and no classifications. The
-    isolated test database still has no authority-bearing resource rows, so this remains command
-    and schema-state evidence only; it does not open owner mapping or cutover. Evidence:
+    `evidence/2026-09-22-authority-owner-inventory-revalidation-T7U8.md`. A current Compose-backed
+    invocation on this checkout also completed with `authority_schema_state: applied`,
+    `resources_scanned: 0`, and no classifications. The isolated test database still has no
+    authority-bearing resource rows, so this remains command and schema-state evidence only; it does
+    not open owner mapping or cutover. Evidence:
     `evidence/2026-09-22-authority-owner-inventory-current-O1P2.md`.
 11. Welcome authorization and Auth pre-authentication checks were revalidated against the current
     controllers and public behavior. Base app/com/org Welcome flows authorize the pending sign-in
     cycle through the shared sequence gate; Auth checks enforce sequence integrity and are not
-    ordinary authenticated-resource authorization points. The focused three-surface/app-check
-    suite passes with 15 runs / 171 assertions / 0 failures / 0 errors / 0 skips. No duplicate
-    Action Policy hook was added. Evidence:
+    ordinary authenticated-resource authorization points. The focused three-surface/app-check suite
+    passes with 15 runs / 171 assertions / 0 failures / 0 errors / 0 skips. No duplicate Action
+    Policy hook was added. Evidence:
     `evidence/2026-09-22-welcome-preauth-authorization-revalidation-U9V0.md`.
 12. OIDC connection reactivation and RP revocation were revalidated against the current
     surface-local implementations. Stale authorization codes cannot clear a newer connection
     revocation, and RP revoke remains limited to the authenticated RP Session with parent-first
-    locking. The focused operation/controller suite passes with 23 runs / 72 assertions / 0
-    failures / 0 errors / 0 skips. External RP registration and the unresolved Auth/Base authority
-    handoff remain separate gates. Evidence:
+    locking. The focused operation/controller suite passes with 23 runs / 72 assertions / 0 failures
+    / 0 errors / 0 skips. External RP registration and the unresolved Auth/Base authority handoff
+    remain separate gates. Evidence:
     `evidence/2026-09-22-oidc-revoke-connection-revalidation-V2W3.md`.
 13. A stale-row sign-up expiry interleaving was verified with a committed flow and an independent
-   PostgreSQL connection: legitimate completion remains authoritative and the later expiry
-   operation rejects the stale terminal transition. This strengthens the repository-side #840
-   proof but does not establish production scheduler topology or exact live worker/request
-   concurrency. Evidence: `evidence/2026-09-22-signup-expiry-stale-row-D4E5.md`.
+    PostgreSQL connection: legitimate completion remains authoritative and the later expiry
+    operation rejects the stale terminal transition. This strengthens the repository-side #840 proof
+    but does not establish production scheduler topology or exact live worker/request concurrency.
+    Evidence: `evidence/2026-09-22-signup-expiry-stale-row-D4E5.md`.
 14. The setup-only Solid Queue configuration test remains absent in accordance with the repository
     no-environment-tests rule. The installed test-environment validator was rerun and reported
     `Solid Queue configuration is valid.` Existing enqueue/status and recurring-schedule behavior
     tests also pass with 9 runs / 31 assertions. The same validator now also passes for the local
-    development environment with explicit `TRUSTED_PROXIES`; production worker topology,
-    scheduler execution, and provider delivery remain CF-005/CF-011 concerns. A production check
-    was attempted but stopped before validation because `BASE_SERVICE_URL` was not supplied; no
-    fallback host was invented. Evidence:
-    `evidence/2026-09-22-solid-queue-rule-status-E5F6.md`.
+    development environment with explicit `TRUSTED_PROXIES`; production worker topology, scheduler
+    execution, and provider delivery remain CF-005/CF-011 concerns. A production check was attempted
+    but stopped before validation because `BASE_SERVICE_URL` was not supplied; no fallback host was
+    invented. Evidence: `evidence/2026-09-22-solid-queue-rule-status-E5F6.md`.
 15. Auth ceremony admission rotation now uses the public `rotate_and_admit!` operation so
     predecessor revocation and replacement admission share one writing-database transaction. The
     existing predecessor digest records the replacement lineage and prevents a second replacement
-    from the same persisted predecessor after the first commits; a uniqueness failure rolls back
-    the predecessor revocation. The Compose-backed focused model and independent-connection
-    concurrency tests now pass with 36 runs / 219 assertions / 0 failures / 0 errors / 0 skips.
-    This closes only the Auth-local admission-rotation sub-boundary. The later CF-010 closure
-    amendment supplies the approved Base/Auth finalization contract; external RP registration,
-    key deployment, live acceptance, and first-admission coordination without a persisted
-    predecessor remain separate gates.
-    Evidence: `evidence/2026-09-22-auth-ceremony-atomic-rotation-C6D7.md` and
+    from the same persisted predecessor after the first commits; a uniqueness failure rolls back the
+    predecessor revocation. The Compose-backed focused model and independent-connection concurrency
+    tests now pass with 36 runs / 219 assertions / 0 failures / 0 errors / 0 skips. This closes only
+    the Auth-local admission-rotation sub-boundary. The later CF-010 closure amendment supplies the
+    approved Base/Auth finalization contract; external RP registration, key deployment, live
+    acceptance, and first-admission coordination without a persisted predecessor remain separate
+    gates. Evidence: `evidence/2026-09-22-auth-ceremony-atomic-rotation-C6D7.md` and
     `evidence/2026-09-22-auth-ceremony-rotation-runtime-revalidation-S3T4.md`.
 16. Historical validation-order check: the Base Auth-result POST validated the stored OIDC
     authorization request before consuming the then-current one-shot Valkey result. The current
-    implementation supersedes that transport detail with a re-readable, generation-bound result
-    and PostgreSQL finalization; this entry remains historical evidence.
-    Evidence: `evidence/2026-09-22-result-validation-before-consume-S1T2.md`.
+    implementation supersedes that transport detail with a re-readable, generation-bound result and
+    PostgreSQL finalization; this entry remains historical evidence. Evidence:
+    `evidence/2026-09-22-result-validation-before-consume-S1T2.md`.
 17. Historical readiness check: the result endpoint checked that the authorization transaction was
     unexpired and authenticated before consuming the then-current one-shot result, using the
-    transaction class's writer-database clock. The current implementation retains the DB-clock
-    check and supersedes consumption with generation-bound result validation and idempotent
-    finalization. Evidence:
-    `evidence/2026-09-22-result-readiness-before-consume-T3U4.md`.
+    transaction class's writer-database clock. The current implementation retains the DB-clock check
+    and supersedes consumption with generation-bound result validation and idempotent finalization.
+    Evidence: `evidence/2026-09-22-result-readiness-before-consume-T3U4.md`.
 18. Auth admission now evaluates Base authorization-transaction expiry using the matching writer
     database clock for both login-challenge and transaction expiry. A public app admission
     regression covers a DB-clock-expired transaction that is still future relative to the
@@ -1793,8 +1788,8 @@ shape and operational contract.
     was added because choosing a scope/AAL for an unresolved authority meaning would invent a
     product/security contract. This remains `NEXT_CYCLE / CONTRACT_UNDEFINED` for the separate
     Persona/Avatar authority decision; it is not evidence that existing credential, recovery,
-    session-revocation, withdrawal, social-linking, or enforcement gates were removed.
-    Evidence: `evidence/2026-09-22-step-up-group-boundary-audit-V6W7.md`.
+    session-revocation, withdrawal, social-linking, or enforcement gates were removed. Evidence:
+    `evidence/2026-09-22-step-up-group-boundary-audit-V6W7.md`.
 20. The OIDC endpoint/realm boundary was revalidated through the public exchange, refresh,
     revocation, and first-party browser authorization contracts. Controller-supplied
     `expected_resource_type` is required before code consumption or token issuance; refresh and
@@ -1807,32 +1802,34 @@ shape and operational contract.
     errors / 0 skips, followed by the full Rails suite with 11,536 runs / 73,429 assertions / 0
     failures / 0 errors / 8 skips. Evidence:
     `evidence/2026-09-22-oidc-endpoint-realm-revalidation-C8D9.md`.
-21. The defined #884 sensitive-write Step-Up contracts were revalidated on the current Compose-backed
-    test services. Credential management, contact changes, MFA reset, social unlink, withdrawal,
-    revoke-all, and Emergency-context refusal passed with 76 runs / 290 assertions / 0 failures / 0
-    errors / 0 skips. App Group and Group Avatar Membership remain outside a newly invented scope
-    because their assurance classification is still an explicit authority decision. Evidence:
-    `evidence/2026-09-22-step-up-runtime-revalidation-D9E0.md`.
-22. The Base app/com/org Dashboard Menu/Primary contract was rerun against the current Compose-backed
-    checkout. The focused public Inertia-props set passed with 19 runs / 267 assertions / 0 failures /
-    0 errors / 0 skips, and the full Rails suite passed with 11,536 runs / 73,426 assertions / 0
-    failures / 0 errors / 8 skips. No Dashboard implementation change was needed; the existing
-    route-helper props and shared section renderer satisfy the accepted presentation-only contract.
-    Evidence: `evidence/2026-09-22-dashboard-menu-links-runtime-H1I2.md`.
+21. The defined #884 sensitive-write Step-Up contracts were revalidated on the current
+    Compose-backed test services. Credential management, contact changes, MFA reset, social unlink,
+    withdrawal, revoke-all, and Emergency-context refusal passed with 76 runs / 290 assertions / 0
+    failures / 0 errors / 0 skips. App Group and Group Avatar Membership remain outside a newly
+    invented scope because their assurance classification is still an explicit authority decision.
+    Evidence: `evidence/2026-09-22-step-up-runtime-revalidation-D9E0.md`.
+22. The Base app/com/org Dashboard Menu/Primary contract was rerun against the current
+    Compose-backed checkout. The focused public Inertia-props set passed with 19 runs / 267
+    assertions / 0 failures / 0 errors / 0 skips, and the full Rails suite passed with 11,536 runs /
+    73,426 assertions / 0 failures / 0 errors / 8 skips. No Dashboard implementation change was
+    needed; the existing route-helper props and shared section renderer satisfy the accepted
+    presentation-only contract. Evidence:
+    `evidence/2026-09-22-dashboard-menu-links-runtime-H1I2.md`.
 23. The current checkout's formal preflight, full Rails suite, full Vitest suite, RuboCop, and
     JavaScript/OpenAPI quality checks were rerun without displaying secrets or contacting external
     services. Coverage was intentionally omitted; no coverage threshold or test assertion was
     weakened. Evidence: `evidence/2026-09-22-final-quality-gates-J3K4.md`.
-24. The read-only `authority:owner_inventory` task was rerun against the isolated test topology.
-    It reports `authority_schema_state: applied`, `resources_scanned: 0`, and no classifications.
-    This confirms the task and schema-state boundary, but leaves CF-003/CF-004 blocked because an
-    empty inventory cannot authorize owner mapping, backfill, lifecycle, or destructive cutover.
-    Evidence: `evidence/2026-09-22-authority-owner-inventory-recheck-J4K5.md`.
+24. The read-only `authority:owner_inventory` task was rerun against the isolated test topology. It
+    reports `authority_schema_state: applied`, `resources_scanned: 0`, and no classifications. This
+    confirms the task and schema-state boundary, but leaves CF-003/CF-004 blocked because an empty
+    inventory cannot authorize owner mapping, backfill, lifecycle, or destructive cutover. Evidence:
+    `evidence/2026-09-22-authority-owner-inventory-recheck-J4K5.md`.
 25. The `core-next-rp` compatibility boundary was rechecked through the production bridge models,
-    static registry, and public registry/bridge tests (`47 runs / 358 assertions / 0 failures / 0
-    errors / 0 skips`). The bridge still has live local references, so retiring the client requires
-    external registration/key and data-migration reconciliation; no client ID or credential sharing
-    was invented. Evidence: `evidence/2026-09-22-core-next-rp-bridge-recheck-K5L6.md`.
+    static registry, and public registry/bridge tests
+    (`47 runs / 358 assertions / 0 failures / 0 errors / 0 skips`). The bridge still has live local
+    references, so retiring the client requires external registration/key and data-migration
+    reconciliation; no client ID or credential sharing was invented. Evidence:
+    `evidence/2026-09-22-core-next-rp-bridge-recheck-K5L6.md`.
 26. Rails 8.2 CSRF strategy declarations were revalidated through the public security invariants:
     `header_or_legacy_token` and `with: :exception` remain explicit on the application boundary,
     while the two reviewed non-browser exceptions remain narrowly allowlisted. The focused set
@@ -1841,13 +1838,13 @@ shape and operational contract.
 
 #### Follow-up: authority and queue contract runtime recheck (2026-09-21)
 
-- The previously environment-blocked owner-inventory, authority-schema/vocabulary, creator-race,
-  and Solid Queue integration contracts now run against the Compose-backed isolated services.
-  Focused verification passed with 19 runs / 279 assertions / 0 failures / 0 errors / 0 skips.
+- The previously environment-blocked owner-inventory, authority-schema/vocabulary, creator-race, and
+  Solid Queue integration contracts now run against the Compose-backed isolated services. Focused
+  verification passed with 19 runs / 279 assertions / 0 failures / 0 errors / 0 skips.
 - This confirms the current local contracts and real creator concurrency only. It does not enable
   the authored authority migrations, infer owners, perform backfill, start a worker, or prove
-  production queue operation. The owner mapping and cutover gates remain closed until their
-  explicit data and operational reviews are complete.
+  production queue operation. The owner mapping and cutover gates remain closed until their explicit
+  data and operational reviews are complete.
 - Evidence: `evidence/2026-09-21-authority-queue-runtime-recheck-N5P6.md`.
 
 #### Follow-up: nested surface connection owners
@@ -1864,10 +1861,10 @@ safety, full-suite health, or production topology.
 
 ## Handoff rule
 
-The next safe action is to continue static review of the remaining authentication/session
-boundaries and rerun narrow Rails suites before extending policy or lifecycle behavior. The JWT
-anomaly subscriber makes missing catalog rows observable without fabricating reference data, and
-the current-runtime catalog transition is now verified through both migration and schema-load/seed
+The next safe action is to continue static review of the remaining authentication/session boundaries
+and rerun narrow Rails suites before extending policy or lifecycle behavior. The JWT anomaly
+subscriber makes missing catalog rows observable without fabricating reference data, and the
+current-runtime catalog transition is now verified through both migration and schema-load/seed
 paths; CF-013 is closed for that boundary. The next blocked action is executing the authority
 migrations, backfilling owners, enabling grant/transfer routes, destructive scrub, or production
 queue changes without the shape, connection, migration, and isolated-test gates.
@@ -1989,9 +1986,9 @@ queue changes without the shape, connection, migration, and isolated-test gates.
   decision time instead of reacquiring `Time.current`. The existing 15-minute retry policy and
   explicit unavailable-processor failure boundary are unchanged; no processor adapter or delivery
   contract was introduced.
-- TDD RED reproduced the mismatch with a fixed historical decision time. The focused model, job,
-  and existing processor-notification coverage then passed with 35 runs / 312 assertions / 0
-  failures / 0 errors / 0 skips. Targeted RuboCop, Ruby syntax, and `git diff --check` passed.
+- TDD RED reproduced the mismatch with a fixed historical decision time. The focused model, job, and
+  existing processor-notification coverage then passed with 35 runs / 312 assertions / 0 failures /
+  0 errors / 0 skips. Targeted RuboCop, Ruby syntax, and `git diff --check` passed.
 - The subsequent full Rails suite passed with 11,501 runs / 73,297 assertions / 0 failures / 0
   errors / 5 skips. The skips and expected provider/OmniAuth test diagnostics were not changed by
   this slice.
@@ -2002,12 +1999,12 @@ queue changes without the shape, connection, migration, and isolated-test gates.
 #### Follow-up: processor-notification terminal-state guard (2026-09-22)
 
 - Adversarial review found that the public `mark_failed!` and `mark_notified!` methods could
-  overwrite a persisted `NOTIFIED` or `SKIPPED` row because the job-level `terminal?` check was
-  not repeated inside the state update.
+  overwrite a persisted `NOTIFIED` or `SKIPPED` row because the job-level `terminal?` check was not
+  repeated inside the state update.
 - The methods now lock and re-read the row, then leave terminal rows unchanged. Non-terminal
   `PENDING`/`FAILED` retry behavior is unchanged.
-- This closes only terminal-state overwrite. It does not close CF-011's separate processor
-  adapter, provider receipt, bounded retry/exhaustion, or permanent-failure contract.
+- This closes only terminal-state overwrite. It does not close CF-011's separate processor adapter,
+  provider receipt, bounded retry/exhaustion, or permanent-failure contract.
 - Evidence: `evidence/2026-09-22-processor-notification-terminal-guard-C3D4.md`.
 
 #### Follow-up: processor-notification retry-window guard (2026-09-22)
@@ -2029,13 +2026,13 @@ queue changes without the shape, connection, migration, and isolated-test gates.
 - The focused retention, notification-state, and Core route contract set passed with 59 runs / 374
   assertions / 0 failures / 0 errors / 0 skips against the Compose-backed test services. This
   revalidation covers the existing retention allowlist, bounded batches, writer-clock eligibility,
-  hold and enforcement protection, kill switch, notification retry-window and terminal-state
-  guards, and the canonical RP callback route.
+  hold and enforcement protection, kill switch, notification retry-window and terminal-state guards,
+  and the canonical RP callback route.
 - `git diff --check`, changed-file syntax, and targeted RuboCop passed. The latest complete Rails
   result including the retry-window implementation remains 11,505 runs / 73,310 assertions / 0
   failures / 0 errors / 5 skips, recorded in the retry-window evidence.
-- Retention remains `ACCEPTED_AS_EXISTING_IMPLEMENTATION`; dry-run, preview, and simulation APIs
-  are not required and were not added. Provider delivery/receipt/retry-exhaustion/permanent-failure
+- Retention remains `ACCEPTED_AS_EXISTING_IMPLEMENTATION`; dry-run, preview, and simulation APIs are
+  not required and were not added. Provider delivery/receipt/retry-exhaustion/permanent-failure
   remains `CF-011`, and the Auth/Base authority and external RP/deployment gates remain open.
 - Evidence: `evidence/2026-09-22-retention-notification-route-revalidation-N6P7.md` and the final
   plan re-review in `evidence/2026-09-22-retention-frozen-plan-rereview-R9S0.md`.
@@ -2044,12 +2041,12 @@ queue changes without the shape, connection, migration, and isolated-test gates.
 
 The processor-notification boundary was rechecked against the current models, job, tests, and
 security documentation. The repository still has no concrete processor adapter, authenticated
-receipt contract, bounded retry-exhaustion policy, or approved permanent-failure status. The
-success allowlist therefore remains empty; a requested notification is recorded as
-`processor_unavailable` rather than falsely marked `NOTIFIED`. The focused retention,
-notification-state, and Core route set passed with `31 runs, 287 assertions, 0 failures, 0 errors,
-0 skips`. No adapter, receipt ledger, retry limit, or status was invented without an approved
-contract. Evidence: `evidence/2026-09-22-processor-notification-contract-revalidation-L3M4.md`.
+receipt contract, bounded retry-exhaustion policy, or approved permanent-failure status. The success
+allowlist therefore remains empty; a requested notification is recorded as `processor_unavailable`
+rather than falsely marked `NOTIFIED`. The focused retention, notification-state, and Core route set
+passed with `31 runs, 287 assertions, 0 failures, 0 errors, 0 skips`. No adapter, receipt ledger,
+retry limit, or status was invented without an approved contract. Evidence:
+`evidence/2026-09-22-processor-notification-contract-revalidation-L3M4.md`.
 
 The 2026-09-23 local contract recheck reconfirmed the same boundary with the focused processor
 job/state tests (`8 runs, 23 assertions, 0 failures, 0 errors, 0 skips`). Existing coverage is
@@ -2323,41 +2320,40 @@ undefined until their contracts are approved. Evidence:
   cache, session lookup, or retry mechanism. No production code or schema changed in this slice.
 - Focused verification passed with 123 runs / 571 assertions. The full Rails suite passed with
   11,532 runs / 73,415 assertions / 0 failures / 0 errors / 8 skips. Ruby syntax, scoped RuboCop,
-  and `git diff --check` also passed. Evidence:
-  `evidence/2026-09-22-oidc-grant-rollback-T6U7.md`.
+  and `git diff --check` also passed. Evidence: `evidence/2026-09-22-oidc-grant-rollback-T6U7.md`.
 
 #### Revalidation: app-only TOTP lifecycle and attempt binding (2026-09-22)
 
 - The current TOTP implementation was revalidated through the public consumer, controller, model,
   concurrency, enrollment, and route-contract interfaces. The focused set passed with 91 runs / 747
-  assertions / 0 failures / 0 errors / 0 skips. It confirms app-only routing, actor-scoped credential
-  selection, per-credential failure accounting, terminal `REVOKED` at 100 failures, replay rejection,
-  independent-connection concurrency behavior, and the two-slot ACTIVE/INACTIVE enrollment rule.
-- The `last_otp_at` schema concern was corrected in a separate reversible migration. New and existing
-  never-used credentials now store `NULL`; the model no longer requires a fabricated event timestamp,
-  settings continue to render an unused credential safely, and accepted codes still write a finite
-  timestamp used by replay prevention. The migration was applied only to the disposable test
-  `app_zenith` database during verification, and the standard `app_zenith_structure.sql` dump was
-  updated without carrying unrelated live-database constraint differences into the repository.
+  assertions / 0 failures / 0 errors / 0 skips. It confirms app-only routing, actor-scoped
+  credential selection, per-credential failure accounting, terminal `REVOKED` at 100 failures,
+  replay rejection, independent-connection concurrency behavior, and the two-slot ACTIVE/INACTIVE
+  enrollment rule.
+- The `last_otp_at` schema concern was corrected in a separate reversible migration. New and
+  existing never-used credentials now store `NULL`; the model no longer requires a fabricated event
+  timestamp, settings continue to render an unused credential safely, and accepted codes still write
+  a finite timestamp used by replay prevention. The migration was applied only to the disposable
+  test `app_zenith` database during verification, and the standard `app_zenith_structure.sql` dump
+  was updated without carrying unrelated live-database constraint differences into the repository.
 - RED verification before the correction was 29 runs / 68 assertions / 3 failures. After the
   correction, the focused model/consumer set passed with 29 runs / 70 assertions, and the broader
-  TOTP set passed with 91 runs / 747 assertions. The post-change full suite passed with 11,533 runs /
-  73,416 assertions / 0 failures / 0 errors / 8 skips, and the subsequent structure-load/reset
+  TOTP set passed with 91 runs / 747 assertions. The post-change full suite passed with 11,533 runs
+  / 73,416 assertions / 0 failures / 0 errors / 8 skips, and the subsequent structure-load/reset
   verification passed with 11,533 runs / 73,419 assertions / 0 failures / 0 errors / 8 skips.
   Syntax, scoped and repository-wide RuboCop, Brakeman (0 errors / 0 security warnings), and diff
   checks passed. The migration was also rolled back and reapplied on the disposable test database
-  successfully. Evidence:
-  `evidence/2026-09-22-totp-last-otp-nullability-Z6A7.md`.
+  successfully. Evidence: `evidence/2026-09-22-totp-last-otp-nullability-Z6A7.md`.
 
 #### Historical CF-011 pre-deployment implementation continuation (2026-09-23; superseded by closure below)
 
 The approved provider-neutral contract is now represented in the repository. App and com
-notifications have concrete attempt ledgers, monotonic delivery generations, digest-only
-idempotency identities, verified-receipt binding, bounded retry policy, immutable
-`PERMANENT_FAILURE`, and an authorized manual-recovery operation. `NOTIFIED` cannot be reached from
-enqueue or an unverified processor response. A due retry is re-enqueued through the retention queue,
-and a recurring bounded sweep recovers rows whose retry enqueue was interrupted. The adapter registry
-remains empty by default, so no provider or external credential was invented.
+notifications have concrete attempt ledgers, monotonic delivery generations, digest-only idempotency
+identities, verified-receipt binding, bounded retry policy, immutable `PERMANENT_FAILURE`, and an
+authorized manual-recovery operation. `NOTIFIED` cannot be reached from enqueue or an unverified
+processor response. A due retry is re-enqueued through the retention queue, and a recurring bounded
+sweep recovers rows whose retry enqueue was interrupted. The adapter registry remains empty by
+default, so no provider or external credential was invented.
 
 The focused acceptance suite remains unverified because the current process cannot resolve the
 required Compose service `primary`; the exact preflight and Rails boot error are recorded in
@@ -2379,31 +2375,31 @@ restore the retired unique idempotency index after valid retry duplicates exist.
 preserve fail-closed behavior without inventing provider semantics. Syntax, scoped RuboCop, and
 `git diff --check` passed; PostgreSQL migration and runtime evidence remain unverified.
 
-The resumed blocker audit also rechecked the Rails test boot dependency. Test cache is intentionally an
-in-process MemoryStore, but test rate-limit and auth-state use the configured KVS service, so removing the
-`VALKEY_KVS_HOST` dependency would be a test-isolation and security-contract regression rather than a
-configuration fix. The required environment variables load successfully, while the current process still
-cannot resolve `primary` or `valkey-kvs`; the exact preflight remains `PG::ConnectionBad` before application
-checks. A new independent-connection CF-011 regression test now covers at-most-one attempt claim and
-concurrent verified-receipt idempotency. It is syntax-valid and RuboCop-clean but remains unrun until the
-isolated PostgreSQL/Valkey services are available. At that historical point CF-005 and CF-011 were
-evidence-gated, while CF-003/CF-004 and CF-007 were decision-gated. The later approved-decision and
-closure sections supersede those dispositions.
+The resumed blocker audit also rechecked the Rails test boot dependency. Test cache is intentionally
+an in-process MemoryStore, but test rate-limit and auth-state use the configured KVS service, so
+removing the `VALKEY_KVS_HOST` dependency would be a test-isolation and security-contract regression
+rather than a configuration fix. The required environment variables load successfully, while the
+current process still cannot resolve `primary` or `valkey-kvs`; the exact preflight remains
+`PG::ConnectionBad` before application checks. A new independent-connection CF-011 regression test
+now covers at-most-one attempt claim and concurrent verified-receipt idempotency. It is syntax-valid
+and RuboCop-clean but remains unrun until the isolated PostgreSQL/Valkey services are available. At
+that historical point CF-005 and CF-011 were evidence-gated, while CF-003/CF-004 and CF-007 were
+decision-gated. The later approved-decision and closure sections supersede those dispositions.
 
-The retry-sweep contract test also now fixes due-only selection and the configured batch boundary at the
-public Active Job interface. This is repository-level evidence only; it does not substitute for dispatcher,
-worker, scheduler, or database-backed queue execution evidence.
+The retry-sweep contract test also now fixes due-only selection and the configured batch boundary at
+the public Active Job interface. This is repository-level evidence only; it does not substitute for
+dispatcher, worker, scheduler, or database-backed queue execution evidence.
 
 The current-process CF-011 recheck on 2026-09-23 found no additional implementation defect. Syntax,
-scoped RuboCop, Brakeman, diff checks, and the DB-free value-contract smoke passed. The required preflight
-still fails before Rails boot because `primary` and `valkey-kvs` do not resolve in this process. Therefore
-the focused Minitest, migration, PostgreSQL locking/constraint, and queue-runtime acceptance evidence
-remain uncollected; CF-011 stays `OPEN — EVIDENCE REQUIRED` and is not promoted to pre-deployment CLOSED.
+scoped RuboCop, Brakeman, diff checks, and the DB-free value-contract smoke passed. The required
+preflight still fails before Rails boot because `primary` and `valkey-kvs` do not resolve in this
+process. Therefore the focused Minitest, migration, PostgreSQL locking/constraint, and queue-runtime
+acceptance evidence remain uncollected; CF-011 stays `OPEN — EVIDENCE REQUIRED` and is not promoted
+to pre-deployment CLOSED.
 
 The paragraphs in this historical continuation describe an earlier non-Compose verification
 boundary. They are retained as evidence of what was not executable in that process and do not
-override the later isolated Compose acceptance and the current status table at the top of this
-plan.
+override the later isolated Compose acceptance and the current status table at the top of this plan.
 
 #### CF-011 pre-deployment acceptance closure (2026-09-23)
 
@@ -2415,11 +2411,12 @@ constraint validation and concurrent index replacement. The generated app/com SQ
 were loaded through the standard Rails reset tasks and the combined schema/contract tests passed.
 
 The CF-011 focused suite passed with `30 runs / 118 assertions / 0 failures / 0 errors / 0 skips`.
-The schema, architecture, and placement contract set passed with `17 runs / 3118 assertions / 0
-failures / 0 errors / 0 skips`; after structure load the combined set passed with `47 runs / 3236
-assertions / 0 failures / 0 errors / 0 skips`. The full Rails suite then passed with `11560 runs /
-73578 assertions / 0 failures / 0 errors / 8 skips`. Repository-wide RuboCop, Brakeman, and diff
-checks passed. Evidence: `evidence/2026-09-23-cf011-idempotency-recheck-R4S5.md`.
+The schema, architecture, and placement contract set passed with
+`17 runs / 3118 assertions / 0 failures / 0 errors / 0 skips`; after structure load the combined set
+passed with `47 runs / 3236 assertions / 0 failures / 0 errors / 0 skips`. The full Rails suite then
+passed with `11560 runs / 73578 assertions / 0 failures / 0 errors / 8 skips`. Repository-wide
+RuboCop, Brakeman, and diff checks passed. Evidence:
+`evidence/2026-09-23-cf011-idempotency-recheck-R4S5.md`.
 
 `CF-011` is therefore `CLOSED — PRE-DEPLOYMENT ACCEPTANCE SATISFIED`. This closure covers only the
 provider-neutral repository and isolated-environment contract. Provider authentication, real
@@ -2427,10 +2424,10 @@ credentials, provider-specific receipt protocol, and provider E2E remain in the 
 provider acceptance gate. At the time of this CF-011 verification, `CF-005` remained independently
 open; the later local queue-runtime evidence below supersedes that status.
 
-This paragraph is retained as historical evidence for the earlier isolated run and is superseded
-for current status by the later CF-011 state-metadata, retry-boundary, and current-process
-revalidation entries below. It must not be read as the present blocker disposition; the status
-table at the top of this plan remains authoritative.
+This paragraph is retained as historical evidence for the earlier isolated run and is superseded for
+current status by the later CF-011 state-metadata, retry-boundary, and current-process revalidation
+entries below. It must not be read as the present blocker disposition; the status table at the top
+of this plan remains authoritative.
 
 #### CF-005 pre-deployment acceptance closure (2026-09-23)
 
@@ -2440,8 +2437,8 @@ drove `SecurityConsumedJtiPurgeJob` through scheduler registration, recurring ex
 dispatcher/worker pickup, and five completed queue jobs; an expired application replay row was
 removed by the job. An intentionally invalid `SignUpExpiryJob` boundary produced a recorded
 `ArgumentError` failed execution and no false successful mutation. Existing bounded retry/recovery
-contract tests passed in the focused queue/OIDC/processor suite with `23 runs / 59 assertions / 0
-failures / 0 errors / 0 skips`.
+contract tests passed in the focused queue/OIDC/processor suite with
+`23 runs / 59 assertions / 0 failures / 0 errors / 0 skips`.
 
 The repository's normal recurring schedules were restored after the probe. No production worker,
 production queue database, heartbeat/monitoring, operational rollback, or external provider was
@@ -2457,8 +2454,7 @@ environment. The initial attempt incorrectly passed the Jest-only `--runInBand` 
 failed before test discovery; the corrected command passed all frontend tests. Formatting, lint, and
 TypeScript checks, the production Vite build, local dead-code analysis, OpenAPI lint, and the
 aggregate `bun run check` also passed. This evidence covers repository-side frontend behavior only
-and does not replace
-Rails/WebAuthn integration or live authenticator verification.
+and does not replace Rails/WebAuthn integration or live authenticator verification.
 
 Evidence: `evidence/2026-09-23-frontend-quality-revalidation-D5E6.md`.
 
@@ -2467,17 +2463,17 @@ Evidence: `evidence/2026-09-23-frontend-quality-revalidation-D5E6.md`.
 The non-Compose process initially stopped before Rails loading because the repository environment
 file's `RUBY_DEBUG_OPEN=false` is interpreted as a truthy untyped option by the vendored `debug`
 gem, which attempted to bind a UNIX debugger socket. This was not bypassed by changing repository
-configuration. A process-local `RUBY_DEBUG_ENABLE=0` override allowed `bundle exec bin/rails
-zeitwerk:check` to complete with `All is good!`.
+configuration. A process-local `RUBY_DEBUG_ENABLE=0` override allowed
+`bundle exec bin/rails zeitwerk:check` to complete with `All is good!`.
 
 The same process-local override does not provide database services. The required test preflight and
 the focused `ProcessorErasureNotificationState` test still fail before assertions because `primary`
-cannot be resolved (`PG::ConnectionBad: could not translate host name "primary" to address:
-Temporary failure in name resolution`); `getent hosts primary` and `getent hosts valkey-kvs` return
-no records. At the time of this non-Compose run, the DB-backed CF-011 tests remained unverified
-and the historical status was `OPEN — EVIDENCE REQUIRED`. That status was superseded by the
-isolated acceptance record above. No app, configuration, test, database, or external service was
-changed to bypass this boundary.
+cannot be resolved
+(`PG::ConnectionBad: could not translate host name "primary" to address: Temporary failure in name resolution`);
+`getent hosts primary` and `getent hosts valkey-kvs` return no records. At the time of this
+non-Compose run, the DB-backed CF-011 tests remained unverified and the historical status was
+`OPEN — EVIDENCE REQUIRED`. That status was superseded by the isolated acceptance record above. No
+app, configuration, test, database, or external service was changed to bypass this boundary.
 
 Evidence: `evidence/2026-09-23-rails-loader-environment-boundary-H7J8.md`.
 
@@ -2486,8 +2482,8 @@ Evidence: `evidence/2026-09-23-rails-loader-environment-boundary-H7J8.md`.
 An adversarial value review found that Ruby's `Integer(value)` conversion silently truncated
 fractional numeric values. Retry-policy limits/delays/attempt numbers and verified-receipt
 generations now reject non-integral numeric types while retaining accepted integer-string
-normalization. TDD RED/green coverage passes for both value boundaries (`4 runs / 15 assertions`
-and `6 runs / 24 assertions`); targeted RuboCop, Brakeman, syntax, and diff checks pass. This is a
+normalization. TDD RED/green coverage passes for both value boundaries (`4 runs / 15 assertions` and
+`6 runs / 24 assertions`); targeted RuboCop, Brakeman, syntax, and diff checks pass. This is a
 provider-neutral value-boundary correction and does not close the outstanding DB-backed CF-011
 evidence requirement. Evidence: `evidence/2026-09-23-processor-integer-boundary-I9J0.md`.
 
@@ -2503,18 +2499,18 @@ gap is recorded in the same evidence file.
 
 The follow-up adversarial search found no additional production state-write path that bypasses the
 public notification transitions. `NOTIFIED` remains reachable only through the adapter-verified
-receipt path, and manual recovery remains a separate authorized operation that advances the
-delivery generation. No public controller or route currently invokes manual recovery, so this
-review does not invent a new operator role or permission contract. Direct low-level writes found by
-the search are confined to tests and migrations. Pure value tests passed, while the required
-PostgreSQL/Valkey preflight still fails in the current process because `primary` and `valkey-kvs`
-do not resolve; DB-backed state, migration, constraint, and concurrency acceptance therefore
-remain unverified. Evidence: `evidence/2026-09-23-cf011-state-bypass-review-K2L3.md`.
+receipt path, and manual recovery remains a separate authorized operation that advances the delivery
+generation. No public controller or route currently invokes manual recovery, so this review does not
+invent a new operator role or permission contract. Direct low-level writes found by the search are
+confined to tests and migrations. Pure value tests passed, while the required PostgreSQL/Valkey
+preflight still fails in the current process because `primary` and `valkey-kvs` do not resolve;
+DB-backed state, migration, constraint, and concurrency acceptance therefore remain unverified.
+Evidence: `evidence/2026-09-23-cf011-state-bypass-review-K2L3.md`.
 
-The subsequent static revalidation passed the two pure value-contract files, repository-wide
-RuboCop (`4773 files inspected, no offenses`), Brakeman (`0 errors, 0 security warnings`),
-`zeitwerk:check`, and `git diff --check`. The Rails job assertions and all PostgreSQL/Valkey-backed
-CF-011 acceptance remain unverified in the current process. Evidence:
+The subsequent static revalidation passed the two pure value-contract files, repository-wide RuboCop
+(`4773 files inspected, no offenses`), Brakeman (`0 errors, 0 security warnings`), `zeitwerk:check`,
+and `git diff --check`. The Rails job assertions and all PostgreSQL/Valkey-backed CF-011 acceptance
+remain unverified in the current process. Evidence:
 `evidence/2026-09-23-cf011-static-revalidation-L4M5.md`.
 
 #### Boot-dependency classification re-audit (2026-09-23)
@@ -2523,9 +2519,9 @@ The requested distinction between a repository configuration defect and an unava
 rechecked from the current source. Test application cache is intentionally `MemoryStore`, but test
 rate-limit and Auth-state isolation intentionally construct Valkey-backed stores from
 `VALKEY_KVS_HOST` / `VALKEY_KVS_PORT`; `test/test_helper.rb` also cleans those namespaces for every
-test. `config/database.yml` independently requires the configured test PostgreSQL host. The
-current `primary` and `valkey-kvs` resolution failure is therefore `ENVIRONMENT_UNAVAILABLE`, not
-a reason to remove the test KVS dependency or substitute localhost. Evidence:
+test. `config/database.yml` independently requires the configured test PostgreSQL host. The current
+`primary` and `valkey-kvs` resolution failure is therefore `ENVIRONMENT_UNAVAILABLE`, not a reason
+to remove the test KVS dependency or substitute localhost. Evidence:
 `evidence/2026-09-23-rails-loader-environment-boundary-H7J8.md`.
 
 The approved provider-neutral CF-011 contract was also extended with a public-job regression for a
@@ -2544,11 +2540,11 @@ Podman socket with which to enter the Compose network. This is the already class
 `ENVIRONMENT_UNAVAILABLE` boundary, not evidence of a repository configuration defect and not a
 reason to substitute localhost or remove the intentional test Valkey dependency.
 
-The provider permanent-failure regression, locked-operator recovery rejection, terminal
-`NOTIFIED` recovery rejection, and manual-recovery audit-event assertion are present but remain
-`UNVERIFIED` until the same commands run in the isolated PostgreSQL/Valkey topology. Retry-policy
-and receipt-value boundary tests passed
-without Rails boot; repository-wide RuboCop, Brakeman, and `git diff --check` also passed. At that
-historical point CF-011 was `OPEN — EVIDENCE REQUIRED`, and CF-003/CF-004 and CF-007 were still
-decision-gated. The current blocker table at the top of this plan supersedes those dispositions.
-Evidence: `evidence/2026-09-23-cf011-permanent-failure-test-M6N7.md`.
+The provider permanent-failure regression, locked-operator recovery rejection, terminal `NOTIFIED`
+recovery rejection, and manual-recovery audit-event assertion are present but remain `UNVERIFIED`
+until the same commands run in the isolated PostgreSQL/Valkey topology. Retry-policy and
+receipt-value boundary tests passed without Rails boot; repository-wide RuboCop, Brakeman, and
+`git diff --check` also passed. At that historical point CF-011 was `OPEN — EVIDENCE REQUIRED`, and
+CF-003/CF-004 and CF-007 were still decision-gated. The current blocker table at the top of this
+plan supersedes those dispositions. Evidence:
+`evidence/2026-09-23-cf011-permanent-failure-test-M6N7.md`.

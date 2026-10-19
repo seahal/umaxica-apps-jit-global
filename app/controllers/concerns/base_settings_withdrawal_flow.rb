@@ -80,7 +80,9 @@ module BaseSettingsWithdrawalFlow
   end
 
   def terminate_withdrawal!(actor)
-    ::WithdrawalLifecycle.terminate!(actor: actor, request: request) if actor.early_terminatable?
+    # The lifecycle owns the locked deadline/hold check. Never consume the ceremony or redirect
+    # as though termination succeeded when the destructive operation was refused.
+    ::WithdrawalLifecycle.terminate!(actor: actor, request: request)
     consume_current_withdrawal_ceremony!
 
     safe_redirect_to(

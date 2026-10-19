@@ -11,6 +11,18 @@ module StepUpSessionConsumable
   VERIFICATION_PURPOSES = %w(step_up reauthentication).freeze
   REGISTRATION_PURPOSES = %w(bootstrap credential_registration).freeze
   MAX_CHALLENGE_REF_COLLISION_RETRIES = 3
+  METHOD_ATTRIBUTE_SENTINEL = Object.new.freeze
+
+  # Rails 8 calls Object#method(name) while reflecting over associations. The
+  # persisted `method` column would otherwise replace that reflection API with
+  # a zero-argument attribute reader and raise ArgumentError. Preserve both
+  # contracts: no argument reads the column, while an argument delegates to
+  # Ruby's original method lookup.
+  def method(name = METHOD_ATTRIBUTE_SENTINEL)
+    return self[:method] if name.equal?(METHOD_ATTRIBUTE_SENTINEL)
+
+    Object.instance_method(:method).bind_call(self, name)
+  end
 
   def revoke_authority!
     self.class.revoke_authority_for!(id: id)

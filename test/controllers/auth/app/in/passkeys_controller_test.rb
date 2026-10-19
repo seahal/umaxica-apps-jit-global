@@ -504,13 +504,17 @@ module Auth::App::In
     private
 
     def register_fake_client_passkey!(client:, user:, description:)
-      ClientPasskey.create!(
+      passkey = ClientPasskey.create!(
         user: user,
         external_id: SecureRandom.uuid,
         description: description,
         status_id: ClientPasskeyStatus::ACTIVE,
         **fake_credential_record_attrs(client),
       )
+      # The credential's MFA callback refreshes the persisted Client row. Keep
+      # this fixture owner usable for later optimistic-locking assertions.
+      user.reload
+      passkey
     end
 
     def assertion_params_for(challenge_id:, challenge:, client: @fake_client)

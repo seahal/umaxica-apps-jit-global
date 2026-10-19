@@ -12,8 +12,8 @@ Related:
 
 ## 1. Problem
 
-Vite hot module replacement (HMR) does not work when development is opened through a public
-hostname published by Cloudflare Tunnel (for example `https://auth.umaxica.app`).
+Vite hot module replacement (HMR) does not work when development is opened through a public hostname
+published by Cloudflare Tunnel (for example `https://auth.umaxica.app`).
 
 Observed in `log/development.log` (`security.csp_violation.reported`): the HMR client loaded from
 `https://<host>/vite-dev/@vite/client` tries to open `wss://localhost:3036/vite-dev/`. For a browser
@@ -48,14 +48,14 @@ server: {
 ```
 
 Without `hmr.host`, the client uses the page hostname. Add `VITE_HMR_CLIENT_PORT` to
-`.env.devcontainer.example` with a comment explaining it applies only to tunnel access.
+`.env.container.devcontainer` with a comment explaining it applies only to tunnel access.
 
 ### 4.2 Tunnel ingress path rule
 
 Add one rule per public hostname pattern, ordered before the rule that sends traffic to Rails:
 
 ```yaml
-- hostname: "*.umaxica.app"   # likewise for .com and .org
+- hostname: "*.umaxica.app" # likewise for .com and .org
   path: ^/vite-dev/
   service: http://core:3036
 ```
@@ -66,17 +66,17 @@ this repository; changing it is an external write and needs its owner's approval
 ### 4.3 CSP
 
 No change expected. A same-origin `wss://<host>` connection is covered by `connect-src 'self'`. The
-existing `ws(s)://<host>:3036` entries could be removed once the path rule works; verify in a browser
-before removing them.
+existing `ws(s)://<host>:3036` entries could be removed once the path rule works; verify in a
+browser before removing them.
 
 ## 5. Alternatives considered
 
-| Option                                                   | Cost                                                                                                                   |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Separate Vite hostname (e.g. `vite.umaxica.app` → 3036)  | Still one more tunnel rule, plus a cross-origin socket: CSP and `allowedHosts` additions and extra DNS/certificates   |
-| Put Vite in front and proxy to Rails via `server.proxy`  | Every request passes through Node; outside `vite_ruby`'s model; Cookie, `Host`, and forwarded-header handling must be reworked, risking auth boundaries |
-| Relay WebSockets inside Rails/Puma                       | Custom proxy code maintained only for development                                                                      |
-| Accept no HMR through the tunnel                         | No routing change; manual reload after each edit                                                                       |
+| Option                                                  | Cost                                                                                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Separate Vite hostname (e.g. `vite.umaxica.app` → 3036) | Still one more tunnel rule, plus a cross-origin socket: CSP and `allowedHosts` additions and extra DNS/certificates                                     |
+| Put Vite in front and proxy to Rails via `server.proxy` | Every request passes through Node; outside `vite_ruby`'s model; Cookie, `Host`, and forwarded-header handling must be reworked, risking auth boundaries |
+| Relay WebSockets inside Rails/Puma                      | Custom proxy code maintained only for development                                                                                                       |
+| Accept no HMR through the tunnel                        | No routing change; manual reload after each edit                                                                                                        |
 
 The path rule is the smallest change: one ingress rule per hostname pattern, no Rails or CSP change.
 

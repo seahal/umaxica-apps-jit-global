@@ -702,13 +702,13 @@ describe("withdrawal interaction", () => {
     setInput("#withdrawal_reentry_address", "someone@example.com");
     submitForm(0);
     expect(post).toHaveBeenCalledWith("/identity/withdrawal/session", {
-      data: { withdrawal_reentry: { address: "someone@example.com" } },
+      withdrawal_reentry: { address: "someone@example.com" },
     });
 
     setInput("#withdrawal_pass_code", "123456");
     submitForm(1);
     expect(post).toHaveBeenCalledWith("/identity/withdrawal/session", {
-      data: { pass_code: "123456" },
+      pass_code: "123456",
     });
   });
 
@@ -753,14 +753,14 @@ describe("withdrawal interaction", () => {
     submitForm(1);
     answerConfirmation(true);
     expect(patch).toHaveBeenCalledWith("/identity/withdrawal", {
-      data: { ack_deactivate_today: "0" },
+      ack_deactivate_today: "0",
     });
     patch.mockClear();
     toggleCheckbox("#ack_deactivate_today");
     submitForm(1);
     answerConfirmation(true);
     expect(patch).toHaveBeenCalledWith("/identity/withdrawal", {
-      data: { ack_deactivate_today: "1" },
+      ack_deactivate_today: "1",
     });
   });
 

@@ -1,5 +1,10 @@
 # Sign-Up Sequence
 
+The reason completed App/Com registration enters the canonical Sign In admission before session
+issuance is recorded in [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md)
+and [ADR D13](../../adr/sign-in-first-and-sign-up-handoff.md). That system handoff is distinct from
+user-initiated Sign In/Sign Up switching.
+
 > **Authority boundary:** `acme/www` is the Session, Token, Account, Preference, Authorization, and
 > downstream-token Authority. `sign/id` is ceremony-only. Existing sign-side physical tables/models
 > do not imply sign-side authority. Do not use this document to reintroduce sign-side sessions,
@@ -917,7 +922,7 @@ Target decision:
 ## Delivered current sequence (2026-10-06)
 
 The current sign-up sequence uses the owning flow's state reference and named transitions. Contact
-OTP, checkpoint and social evidence are bound to the actor, candidate, flow and browser; finalization
-enters ordinary sign-in admission and completes at session issuance. Cancellation and expiry retain
-terminal facts and clean only artifacts owned by that flow. The old “future canonical vocabulary”
-notice above is superseded by `adr/authentication-state-machine-normalization.md`.
+OTP, checkpoint and social evidence are bound to the actor, candidate, flow and browser;
+finalization enters ordinary sign-in admission and completes at session issuance. Cancellation and
+expiry retain terminal facts and clean only artifacts owned by that flow. The old “future canonical
+vocabulary” notice above is superseded by `adr/authentication-state-machine-normalization.md`.

@@ -36,6 +36,16 @@ module WithdrawalCeremonyAuthentication
     safe_redirect_to(withdrawal_ceremony_entry_path, fallback: withdrawal_public_fallback_path, status: :see_other)
   end
 
+  # A status/re-entry proof is intentionally not an authorization for irreversible operations.
+  # The purpose-specific issuance and assurance contract for termination is still pending, so
+  # fail closed until a ceremony with the explicit termination purpose exists.
+  def withdrawal_termination_ceremony_required!
+    ceremony = current_withdrawal_ceremony
+    return if ceremony&.purpose == "termination"
+
+    raise Sign::InvalidWithdrawalStateError, ceremony&.purpose.presence || "missing"
+  end
+
   def revoke_current_withdrawal_ceremony!
     ceremony = current_withdrawal_ceremony
     if ceremony&.active?

@@ -52,8 +52,9 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
     assert_empty actor.visitor_emails
     assert_empty actor.visitor_telephones
 
-    credential = actor.visitor_passkeys.create!(
-      webauthn_id: SecureRandom.uuid, public_key: "passkey-only-public-key",
+    credential = PasskeyRegistrationOperation.call!(
+      actor: actor, passkey_class: VisitorPasskey,
+      attributes: { webauthn_id: SecureRandom.uuid, public_key: "passkey-only-public-key" },
     )
 
     assert_predicate credential, :persisted?
@@ -63,44 +64,44 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
     assert_empty VisitorTelephone.where(visitor_id: actor.id)
   end
 
-  test "retained terminal history does not consume the four Passkey slots" do
+  test "physical deletion removes the Passkey from the owner count" do
     actor = create_visitor!
     actor.visitor_emails.create!(address: "slots-#{SecureRandom.hex(5)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
-    [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED].each do |terminal_status|
-      historical = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
-      historical.update!(status_id: terminal_status)
-    end
-    3.times { actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
-
-    assert_equal 3, actor.visitor_passkeys.active.count
-    actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fourth-slot-public-key")
-
-    assert_equal 4, actor.visitor_passkeys.active.count
-    assert_no_difference(-> { actor.visitor_passkeys.count }) do
-      assert_raises(ActiveRecord::RecordInvalid) do
-        actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key")
+    passkeys =
+      3.times.map do |index|
+        PasskeyRegistrationOperation.call!(
+          actor: actor, passkey_class: VisitorPasskey,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "slot-public-key-#{index}" },
+        )
       end
-    end
+    passkeys.first.destroy!
+    replacement = PasskeyRegistrationOperation.call!(
+      actor: actor, passkey_class: VisitorPasskey,
+      attributes: { webauthn_id: SecureRandom.uuid, public_key: "replacement-public-key" },
+    )
 
-    assert_equal 6, actor.visitor_passkeys.count
+    assert_predicate replacement, :persisted?
+    assert_equal 3, actor.visitor_passkeys.count
     assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
   end
 
-  test "a stale loaded owner association cannot admit a fifth Passkey" do
-    actor = create_visitor!
-    actor.visitor_emails.create!(address: "slots-#{SecureRandom.hex(5)}@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED)
-    stale_actor = Visitor.includes(:visitor_passkeys).find(actor.id)
-    4.times { actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
-    candidate = VisitorPasskey.new(
-      visitor: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",
-    )
-
-    assert_not candidate.valid?
-    assert_no_difference(-> { actor.visitor_passkeys.count }) do
-      assert_raises(ActiveRecord::RecordInvalid) { candidate.save! }
+  test "validation accepts the tenth Passkey and refuses the eleventh for one visitor" do
+    owner = Visitor.create!
+    9.times do |index|
+      PasskeyRegistrationOperation.call!(
+        actor: owner, passkey_class: VisitorPasskey,
+        attributes: { webauthn_id: SecureRandom.uuid, public_key: "limit-public-key-#{index}" },
+      )
     end
+    tenth = VisitorPasskey.new(visitor: owner, webauthn_id: SecureRandom.uuid, public_key: "tenth-public-key")
 
-    assert_equal 4, actor.visitor_passkeys.active.count
+    assert_predicate tenth, :valid?
+
+    tenth.save!
+    eleventh = VisitorPasskey.new(visitor: owner, webauthn_id: SecureRandom.uuid, public_key: "eleventh-public-key")
+
+    assert_not eleventh.valid?
+    assert_match(/exceeds maximum passkeys/, eleventh.errors[:base].join)
   end
 
   setup do
@@ -138,16 +139,21 @@ class VisitorPasskeyTest < ActiveSupport::TestCase
 
   test "enforces maximum passkeys per visitor" do
     @visitor.visitor_emails.load
-    status = VisitorPasskeyStatus.find(VisitorPasskeyStatus::ACTIVE)
-
-    4.times do |i|
-      VisitorPasskey.create!(@valid_params.merge(status: status, webauthn_id: "id-#{i}"))
+    VisitorPasskey::MAX_PASSKEYS_PER_VISITOR.times do |i|
+      PasskeyRegistrationOperation.call!(
+        actor: @visitor, passkey_class: VisitorPasskey,
+        attributes: { webauthn_id: "id-#{i}", public_key: "visitor-key-#{i}", description: "Key #{i}" },
+      )
     end
 
-    extra = VisitorPasskey.new(@valid_params.merge(status: status, webauthn_id: "id-extra"))
-
-    assert_not extra.valid?
-    assert_includes extra.errors[:base], "exceeds maximum passkeys per visitor (4)"
+    error =
+      assert_raises(ActiveRecord::RecordInvalid) do
+        PasskeyRegistrationOperation.call!(
+          actor: @visitor, passkey_class: VisitorPasskey,
+          attributes: { webauthn_id: "id-extra", public_key: "overflow-key" },
+        )
+      end
+    assert_match(/exceeds maximum passkeys/, error.record.errors[:base].join)
   end
 
   test "creation does not require a verified recovery identity" do

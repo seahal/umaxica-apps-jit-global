@@ -114,7 +114,7 @@ module ParallelTestDatabaseCloner
         workers.times.map { |worker| "#{entry.fetch("name")}_#{worker}" }
       end
     ActiveRecord::Base.connection_handler.clear_all_connections!
-    admin = connect(first_config, ENV.fetch("POSTGRESQL_DATABASE"))
+    admin = connect(first_config, Umaxica::TestEnvironment::DatabaseSafety::ADMIN_DATABASE)
     admin.exec("select pg_advisory_lock(hashtext('umaxica_parallel_test_database_cloner'))")
     existing = admin.exec_params(
       "SELECT datname FROM pg_database WHERE datname = ANY($1::text[])", ["{#{planned.join(",")}}"],
@@ -182,7 +182,7 @@ module ParallelTestDatabaseCloner
 
     first_config = ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
       .first.configuration_hash
-    admin = connect(first_config, ENV.fetch("POSTGRESQL_DATABASE"))
+    admin = connect(first_config, Umaxica::TestEnvironment::DatabaseSafety::ADMIN_DATABASE)
     rows = admin.exec_params(<<~SQL.squish, ["{#{names.join(",")}}"])
       SELECT datname AS name, oid::text AS oid, pg_get_userbyid(datdba) AS owner,
              shobj_description(oid, 'pg_database') AS comment
@@ -280,7 +280,7 @@ module ParallelTestDatabaseCloner
 
     ActiveRecord::Base.connection_handler.clear_all_connections!
 
-    admin_connection = connect(first_config, ENV.fetch("POSTGRESQL_DATABASE"))
+    admin_connection = connect(first_config, Umaxica::TestEnvironment::DatabaseSafety::ADMIN_DATABASE)
     admin_connection.exec("select pg_advisory_lock(hashtext('umaxica_parallel_test_database_cloner'))")
 
     stamped_sha = clone_sha_by_database(admin_connection)
@@ -371,7 +371,7 @@ module ParallelTestDatabaseCloner
     errors = Queue.new
     Array.new(thread_count) {
       Thread.new do
-        connection = connect(config, ENV.fetch("POSTGRESQL_DATABASE"))
+        connection = connect(config, Umaxica::TestEnvironment::DatabaseSafety::ADMIN_DATABASE)
         begin
           loop do
             group = queue.pop

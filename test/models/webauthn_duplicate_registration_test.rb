@@ -63,7 +63,9 @@ class WebauthnDuplicateRegistrationTest < ActiveSupport::TestCase
     first = build_client_passkey(aaguid: aaguid, provider_name: "Google Titan Security Key")
     first.save!
 
-    second = build_client_passkey(aaguid: aaguid, provider_name: "Google Titan Security Key")
+    second = build_client_passkey(
+      aaguid: aaguid, provider_name: "Google Titan Security Key",
+    )
 
     assert second.save
   end

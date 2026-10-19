@@ -8,6 +8,7 @@ module Auth
         include SignUpSuspensionGuard
         include ::SurfaceInertiaPage
         include ::AuthCeremonyAdmission
+        include ::SignEntryExit
 
         AUTHENTICATION_MODE = :guest
 
@@ -43,13 +44,20 @@ module Auth
 
           {
             title: t("sign.app.registration.new.page_title"),
-            cancel_label: t("actions.cancel"),
             description: nil,
             suspended_notice: suspended ? t("errors.messages.sign_up_suspended") : nil,
             methods: suspended ? [] : sign_up_method_links(entry_params),
-            links: suspended ? [] : sign_up_footer_links(entry_params),
+            # An OIDC-bound page moves to Sign In only through the Switch form (D06).
+            links: (suspended || sign_entry_parent_bound?) ? [] : sign_up_footer_links(entry_params),
+            **sign_entry_exit_forms(switch_to: "sign_in", switch_label: t("sign.app.registration.new.links.sign_in")),
           }
         end
+
+        def sign_entry_exit_sign_up_cycle_class = VisitorSignUpFlow
+
+        def sign_entry_exit_cancellation_path = auth_com_sign_cancellation_path(ri: params[:ri])
+
+        def sign_entry_exit_switch_path = auth_com_sign_switch_path(ri: params[:ri])
 
         def sign_up_method_links(entry_params)
           [

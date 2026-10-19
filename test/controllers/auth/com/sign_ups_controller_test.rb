@@ -251,7 +251,8 @@ class Auth::Com::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal "auth/com/sign_ups/new", inertia_component
-    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+    # The first Sign Up page of an OIDC parent offers Cancel as a POST form (D09).
+    assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("cancel_form").fetch("action")
 
     methods = inertia_props.fetch("methods")
 

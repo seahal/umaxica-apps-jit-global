@@ -129,6 +129,56 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_response :see_other
   end
 
+  test "status ceremony cannot authorize irreversible termination" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    host! host
+    client = create_client
+    client.update_columns(
+      created_at: 9.days.ago,
+      withdrawal_started_at: 8.days.ago,
+      deactivated_at: 8.days.ago,
+      discard_at: 8.days.ago,
+      purge_eligible_at: 23.days.from_now,
+    )
+    ceremony = ClientWithdrawalCeremony.issue!(
+      subject: client,
+      purpose: "status",
+      request: ActionDispatch::TestRequest.create,
+    )
+    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
+
+    delete base_app_identity_withdrawal_url(ri: "jp", host: host), headers: browser_headers
+
+    assert_response :redirect
+    assert_not_predicate client.reload, :terminated?
+    assert_predicate ceremony.reload, :active?
+  end
+
+  test "com status ceremony cannot authorize irreversible termination" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
+    host! host
+    visitor = create_visitor
+    visitor.update_columns(
+      created_at: 9.days.ago,
+      withdrawal_started_at: 8.days.ago,
+      deactivated_at: 8.days.ago,
+      discard_at: 8.days.ago,
+      purge_eligible_at: 23.days.from_now,
+    )
+    ceremony = VisitorWithdrawalCeremony.issue!(
+      subject: visitor,
+      purpose: "status",
+      request: ActionDispatch::TestRequest.create,
+    )
+    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
+
+    delete base_com_identity_withdrawal_url(ri: "jp", host: host), headers: browser_headers
+
+    assert_response :redirect
+    assert_not_predicate visitor.reload, :terminated?
+    assert_predicate ceremony.reload, :active?
+  end
+
   private
 
   def withdrawal_ceremony_cookie_name

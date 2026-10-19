@@ -1843,6 +1843,48 @@ ALTER SEQUENCE public.operator_oidc_identity_bindings_id_seq OWNED BY public.ope
 
 
 --
+-- Name: operator_passkey_audit_outboxes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.operator_passkey_audit_outboxes (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    event_type character varying NOT NULL,
+    surface character varying NOT NULL,
+    external_id uuid NOT NULL,
+    actor_ref character varying,
+    operation_ref character varying,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    acknowledged_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT operator_passkey_audit_acknowledgment CHECK (((acknowledged_at IS NULL) OR (acknowledged_at >= occurred_at))),
+    CONSTRAINT operator_passkey_audit_event CHECK (((event_type)::text = ANY ((ARRAY['passkey.registered.signup'::character varying, 'passkey.registered.settings'::character varying, 'passkey.description_changed'::character varying, 'passkey.removed'::character varying, 'passkey.revoked'::character varying, 'passkey.registration_cancelled'::character varying, 'passkey.purged'::character varying])::text[]))),
+    CONSTRAINT operator_passkey_audit_surface CHECK (((surface)::text = 'org'::text))
+);
+
+
+--
+-- Name: operator_passkey_audit_outboxes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.operator_passkey_audit_outboxes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: operator_passkey_audit_outboxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.operator_passkey_audit_outboxes_id_seq OWNED BY public.operator_passkey_audit_outboxes.id;
+
+
+--
 -- Name: operator_passkey_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4120,6 +4162,13 @@ ALTER TABLE ONLY public.operator_oidc_identity_bindings ALTER COLUMN id SET DEFA
 
 
 --
+-- Name: operator_passkey_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_passkey_audit_outboxes ALTER COLUMN id SET DEFAULT nextval('public.operator_passkey_audit_outboxes_id_seq'::regclass);
+
+
+--
 -- Name: operator_passkey_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4933,6 +4982,14 @@ ALTER TABLE ONLY public.operator_mfa_statuses
 
 ALTER TABLE ONLY public.operator_oidc_identity_bindings
     ADD CONSTRAINT operator_oidc_identity_bindings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: operator_passkey_audit_outboxes operator_passkey_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_passkey_audit_outboxes
+    ADD CONSTRAINT operator_passkey_audit_outboxes_pkey PRIMARY KEY (id);
 
 
 --
@@ -6219,10 +6276,17 @@ CREATE INDEX index_operator_oidc_identity_bindings_on_operator_identity_id ON pu
 
 
 --
--- Name: index_operator_passkeys_on_external_id; Type: INDEX; Schema: public; Owner: -
+-- Name: index_operator_passkey_audit_outboxes_on_event_uuid; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX index_operator_passkeys_on_external_id ON public.operator_passkeys USING btree (external_id);
+CREATE UNIQUE INDEX index_operator_passkey_audit_outboxes_on_event_uuid ON public.operator_passkey_audit_outboxes USING btree (event_uuid);
+
+
+--
+-- Name: index_operator_passkeys_on_external_id_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_operator_passkeys_on_external_id_unique ON public.operator_passkeys USING btree (external_id);
 
 
 --
@@ -6783,6 +6847,13 @@ CREATE INDEX index_user_workspaces_on_user_id ON public.user_workspaces USING bt
 --
 
 CREATE INDEX index_user_workspaces_on_workspace_id ON public.user_workspaces USING btree (workspace_id);
+
+
+--
+-- Name: operator_passkey_audit_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX operator_passkey_audit_pending ON public.operator_passkey_audit_outboxes USING btree (id) WHERE (acknowledged_at IS NULL);
 
 
 --
@@ -7757,6 +7828,8 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261019120004'),
+('20261019120002'),
 ('20261016210005'),
 ('20261016210002'),
 ('20261013184127'),

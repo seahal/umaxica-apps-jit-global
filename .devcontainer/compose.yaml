@@ -64,7 +64,7 @@ services:
     # Rails loads the ignored repository .env via config/boot.rb. Compose only
     # supplies the process environment; it does not own application configuration.
     env_file:
-      - .env.devcontainer.example
+      - .env.container.devcontainer
     # Bounded on purpose. Podman applies no backoff to a restart policy, so a service that
     # exits immediately on a bad configuration is recreated several times a second until
     # the netns, veth, conmon, and journald churn saturates a CPU; the attempt count is

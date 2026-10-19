@@ -106,7 +106,7 @@ export default function WithdrawalNew({
                 { message: deactivate.confirm, confirmLabel: deactivate.submit_label },
                 () => {
                   router.patch(deactivate.action, {
-                    data: { ack_deactivate_today: ackDeactivate ? "1" : "0" },
+                    ack_deactivate_today: ackDeactivate ? "1" : "0",
                   });
                 },
               );

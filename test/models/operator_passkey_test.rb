@@ -27,7 +27,7 @@
 #
 # Indexes
 #
-#  index_operator_passkeys_on_external_id  (external_id)
+#  index_operator_passkeys_on_external_id_unique (external_id) UNIQUE
 #  index_operator_passkeys_on_staff_id     (staff_id)
 #  index_operator_passkeys_on_status_id    (status_id)
 #  index_operator_passkeys_on_webauthn_id  (webauthn_id) UNIQUE
@@ -41,42 +41,43 @@
 require "test_helper"
 
 class OperatorPasskeyTest < ActiveSupport::TestCase
-  test "retained terminal history does not consume the four Passkey slots" do
+  test "physical deletion removes the Passkey from the owner count" do
     actor = Operator.create!
-    [OperatorPasskeyStatus::REVOKED].each do |terminal_status|
-      historical = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
-      historical.update!(status_id: terminal_status)
-    end
-    3.times { actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
-
-    assert_equal 3, actor.staff_passkeys.active.count
-    actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fourth-slot-public-key")
-
-    assert_equal 4, actor.staff_passkeys.active.count
-    assert_no_difference(-> { actor.staff_passkeys.count }) do
-      assert_raises(ActiveRecord::RecordInvalid) do
-        actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key")
+    passkeys =
+      3.times.map do |index|
+        PasskeyRegistrationOperation.call!(
+          actor: actor, passkey_class: OperatorPasskey,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "slot-public-key-#{index}" },
+        )
       end
-    end
+    passkeys.first.destroy!
+    replacement = PasskeyRegistrationOperation.call!(
+      actor: actor, passkey_class: OperatorPasskey,
+      attributes: { webauthn_id: SecureRandom.uuid, public_key: "replacement-public-key" },
+    )
 
-    assert_equal 5, actor.staff_passkeys.count
+    assert_predicate replacement, :persisted?
+    assert_equal 3, actor.staff_passkeys.count
     assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
   end
 
-  test "a stale loaded owner association cannot admit a fifth Passkey" do
-    actor = Operator.create!
-    stale_actor = Operator.includes(:staff_passkeys).find(actor.id)
-    4.times { actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
-    candidate = OperatorPasskey.new(
-      staff: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",
-    )
-
-    assert_not candidate.valid?
-    assert_no_difference(-> { actor.staff_passkeys.count }) do
-      assert_raises(ActiveRecord::RecordInvalid) { candidate.save! }
+  test "validation accepts the tenth Passkey and refuses the eleventh for one staff" do
+    owner = Operator.create!
+    9.times do |index|
+      PasskeyRegistrationOperation.call!(
+        actor: owner, passkey_class: OperatorPasskey,
+        attributes: { webauthn_id: SecureRandom.uuid, public_key: "limit-public-key-#{index}" },
+      )
     end
+    tenth = OperatorPasskey.new(staff: owner, webauthn_id: SecureRandom.uuid, public_key: "tenth-public-key")
 
-    assert_equal 4, actor.staff_passkeys.active.count
+    assert_predicate tenth, :valid?
+
+    tenth.save!
+    eleventh = OperatorPasskey.new(staff: owner, webauthn_id: SecureRandom.uuid, public_key: "eleventh-public-key")
+
+    assert_not eleventh.valid?
+    assert_match(/exceeds maximum passkeys/, eleventh.errors[:base].join)
   end
 
   test "should create passkey with valid attributes" do
@@ -153,18 +154,19 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
 
   test "enforces maximum passkeys per staff" do
     staff = Operator.create!
-    4.times { staff.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
-    extra_passkey = OperatorPasskey.new(
-      staff: staff,
-      description: "Overflow Staff Key",
-      public_key: "overflow-key",
-      sign_count: 0,
-      external_id: SecureRandom.uuid,
-      webauthn_id: SecureRandom.hex(32),
-    )
-
-    assert_not extra_passkey.valid?
-    assert_includes extra_passkey.errors[:base],
-                    "exceeds maximum passkeys per staff (#{OperatorPasskey::MAX_PASSKEYS_PER_STAFF})"
+    OperatorPasskey::MAX_PASSKEYS_PER_STAFF.times do |i|
+      PasskeyRegistrationOperation.call!(
+        actor: staff, passkey_class: OperatorPasskey,
+        attributes: { webauthn_id: SecureRandom.uuid, public_key: "slot-public-key-#{i}" },
+      )
+    end
+    error =
+      assert_raises(ActiveRecord::RecordInvalid) do
+        PasskeyRegistrationOperation.call!(
+          actor: staff, passkey_class: OperatorPasskey,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "overflow-key" },
+        )
+      end
+    assert_match(/exceeds maximum passkeys/, error.record.errors[:base].join)
   end
 end

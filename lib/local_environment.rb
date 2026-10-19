@@ -13,7 +13,6 @@ module LocalEnvironment
 
     path = Pathname.new(ENV.fetch("UMAXICA_ENV_FILE", default_path))
     path = Pathname.new(File.expand_path("../.env", __dir__)) unless path.file?
-    path = Pathname.new(File.expand_path("../.env.example", __dir__)) unless path.file?
     return unless path.file?
 
     path.each_line do |line|

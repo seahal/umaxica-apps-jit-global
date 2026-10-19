@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <%= display_meta_tags title: I18n.t("actions.continue") %>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="referrer" content="no-referrer">
+  </head>
+  <body>
+    <%= form_with id: "oidc-authorization-exit-form", url: action_url, method: :post, local: true,
+                  data: { turbo: false } do %>
+      <% fields.each do |name, value| %>
+        <%= hidden_field_tag name, value %>
+      <% end %>
+      <%= submit_tag "Continue" %>
+    <% end %>
+  </body>
+</html>

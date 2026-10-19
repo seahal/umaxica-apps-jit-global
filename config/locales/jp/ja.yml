@@ -1886,6 +1886,9 @@ ja:
             session_revoked: セッションを終了
             security_change: セキュリティ設定を変更
             session_security_alert: セキュリティ上の理由でセッションを終了
+            passkey_registered: パスキーを登録
+            passkey_description_changed: パスキーの名前を変更
+            passkey_removed: パスキーを削除
           risks:
             none: なし
             low: 低

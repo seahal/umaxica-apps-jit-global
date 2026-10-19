@@ -149,7 +149,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
             end
         else
           credentials =
-            Array.new(2) do
+            Array.new(2) do |_index|
               model.create!(
                 owner_key => actor.id, :webauthn_id => SecureRandom.uuid,
                 :public_key => "removal-race-key", :uv_verified_at => Time.current,
@@ -207,7 +207,9 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           end
 
         assert_equal 1, remaining.count, surface.to_s
-        assert_equal 2, model.where(owner_key => actor.id).count, surface.to_s
+        expected_total = (surface == :totp) ? 2 : 1
+
+        assert_equal expected_total, model.where(owner_key => actor.id).count, surface.to_s
         assert_predicate token.reload, :currently_usable?, surface.to_s
       ensure
         if threads
@@ -256,9 +258,11 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
             visitor_email_status_id: VisitorEmailStatus::VERIFIED,
           )
         end
-        3.times {
-          model.create!(owner_key => actor.id, :webauthn_id => SecureRandom.uuid, :public_key => "slot-public-key")
-        }
+        9.times do |_index|
+          model.create!(
+            owner_key => actor.id, :webauthn_id => SecureRandom.uuid, :public_key => "slot-public-key",
+          )
+        end
         ActiveRecord::Base.connection_handler.clear_active_connections!
         threads =
           Array.new(2) do
@@ -268,12 +272,14 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
                   ready << connection.select_value("SELECT pg_backend_pid()")
                   release.pop
                   begin
-                    model.create!(
-                      owner_key => actor.id, :webauthn_id => SecureRandom.uuid,
-                      :public_key => "competing-key",
+                    PasskeyRegistrationOperation.call!(
+                      actor: actor.class.find(actor.id), passkey_class: model,
+                      attributes: {
+                        webauthn_id: SecureRandom.uuid, public_key: "competing-key",
+                      },
                     )
                     :created
-                  rescue ActiveRecord::RecordInvalid
+                  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique
                     :full
                   end
                 end
@@ -290,7 +296,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
 
         assert_equal 2, pids.uniq.length, surface.to_s
         assert_equal [:created, :full], results.sort, surface.to_s
-        assert_equal 4, model.active.where(owner_key => actor.id).count, surface.to_s
+        assert_equal 10, model.active.where(owner_key => actor.id).count, surface.to_s
       ensure
         if threads
           2.times { release << true }

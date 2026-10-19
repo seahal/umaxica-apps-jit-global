@@ -1798,6 +1798,48 @@ ALTER SEQUENCE public.visitor_oidc_identity_bindings_id_seq OWNED BY public.visi
 
 
 --
+-- Name: visitor_passkey_audit_outboxes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visitor_passkey_audit_outboxes (
+    id bigint NOT NULL,
+    event_uuid uuid NOT NULL,
+    event_type character varying NOT NULL,
+    surface character varying NOT NULL,
+    external_id uuid NOT NULL,
+    actor_ref character varying,
+    operation_ref character varying,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    occurred_at timestamp(6) with time zone NOT NULL,
+    acknowledged_at timestamp(6) with time zone,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT visitor_passkey_audit_acknowledgment CHECK (((acknowledged_at IS NULL) OR (acknowledged_at >= occurred_at))),
+    CONSTRAINT visitor_passkey_audit_event CHECK (((event_type)::text = ANY ((ARRAY['passkey.registered.signup'::character varying, 'passkey.registered.settings'::character varying, 'passkey.description_changed'::character varying, 'passkey.removed'::character varying, 'passkey.revoked'::character varying, 'passkey.registration_cancelled'::character varying, 'passkey.purged'::character varying])::text[]))),
+    CONSTRAINT visitor_passkey_audit_surface CHECK (((surface)::text = 'com'::text))
+);
+
+
+--
+-- Name: visitor_passkey_audit_outboxes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.visitor_passkey_audit_outboxes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: visitor_passkey_audit_outboxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.visitor_passkey_audit_outboxes_id_seq OWNED BY public.visitor_passkey_audit_outboxes.id;
+
+
+--
 -- Name: visitor_passkey_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3317,6 +3359,8 @@ CREATE TABLE public.visitors (
     reactivated_at timestamp(6) with time zone,
     webauthn_user_handle character varying NOT NULL,
     authentication_epoch bigint DEFAULT 0 NOT NULL,
+    recovery_available_at timestamp(6) with time zone,
+    early_termination_available_at timestamp(6) with time zone,
     CONSTRAINT chk_customers_retention_order CHECK ((discard_at <= purge_eligible_at)),
     CONSTRAINT chk_visitors_access_state CHECK (((access_state)::text = ANY ((ARRAY['enabled'::character varying, 'admin_locked'::character varying])::text[]))),
     CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
@@ -3672,6 +3716,13 @@ ALTER TABLE ONLY public.visitor_mfa_statuses ALTER COLUMN id SET DEFAULT nextval
 --
 
 ALTER TABLE ONLY public.visitor_oidc_identity_bindings ALTER COLUMN id SET DEFAULT nextval('public.visitor_oidc_identity_bindings_id_seq'::regclass);
+
+
+--
+-- Name: visitor_passkey_audit_outboxes id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_passkey_audit_outboxes ALTER COLUMN id SET DEFAULT nextval('public.visitor_passkey_audit_outboxes_id_seq'::regclass);
 
 
 --
@@ -4427,6 +4478,14 @@ ALTER TABLE ONLY public.visitor_mfa_statuses
 
 ALTER TABLE ONLY public.visitor_oidc_identity_bindings
     ADD CONSTRAINT visitor_oidc_identity_bindings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: visitor_passkey_audit_outboxes visitor_passkey_audit_outboxes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_passkey_audit_outboxes
+    ADD CONSTRAINT visitor_passkey_audit_outboxes_pkey PRIMARY KEY (id);
 
 
 --
@@ -5546,10 +5605,24 @@ CREATE INDEX index_visitor_oidc_identity_bindings_on_visitor_identity_id ON publ
 
 
 --
+-- Name: index_visitor_passkey_audit_outboxes_on_event_uuid; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_visitor_passkey_audit_outboxes_on_event_uuid ON public.visitor_passkey_audit_outboxes USING btree (event_uuid);
+
+
+--
 -- Name: index_visitor_passkeys_on_discard_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX index_visitor_passkeys_on_discard_at ON public.visitor_passkeys USING btree (discard_at);
+
+
+--
+-- Name: index_visitor_passkeys_on_external_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_visitor_passkeys_on_external_id ON public.visitor_passkeys USING btree (external_id);
 
 
 --
@@ -6064,6 +6137,13 @@ CREATE INDEX index_visitors_on_discard_at ON public.visitors USING btree (discar
 
 
 --
+-- Name: index_visitors_on_early_termination_available_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_visitors_on_early_termination_available_at ON public.visitors USING btree (early_termination_available_at) WHERE (early_termination_available_at IS NOT NULL);
+
+
+--
 -- Name: index_visitors_on_mfa_level_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6089,6 +6169,13 @@ CREATE UNIQUE INDEX index_visitors_on_public_id ON public.visitors USING btree (
 --
 
 CREATE INDEX index_visitors_on_purge_eligible_at ON public.visitors USING btree (purge_eligible_at);
+
+
+--
+-- Name: index_visitors_on_recovery_available_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_visitors_on_recovery_available_at ON public.visitors USING btree (recovery_available_at) WHERE (recovery_available_at IS NOT NULL);
 
 
 --
@@ -6159,6 +6246,13 @@ CREATE UNIQUE INDEX visitor_emails_effective_digest ON public.visitor_emails USI
 --
 
 CREATE UNIQUE INDEX visitor_emails_effective_owner ON public.visitor_emails USING btree (visitor_id) WHERE ((binding_finalized_at IS NOT NULL) AND (binding_released_at IS NULL));
+
+
+--
+-- Name: visitor_passkey_audit_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX visitor_passkey_audit_pending ON public.visitor_passkey_audit_outboxes USING btree (id) WHERE (acknowledged_at IS NULL);
 
 
 --
@@ -7058,6 +7152,9 @@ ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261019120004'),
+('20261019120002'),
+('20261019120000'),
 ('20261016210004'),
 ('20261016210001'),
 ('20261012092101'),

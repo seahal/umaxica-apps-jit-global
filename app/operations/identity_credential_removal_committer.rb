@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 # Caller supplies an authorized, owner-scoped record. The owner lock serializes inventory
-# decisions with registration and Base finalization; retained terminal rows preserve history.
+# decisions with registration and Base finalization. Passkeys are current-state credentials:
+# successful user removal physically deletes the row and records the stable audit fact in the
+# principal-side outbox before the delete commits.
 class IdentityCredentialRemovalCommitter
   class << self
     public
@@ -48,7 +50,7 @@ class IdentityCredentialRemovalCommitter
                 actor: actor, current_session: current_session, reason: :mfa_level_changed,
                 affected_surface: surface, revoke_other_sessions: false, request: request,
               )
-              mark_terminal!
+              remove_credential!
               record_contact_release_intent!
               true
             end
@@ -154,11 +156,18 @@ class IdentityCredentialRemovalCommitter
     end
   end
 
-  def mark_terminal!
+  def remove_credential!
     case credential
-    when ClientPasskey then credential.update!(status_id: ClientPasskeyStatus::DELETED)
-    when VisitorPasskey then credential.update!(status_id: VisitorPasskeyStatus::DELETED)
-    when OperatorPasskey then credential.update!(status_id: OperatorPasskeyStatus::REVOKED)
+    when ClientPasskey, VisitorPasskey, OperatorPasskey
+      PasskeyAuditOutbox.record_for!(
+        passkey: credential,
+        event_type: "passkey.removed",
+        surface: surface,
+        actor_ref: actor.public_id,
+        operation_ref: request&.request_id || SecureRandom.uuid,
+        occurred_at: actor.class.database_now,
+      )
+      credential.destroy!
     when ClientTotpCredential then credential.update!(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::DELETED)
     when ClientEmail
       credential.release_binding!(at: ClientEmail.database_now)

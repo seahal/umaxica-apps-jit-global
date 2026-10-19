@@ -955,7 +955,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     delete base_com_identity_passkey_url(passkey.public_id, ri: "jp", host: @base_host),
            headers: http_headers_0
 
-    assert_equal VisitorPasskeyStatus::DELETED, passkey.reload.status_id
+    assert_not VisitorPasskey.exists?(passkey.id)
   end
 
   test "visitor can browse and rename an active secret credential" do

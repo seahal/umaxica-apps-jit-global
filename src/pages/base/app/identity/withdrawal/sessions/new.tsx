@@ -45,7 +45,7 @@ export default function WithdrawalSessionNew({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            router.post(addressForm.action, { data: { withdrawal_reentry: { address } } });
+            router.post(addressForm.action, { withdrawal_reentry: { address } });
           }}
           className="flex flex-col gap-4"
         >
@@ -66,7 +66,7 @@ export default function WithdrawalSessionNew({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              router.post(passCodeForm.action, { data: { pass_code: passCode } });
+              router.post(passCodeForm.action, { pass_code: passCode });
             }}
             className="flex flex-col gap-4"
           >

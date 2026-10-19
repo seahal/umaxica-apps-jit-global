@@ -6,6 +6,8 @@
 // into a ceremony the guard would reject anyway.
 import Page from "@/components/ui/Page";
 
+import EntryExitForm, { type EntryExitFormProps } from "./EntryExitForm";
+
 export type AuthMethodLink = {
   key: string;
   label: string;
@@ -17,8 +19,10 @@ export type AuthMethodChoiceProps = {
   description: string | null;
   suspended_notice: string | null;
   methods: AuthMethodLink[];
+  /** A local entry's links; empty on an OIDC-bound page, which moves only by Switch. */
   links: AuthMethodLink[];
-  cancel_label?: string;
+  cancel_form: EntryExitFormProps | null;
+  switch_form: EntryExitFormProps | null;
 };
 
 export default function AuthMethodChoice({
@@ -27,7 +31,8 @@ export default function AuthMethodChoice({
   suspended_notice: suspendedNotice,
   methods,
   links,
-  cancel_label: cancelLabel,
+  cancel_form: cancelForm,
+  switch_form: switchForm,
 }: AuthMethodChoiceProps) {
   if (suspendedNotice) {
     return (
@@ -86,7 +91,20 @@ export default function AuthMethodChoice({
           </a>
         </p>
       ))}
-      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
+      {switchForm !== null && (
+        <EntryExitForm
+          form={switchForm}
+          testId="sign-entry-switch"
+          tone="muted"
+        />
+      )}
+      {cancelForm !== null && (
+        <EntryExitForm
+          form={cancelForm}
+          testId="sign-entry-cancel"
+          tone="muted"
+        />
+      )}
     </Page>
   );
 }

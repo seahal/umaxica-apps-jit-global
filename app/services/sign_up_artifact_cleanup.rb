@@ -136,6 +136,20 @@ class SignUpArtifactCleanup
           next
         end
 
+        if record.is_a?(ClientPasskey) || record.is_a?(VisitorPasskey)
+          PasskeyAuditOutbox.record_for!(
+            passkey: record,
+            event_type: "passkey.registration_cancelled",
+            surface: record.is_a?(ClientPasskey) ? "app" : "com",
+            actor_ref: nil,
+            operation_ref: cycle.public_id,
+            occurred_at: record.class.database_now,
+            metadata: { reason: "sign_up_cancelled" },
+          )
+          record.destroy!
+          next
+        end
+
         status_column = deleted_status_column(record)
         deleted_id = deleted_status_id(record)
 

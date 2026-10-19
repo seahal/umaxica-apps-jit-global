@@ -61,10 +61,31 @@ class RetentionCrossDatabaseChildPurge
 
   def purge_operator
     OperatorNotificationRecord.where(staff_id: actor.id).delete_all # org_signal DB
+    purge_operator_passkeys
     # org_zenith DB. Withdrawn at suspend/terminate and kept for audit until the
     # operator's retention window expires; this is where that window ends. Until
     # it does, the row still holds its (tid, oid), so a returning person cannot be
     # provisioned onto the same Entra object before the purge runs.
     OperatorEntraIdentity.where(operator_id: actor.id).delete_all
+  end
+
+  def purge_operator_passkeys
+    OperatorPasskey.where(staff_id: actor.id).order(:id).find_each do |passkey|
+      OperatorPasskey.transaction do
+        current = OperatorPasskey.lock.find_by(id: passkey.id, staff_id: actor.id)
+        next unless current
+
+        PasskeyAuditOutbox.record_for!(
+          passkey: current,
+          event_type: "passkey.purged",
+          surface: "org",
+          actor_ref: nil,
+          operation_ref: "retention:OperatorPasskey:#{current.external_id}",
+          occurred_at: OperatorPasskey.database_now,
+          metadata: { reason: "operator_retention_purge" },
+        )
+        current.destroy!
+      end
+    end
   end
 end

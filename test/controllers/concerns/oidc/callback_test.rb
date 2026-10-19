@@ -532,6 +532,71 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_not_includes snapshot.fetch("oidc_pending_flows").keys, "expired-state"
   end
 
+  test "access_denied consumes only its matching pending flow and logs nobody in" do
+    get "/oidc/callback/session", params: { pending_state: "canceled-state", pending_pt: "/canceled" }
+    get "/oidc/callback/session", params: { pending_state: "other-state", pending_pt: "/other" }
+
+    OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("access_denied must not exchange a code") }) do
+      get "/oidc/callback",
+          params: { error: "access_denied", state: "canceled-state", iss: OidcIssuer.for_resource_type("client") }
+    end
+
+    assert_response :unprocessable_content
+    assert_nil OidcCallbackTestController.last_login_kwargs
+    get "/oidc/callback/snapshot"
+
+    assert_equal ["other-state"], response.parsed_body.fetch("oidc_pending_flows").keys
+  end
+
+  test "access_denied with an unknown state or a foreign issuer consumes no pending flow" do
+    get "/oidc/callback/session", params: { pending_state: "live-state", pending_pt: "/live" }
+
+    [{ state: "unknown-state", iss: OidcIssuer.for_resource_type("client") },
+     { state: "", iss: OidcIssuer.for_resource_type("client") },].each do |params|
+      get "/oidc/callback", params: params.merge(error: "access_denied")
+
+      assert_response :unprocessable_content
+    end
+    get "/oidc/callback/snapshot"
+
+    assert_equal ["live-state"], response.parsed_body.fetch("oidc_pending_flows").keys
+    assert_nil OidcCallbackTestController.last_login_kwargs
+  end
+
+  test "pending state is accepted exactly at the ten-minute TTL and refused one second later" do
+    exchanged_verifiers = []
+    failed = Result.new(success?: false, token_response: nil, error: "invalid_grant", error_description: nil)
+    freeze_time do
+      get "/oidc/callback/session",
+          params: { pending_state: "at-ttl",
+                    pending_code_verifier: "at-ttl-verifier",
+                    pending_created_at: (10.minutes.ago).to_i, }
+      get "/oidc/callback/session",
+          params: { pending_state: "past-ttl",
+                    pending_code_verifier: "past-ttl-verifier",
+                    pending_created_at: (10.minutes.ago - 1.second).to_i, }
+
+      exchange =
+        ->(**kwargs) {
+          exchanged_verifiers << kwargs.fetch(:code_verifier)
+          failed
+        }
+      OidcOpTokenClient.stub(:authorization_code, exchange) do
+        %w(at-ttl past-ttl).each do |state|
+          get "/oidc/callback", params: { code: "abc", state: state, iss: OidcIssuer.for_resource_type("client") }
+
+          assert_not response.successful?, state
+        end
+      end
+    end
+
+    assert_equal ["at-ttl-verifier"], exchanged_verifiers
+    assert_nil OidcCallbackTestController.last_login_kwargs
+    get "/oidc/callback/snapshot"
+
+    assert_nil response.parsed_body["oidc_pending_flows"]
+  end
+
   test "show deletes consumed pending state without disturbing other pending flows" do
     get "/oidc/callback/session",
         params: {

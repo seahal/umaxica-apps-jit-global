@@ -93,9 +93,8 @@ report it.
 
 The test databases are declared even though nothing connects to them under `RAILS_ENV=test`:
 `assert_nonprod_db!` refuses to validate a responsibility it has no expected database for. They are
-deliberately absent from the test Valkey boot contract (`config/valkey.yml` test
-section has no performance/coverband keys), so test boot does not demand
-variables it will never use.
+deliberately absent from the test Valkey boot contract (`config/valkey.yml` test section has no
+performance/coverband keys), so test boot does not demand variables it will never use.
 
 ### Retention
 
@@ -276,10 +275,9 @@ Unset means 401.
 
 ### Environment variables to add
 
-`.env.example` and `.env.devcontainer.example` were not edited by the session that made this change:
-a global permission rule (`Read(**/.env*)`) denies agent access to every env file, and it was
-respected rather than worked around. They must be updated by hand. `bin/setup-diagnostic-env`
-appends the block below to both, idempotently.
+`.env.container` and `.env.container.devcontainer` were not edited by the session that made this
+change: a global permission rule (`Read(**/.env*)`) denies agent access to every env file, and it
+was respected rather than worked around. They must be updated by hand with the block below.
 
 ```
 PUBLIC_PERFORMANCE_URL=performance.umaxica.dev

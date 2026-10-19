@@ -64,6 +64,12 @@ surface-specific. These are durable requirements, not current verification resul
   most one refetch; while that fetch fails, the unknown key stays untrusted and an already cached
   key remains usable only within its fresh and bounded stale windows.
 
+- AUTH-18: APP/COM/ORG Passkey lifecycle mutations and their audit outbox facts share the owning
+  principal transaction. Additional metadata cannot replace the authoritative surface, target UUID
+  or actor reference. Delivery preserves nil system actors and business occurrence time after
+  credential deletion; retry after Chronicle commit before acknowledgement creates no second event.
+  See [Passkey lifecycle and audit](../security/passkey-lifecycle-and-audit.md).
+
 Sources:
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc),
 [Base/Auth authority](../../adr/base-auth-ceremony-and-seven-rp-boundary.md). Broader scenarios:

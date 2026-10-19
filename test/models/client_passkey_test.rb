@@ -46,42 +46,43 @@
 require "test_helper"
 
 class ClientPasskeyTest < ActiveSupport::TestCase
-  test "retained terminal history does not consume the four Passkey slots" do
+  test "physical deletion removes the Passkey from the owner count" do
     actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
-    [ClientPasskeyStatus::REVOKED, ClientPasskeyStatus::DELETED].each do |terminal_status|
-      historical = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "history-public-key")
-      historical.update!(status_id: terminal_status)
-    end
-    3.times { actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
-
-    assert_equal 3, actor.client_passkeys.active.count
-    actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "fourth-slot-public-key")
-
-    assert_equal 4, actor.client_passkeys.active.count
-    assert_no_difference(-> { actor.client_passkeys.count }) do
-      assert_raises(ActiveRecord::RecordInvalid) do
-        actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key")
+    passkeys =
+      3.times.map do |index|
+        PasskeyRegistrationOperation.call!(
+          actor: actor, passkey_class: ClientPasskey,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "slot-public-key-#{index}" },
+        )
       end
-    end
+    passkeys.first.destroy!
+    replacement = PasskeyRegistrationOperation.call!(
+      actor: actor, passkey_class: ClientPasskey,
+      attributes: { webauthn_id: SecureRandom.uuid, public_key: "replacement-public-key" },
+    )
 
-    assert_equal 6, actor.client_passkeys.count
+    assert_predicate replacement, :persisted?
+    assert_equal 3, actor.client_passkeys.count
     assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
   end
 
-  test "a stale loaded owner association cannot admit a fifth Passkey" do
-    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
-    stale_actor = Client.includes(:client_passkeys).find(actor.id)
-    4.times { actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "slot-public-key") }
-    candidate = ClientPasskey.new(
-      user: stale_actor, webauthn_id: SecureRandom.uuid, public_key: "overflow-public-key",
-    )
-
-    assert_not candidate.valid?
-    assert_no_difference(-> { actor.client_passkeys.count }) do
-      assert_raises(ActiveRecord::RecordInvalid) { candidate.save! }
+  test "validation accepts the tenth Passkey and refuses the eleventh for one user" do
+    owner = Client.create!
+    9.times do |index|
+      PasskeyRegistrationOperation.call!(
+        actor: owner, passkey_class: ClientPasskey,
+        attributes: { webauthn_id: SecureRandom.uuid, public_key: "limit-public-key-#{index}" },
+      )
     end
+    tenth = ClientPasskey.new(user: owner, webauthn_id: SecureRandom.uuid, public_key: "tenth-public-key")
 
-    assert_equal 4, actor.client_passkeys.active.count
+    assert_predicate tenth, :valid?
+
+    tenth.save!
+    eleventh = ClientPasskey.new(user: owner, webauthn_id: SecureRandom.uuid, public_key: "eleventh-public-key")
+
+    assert_not eleventh.valid?
+    assert_match(/exceeds maximum passkeys/, eleventh.errors[:base].join)
   end
 
   def setup
@@ -208,28 +209,21 @@ class ClientPasskeyTest < ActiveSupport::TestCase
   end
 
   test "enforces maximum passkeys per user" do
-    Prosopite.pause do
-      ClientPasskey::MAX_PASSKEYS_PER_USER.times do |i|
-        ClientPasskey.create!(
-          user: @user,
-          webauthn_id: SecureRandom.uuid,
-          external_id: SecureRandom.uuid,
-          public_key: "test-key-#{i}",
-          description: "Key #{i}",
-        )
-      end
+    ClientPasskey::MAX_PASSKEYS_PER_USER.times do |i|
+      PasskeyRegistrationOperation.call!(
+        actor: @user, passkey_class: ClientPasskey,
+        attributes: { webauthn_id: SecureRandom.uuid, public_key: "test-key-#{i}", description: "Key #{i}" },
+      )
     end
 
-    extra_passkey = ClientPasskey.new(
-      user: @user,
-      webauthn_id: SecureRandom.uuid,
-      external_id: SecureRandom.uuid,
-      public_key: "overflow-key",
-      description: "Overflow key",
-    )
-
-    assert_not extra_passkey.valid?
-    assert_includes extra_passkey.errors[:base], "exceeds maximum passkeys per user (#{ClientPasskey::MAX_PASSKEYS_PER_USER})"
+    error =
+      assert_raises(ActiveRecord::RecordInvalid) do
+        PasskeyRegistrationOperation.call!(
+          actor: @user, passkey_class: ClientPasskey,
+          attributes: { webauthn_id: SecureRandom.uuid, public_key: "overflow-key" },
+        )
+      end
+    assert_match(/exceeds maximum passkeys/, error.record.errors[:base].join)
   end
 
   test "description is invalid when blank" do

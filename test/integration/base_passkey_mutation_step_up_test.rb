@@ -85,7 +85,8 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
       browser.delete(path, headers: headers)
 
       assert_equal 303, browser.response.status, "#{surface}: #{browser.response.body.first(100)}"
-      assert_not_equal 1, target.reload.status_id
+      assert_not target.class.exists?(target.id),
+                 "#{surface}: passkey removal must physically delete the current credential"
     end
   end
 end

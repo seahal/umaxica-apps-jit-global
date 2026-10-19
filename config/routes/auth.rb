@@ -61,6 +61,9 @@ scope(module: :auth, as: :auth) do
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
         resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
+        # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
+        resource :cancellation, only: :create
+        resource :switch, only: :create
       end
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
@@ -299,6 +302,9 @@ scope(module: :auth, as: :auth) do
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
         resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
+        # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
+        resource :cancellation, only: :create
+        resource :switch, only: :create
       end
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
@@ -474,6 +480,8 @@ scope(module: :auth, as: :auth) do
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
         resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
+        # D09: first-page Cancel to the RP. Org has no public Sign Up, so no Switch.
+        resource :cancellation, only: :create
       end
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.

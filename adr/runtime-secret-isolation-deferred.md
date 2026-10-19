@@ -66,3 +66,30 @@ service account) cannot be chosen yet.
 - When the follow-up cycle starts, `one.md` R5-WU03A and `docs/security/role-secret-isolation.md`
   are revised to the deployed-environment mechanism chosen then; they currently describe a
   development-only file-permission design.
+
+## Amendment (2026-10-19): development uses one Rails-standard credentials set
+
+User decision in conversation on 2026-10-19. It overrides the per-role credentials and per-role
+database-login parts of R5-WU03A for development and test.
+
+- **One credentials set per environment.** Every process, whatever its `UMAXICA_RUNTIME_ROLE`, reads
+  the Rails-standard `config/credentials/<env>.yml.enc` with `<env>.key`. The per-role bundle
+  selection in `config/application.rb`, `RuntimeRole.credentials_paths`, the
+  `config/credentials/development/<role>.yml.enc` bundles and the `runtime_roles:provision` task are
+  removed. Development and test do not provide the "a role decrypts only its own bundle" property,
+  and `AT-R5-03A` cannot pass there; this is now intended, not a gap to close in development.
+- **One `SECRET_KEY_BASE` for every process.** The removed provisioning task generated a different
+  random `SECRET_KEY_BASE` per role. Cookies and the `secret_key_base`-derived digests and HMACs
+  (`SignSecretLookupDigest`, OTP resend state, TOTP and secret-credential ceremony candidates,
+  OmniAuth state, the social audit outbox) must verify across hosts and processes, so a per-role
+  value breaks them. All processes share the one value in the environment's credentials.
+- **No per-role database login.** `config/database.yml` no longer switches to a
+  `umaxica_role_<role>` login. Development and test connect to the fixed Dev Container services
+  (`primary`, `replica`, port 5432, `root`/`development`), written literally in
+  `config/database.yml` and never read from the environment.
+- **Development runs only in the Dev Container.** Host-native Rails and `.env.container` are
+  removed.
+- **Kept:** `RuntimeRole` still selects route ownership, required private signing keys and the OP/RP
+  branches. Production keeps its environment-supplied connections and credentials, and decision 3
+  above still holds for deployed environments: the pod and secret-store design in the follow-up plan
+  remains the way to isolate secrets there.

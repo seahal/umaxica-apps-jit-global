@@ -25,23 +25,10 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
     assert_match(/configurations are empty/, error.message)
   end
 
-  test "database catalog rejects a production administration database" do
-    error =
-      assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
-        Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!(
-          configurations: [database_config],
-          environment: database_environment.merge("POSTGRESQL_DATABASE" => "production"),
-          catalog_databases: ["test_primary_db"],
-        )
-      end
-
-    assert_match(/must not be a development or production database/, error.message)
-  end
-
   test "database catalog accepts an array and reports absent server identity" do
     manifest = Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!(
       configurations: [database_config],
-      environment: database_environment.merge("POSTGRESQL_DATABASE" => "db"),
+      environment: database_environment,
       catalog_databases: ["test_primary_db", "test_primary_db"],
     )
 
@@ -68,11 +55,14 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
 
   test "database safety rejects each unsafe effective configuration target" do
     cases = {
-      "blank host" => database_config(values: { port: 5432, username: "test-user" }),
-      "wrong host" => database_config(values: { host: "other-db", port: 5432, username: "test-user" }),
-      "wrong port" => database_config(values: { host: "test-db", port: 5433, username: "test-user" }),
+      "blank host" => database_config(values: { port: 5432, username: "root" }),
+      "wrong host" => database_config(values: { host: "other-db", port: 5432, username: "root" }),
+      "port just below" => database_config(values: { host: "primary", port: 5431, username: "root" }),
+      "port just above" => database_config(values: { host: "primary", port: 5433, username: "root" }),
+      "missing port" => database_config(values: { host: "primary", username: "root" }),
       "non-test database" => database_config(database: "development_primary_db"),
-      "wrong user" => database_config(values: { host: "test-db", port: 5432, username: "other-user" }),
+      "wrong user" => database_config(values: { host: "primary", port: 5432, username: "other-user" }),
+      "missing user" => database_config(values: { host: "primary", port: 5432 }),
     }
 
     cases.each do |label, config|
@@ -89,9 +79,9 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
 
   test "database safety validates explicit URL scheme target and database" do
     {
-      "wrong scheme" => "redis://test-db:5432/test_primary_db",
+      "wrong scheme" => "redis://primary:5432/test_primary_db",
       "wrong target" => "postgres://other-db:5432/test_primary_db",
-      "wrong database" => "postgres://test-db:5432/test_other_db",
+      "wrong database" => "postgres://primary:5432/test_other_db",
       "invalid URL" => "postgres://[invalid",
     }.each do |label, url|
       error =
@@ -117,23 +107,27 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
     assert_match(/unsupported test database URL overrides/, error.message)
   end
 
-  test "database safety rejects invalid and missing required values" do
-    assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
-      Umaxica::TestEnvironment::DatabaseSafety.verify!(
-        configurations: [database_config],
-        environment: database_environment.merge("POSTGRESQL_TEST_HOST" => ""),
-      )
-    end
+  test "database safety ignores exported connection variables and checks the fixed target" do
+    assert Umaxica::TestEnvironment::DatabaseSafety.verify!(
+      configurations: [database_config],
+      environment: {
+        "POSTGRESQL_TEST_HOST" => "other-db",
+        "POSTGRESQL_PORT" => "5433",
+        "POSTGRESQL_USER" => "other-user",
+      },
+    )
+  end
 
+  test "database safety rejects out-of-range and malformed configured ports" do
     ["0", "65536", "not-a-port"].each do |port|
       error =
-        assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
+        assert_raises(Umaxica::TestEnvironment::ConfigurationError, port) do
           Umaxica::TestEnvironment::DatabaseSafety.verify!(
-            configurations: [database_config],
-            environment: database_environment.merge("POSTGRESQL_PORT" => port),
+            configurations: [database_config(values: database_config_values.merge(port:))],
+            environment: database_environment,
           )
         end
-      assert_match(/POSTGRESQL_PORT/, error.message)
+      assert_match(/database port/, error.message)
     end
   end
 
@@ -220,12 +214,7 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
   private
 
   def database_environment
-    {
-      "POSTGRESQL_TEST_HOST" => "test-db",
-      "POSTGRESQL_PORT" => "5432",
-      "POSTGRESQL_USER" => "test-user",
-      "POSTGRESQL_DATABASE" => "db",
-    }
+    {}
   end
 
   def database_config(database: "test_primary_db", values: database_config_values)
@@ -233,7 +222,7 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
   end
 
   def database_config_values
-    { host: "test-db", port: 5432, username: "test-user" }
+    { host: "primary", port: 5432, username: "root" }
   end
 
   def valkey_environment

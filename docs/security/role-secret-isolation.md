@@ -1,72 +1,31 @@
 # Role Secret Isolation (R5-WU03A)
 
-Status: **Proposed — awaiting S review of the exact role manifest.** No credential file, master key,
-database login or launch definition has been changed yet. Scope is local development and test only;
-production, CI and external services are out of scope.
+Status: development and test use **one Rails-standard credentials set and one database login for
+every role** (user decision 2026-10-19, `adr/runtime-secret-isolation-deferred.md` amendment). This
+page describes what a runtime role still controls and what it does not.
 
-Owner specification: `one.md` section 4.1 and R5-WU03A. This page is the current description of
-which runtime role may read which secret, and why.
+Per-role secret isolation for deployed environments remains deferred to the pod and secret-store
+design in `plans/backlog/2026-10-18-production-runtime-secret-isolation.md`.
 
-## Why this exists
+## What a runtime role does not control
 
-Today every process boots with one `config/credentials/development.key`, one shared `.env` and one
-PostgreSQL login (`POSTGRESQL_PASSWORD`) that reaches every database. An RP process can therefore
-decrypt the OP signing keys and open OP, Zenith and sibling RP databases even if its code never
-calls them. R5 requires that compromising one RP cell cannot mint OP credentials or read another
-surface's state, so each role must hold only its own secrets.
+- **Credentials.** Every process reads `config/credentials/<env>.yml.enc` with `<env>.key`. There
+  are no per-role bundles, and every process shares one `SECRET_KEY_BASE`: cookies and
+  `secret_key_base`-derived digests must verify across hosts and processes.
+- **Database login.** Development and test connect with the fixed Dev Container login written in
+  `config/database.yml`; there is no per-role PostgreSQL login and no PostgreSQL-grant boundary
+  between roles.
+- **Operating-system boundary.** All roles run in the single development container (user decision
+  2026-10-17).
 
-## Mechanism
+Consequently an RP role process in development can read every secret in the environment's
+credentials. `AT-R5-03A` cannot pass in development or test; that is intended.
 
-- **Reader:** Rails 8.2 `Rails.app.creds` (`ActiveSupport::CombinedConfiguration`), which the code
-  already uses. Required values use `Rails.app.creds.require(:NAME)`; optional values use `option`
-  with an explicit nil branch (`generic/no-silent-fallback.mdc`).
-- **Lookup order caveat:** in development `Rails.app.creds` reads ENV, then `.env`, then encrypted
-  credentials. Splitting credentials alone is therefore insufficient: secrets must be removed from
-  the shared `.env`/ENV that a role process receives, or that role can still read them.
-- **Store:** one encrypted credentials file and one key per role, e.g.
-  `config/credentials/development/rp-core-app-jp.yml.enc` with `rp-core-app-jp.key`. A process is
-  started with exactly one role key (`RAILS_MASTER_KEY` for that role) and the matching
-  `config.credentials.content_path`/`key_path`, selected from a trusted startup role name.
-- **Role selection:** the startup configuration names one role from a fixed allowlist before any
-  credential or connection is loaded. Request input (Host, `ri`, token claims) never selects a role.
-- **OS boundary:** credentials split is necessary but not sufficient. Each role process must not be
-  able to read other roles' `.key` files, the shared `.env` or container-control sockets; this is
-  enforced by per-role container mounts/UIDs, not by code.
-- **Database logins:** one non-superuser PostgreSQL login per role with CONNECT and table grants on
-  its own databases only (no CREATEDB/CREATEROLE/BYPASSRLS). The current shared login stays only for
-  maintenance tasks, never for a role process.
+## What a runtime role controls
 
-## Proposed role manifest
-
-Names follow `one.md` section 5.1. "Public" values (issuer URLs, public JWKS) are configuration, not
-secrets, and may be shared.
-
-| Role                                                                                                                                                                    | Secrets it may hold                                                                                                                                                                                   | Databases it may log in to                                                                                 |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `op-base-app`, `op-base-com`, `op-base-org`                                                                                                                             | That realm's `AUTH_JWT_PRIVATE_KEYSET`; OP cookie/session `SECRET_KEY_BASE`; that realm's OTP verifier / history / Active Record encryption keys used by OP rows; RP client **public** assertion keys | `op_base_<realm>` (+ replica), required read/write on `<realm>_zenith` through the identity authority path |
-| `auth-app`, `auth-com`, `auth-org`                                                                                                                                      | Credential-ceremony secrets: OmniAuth/Apple/Entra/Google, `SOCIAL_AUTH_CEREMONY_HMAC_KEY`, email/telephone HMAC and OTP keys, Turnstile, SES sending                                                  | Those ceremony stores currently owned by Auth (to be enumerated from R5-WU01 manifest)                     |
-| `rp-<client>` (12 JP cells: `base-app-ww`, `base-com-ww`, `base-org-ww`, `edit-org-ww`, `tech-org-ww`, `core-{app,com,org}-jp`, `warp-{app,com,org}-jp`, `palm-app-jp`) | That cell's client assertion private key (`<CELL>_PRIVATE_KEY`); that cell's cookie/session `SECRET_KEY_BASE`                                                                                         | `rp_<family>_<realm>` local store only                                                                     |
-| Domain authorities (`publishing`, `avatar`, org IAM/Support/Enforcement)                                                                                                | Their own protocol secrets (e.g. `ENFORCEMENT_*_IDENTIFIER_HMAC_KEY` for Enforcement)                                                                                                                 | Their canonical stores only                                                                                |
-| `maintenance` (not a runtime role)                                                                                                                                      | Shared admin login for migrations/rebuilds                                                                                                                                                            | All, invoked manually only                                                                                 |
-
-Never held by any RP role: OP signing keys, another cell's private key, OP/Zenith/sibling DB logins,
-or a universal master key. Observability UIs (Flipper, Blazer, PgHero, Coverband, Swagger, Rails
-Performance) are operator tools; their passwords stay out of every RP role.
-
-## Open points for S review
-
-1. Exact credential key names per role (current names above are reused where the code already reads
-   them; new names follow `<CELL>_PRIVATE_KEY`).
-2. Which existing Active Record encryption / HMAC keys each role needs; this depends on the R5-WU01
-   model ownership manifest and is not guessed here.
-3. Solid Queue: per-role schema and login, as required by R5-WU03A, after confirming the installed
-   version supports a per-role connection.
-4. Development launcher — **decided by the user on 2026-10-17: do not split containers.** All roles
-   keep running in the existing single development container. Consequence: the R5-WU03A
-   mount/process-visibility boundary is not provided, so `AT-R5-03A` cannot claim full effective
-   isolation in development; it must record this as a known gap. Within the container, the remaining
-   achievable boundary is per-role credentials files and per-role database logins (and, if adopted
-   later, per-role Linux users owning each role key with mode `0400`).
+`UMAXICA_RUNTIME_ROLE` names one role from the fixed allowlist in `lib/runtime_role.rb`, read once
+at boot and never from request input. It selects the controllers the process serves (below), the
+private signing keys it requires and keeps in its environment, and the OP/RP code paths.
 
 ## Route ownership and cell authentication (R5-WU17)
 
@@ -101,9 +60,8 @@ cell's own private_key_jwt client key, its surface's Jump RT key and the prefere
 registry requires private keys only for those records in that process; all public keysets still
 load. Probe on 2026-10-17 (`rp-palm-app-jp`): 39 `*_PRIVATE_KEY*` variables before, 3 after.
 
-Not closed: every role runs as the same Linux user in the single development container, so a role
-process can still read another role's key file and decrypt its bundle. This is the accepted
-container-split gap above.
+Not a secret boundary: every role reads the same credentials file, so the key removal limits what a
+cell process _uses_, not what it could decrypt.
 
 ## Activation (R5-WU19)
 

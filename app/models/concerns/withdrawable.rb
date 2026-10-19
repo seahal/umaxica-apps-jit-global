@@ -5,7 +5,9 @@
 module Withdrawable
   extend ActiveSupport::Concern
 
-  # Deterministic recovery window: use 31 days to match product requirement.
+  # These legacy values are deliberately immutable.  They are used only when reading a
+  # withdrawal created before the persisted deadline columns were introduced; a later
+  # development/test override must never shorten that account's already-existing window.
   WITHDRAWAL_RECOVERY_PERIOD = 31.days
   WITHDRAWAL_RECOVERY_DELAY = 1.hour
   WITHDRAWAL_EARLY_TERMINATION_DELAY = 7.days
@@ -58,30 +60,32 @@ module Withdrawable
     nil
   end
 
-  def can_recover?
+  def can_recover?(now: Time.current)
     return false if recovery_deadline.blank?
-    return Time.current < recovery_deadline if recovery_available_at.blank?
+    return now < recovery_deadline if recovery_available_at.blank?
 
-    Time.current >= recovery_available_at && Time.current < recovery_deadline
+    now >= recovery_available_at && now < recovery_deadline
   end
 
   def recovery_available_at
     return nil if deactivated_at.blank?
 
-    deactivated_at + WITHDRAWAL_RECOVERY_DELAY
+    persisted = self[:recovery_available_at] if has_attribute?(:recovery_available_at)
+    persisted.presence || (deactivated_at + WITHDRAWAL_RECOVERY_DELAY)
   end
 
   def early_termination_available_at
     return nil if deactivated_at.blank?
 
-    deactivated_at + WITHDRAWAL_EARLY_TERMINATION_DELAY
+    persisted = self[:early_termination_available_at] if has_attribute?(:early_termination_available_at)
+    persisted.presence || (deactivated_at + WITHDRAWAL_EARLY_TERMINATION_DELAY)
   end
 
-  def early_terminatable?
+  def early_terminatable?(now: Time.current)
     return false unless suspended?
     return false if early_termination_available_at.blank?
 
-    Time.current >= early_termination_available_at
+    now >= early_termination_available_at
   end
 
   def permanently_deletable?

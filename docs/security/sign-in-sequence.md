@@ -1,5 +1,10 @@
 # Sign-In Sequence
 
+The canonical Sign In admission also receives completed App/Com registration. The rationale and
+failure-domain contract are documented in
+[Sign In First: Registration Handoff](sign-in-first-registration-handoff.md) and
+[ADR D13](../../adr/sign-in-first-and-sign-up-handoff.md).
+
 > **Authority-boundary supersession (2026-09-22):** This document retains the earlier
 > `sign/id`–`acme/www` migration vocabulary for historical context. The current Rails contract is
 > defined by `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
@@ -19,8 +24,9 @@
 ## Current Rails result contract
 
 Auth owns credential ceremony continuity and authentication evidence only. Base owns the OIDC
-authorization transaction, Base Browser Session, RP Session, authorization code, and token
-authority.
+authorization transaction, Base Browser Session, authorization code, and token authority. Each RP
+owns its own RP Session and local state; Base's self-RP participates through its registered client
+without acquiring authority over other RPs' databases.
 
 The Auth-to-Base result is a short-lived opaque Valkey transport capability. Its digest, generation,
 expiry, and Base finalization references are stored on the matching surface-local PostgreSQL

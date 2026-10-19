@@ -19,11 +19,14 @@ class BaseIdentityActivitiesFailureTest < ActiveSupport::TestCase
 
       def activity_log
         log = Object.new
+        log.define_singleton_method(:app_activities) { |_scope, client:, limit:| raise ActiveRecord::ConnectionNotEstablished, "reader down" }
         log.define_singleton_method(:activities) { |_scope| raise ActiveRecord::ConnectionNotEstablished, "reader down" }
         log
       end
 
       def activity_scope = ClientChronicle.none
+
+      def current_client = Struct.new(:public_id).new("client-activity-test")
 
       def render(*args, **kwargs)
         self.rendered = [args, kwargs]

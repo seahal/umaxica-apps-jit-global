@@ -1099,7 +1099,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     delete base_org_identity_passkey_url(passkey.external_id, ri: "jp", host: @base_host),
            headers: http_headers_1
 
-    assert_equal OperatorPasskeyStatus::REVOKED, passkey.reload.status_id
+    assert_not OperatorPasskey.exists?(passkey.id)
 
     assert_no_difference("OperatorSecretCredential.count") do
       http_headers_0 =

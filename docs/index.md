@@ -90,7 +90,11 @@ Current content-model references:
 - `docs/security/step-up-mfa-status.md`
 - `docs/security/mfa-reset-account-recovery.md`
 - `docs/security/sign-in-sequence.md`
+- `docs/security/authentication-capacity-admission.md`
+- `docs/security/sign-in-first-registration-handoff.md`
 - `docs/security/sign-up-sequence.md`
+- `docs/security/passkey-lifecycle-and-audit.md`
+- `docs/security/app-com-withdrawal-timing.md`
 - `docs/security/logout-sequence.md`
 - `docs/security/refresh-token-rotation.md`
 - `docs/security/identifier-hmac-emergency-rotation.md`

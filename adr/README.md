@@ -47,6 +47,19 @@ Current org federated sign-in decision:
 
 Current identity authority decision:
 
+- `adr/sign-in-first-and-sign-up-handoff.md` — **Accepted (2026-10-18)**; Sign In is the canonical
+  session-admission boundary and completed App/Com Sign Up enters it through a trusted handoff. D11,
+  D12, and D14 remain unresolved.
+
+- `adr/passkey-current-state-limit-and-chronicle-outbox.md` — **Accepted (2026-10-19)**; APP, COM,
+  and ORG Passkeys are limited to ten per owner by an owner-locked registration operation (not by a
+  database constraint), use physical lifecycle deletion, and deliver common Chronicle facts through
+  principal transactional outboxes. Chronicle retention is still TBC.
+
+- `adr/app-com-withdrawal-deadline-snapshot.md` — **Accepted (2026-10-19)**; Client and Visitor
+  withdrawal deadlines use an immutable policy, persisted confirmation timestamps, and strict
+  development/test-only overrides. Operator timing remains separate.
+
 - `adr/email-sign-in-otp-ceremony-binding-and-risk-acceptance.md` — accepted APP/COM Email Sign-In
   ceremony/continuity binding target, one-time consumption and resend invariants, and limited
   browser-secret theft/external-mailbox risk acceptances (2026-10-11); conformity is unverified and
@@ -137,7 +150,9 @@ Current runtime secret isolation decision (deferred; not implemented):
 - `adr/runtime-secret-isolation-deferred.md` — R5-WU03A secret isolation is out of the current
   cycle; development keeps the `shared` role, production/staging sharing of one secret set stays an
   open defect, the future boundary is the pod and its secret-store policy, and `AT-R5-03A` stays
-  NOT_RUN. Follow-up: `plans/backlog/2026-10-18-production-runtime-secret-isolation.md`.
+  NOT_RUN. Follow-up: `plans/backlog/2026-10-18-production-runtime-secret-isolation.md`. Amended
+  2026-10-19: development and test use one Rails-standard credentials set, one `SECRET_KEY_BASE` and
+  one fixed Dev Container database login for every role.
 
 Current backend transport decision:
 

@@ -9,6 +9,7 @@ module Auth
         include ::AuthenticationModeSwitchGuard
         include ::AuthCeremonyAdmission
         include ::SignInPhaseBindingControllerSupport
+        include ::SignEntryExit
 
         AUTHENTICATION_MODE = :guest
         declare_authentication_mode! :guest
@@ -36,15 +37,28 @@ module Auth
             title: page_t("#{scope}.page_title"),
             description: page_t("#{scope}.description"),
             methods: method_selection_links(scope),
-            cancel_label: t("actions.cancel"),
             social_providers: [google_provider_button(scope), apple_provider_button(scope)],
-            registration_link: {
-              key: "registration",
-              label: page_t("#{scope}.links.registration"),
-              href: auth_app_sign_up_path(ri: params[:ri], pt: signed_pt_param),
-            },
+            registration_link: registration_link(scope),
+            **sign_entry_exit_forms(switch_to: "sign_up", switch_label: page_t("#{scope}.links.registration")),
           }
         end
+
+        # A local entry keeps its link to Sign Up; an OIDC-bound page moves only through Switch.
+        def registration_link(scope)
+          return nil if sign_entry_parent_bound?
+
+          {
+            key: "registration",
+            label: page_t("#{scope}.links.registration"),
+            href: auth_app_sign_up_path(ri: params[:ri], pt: signed_pt_param),
+          }
+        end
+
+        def sign_entry_exit_sign_up_cycle_class = ClientSignUpFlow
+
+        def sign_entry_exit_cancellation_path = auth_app_sign_cancellation_path(ri: params[:ri])
+
+        def sign_entry_exit_switch_path = auth_app_sign_switch_path(ri: params[:ri])
 
         def method_selection_links(scope)
           pt = signed_pt_param

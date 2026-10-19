@@ -30,7 +30,6 @@ docs/
 
 # Environment files
 .env*
-!.env.example
 !.env*.erb
 
 # Local credentials are excluded independently of Git. Keep this synchronized

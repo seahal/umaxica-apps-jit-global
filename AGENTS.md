@@ -182,6 +182,10 @@ Vitest case whose subject is dependency, configuration, container, or mounted-en
 thing and record what you observed in `evidence/`. See
 `.agents/harnesses/rules/project/no-environment-tests.mdc`.
 
+Documentation MAY guide investigation, but it is not evidence of current behavior. Before reporting
+a behavioral claim to the user, confirm it against the implementing code, the relevant docs, and the
+tests; when they disagree, report the discrepancy instead of choosing one silently.
+
 Report only claims supported by results from the current session. State failed, skipped, blocked,
 and unverified checks plainly. Lead with the outcome; keep responses proportional to the task. Do
 not add a separate verifier pass; delegate only independent, substantial work whose parallel

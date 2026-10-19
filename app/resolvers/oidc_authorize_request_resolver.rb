@@ -4,7 +4,7 @@
 class OidcAuthorizeRequestResolver < ApplicationService
   class InvalidScope < ArgumentError; end
 
-  SUPPORTED_PROMPTS = %w(login none).freeze
+  SUPPORTED_PROMPTS = %w(login none create).freeze
 
   ValidatedRequest = Data.define(:client, :scope, :prompt, :max_age)
 
@@ -50,6 +50,10 @@ class OidcAuthorizeRequestResolver < ApplicationService
     client = find_client!
     scope = validate_scope_allowlist!(client)
     prompt = self.class.normalize_prompt(params[:prompt])
+    if prompt == "create" && resource_type == "operator"
+      raise ArgumentError, "prompt=create is not supported for the Org surface"
+    end
+
     max_age = self.class.normalize_max_age(params[:max_age])
     validate_redirect_uri!
     validate_state_and_nonce!

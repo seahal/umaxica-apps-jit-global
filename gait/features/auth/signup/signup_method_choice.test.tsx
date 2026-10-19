@@ -32,31 +32,38 @@ describe("SignUpMethodChoice", () => {
       { provider: "entra", label: "Entraで続行", url: "/social/entra" },
     ],
     links: [{ key: "sign_in", label: "ログイン", href: "/sign/in" }],
+    cancel_form: null,
+    switch_form: null,
   };
 
-  it("appends Cancel as plain text after the sign-in link", () => {
+  it("renders Switch and Cancel as POST forms instead of the link on an OIDC-bound page", () => {
     const markup = renderToStaticMarkup(
       <SignUpMethodChoice
         {...props}
-        cancel_label="Cancel"
+        links={[]}
+        switch_form={{
+          label: "ログイン",
+          action: "/sign/switch",
+          to: "sign_in",
+          authenticity_token: "csrf-value",
+        }}
+        cancel_form={{
+          label: "Cancel",
+          action: "/sign/cancellation",
+          to: null,
+          authenticity_token: "csrf-value",
+        }}
       />,
     );
-    const document = new DOMParser().parseFromString(markup, "text/html");
-    const cancel = Array.from(document.querySelectorAll("p")).find(
-      (node) => node.textContent === "Cancel",
-    );
-    expect(cancel?.textContent).toBe("Cancel");
-    expect(cancel?.tagName).toBe("P");
-    expect(cancel?.closest("a, button, form")).toBeNull();
-    expect(cancel?.querySelector("a, button, form")).toBeNull();
-    expect(cancel?.previousElementSibling?.querySelector("a")?.getAttribute("href")).toBe(
-      "/sign/in",
-    );
+    expect(markup).toMatch(/action="\/sign\/switch".*action="\/sign\/cancellation"/su);
+    expect(markup).toContain('name="to" value="sign_in"');
+    expect(markup).not.toContain('href="/sign/in"');
   });
 
-  it("omits Cancel when its optional label is absent", () => {
+  it("omits Cancel and Switch when the server sent none", () => {
     const markup = renderToStaticMarkup(<SignUpMethodChoice {...props} />);
-    expect(markup).not.toContain("Cancel");
+    expect(markup).not.toContain("/sign/cancellation");
+    expect(markup).not.toContain("/sign/switch");
   });
 
   it("lists every registration method and social provider the server offered", () => {

@@ -229,8 +229,11 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
       VisitorSecretCredentialStatus.find_or_create_by!(id: status)
     end
     VisitorSecretCredentialKind.find_or_create_by!(id: VisitorSecretCredentialKind::LOGIN)
-    passkey = visitor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "withdrawal-test-key")
+    passkey = visitor.visitor_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "withdrawal-test-key",
+    )
     secret = visitor.visitor_secret_credentials.create!(name: "Withdrawal", password: SecureRandom.base58(32))
+    visitor.reload
     visitor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
 
     assert_same visitor, WithdrawalPersonalDataAnonymizer.call(actor: visitor)

@@ -3,15 +3,21 @@ stateDiagram-v2
     state "pending" as pending
     state "authenticated" as authenticated
     state "consumed" as consumed
+    state "canceled" as canceled
     [*] --> pending
     pending --> authenticated: register_authentication!
     authenticated --> authenticated: prepare_result_delivery!
     authenticated --> consumed: consume!
     authenticated --> consumed: finalize_base! success
     consumed --> consumed: claim_authorization_grant!
+    pending --> pending: prepare_cancellation_handoff!
+    pending --> canceled: cancel!
+    canceled --> canceled: cancel! same handoff digest
+    canceled --> [*]
     consumed --> [*]
     note right of pending
         Auth proof returns through opaque result to Base finalization.
         Consumed authorization can still claim its grant once for RP exchange.
         TTL refusal does not write an expired state.
+        canceled is the D09 first-page Cancel; a canceled parent refuses later results.
     end note

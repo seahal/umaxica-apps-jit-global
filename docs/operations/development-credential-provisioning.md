@@ -96,14 +96,9 @@ development lead when you do not have dashboard access.** Only the tunnel you ac
 token; a connector started without one exits immediately and stays stopped after three bounded
 restart attempts. There is no anonymous fallback.
 
-The committed `.env.example` and `.env.devcontainer.example` files are non-secret development
-contracts only. They contain obvious local placeholders, never provider credentials or Rails keys.
-Copy `.env.example` to the ignored `.env` only when host-specific overrides are needed:
-
-```bash
-cp .env.example .env
-chmod 600 .env
-```
+The committed `.env.container.devcontainer` file is a non-secret development contract only. It
+contains obvious local placeholders, never provider credentials or Rails keys. Put host-specific
+overrides in the ignored `.env` only when they are needed, and keep it at mode `600`.
 
 ## Provider credentials for staging, production, and individual environments
 
@@ -131,15 +126,15 @@ revoked.
 
 ## Development service passwords: fixed literals
 
-The development PostgreSQL passwords are fixed, development-only values represented in the local
-environment contract and consumed by the infrastructure services. They are not generated, not
-rotated, and not secret:
+The development PostgreSQL passwords are fixed, development-only values written in
+`config/database.yml` and in the infrastructure services. They are not generated, not rotated, and
+not secret:
 
-| Variable                        | Value         | Set on                 |
-| :------------------------------ | :------------ | :--------------------- |
-| `POSTGRESQL_PASSWORD`           | `development` | `.env.example`, `core` |
-| `POSTGRES_PASSWORD`             | `development` | `primary`, `replica`   |
-| `POSTGRES_REPLICATION_PASSWORD` | `replication` | `primary`, `replica`   |
+| Variable                        | Value         | Set on                |
+| :------------------------------ | :------------ | :-------------------- |
+| `password` (development, test)  | `development` | `config/database.yml` |
+| `POSTGRES_PASSWORD`             | `development` | `primary`, `replica`  |
+| `POSTGRES_REPLICATION_PASSWORD` | `replication` | `primary`, `replica`  |
 
 This is deliberate. The stack is development-only, every database it serves is disposable, no port
 is published for `primary` or `replica`, and the values guard nothing reachable off the host. A

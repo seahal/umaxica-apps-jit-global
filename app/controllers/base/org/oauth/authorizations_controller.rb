@@ -72,7 +72,9 @@ module Base
 
         def authorization_session_sufficient?
           return false unless logged_in?
-          return false if OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt]) == "login"
+
+          prompt = OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt])
+          return false if %w(login create).include?(prompt)
 
           max_age = @validated_client&.max_age
           return true if max_age.nil?
@@ -223,10 +225,15 @@ module Base
           end
         end
 
+        # Org has no public Sign Up, so a Switch never reaches here (the coordinator refuses it).
+        def authorization_switch_url(target:, entry_ref:)
+          raise ArgumentError, "Org does not switch to #{target.inspect} (entry #{entry_ref.inspect})"
+        end
+
         def authorization_intent
           return "authentication" if first_party_browser_rp?
 
-          (params[:screen_hint].to_s == "signup") ? "sign_up" : "sign_in"
+          "sign_in"
         end
 
         def first_party_browser_rp?
@@ -261,7 +268,7 @@ module Base
           # report those as unpermitted, which they are not - they are simply not ours.
           keys = %i(
             response_type client_id redirect_uri state
-            code_challenge code_challenge_method scope nonce screen_hint prompt max_age
+            code_challenge code_challenge_method scope nonce prompt max_age
           )
           params.slice(*keys).permit(*keys)
         end

@@ -3,7 +3,7 @@
 
 return if Rails.env.test?
 
-# `.env.devcontainer.example` declares OPEN_TELEMETRY on `core` and sets it to
+# `.env.container.devcontainer` declares OPEN_TELEMETRY on `core` and sets it to
 # "true": the observability group is no longer profile-gated, so `alloy` is
 # always running and always able to receive.
 #

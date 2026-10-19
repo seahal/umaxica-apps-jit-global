@@ -7,7 +7,11 @@ module OidcAuthorizationTransactionable
   STATUS_PENDING = "pending"
   STATUS_AUTHENTICATED = "authenticated"
   STATUS_CONSUMED = "consumed"
-  STATUSES = [STATUS_PENDING, STATUS_AUTHENTICATED, STATUS_CONSUMED].freeze
+  # D09: a user Cancel on the first Sign In/Up page; terminal, reached only from pending.
+  STATUS_CANCELED = "canceled"
+  STATUSES = [STATUS_PENDING, STATUS_AUTHENTICATED, STATUS_CONSUMED, STATUS_CANCELED].freeze
+  CANCELLATION_HANDOFF_REFERENCE = /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
+  CANCELLATION_HANDOFF_DIGEST = /\A[0-9a-f]{64}\z/
   RETENTION_PERIOD = 15.minutes
   RESULT_TTL = 60.seconds
 
@@ -139,6 +143,72 @@ module OidcAuthorizationTransactionable
 
   def consumed?
     status == STATUS_CONSUMED
+  end
+
+  def canceled?
+    status == STATUS_CANCELED
+  end
+
+  # Binds the encrypted Auth-to-Base cancellation handoff to this pending parent. Re-binding the
+  # same handoff is idempotent; a different one is refused.
+  def prepare_cancellation_handoff!(reference:, ciphertext:)
+    unless reference.is_a?(String) && reference.match?(CANCELLATION_HANDOFF_REFERENCE) &&
+        ciphertext.is_a?(String) && ciphertext.present?
+      raise ArgumentError, "invalid cancellation handoff"
+    end
+
+    self.class.connection_owner.connected_to(role: :writing) do
+      self.class.transaction do
+        locked = self.class.lock.find(id)
+        decision_time = self.class.database_now
+        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
+        raise ArgumentError, "authorization transaction is not pending" unless locked.status == STATUS_PENDING
+
+        if locked.cancellation_handoff_ref.present?
+          return locked if locked.cancellation_handoff_ref == reference &&
+            locked.cancellation_handoff_ciphertext == ciphertext
+
+          raise ArgumentError, "cancellation handoff is already bound"
+        end
+
+        locked.update!(
+          cancellation_handoff_ref: reference, cancellation_handoff_ciphertext: ciphertext,
+          updated_at: decision_time,
+        )
+        locked
+      end
+    end
+  end
+
+  # Commits the Cancel. Only a pending parent with a bound handoff can be canceled, so a parent that
+  # already authenticated or was consumed never turns into a cancellation, and a later
+  # authentication result for a canceled parent is refused by register_authentication!.
+  def cancel!(cancellation_handoff_digest:)
+    unless cancellation_handoff_digest.is_a?(String) && cancellation_handoff_digest.match?(CANCELLATION_HANDOFF_DIGEST)
+      raise ArgumentError, "invalid cancellation handoff digest"
+    end
+
+    self.class.connection_owner.connected_to(role: :writing) do
+      self.class.transaction do
+        locked = self.class.lock.find(id)
+        if locked.canceled?
+          return locked if locked.cancellation_handoff_digest == cancellation_handoff_digest
+
+          raise ArgumentError, "authorization transaction was canceled by another handoff"
+        end
+
+        decision_time = self.class.database_now
+        raise ArgumentError, "authorization transaction expired" if locked.expired?(now: decision_time)
+        raise ArgumentError, "authorization transaction is not pending" unless locked.status == STATUS_PENDING
+        raise ArgumentError, "cancellation handoff is not bound" if locked.cancellation_handoff_ref.blank?
+
+        locked.update!(
+          status: STATUS_CANCELED, canceled_at: decision_time,
+          cancellation_handoff_digest: cancellation_handoff_digest, updated_at: decision_time,
+        )
+        locked
+      end
+    end
   end
 
   def expired?(now: Time.current)

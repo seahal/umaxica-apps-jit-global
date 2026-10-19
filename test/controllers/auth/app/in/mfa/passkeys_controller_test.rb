@@ -87,7 +87,7 @@ module Auth::App::In
 
     %i(failed foreign_actor advanced).each do |interruption|
       test "late #{interruption} interruption of local MFA returns to Base without issuing root credentials" do
-        email = @user.client_emails.first
+        email = @email_record
         post auth_app_sign_in_email_path(fb: @primary_sign_in_binding),
              params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" }
         delivery =

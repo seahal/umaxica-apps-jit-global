@@ -75,7 +75,19 @@ class RetentionPurgeJob < ApplicationJob
       ClientSecretLifecycleJob.perform_now(batch_size: limit)
     end
 
-    RETAINABLE_MODELS.each { |klass| purge_retained_model(klass, batch_size: limit) }
+    failures = []
+    RETAINABLE_MODELS.each do |klass|
+      purge_retained_model(klass, batch_size: limit)
+    rescue StandardError => e
+      failures << e
+      Rails.error.report(
+        e,
+        handled: false,
+        context: { job: self.class.name, retained_model: klass.name, batch_size: limit },
+      )
+    end
+
+    raise failures.first if failures.any?
   end
 
   private
@@ -106,8 +118,8 @@ class RetentionPurgeJob < ApplicationJob
       purge_client_authentication_flows(klass, now: now, batch_size: batch_size)
     elsif klass == ClientToken
       purge_client_tokens(klass, now: now, batch_size: batch_size)
-    elsif klass == ClientPasskey
-      purge_client_passkeys(klass, now: now, batch_size: batch_size)
+    elsif [ClientPasskey, VisitorPasskey].include?(klass)
+      purge_passkeys(klass, now: now, batch_size: batch_size)
     elsif [ClientSessionLimitResolutionTransaction, VisitorSessionLimitResolutionTransaction,
            OperatorSessionLimitResolutionTransaction,].include?(klass)
       purge_session_limit_resolutions(klass, now: now, batch_size: batch_size)
@@ -194,33 +206,69 @@ class RetentionPurgeJob < ApplicationJob
     end
   end
 
-  def purge_client_passkeys(klass, now:, batch_size:)
+  def purge_passkeys(klass, now:, batch_size:)
+    owner_class, owner_key, signup_flow_class, surface =
+      if klass == ClientPasskey
+        [Client, :user_id, ClientSignUpFlow, "app"]
+      elsif klass == VisitorPasskey
+        [Visitor, :visitor_id, VisitorSignUpFlow, "com"]
+      else
+        raise ArgumentError, "unsupported passkey class: #{klass.name}"
+      end
+
     klass.where(purge_eligible_at: ..now).in_batches(of: batch_size) do |batch|
       batch.to_a.each do |passkey|
-        owner = Client.find_by(id: passkey.user_id)
+        owner = owner_class.find_by(id: passkey.public_send(owner_key))
         if owner
           owner.with_lock do
-            OpBaseAppRecord.connected_to(role: :writing) do
-              ClientSignUpFlow.transaction do
-                next if ClientSignUpFlow.lock.exists?(pending_passkey_registration_id: passkey.id)
+            signup_flow_class.connection_class_for_self.connected_to(role: :writing) do
+              signup_flow_class.transaction do
+                next if signup_flow_class.lock.exists?(pending_passkey_registration_id: passkey.id)
 
-                AppZenithRecord.connected_to(role: :writing) do
+                klass.connection_class_for_self.connected_to(role: :writing) do
                   klass.transaction do
                     current = klass.lock.find_by(id: passkey.id, public_id: passkey.public_id)
                     next unless current
-                    next if client_passkey_source_hold?(current, owner)
+                    next if passkey_source_hold?(klass, current, owner)
 
-                    klass.where(id: current.id).delete_all
+                    record_passkey_purge!(current, surface: surface)
                   end
                 end
               end
             end
           end
-        elsif !client_passkey_source_hold?(passkey)
-          klass.where(id: passkey.id).delete_all
+        else
+          klass.connection_class_for_self.connected_to(role: :writing) do
+            klass.transaction do
+              current = klass.lock.find_by(id: passkey.id, public_id: passkey.public_id)
+              next unless current
+              next if passkey_source_hold?(klass, current)
+
+              record_passkey_purge!(current, surface: surface)
+            end
+          end
         end
       end
     end
+  end
+
+  def record_passkey_purge!(passkey, surface:)
+    PasskeyAuditOutbox.record_for!(
+      passkey: passkey,
+      event_type: "passkey.purged",
+      surface: surface,
+      actor_ref: nil,
+      operation_ref: "retention:#{passkey.class.name}:#{passkey.public_id}",
+      occurred_at: passkey.class.database_now,
+      metadata: { reason: "retention_purge" },
+    )
+    passkey.destroy!
+  end
+
+  def passkey_source_hold?(klass, passkey, owner = nil)
+    return client_passkey_source_hold?(passkey, owner) if klass == ClientPasskey
+
+    false
   end
 
   def client_sign_up_flow_protected?(flow)
@@ -405,7 +453,16 @@ class RetentionPurgeJob < ApplicationJob
     telephones.where(purge_eligible_at: ..telephones.klass.database_now).order(:id).find_each do |telephone|
       TelephoneIdentifierPurger.call(record: telephone)
     end
-    !emails.exists? && !telephones.exists?
+
+    remaining = emails.exists? || telephones.exists?
+    if remaining
+      WithdrawalOccurrenceRecording.record!(
+        subject: actor,
+        event_type: "withdrawal.purge_deferred",
+        context: { reason_code: "identifier_retention" },
+      )
+    end
+    !remaining
   end
 
   def active_retention_hold_for(actor, now:)

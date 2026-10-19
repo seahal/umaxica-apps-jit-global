@@ -33,6 +33,7 @@
 #  index_visitor_passkeys_on_discard_at  (discard_at)
 #  index_visitor_passkeys_on_public_id     (public_id) UNIQUE
 #  index_visitor_passkeys_on_purge_eligible_at     (purge_eligible_at)
+#  index_visitor_passkeys_on_external_id           (external_id) UNIQUE
 #  index_visitor_passkeys_on_status_id     (status_id)
 #  index_visitor_passkeys_on_visitor_id    (visitor_id)
 #  index_visitor_passkeys_on_webauthn_id   (webauthn_id) UNIQUE
@@ -47,7 +48,7 @@ class VisitorPasskey < ComPrincipalRecord
   include Retainable
   include MfaStatusCredential
 
-  MAX_PASSKEYS_PER_VISITOR = 4
+  MAX_PASSKEYS_PER_VISITOR = 10
 
   attribute :status_id, default: VisitorPasskeyStatus::ACTIVE
 
@@ -59,11 +60,10 @@ class VisitorPasskey < ComPrincipalRecord
   validates :external_id, presence: true
   validates :public_key, presence: true
   validates :description, presence: true
+  validate :within_passkey_limit, on: :create
   validates :status_id, numericality: { only_integer: true }
   validates :sign_count, presence: true, numericality: { greater_than_or_equal_to: 0 }
-  validate :validate_slot_limit, on: :create
   before_validation :set_defaults, on: :create
-  around_create :create_with_slot_lock
 
   scope :active, -> { where(status_id: VisitorPasskeyStatus::ACTIVE) }
 
@@ -73,29 +73,18 @@ class VisitorPasskey < ComPrincipalRecord
 
   private
 
-  # Terminal history remains available to bootstrap/recovery checks without occupying a registration slot.
-  def validate_slot_limit
-    return if visitor_id.nil? || [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED].include?(status_id)
+  # Every retained row counts (REQ-P01); a removed Passkey is physically deleted and frees its place.
+  # This check alone races; PasskeyRegistrationOperation repeats it while holding the visitor lock.
+  def within_passkey_limit
+    return if visitor_id.nil?
 
     count =
       self.class.connection_class_for_self.connected_to(role: :writing) do
-        self.class.where(visitor_id: visitor_id).where.not(status_id: [VisitorPasskeyStatus::REVOKED, VisitorPasskeyStatus::DELETED]).count
+        self.class.where(visitor_id: visitor_id).count
       end
     return if count < MAX_PASSKEYS_PER_VISITOR
 
     errors.add(:base, :too_many, message: "exceeds maximum passkeys per visitor (#{MAX_PASSKEYS_PER_VISITOR})")
-  end
-
-  # Validation alone cannot reserve capacity; every INSERT repeats the check under the owner lock.
-  def create_with_slot_lock
-    self.class.connection_class_for_self.connected_to(role: :writing) do
-      visitor.with_lock do
-        validate_slot_limit
-        raise ActiveRecord::RecordInvalid, self if errors.any?
-
-        yield
-      end
-    end
   end
 
   def set_defaults

@@ -175,7 +175,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
     assert_equal ClientSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
     assert_equal ClientTelephoneStatus::DELETED, telephone.reload.user_telephone_status_id
-    assert_equal ClientPasskeyStatus::DELETED, pending_passkey.reload.status_id
+    assert_raises(ActiveRecord::RecordNotFound) { pending_passkey.reload }
     assert_operator user.reload.discard_at, :>=, now
   end
 
@@ -212,7 +212,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
     assert_equal VisitorSignUpFlowCleanupStatus::COMPLETED, cycle.reload.cleanup_status_id
     assert_equal VisitorTelephoneStatus::DELETED, telephone.reload.visitor_telephone_status_id
-    assert_equal VisitorPasskeyStatus::DELETED, pending_passkey.reload.status_id
+    assert_raises(ActiveRecord::RecordNotFound) { pending_passkey.reload }
     assert_operator visitor.reload.discard_at, :>=, now
   end
 

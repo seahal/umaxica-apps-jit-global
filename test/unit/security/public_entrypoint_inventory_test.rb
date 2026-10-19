@@ -294,6 +294,10 @@ module Security
         return { "show" => "GET", "create" => "POST" }[entry.action] == entry.verb &&
             entry.controller_path.match?(%r{\Abase/(app|com|org)/sign/completions\z})
       end
+      if %w(/sign/cancellation /sign/switch).include?(entry.path)
+        return entry.verb == "POST" && entry.action == "create" &&
+            entry.controller_path.match?(%r{\Aauth/(app|com|org)/sign/(cancellations|switches)\z})
+      end
       if entry.path == "/sign/handoff"
         return %w(GET POST).include?(entry.verb) && %w(show create).include?(entry.action) &&
             entry.controller_path.match?(%r{\Aauth/(app|com|org)/sign/handoffs\z})

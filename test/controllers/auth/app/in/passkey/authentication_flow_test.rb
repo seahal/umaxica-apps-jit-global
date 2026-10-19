@@ -132,6 +132,9 @@ module Auth::App::Sign::In::Passkey
     end
 
     test "passkey login completes without additional MFA even when MFA is enabled" do
+      # Credential persistence may advance the owner's optimistic-lock version through
+      # existing MFA status bookkeeping; refresh before this independent mutation.
+      @user.reload
       @user.update!(mfa_level_enabled: true)
       ClientTotpCredential.create!(
         user: @user,

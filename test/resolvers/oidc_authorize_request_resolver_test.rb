@@ -27,6 +27,12 @@ class OidcAuthorizeRequestResolverTest < ActiveSupport::TestCase
 
     assert_equal "login", result.prompt
     assert_equal 300, result.max_age
+
+    create_result = OidcAuthorizeRequestResolver.call(
+      params: @params.merge(prompt: "create"), resource: @resource,
+    )
+
+    assert_equal "create", create_result.prompt
   end
 
   test "rejects prompt combinations and negative max_age" do
@@ -43,5 +49,16 @@ class OidcAuthorizeRequestResolverTest < ActiveSupport::TestCase
         OidcAuthorizeRequestResolver.call(params: @params.merge(max_age: "-1"), resource: @resource)
       end
     assert_equal "max_age must be a non-negative integer", error.message
+  end
+
+  test "rejects create for the Org surface" do
+    error =
+      assert_raises(ArgumentError) do
+        OidcAuthorizeRequestResolver.call(
+          params: @params.merge(prompt: "create"), resource: operators(:one), resource_type: "operator",
+        )
+      end
+
+    assert_equal "prompt=create is not supported for the Org surface", error.message
   end
 end

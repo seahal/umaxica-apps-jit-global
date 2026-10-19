@@ -61,7 +61,7 @@ exactly five edits:
 
 Plus `.devcontainer/compose.yaml` `networks.frontend.aliases` on the `core` service (both the
 `.core.dev.localhost` and `.umaxica.dev` forms, as `mission|flipper|blazer|pghero` already do), and
-`.env.example` / `.env.devcontainer.example`.
+`.env.container` / `.env.container.devcontainer`.
 
 `config/environments/production.rb` is **not** touched: no `*.umaxica.dev` host is in the production
 `config.hosts` literal today, and these gems are development-only. This satisfies "3
@@ -122,8 +122,8 @@ development guard**, so a missing URL fails the boot loudly instead of falling b
 cache DB). No `||` default, no two-arg fetch.
 
 Update `adr/valkey-nonprod-logical-db-topology.md` with DB 6/7, and add
-`OBSERVABILITY_REDIS_URL=redis://valkey:6379/6` to `.env.example`, `.env.devcontainer.example`, and
-the `core` service environment in `.devcontainer/compose.yaml`.
+`OBSERVABILITY_REDIS_URL=redis://valkey:6379/6` to `.env.container`, `.env.container.devcontainer`,
+and the `core` service environment in `.devcontainer/compose.yaml`.
 
 ## Step 3 — Swagger, and moving the OpenAPI bundle out of `public/`
 

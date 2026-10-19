@@ -521,6 +521,8 @@ CREATE TABLE public.visitor_auth_admission_bindings (
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
+    entry_intent character varying,
+    CONSTRAINT visitor_admission_binding_entry_intent CHECK (((entry_intent IS NULL) OR ((entry_intent)::text = ANY ((ARRAY['sign_in'::character varying, 'sign_up'::character varying])::text[])))),
     CONSTRAINT visitor_admission_bindings_auth_proof_pair CHECK ((((auth_ceremony_session_id IS NULL) AND (confirmation_ref IS NULL)) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT visitor_admission_bindings_confirmation_requires_auth CHECK (((base_confirmed_at IS NULL) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT visitor_admission_bindings_one_parent CHECK ((num_nonnulls(sign_in_flow_id, authorization_transaction_id, step_up_ceremony_transaction_id) = 1)),
@@ -791,7 +793,14 @@ CREATE TABLE public.visitor_oidc_authorization_transactions (
     base_finalized_at timestamp(6) with time zone,
     authorization_grant_redeemed_at timestamp(6) with time zone,
     contract_epoch bigint,
+    canceled_at timestamp with time zone,
+    cancellation_handoff_digest character varying(64),
+    cancellation_handoff_ref uuid,
+    cancellation_handoff_ciphertext text,
     CONSTRAINT chk_visitor_oidc_authorization_transactions_contract_epoch CHECK (((contract_epoch IS NULL) OR (contract_epoch >= 1))),
+    CONSTRAINT visitor_oidc_auth_canceled_terminal CHECK (((canceled_at IS NULL) = ((status)::text <> 'canceled'::text))),
+    CONSTRAINT visitor_oidc_auth_cancellation_handoff_pair CHECK ((((cancellation_handoff_ref IS NULL) AND (cancellation_handoff_ciphertext IS NULL)) OR ((cancellation_handoff_ref IS NOT NULL) AND (cancellation_handoff_ciphertext IS NOT NULL)))),
+    CONSTRAINT visitor_oidc_auth_cancellation_handoff_valid CHECK (((cancellation_handoff_digest IS NULL) OR ((cancellation_handoff_digest)::text ~ '^[0-9a-f]{64}$'::text))),
     CONSTRAINT visitor_oidc_auth_transactions_result_generation_nonnegative CHECK ((result_generation >= 0))
 );
 
@@ -2395,10 +2404,10 @@ CREATE UNIQUE INDEX idx_active_op_com_grant_per_device_session ON public.op_com_
 
 
 --
--- Name: idx_auth_ceremony_sessions_on_tx_ref; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_auth_ceremony_sessions_on_live_tx_ref; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_auth_ceremony_sessions_on_tx_ref ON public.visitor_auth_ceremony_sessions USING btree (authorization_transaction_ref) WHERE (authorization_transaction_ref IS NOT NULL);
+CREATE UNIQUE INDEX idx_auth_ceremony_sessions_on_live_tx_ref ON public.visitor_auth_ceremony_sessions USING btree (authorization_transaction_ref) WHERE ((authorization_transaction_ref IS NOT NULL) AND (cancelled_at IS NULL));
 
 
 --
@@ -2437,6 +2446,13 @@ CREATE INDEX idx_on_actor_ref_session_ref_b6a6aeb3f9 ON public.visitor_secret_cr
 
 
 --
+-- Name: idx_on_cancellation_handoff_digest_3514b7fb07; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_cancellation_handoff_digest_3514b7fb07 ON public.visitor_oidc_authorization_transactions USING btree (cancellation_handoff_digest);
+
+
+--
 -- Name: idx_on_cancellation_handoff_digest_4c74b9916d; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2448,6 +2464,13 @@ CREATE UNIQUE INDEX idx_on_cancellation_handoff_digest_4c74b9916d ON public.visi
 --
 
 CREATE UNIQUE INDEX idx_on_cancellation_handoff_ref_6f48086762 ON public.visitor_step_up_ceremony_transactions USING btree (cancellation_handoff_ref);
+
+
+--
+-- Name: idx_on_cancellation_handoff_ref_902019dea4; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_cancellation_handoff_ref_902019dea4 ON public.visitor_oidc_authorization_transactions USING btree (cancellation_handoff_ref);
 
 
 --
@@ -3698,6 +3721,9 @@ ALTER TABLE ONLY public.visitor_email_ceremony_transactions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261019035655'),
+('20261019035540'),
+('20261019032923'),
 ('20261017150000'),
 ('20261017140000'),
 ('20261017070000'),

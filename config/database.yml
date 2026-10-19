@@ -1,15 +1,4 @@
 <%
-  # Test databases are a separate safety boundary. Reusing the development host when the
-  # test host is absent can point a destructive test preparation task at the wrong server.
-  # `db:prepare` in development also prepares the test database, so this file is
-  # rendered for `test` from a development process. Resolving to nil there left
-  # every test host blank and sent the connection to a local Unix socket, so read
-  # the variable in every environment; require it only when test itself boots.
-  # The boundary that matters is preserved: this never falls back to a
-  # development host.
-  test_host = Rails.env.test? ? ENV.fetch("POSTGRESQL_TEST_HOST") : ENV["POSTGRESQL_TEST_HOST"]
-  # Rendered in every environment; require the test port only when test boots.
-  test_port = Rails.env.test? ? ENV.fetch("POSTGRESQL_PORT") : ENV["POSTGRESQL_PORT"]
   # The explicit isolated audit run maps every test role to a comment-marked task DB.
   # DatabaseSafety verifies every effective target against a catalog identity manifest before boot.
   isolated_test_run_id = Rails.env.test? ? ENV["POSTGRESQL_ISOLATED_TEST_RUN_ID"] : nil
@@ -20,17 +9,6 @@
     else
       normal_name
     end
-  end
-
-  # Every `development:` host is required configuration: a missing name used to
-  # fall back to a shared default, which silently pointed a database at the
-  # wrong node instead of reporting the gap. Rails renders this file in full for
-  # whichever environment boots, though, so a bare ENV.fetch in that block would
-  # also abort `test` and `production` runs that have no development hosts to
-  # declare. Enforce presence only when development is the environment actually
-  # being booted.
-  development_host = lambda do |name|
-    Rails.env.development? ? ENV.fetch(name) : ENV[name]
   end
 
   # Rails evaluates every environment in this file while booting. Require Neon
@@ -75,16 +53,6 @@ default: &default
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 32 } %>
   port: 5432
   timeout: 30000
-<% if Rails.env.development? && !RuntimeRole.shared? %>
-  # A role process (lib/runtime_role.rb) logs in as its own least-privilege PostgreSQL role for
-  # every connection; databases outside RuntimeRole::ROLE_CONNECTIONS refuse that login. The
-  # password lives only in that role's encrypted credentials bundle.
-  username: <%= RuntimeRole.database_login %>
-  password: <%= Rails.app.creds.require(:DATABASE_PASSWORD) %>
-<% else %>
-  username: <%= ENV.fetch("POSTGRESQL_USER", "postgres") %>
-  password: <%= ENV["POSTGRESQL_PASSWORD"].presence || Rails.application.credentials.dig(:DATABASE, :PASSWORD) %>
-<% end %>
   lock_timeout: 2s
   # Raised from 2s so background jobs (e.g. RetentionPurgeJob batch deletes) are not
   # killed mid-statement. Web requests are additionally bounded by rack-timeout (10s).
@@ -99,7 +67,11 @@ test_default: &test_default
   # The committed-transaction concurrency tests retain the test thread's lease
   # while two worker threads use independent connections.
   pool: 3
-  port: <%= test_port %>
+  # Fixed Dev Container contract (compose.yaml `primary`); test databases are never configured
+  # from the environment, so a stray exported variable cannot redirect a destructive preparation.
+  host: primary
+  username: root
+  password: development
   timeout: 20000
   prepared_statements: false
   advisory_locks: true
@@ -113,24 +85,28 @@ test_default: &test_default
 development_default: &development_default
   !!merge <<: *default
   pool: 2
+  # Fixed Dev Container contract (compose.yaml `primary` and `replica` services, non-secret local
+  # login). Development runs only inside the Dev Container (user decision 2026-10-19).
+  username: root
+  password: development
 development:
   publishing:
     !!merge <<: *development_default
     database: development_publishing_db
-    host: <%= development_host.call("POSTGRESQL_PUBLISHING_PUB") %>
+    host: primary
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
   publishing_replica:
     !!merge <<: *development_default
     replica: true
     database: development_publishing_db
-    host: <%= development_host.call("POSTGRESQL_PUBLISHING_SUB") %>
+    host: replica
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
   com_zenith:
     !!merge <<: *development_default
     database: development_com_zenith_db
-    host: <%= development_host.call("POSTGRESQL_COM_ZENITH_PUB") %>
+    host: primary
     migrations_paths:
       - db/com_principals_migrate
       - db/com_zenith_migrate
@@ -139,7 +115,7 @@ development:
     !!merge <<: *development_default
     replica: true
     database: development_com_zenith_db
-    host: <%= development_host.call("POSTGRESQL_COM_ZENITH_SUB") %>
+    host: replica
     migrations_paths:
       - db/com_principals_migrate
       - db/com_zenith_migrate
@@ -147,7 +123,7 @@ development:
   app_zenith:
     !!merge <<: *development_default
     database: development_app_zenith_db
-    host: <%= development_host.call("POSTGRESQL_APP_ZENITH_PUB") %>
+    host: primary
     migrations_paths:
       - db/app_principals_migrate
       - db/app_zenith_migrate
@@ -156,7 +132,7 @@ development:
     !!merge <<: *development_default
     replica: true
     database: development_app_zenith_db
-    host: <%= development_host.call("POSTGRESQL_APP_ZENITH_SUB") %>
+    host: replica
     migrations_paths:
       - db/app_principals_migrate
       - db/app_zenith_migrate
@@ -164,7 +140,7 @@ development:
   org_zenith:
     !!merge <<: *development_default
     database: development_org_zenith_db
-    host: <%= development_host.call("POSTGRESQL_ORG_ZENITH_PUB") %>
+    host: primary
     migrations_paths:
       - db/org_principals_migrate
       - db/org_zenith_migrate
@@ -173,7 +149,7 @@ development:
     !!merge <<: *development_default
     replica: true
     database: development_org_zenith_db
-    host: <%= development_host.call("POSTGRESQL_ORG_ZENITH_SUB") %>
+    host: replica
     migrations_paths:
       - db/org_principals_migrate
       - db/org_zenith_migrate
@@ -181,7 +157,7 @@ development:
   app_setting:
     !!merge <<: *development_default
     database: development_app_setting_db
-    host: <%= development_host.call("POSTGRESQL_APP_SETTING_PUB") %>
+    host: primary
     migrations_paths: db/app_settings_migrate
     schema_dump: app_setting_structure.sql
     connect_timeout: 2
@@ -189,179 +165,179 @@ development:
     !!merge <<: *development_default
     replica: true
     database: development_app_setting_db
-    host: <%= development_host.call("POSTGRESQL_APP_SETTING_SUB") %>
+    host: replica
     migrations_paths: db/app_settings_migrate
     schema_dump: app_setting_structure.sql
     connect_timeout: 2
   org_setting:
     !!merge <<: *development_default
     database: development_org_setting_db
-    host: <%= development_host.call("POSTGRESQL_ORG_SETTING_PUB") %>
+    host: primary
     migrations_paths: db/org_settings_migrate
     schema_dump: org_setting_structure.sql
   org_setting_replica:
     !!merge <<: *development_default
     replica: true
     database: development_org_setting_db
-    host: <%= development_host.call("POSTGRESQL_ORG_SETTING_SUB") %>
+    host: replica
     migrations_paths: db/org_settings_migrate
     schema_dump: org_setting_structure.sql
   com_setting:
     !!merge <<: *development_default
     database: development_com_setting_db
-    host: <%= development_host.call("POSTGRESQL_COM_SETTING_PUB") %>
+    host: primary
     migrations_paths: db/com_settings_migrate
     schema_dump: com_setting_structure.sql
   com_setting_replica:
     !!merge <<: *development_default
     replica: true
     database: development_com_setting_db
-    host: <%= development_host.call("POSTGRESQL_COM_SETTING_SUB") %>
+    host: replica
     migrations_paths: db/com_settings_migrate
     schema_dump: com_setting_structure.sql
   search:
     !!merge <<: *development_default
     database: development_search_db
-    host: <%= development_host.call("POSTGRESQL_SEARCH_PUB") %>
+    host: primary
     migrations_paths: db/searches_migrate
   search_replica:
     !!merge <<: *development_default
     replica: true
     database: development_search_db
-    host: <%= development_host.call("POSTGRESQL_SEARCH_SUB") %>
+    host: replica
     migrations_paths: db/searches_migrate
   op_base_org:
     !!merge <<: *development_default
     database: development_op_base_org_db
-    host: <%= development_host.call("POSTGRESQL_OP_BASE_ORG_PUB") %>
+    host: primary
     migrations_paths: db/op_base_org_migrate
   op_base_org_replica:
     !!merge <<: *development_default
     replica: true
     database: development_op_base_org_db
-    host: <%= development_host.call("POSTGRESQL_OP_BASE_ORG_SUB") %>
+    host: replica
     migrations_paths: db/op_base_org_migrate
   op_base_com:
     !!merge <<: *development_default
     database: development_op_base_com_db
-    host: <%= development_host.call("POSTGRESQL_OP_BASE_COM_PUB") %>
+    host: primary
     migrations_paths: db/op_base_com_migrate
   op_base_com_replica:
     !!merge <<: *development_default
     replica: true
     database: development_op_base_com_db
-    host: <%= development_host.call("POSTGRESQL_OP_BASE_COM_SUB") %>
+    host: replica
     migrations_paths: db/op_base_com_migrate
   op_base_app:
     !!merge <<: *development_default
     database: development_op_base_app_db
-    host: <%= development_host.call("POSTGRESQL_OP_BASE_APP_PUB") %>
+    host: primary
     migrations_paths: db/op_base_app_migrate
   op_base_app_replica:
     !!merge <<: *development_default
     replica: true
     database: development_op_base_app_db
-    host: <%= development_host.call("POSTGRESQL_OP_BASE_APP_SUB") %>
+    host: replica
     migrations_paths: db/op_base_app_migrate
 <% rp_cells.each do |cell| %>
   <%= cell.fetch(:connection) %>:
     !!merge <<: *development_default
     database: <%= cell.fetch(:database) %>
-    host: <%= development_host.call("POSTGRESQL_#{cell.fetch(:env_prefix)}_PUB") %>
+    host: primary
     migrations_paths: <%= cell.fetch(:migrations_path) %>
     schema_dump: <%= cell.fetch(:schema_dump) %>
   <%= cell.fetch(:connection) %>_replica:
     !!merge <<: *development_default
     replica: true
     database: <%= cell.fetch(:database) %>
-    host: <%= development_host.call("POSTGRESQL_#{cell.fetch(:env_prefix)}_SUB") %>
+    host: replica
     migrations_paths: <%= cell.fetch(:migrations_path) %>
     schema_dump: <%= cell.fetch(:schema_dump) %>
 <% end %>
   app_signal:
     !!merge <<: *development_default
     database: development_app_signal_db
-    host: <%= development_host.call("POSTGRESQL_APP_SIGNAL_PUB") %>
+    host: primary
     migrations_paths: db/app_signals_migrate
   app_signal_replica:
     !!merge <<: *development_default
     replica: true
     database: development_app_signal_db
-    host: <%= development_host.call("POSTGRESQL_APP_SIGNAL_SUB") %>
+    host: replica
     migrations_paths: db/app_signals_migrate
   org_signal:
     !!merge <<: *development_default
     database: development_org_signal_db
-    host: <%= development_host.call("POSTGRESQL_ORG_SIGNAL_PUB") %>
+    host: primary
     migrations_paths: db/org_signals_migrate
   org_signal_replica:
     !!merge <<: *development_default
     replica: true
     database: development_org_signal_db
-    host: <%= development_host.call("POSTGRESQL_ORG_SIGNAL_SUB") %>
+    host: replica
     migrations_paths: db/org_signals_migrate
   com_signal:
     !!merge <<: *development_default
     database: development_com_signal_db
-    host: <%= development_host.call("POSTGRESQL_COM_SIGNAL_PUB") %>
+    host: primary
     migrations_paths: db/com_signals_migrate
   com_signal_replica:
     !!merge <<: *development_default
     replica: true
     database: development_com_signal_db
-    host: <%= development_host.call("POSTGRESQL_COM_SIGNAL_SUB") %>
+    host: replica
     migrations_paths: db/com_signals_migrate
   queue:
     !!merge <<: *development_default
     pool: 5
     database: development_queue_db
-    host: <%= development_host.call("POSTGRESQL_QUEUE_PUB") %>
+    host: primary
     migrations_paths: db/queues_migrate
   storage:
     !!merge <<: *development_default
     database: development_storage_db
-    host: <%= development_host.call("POSTGRESQL_STORAGE_PUB") %>
+    host: primary
     migrations_paths: db/storages_migrate
   storage_replica:
     !!merge <<: *development_default
     replica: true
     database: development_storage_db
-    host: <%= development_host.call("POSTGRESQL_STORAGE_SUB") %>
+    host: replica
     migrations_paths: db/storages_migrate
   occurrence:
     !!merge <<: *development_default
     database: development_occurrence_db
-    host: <%= development_host.call("POSTGRESQL_OCCURRENCE_PUB") %>
+    host: primary
     migrations_paths: db/occurrences_migrate
   occurrence_replica:
     !!merge <<: *development_default
     replica: true
     database: development_occurrence_db
-    host: <%= development_host.call("POSTGRESQL_OCCURRENCE_SUB") %>
+    host: replica
     migrations_paths: db/occurrences_migrate
   chronicle:
     !!merge <<: *development_default
     database: development_chronicle_db
-    host: <%= development_host.call("POSTGRESQL_CHRONICLE_PUB") %>
+    host: primary
     migrations_paths: db/chronicle_migrate
     schema_dump: chronicle_structure.sql
   chronicle_replica:
     !!merge <<: *development_default
     replica: true
     database: development_chronicle_db
-    host: <%= development_host.call("POSTGRESQL_CHRONICLE_SUB") %>
+    host: replica
     migrations_paths: db/chronicle_migrate
     schema_dump: chronicle_structure.sql
   avatar:
     !!merge <<: *development_default
     database: development_avatar_db
-    host: <%= development_host.call("POSTGRESQL_AVATAR_PUB") %>
+    host: primary
     migrations_paths: db/avatars_migrate
   avatar_replica:
     !!merge <<: *development_default
     replica: true
     database: development_avatar_db
-    host: <%= development_host.call("POSTGRESQL_AVATAR_SUB") %>
+    host: replica
     migrations_paths: db/avatars_migrate
   # Rails default database. Durable, low-frequency, application-wide configuration
   # (currently Flipper). Deliberately has no replica: a flag is read immediately
@@ -369,7 +345,7 @@ development:
   primary:
     !!merge <<: *development_default
     database: development_primary_db
-    host: <%= development_host.call("POSTGRESQL_PRIMARY_PUB") %>
+    host: primary
     migrations_paths: db/migrate
 # Warning: The database defined as "test" will be erased and
 # re-generated from your development database when you run "rake".
@@ -378,20 +354,17 @@ test:
   publishing:
     !!merge <<: *test_default
     database: <%= test_database.call("publishing", "test_publishing_db") %>
-    host: <%= test_host %>
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
   publishing_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("publishing", "test_publishing_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/publishing_migrate
     schema_dump: publishing_structure.sql
   com_zenith:
     !!merge <<: *test_default
     database: <%= test_database.call("com_zenith", "test_com_zenith_db") %>
-    host: <%= test_host %>
     migrations_paths:
       - db/com_principals_migrate
       - db/com_zenith_migrate
@@ -400,7 +373,6 @@ test:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("com_zenith", "test_com_zenith_replica_db") %>
-    host: <%= test_host %>
     migrations_paths:
       - db/com_principals_migrate
       - db/com_zenith_migrate
@@ -408,7 +380,6 @@ test:
   app_zenith:
     !!merge <<: *test_default
     database: <%= test_database.call("app_zenith", "test_app_zenith_db") %>
-    host: <%= test_host %>
     migrations_paths:
       - db/app_principals_migrate
       - db/app_zenith_migrate
@@ -417,7 +388,6 @@ test:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("app_zenith", "test_app_zenith_replica_db") %>
-    host: <%= test_host %>
     migrations_paths:
       - db/app_principals_migrate
       - db/app_zenith_migrate
@@ -425,7 +395,6 @@ test:
   org_zenith:
     !!merge <<: *test_default
     database: <%= test_database.call("org_zenith", "test_org_zenith_db") %>
-    host: <%= test_host %>
     migrations_paths:
       - db/org_principals_migrate
       - db/org_zenith_migrate
@@ -434,7 +403,6 @@ test:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("org_zenith", "test_org_zenith_replica_db") %>
-    host: <%= test_host %>
     migrations_paths:
       - db/org_principals_migrate
       - db/org_zenith_migrate
@@ -442,138 +410,116 @@ test:
   app_setting:
     !!merge <<: *test_default
     database: <%= test_database.call("app_setting", "test_app_setting_db") %>
-    host: <%= test_host %>
     migrations_paths: db/app_settings_migrate
     schema_dump: app_setting_structure.sql
   app_setting_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("app_setting", "test_app_setting_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/app_settings_migrate
     schema_dump: app_setting_structure.sql
   org_setting:
     !!merge <<: *test_default
     database: <%= test_database.call("org_setting", "test_org_setting_db") %>
-    host: <%= test_host %>
     migrations_paths: db/org_settings_migrate
     schema_dump: org_setting_structure.sql
   org_setting_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("org_setting", "test_org_setting_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/org_settings_migrate
     schema_dump: org_setting_structure.sql
   com_setting:
     !!merge <<: *test_default
     database: <%= test_database.call("com_setting", "test_com_setting_db") %>
-    host: <%= test_host %>
     migrations_paths: db/com_settings_migrate
     schema_dump: com_setting_structure.sql
   com_setting_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("com_setting", "test_com_setting_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/com_settings_migrate
     schema_dump: com_setting_structure.sql
   search:
     !!merge <<: *test_default
     database: <%= test_database.call("search", "test_search_db") %>
-    host: <%= test_host %>
     migrations_paths: db/searches_migrate
   search_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("search", "test_search_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/searches_migrate
     schema_dump: search_structure.sql
   op_base_org:
     !!merge <<: *test_default
     database: <%= test_database.call("op_base_org", "test_op_base_org_db") %>
-    host: <%= test_host %>
     migrations_paths: db/op_base_org_migrate
   op_base_org_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("op_base_org", "test_op_base_org_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/op_base_org_migrate
     schema_dump: op_base_org_structure.sql
   op_base_com:
     !!merge <<: *test_default
     database: <%= test_database.call("op_base_com", "test_op_base_com_db") %>
-    host: <%= test_host %>
     migrations_paths: db/op_base_com_migrate
   op_base_com_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("op_base_com", "test_op_base_com_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/op_base_com_migrate
     schema_dump: op_base_com_structure.sql
   op_base_app:
     !!merge <<: *test_default
     database: <%= test_database.call("op_base_app", "test_op_base_app_db") %>
-    host: <%= test_host %>
     migrations_paths: db/op_base_app_migrate
   op_base_app_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("op_base_app", "test_op_base_app_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/op_base_app_migrate
     schema_dump: op_base_app_structure.sql
 <% rp_cells.each do |cell| %>
   <%= cell.fetch(:connection) %>:
     !!merge <<: *test_default
     database: <%= test_database.call(cell.fetch(:connection), cell.fetch(:test_database)) %>
-    host: <%= test_host %>
     migrations_paths: <%= cell.fetch(:migrations_path) %>
   <%= cell.fetch(:connection) %>_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call(cell.fetch(:connection), cell.fetch(:test_database).sub("_db", "_replica_db")) %>
-    host: <%= test_host %>
     migrations_paths: <%= cell.fetch(:migrations_path) %>
     schema_dump: <%= cell.fetch(:schema_dump) %>
 <% end %>
   app_signal:
     !!merge <<: *test_default
     database: <%= test_database.call("app_signal", "test_app_signal_db") %>
-    host: <%= test_host %>
     migrations_paths: db/app_signals_migrate
   app_signal_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("app_signal", "test_app_signal_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/app_signals_migrate
     schema_dump: app_signal_structure.sql
   org_signal:
     !!merge <<: *test_default
     database: <%= test_database.call("org_signal", "test_org_signal_db") %>
-    host: <%= test_host %>
     migrations_paths: db/org_signals_migrate
   org_signal_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("org_signal", "test_org_signal_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/org_signals_migrate
     schema_dump: org_signal_structure.sql
   com_signal:
     !!merge <<: *test_default
     database: <%= test_database.call("com_signal", "test_com_signal_db") %>
-    host: <%= test_host %>
     migrations_paths: db/com_signals_migrate
   com_signal_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("com_signal", "test_com_signal_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/com_signals_migrate
     schema_dump: com_signal_structure.sql
   queue:
@@ -582,61 +528,51 @@ test:
     # connection plus its polling and heartbeat connections.
     pool: 5
     database: <%= test_database.call("queue", "test_queue_db") %>
-    host: <%= test_host %>
     migrations_paths: db/queues_migrate
   storage:
     !!merge <<: *test_default
     database: <%= test_database.call("storage", "test_storage_db") %>
-    host: <%= test_host %>
     migrations_paths: db/storages_migrate
   storage_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("storage", "test_storage_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/storages_migrate
     schema_dump: storage_structure.sql
   occurrence:
     !!merge <<: *test_default
     database: <%= test_database.call("occurrence", "test_occurrence_db") %>
-    host: <%= test_host %>
     migrations_paths: db/occurrences_migrate
   occurrence_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("occurrence", "test_occurrence_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/occurrences_migrate
     schema_dump: occurrence_structure.sql
   chronicle:
     !!merge <<: *test_default
     database: <%= test_database.call("chronicle", "test_chronicle_db") %>
-    host: <%= test_host %>
     migrations_paths: db/chronicle_migrate
     schema_dump: chronicle_structure.sql
   chronicle_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("chronicle", "test_chronicle_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/chronicle_migrate
     schema_dump: chronicle_structure.sql
   avatar:
     !!merge <<: *test_default
     database: <%= test_database.call("avatar", "test_avatar_db") %>
-    host: <%= test_host %>
     migrations_paths: db/avatars_migrate
   avatar_replica:
     !!merge <<: *test_default
     replica: true
     database: <%= test_database.call("avatar", "test_avatar_replica_db") %>
-    host: <%= test_host %>
     migrations_paths: db/avatars_migrate
     schema_dump: avatar_structure.sql
   primary:
     !!merge <<: *test_default
     database: <%= test_database.call("primary", "test_primary_db") %>
-    host: <%= test_host %>
     migrations_paths: db/migrate
 production:
   publishing:

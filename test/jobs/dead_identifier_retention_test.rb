@@ -24,6 +24,13 @@ class DeadIdentifierRetentionTest < ActiveJob::TestCase
       assert email_model.exists?(email.id)
       assert_equal deadline, email.reload.purge_eligible_at
       assert_empty email_history.where(owner_key => owner.id)
+      deferred = occurrence_model.where(event_type: "withdrawal.purge_deferred").where(
+        "context ->> 'subject_public_id' = ? AND context ->> 'reason_code' = ?",
+        owner.public_id,
+        "identifier_retention",
+      )
+
+      assert_predicate deferred, :exists?
       assert_not occurrence_model.where(event_type: "withdrawal.shredded")
         .exists?(["context ->> 'subject_public_id' = ?", owner.public_id])
 

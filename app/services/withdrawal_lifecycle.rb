@@ -40,21 +40,38 @@ class WithdrawalLifecycle
   end
 
   def suspend!
-    now = Time.current
     stop_event = nil
-    deactivated = actor.deactivated_at.presence || now
+    deactivated = nil
+    timing_policy = Umaxica::Withdrawal::TimingPolicyValue.current
 
     actor.class.transaction do
       actor.lock!
+      now = actor.class.database_now
+      deactivated = actor.deactivated_at.presence || now
       ensure_withdrawal_flow_discarded!(now: now)
+      deactivated = actor.deactivated_at.presence || deactivated
+      recovery_available_at = persisted_or_legacy_deadline(
+        :recovery_available_at,
+        deactivated: deactivated,
+        legacy_delay: Withdrawable::WITHDRAWAL_RECOVERY_DELAY,
+        configured_delay: timing_policy.recovery_delay,
+      )
+      early_termination_available_at = persisted_or_legacy_deadline(
+        :early_termination_available_at,
+        deactivated: deactivated,
+        legacy_delay: Withdrawable::WITHDRAWAL_EARLY_TERMINATION_DELAY,
+        configured_delay: timing_policy.early_termination_delay,
+      )
       actor.update!(
         withdrawal_started_at: actor.withdrawal_started_at.presence || now,
         deactivated_at: deactivated,
+        recovery_available_at: recovery_available_at,
+        early_termination_available_at: early_termination_available_at,
         discard_at: deactivated,
-        purge_eligible_at: if actor.purge_eligible_at.present? && finite_future_time?(actor.purge_eligible_at)
+        purge_eligible_at: if actor.purge_eligible_at.present? && finite_time?(actor.purge_eligible_at)
                              actor.purge_eligible_at
                            else
-                             deactivated + RECOVERY_PERIOD
+                             deactivated + timing_policy.retention_period
                            end,
       )
       stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_suspend")
@@ -71,16 +88,21 @@ class WithdrawalLifecycle
   end
 
   def recover!
-    raise Sign::WithdrawalRecoveryNotAvailableError unless actor.can_recover?
-    raise Sign::WithdrawalRecoveryNotAvailableError if privacy_request_blocks_recovery?
-
     actor.class.transaction do
       actor.lock!
+      # Re-evaluate all time and retention predicates after taking the principal lock. A
+      # pre-lock check lets recovery race a purge or a newly-created privacy request.
+      now = actor.class.database_now
+      raise Sign::WithdrawalRecoveryNotAvailableError unless actor.can_recover?(now: now)
+      raise Sign::WithdrawalRecoveryNotAvailableError if privacy_request_blocks_recovery?
+
       cancel_received_privacy_requests!
-      ensure_withdrawal_flow_recovered!(now: Time.current)
+      ensure_withdrawal_flow_recovered!(now: now)
       actor.update!(
         withdrawal_started_at: nil,
         deactivated_at: nil,
+        recovery_available_at: nil,
+        early_termination_available_at: nil,
         discard_at: Float::INFINITY,
         purge_eligible_at: Float::INFINITY,
         withdrawn_at: nil,
@@ -93,18 +115,23 @@ class WithdrawalLifecycle
   end
 
   def terminate!
-    raise Sign::InvalidWithdrawalStateError, actor.class.name unless actor.early_terminatable?
-
     stop_event = nil
 
     actor.class.transaction do
       actor.lock!
-      ensure_withdrawal_flow_terminated!(now: Time.current)
+      # The deadline and all deletion guards must be checked while holding the same lock as the
+      # terminal write. Otherwise a concurrent recovery or hold can be defeated by a stale check.
+      now = actor.class.database_now
+      raise Sign::InvalidWithdrawalStateError, actor.class.name unless actor.early_terminatable?(now: now)
+      raise Sign::InvalidWithdrawalStateError, actor.class.name if active_retention_hold?
+      raise Sign::InvalidWithdrawalStateError, actor.class.name if enforcement_blocks_termination?
+
+      ensure_withdrawal_flow_terminated!(now: now)
+      WithdrawalPersonalDataAnonymizer.call(actor:)
       if actor.respond_to?(:terminated_at=)
-        actor.terminated_at = Time.current
+        actor.terminated_at = actor.class.database_now
         actor.save!(validate: false)
       end
-      WithdrawalPersonalDataAnonymizer.call(actor:)
       stop_event = IdentityAuthenticationStopRecorder.call(actor:, reason: "withdrawal_terminate")
     end
     OpIdentityEventInvalidator.deliver(event: stop_event)
@@ -127,7 +154,9 @@ class WithdrawalLifecycle
   end
 
   def ensure_withdrawal_flow_discarded!(now:)
-    cycle = active_withdrawal_flow || create_withdrawal_flow!(status: "REQUESTED", now: now)
+    cycle = active_withdrawal_flow
+    raise Sign::InvalidWithdrawalStateError, "REQUESTED" unless cycle
+
     cycle.confirm_withdrawal!(
       **withdrawal_flow_event_attrs(
         now: now,
@@ -144,6 +173,9 @@ class WithdrawalLifecycle
   end
 
   def ensure_withdrawal_flow_recovered!(now:)
+    # Recovery operates on an already-suspended principal. Legacy suspended rows may predate a
+    # flow row, so materialize the discarded cycle here; the deactivation itself still requires a
+    # persisted REQUESTED cycle in ensure_withdrawal_flow_discarded!.
     cycle = active_withdrawal_flow || create_withdrawal_flow!(status: "DISCARDED", now: now)
     cycle.recover_withdrawal!(
       **withdrawal_flow_event_attrs(
@@ -155,6 +187,8 @@ class WithdrawalLifecycle
   end
 
   def ensure_withdrawal_flow_terminated!(now:)
+    # As with recovery, an already-suspended legacy principal may not have a retained flow row.
+    # Termination remains protected by the locked deadline, retention hold and ceremony checks.
     cycle = active_withdrawal_flow || create_withdrawal_flow!(status: "DISCARDED", now: now)
     cycle.terminate_withdrawal!(
       **withdrawal_flow_event_attrs(
@@ -216,11 +250,17 @@ class WithdrawalLifecycle
     }
   end
 
-  def finite_future_time?(value)
-    return false if value.blank?
-    return false if value.respond_to?(:infinite?) && value.infinite?
+  def finite_time?(value)
+    value.present? && !(value.respond_to?(:infinite?) && value.infinite?)
+  end
 
-    value.future?
+  def persisted_or_legacy_deadline(attribute, deactivated:, legacy_delay:, configured_delay:)
+    persisted = actor[attribute] if actor.has_attribute?(attribute)
+    return persisted if persisted.present?
+
+    return deactivated + legacy_delay if actor.deactivated_at.present?
+
+    deactivated + configured_delay
   end
 
   def privacy_requests
@@ -234,6 +274,28 @@ class WithdrawalLifecycle
 
   def privacy_request_blocks_recovery?
     privacy_requests.open_for_recovery_block.exists?
+  end
+
+  def active_retention_hold?
+    case actor
+    when Client then actor.client_retention_holds.active_at(actor.class.database_now).exists?
+    when Visitor then actor.visitor_retention_holds.active_at(actor.class.database_now).exists?
+    else
+      raise Sign::InvalidWithdrawalStateError, actor.class.name
+    end
+  end
+
+  def enforcement_blocks_termination?
+    case actor
+    when Client
+      AppEnforcementCase.principal_effect_blocking?(actor.public_id, :withdrawal_purge_blocked) ||
+        AppEnforcementCase.principal_effect_blocking?(actor.public_id, :principal_hard_delete_blocked)
+    when Visitor
+      ComEnforcementCase.principal_effect_blocking?(actor.public_id, :withdrawal_purge_blocked) ||
+        ComEnforcementCase.principal_effect_blocking?(actor.public_id, :principal_hard_delete_blocked)
+    else
+      raise Sign::InvalidWithdrawalStateError, actor.class.name
+    end
   end
 
   def cancel_received_privacy_requests!

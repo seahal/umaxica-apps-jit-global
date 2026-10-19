@@ -276,6 +276,8 @@ group :development do
   gem "flog", require: false
   # Duplicate code detector.
   gem "flay", require: false
+  # Keep the editable upstream source in the repository; see its VENDOR.md before upgrading.
+  gem 'database_consistency', path: 'vendor/fork/database_consistency', require: false
 end
 
 group :development, :production do

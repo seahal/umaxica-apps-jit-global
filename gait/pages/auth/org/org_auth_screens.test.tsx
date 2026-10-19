@@ -129,21 +129,27 @@ describe("OrgSignInEntry", () => {
       { key: "secret", kind: "link" as const, label: "パスワードでログイン", href: "/org/secret" },
     ],
     registration_link: { label: "招待コードをお持ちの方", href: "/org/invitation" },
+    cancel_form: null,
+    switch_form: null,
   };
 
-  it("appends text-only Cancel without a top back link on org sign-in", () => {
+  it("renders Cancel as the last POST form and no Switch on org sign-in", () => {
     const markup = renderToStaticMarkup(
       <OrgSignInEntry
         {...props}
-        cancel_label="Cancel"
+        cancel_form={{
+          label: "Cancel",
+          action: "/sign/cancellation",
+          to: null,
+          authenticity_token: "csrf-value",
+        }}
       />,
     );
     const page = new DOMParser().parseFromString(markup, "text/html").body.lastElementChild;
     const cancel = page?.lastElementChild;
-    expect(cancel?.tagName).toBe("P");
-    expect(cancel?.textContent).toBe("Cancel");
-    expect(cancel?.closest("a, button, form")).toBeNull();
-    expect(cancel?.querySelector("a, button, form")).toBeNull();
+    expect(cancel?.tagName).toBe("FORM");
+    expect(cancel?.getAttribute("action")).toBe("/sign/cancellation");
+    expect(markup).not.toContain("/sign/switch");
     expect(page?.querySelector("header a")).toBeNull();
   });
 

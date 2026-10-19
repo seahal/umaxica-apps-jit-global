@@ -16,7 +16,9 @@ module Base
         before_action :enforce_oauth_authorize_request_size!, only: :show
 
         def show
-          return render_oidc_result_continuation! if params[:result_ref].present? || params[:transaction_ref].present?
+          if params[:result_ref].present? || params[:transaction_ref].present? || params[:switch_handoff].present?
+            return render_oidc_result_continuation!
+          end
 
           validate_authorization_request!
           return render_client_not_admitted unless op_client_admitted?(authorize_params[:client_id].to_s)
@@ -72,7 +74,9 @@ module Base
 
         def authorization_session_sufficient?
           return false unless logged_in?
-          return false if OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt]) == "login"
+
+          prompt = OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt])
+          return false if %w(login create).include?(prompt)
 
           max_age = @validated_client&.max_age
           return true if max_age.nil?
@@ -222,10 +226,24 @@ module Base
           end
         end
 
+        # D06 Switch target page on Auth for a fresh admission of the same parent.
+        def authorization_switch_url(target:, entry_ref:)
+          case target
+          when "sign_in"
+            auth_com_sign_in_url(ri: params[:ri], host: oidc_sign_host, protocol: oidc_sign_protocol, entry_ref:)
+          when "sign_up"
+            auth_com_sign_up_url(ri: params[:ri], host: oidc_sign_host, protocol: oidc_sign_protocol, entry_ref:)
+          else
+            raise ArgumentError, "unsupported switch target: #{target.inspect}"
+          end
+        end
+
         def authorization_intent
+          prompt = OidcAuthorizeRequestResolver.normalize_prompt(authorize_params[:prompt])
+          return "sign_up" if prompt == "create"
           return "authentication" if first_party_browser_rp?
 
-          (params[:screen_hint].to_s == "signup") ? "sign_up" : "sign_in"
+          "sign_in"
         end
 
         def first_party_browser_rp?
@@ -260,7 +278,7 @@ module Base
           # report those as unpermitted, which they are not - they are simply not ours.
           keys = %i(
             response_type client_id redirect_uri state
-            code_challenge code_challenge_method scope nonce screen_hint prompt max_age
+            code_challenge code_challenge_method scope nonce prompt max_age
           )
           params.slice(*keys).permit(*keys)
         end

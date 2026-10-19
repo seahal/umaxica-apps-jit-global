@@ -9,6 +9,7 @@ module Auth
         include ::AuthenticationModeSwitchGuard
         include ::AuthCeremonyAdmission
         include ::SignInPhaseBindingControllerSupport
+        include ::SignEntryExit
 
         AUTHENTICATION_MODE = :guest
         declare_authentication_mode! :guest, no_redirect: true
@@ -36,17 +37,32 @@ module Auth
 
           {
             title: t("sign.com.authentication.new.page_title"),
-            cancel_label: t("actions.cancel"),
             description: t("sign.com.authentication.new.description"),
             methods: sign_in_method_links(pt),
             social_providers: [],
-            registration_link: {
-              key: "registration",
-              label: t("sign.com.authentication.new.links.registration"),
-              href: auth_com_sign_up_path(ri: params[:ri], pt: pt),
-            },
+            registration_link: registration_link(pt),
+            **sign_entry_exit_forms(
+              switch_to: "sign_up", switch_label: t("sign.com.authentication.new.links.registration"),
+            ),
           }
         end
+
+        # A local entry keeps its link to Sign Up; an OIDC-bound page moves only through Switch.
+        def registration_link(pt)
+          return nil if sign_entry_parent_bound?
+
+          {
+            key: "registration",
+            label: t("sign.com.authentication.new.links.registration"),
+            href: auth_com_sign_up_path(ri: params[:ri], pt: pt),
+          }
+        end
+
+        def sign_entry_exit_sign_up_cycle_class = VisitorSignUpFlow
+
+        def sign_entry_exit_cancellation_path = auth_com_sign_cancellation_path(ri: params[:ri])
+
+        def sign_entry_exit_switch_path = auth_com_sign_switch_path(ri: params[:ri])
 
         def sign_in_method_links(pt)
           binding = sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING")

@@ -10,24 +10,25 @@ Regional repository is created by this work.
 
 ## 2. Runtime modes
 
-The supported local modes are bare-metal Rails with Compose infrastructure and a Dev Container with
-the same infrastructure. Both modes execute the same Rails application and frontend commands.
+The supported local mode is the Dev Container with Compose infrastructure. Bare-metal Rails is not
+supported.
 
 ## 3. Configuration authority
 
 Application configuration is the non-secret environment contract, not a Compose service definition.
-`config/boot.rb` loads `.env` when present and otherwise `.env.example`; exported values always win.
-Production never reads repository-local environment files.
+The Dev Container receives `.env.container.devcontainer` through `env_file`. `config/boot.rb` also
+loads the ignored `.env` when present; exported values always win. Production never reads
+repository-local environment files.
 
 ## 4. Host contract
 
-`.env.example` describes loopback PostgreSQL, Valkey, FakeCloud, Rails, Vite, URL, and identifier
-settings. It contains development-only obvious placeholders, never production credentials.
+There is no host-native environment file. The host runs Podman Compose and the Dev Container only.
 
 ## 5. Dev Container contract
 
-`.env.devcontainer.example` is the same application contract with only topology-sensitive endpoints
-changed to Compose service names. The tracked Dev Container overlay consumes it with `env_file`.
+`.env.container.devcontainer` is the same application contract with only topology-sensitive
+endpoints changed to Compose service names. The tracked Dev Container overlay consumes it with
+`env_file`.
 
 ## 6. Compose boundary
 
@@ -37,9 +38,10 @@ only `core` and does not inline application variables.
 
 ## 7. PostgreSQL
 
-Host-native Rails reaches the loopback-only writer and reader publications. Container Rails reaches
-`primary` and `replica` through the backend network. The database names and connection roles remain
-owned by `config/database.yml` and the environment contract.
+Rails runs only in the Dev Container and reaches `primary` and `replica` through the backend
+network. `config/database.yml` owns the development and test hosts, login and database names as
+fixed literals; production reads the `NEON_*` variables. The loopback publications serve host-side
+tools such as `psql`, not Rails.
 
 ## 8. Valkey
 
@@ -59,8 +61,8 @@ reachable from the LAN, and no service uses host networking.
 ## 11. Secrets
 
 No master key, secret key base, private key, bearer token, production database password, or cloud
-credential belongs in either example file. Rails encrypted credentials and the ignored `.env` remain
-provisioned out of band.
+credential belongs in `.env.container.devcontainer`. Rails encrypted credentials and the ignored
+`.env` remain provisioned out of band.
 
 ## 12. Frontend toolchain
 
@@ -69,20 +71,11 @@ Rails frontend stacks remain intact. The package manager is pinned in `package.j
 
 ## 13. Bare-metal startup
 
-Use the following sequence from the repository root:
-
-```bash
-cp .env.example .env                 # optional; Rails falls back to the example
-podman compose up -d                  # or docker compose up -d
-bin/setup --skip-server
-TMPDIR=/tmp/umaxica-vitest bin/dev
-```
-
-The Rails process is host-native; Compose supplies only the infrastructure services.
+Not supported. Use the Dev Container startup in section 14.
 
 ## 14. Dev Container startup
 
-Open the repository in a Dev Container. The tracked Compose files and `.env.devcontainer.example`
+Open the repository in a Dev Container. The tracked Compose files and `.env.container.devcontainer`
 resolve on a clean checkout. The post-create command installs Bundler and Bun dependencies and
 prepares databases.
 

@@ -36,7 +36,9 @@ class OrgAdminCsrfTest < ActionDispatch::IntegrationTest
       operator: @operator, capabilities: OperatorCapabilityGrant::CAPABILITIES, ticket_id: "TEST-CSRF",
       expires_at: 1.day.from_now,
     )
-    @passkey = @operator.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
+    @passkey = @operator.staff_passkeys.create!(
+      webauthn_id: SecureRandom.uuid, public_key: "public",
+    )
     BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
     access = AuthenticationToken.encode(

@@ -62,6 +62,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
   }.freeze
 
   CANCELLATION_PURPOSE = "cancellation_handoff"
+  SWITCH_HANDOFF_VERSION = 1
+  SWITCH_HANDOFF_TTL = 2.minutes
+  SWITCH_TARGETS = %w(sign_in sign_up).freeze
   CANCELLATION_HANDOFF_VERSION = 1
 
   LOCAL_ENTRY_PURPOSE = {
@@ -106,6 +109,20 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       binding, code = issue_binding_and_transport!(
         transaction: transaction, purpose: purpose, base_browser_nonce: base_browser_nonce,
         base_token: base_token, restart_of:, store: store,
+      )
+      Issuance.new(transaction: transaction, code: code, reference: binding.entry_ref)
+    end
+
+    # D06 Switch: a fresh admission for a parent whose earlier admissions were all redeemed by
+    # ceremonies that have since been cancelled. Any redeemed admission whose ceremony is still
+    # live keeps the ordinary refusal, so a Switch can never run beside an active ceremony.
+    def issue_switch_admission!(transaction:, base_browser_nonce:, base_token:, target:, store: default_store)
+      raise Denied.new("switch target is invalid", code: "invalid_admission") unless SWITCH_TARGETS.include?(target)
+
+      purpose = handoff_purpose_for(transaction.intent)
+      binding, code = issue_binding_and_transport!(
+        transaction: transaction, purpose: purpose, base_browser_nonce: base_browser_nonce,
+        base_token: base_token, restart_of: nil, store: store, after_ended_ceremonies: true, entry_intent: target,
       )
       Issuance.new(transaction: transaction, code: code, reference: binding.entry_ref)
     end
@@ -338,6 +355,77 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def read_cancellation_handoff!(handoff:, surface:, transaction_ref:, store: default_store)
       transaction, payload = validate_cancellation_handoff!(handoff:, surface:, transaction_ref:)
+      consume_cancellation_handoff!(transaction:, payload:, handoff:, surface:, transaction_ref:, store:)
+    end
+
+    # D09 parent-authorization Cancel. The handoff is the same encrypted, single-use shape as the
+    # Step-Up cancellation; it is accepted only when it equals the ciphertext stored on the loaded
+    # authorization transaction, so a Step-Up handoff can never cancel a parent or the reverse.
+    def read_authorization_cancellation_handoff!(handoff:, surface:, transaction_ref:, store: default_store)
+      transaction, payload = validate_authorization_cancellation_handoff!(handoff:, surface:, transaction_ref:)
+      consume_cancellation_handoff!(transaction:, payload:, handoff:, surface:, transaction_ref:, store:)
+    end
+
+    # D06 Switch. Auth ends its first-page ceremony and hands Base a short-lived encrypted request
+    # naming the same parent and the other flow. Base proves the ceremony really ended for that
+    # parent before it issues a fresh admission; the parent itself is never consumed or re-intended.
+    def validate_switch_request!(transaction:, target:)
+      validate_switch_target!(transaction:, target:)
+    end
+
+    def issue_switch_handoff!(transaction:, ceremony_session:, target:)
+      validate_switch_target!(transaction:, target:)
+      unless ceremony_session.cancelled? && ceremony_session.authorization_transaction_ref == transaction.transaction_id
+        raise Denied.new("switch ceremony is not ended for this parent", code: "invalid_admission")
+      end
+
+      switch_handoff_encryptor.encrypt_and_sign(
+        JSON.generate(
+          "version" => SWITCH_HANDOFF_VERSION, "surface" => transaction.surface,
+          "transaction_ref" => transaction.transaction_id, "ceremony_session_id" => ceremony_session.id,
+          "target" => target, "expires_at" => (transaction.class.database_now + SWITCH_HANDOFF_TTL).iso8601,
+        ),
+      )
+    end
+
+    def read_switch_handoff!(handoff:, surface:)
+      raise Denied.new("switch handoff is invalid", code: "invalid_admission") unless handoff.is_a?(String) &&
+        handoff.present?
+
+      payload = JSON.parse(switch_handoff_encryptor.decrypt_and_verify(handoff))
+      unless payload.is_a?(Hash) && payload.fetch("version") == SWITCH_HANDOFF_VERSION &&
+          payload.fetch("surface") == surface.to_s && Time.zone.iso8601(payload.fetch("expires_at")) > Time.current
+        raise Denied.new("switch handoff is invalid", code: "invalid_admission")
+      end
+
+      transaction = authorization_transaction_for_exit(surface:, transaction_ref: payload.fetch("transaction_ref"))
+      target = payload.fetch("target")
+      validate_switch_target!(transaction:, target:)
+      ceremony =
+        ceremony_session_class(surface).connection_owner.connected_to(role: :writing) do
+          ceremony_session_class(surface).find(payload.fetch("ceremony_session_id"))
+        end
+      unless ceremony.cancelled? && ceremony.authorization_transaction_ref == transaction.transaction_id
+        raise Denied.new("switch ceremony is not ended for this parent", code: "invalid_admission")
+      end
+
+      [transaction, target]
+    rescue ActiveSupport::MessageEncryptor::InvalidMessage, ActiveSupport::MessageVerifier::InvalidSignature,
+           JSON::ParserError, KeyError, TypeError, ArgumentError, ActiveRecord::RecordNotFound
+      raise Denied.new("switch handoff is invalid", code: "invalid_admission")
+    end
+
+    def validate_authorization_cancellation_handoff!(handoff:, surface:, transaction_ref:)
+      payload = decrypt_bound_cancellation_payload!(handoff:, surface:, transaction_ref:)
+      transaction = authorization_transaction_for_exit(surface:, transaction_ref:)
+      verify_stored_cancellation_handoff!(transaction:, reference: payload.fetch("reference"), handoff:)
+      [transaction, payload]
+    rescue ActiveSupport::MessageEncryptor::InvalidMessage, ActiveSupport::MessageVerifier::InvalidSignature,
+           JSON::ParserError, KeyError, TypeError, ArgumentError
+      raise Denied.new("cancellation handoff is invalid", code: "invalid_admission")
+    end
+
+    def consume_cancellation_handoff!(transaction:, payload:, handoff:, surface:, transaction_ref:, store:)
       reference = payload.fetch("reference")
 
       # A canceled transaction is the durable replay barrier. Once its handoff has been
@@ -367,28 +455,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def validate_cancellation_handoff!(handoff:, surface:, transaction_ref:)
-      unless handoff.is_a?(String) && handoff.present? && transaction_ref.is_a?(String) && transaction_ref.present?
-        raise Denied.new("cancellation handoff is invalid", code: "invalid_admission")
-      end
-
-      payload = decrypt_cancellation_handoff(handoff)
-      unless payload.fetch("surface") == surface.to_s && payload.fetch("transaction_ref") == transaction_ref.to_s
-        raise Denied.new("cancellation handoff binding mismatch", code: "return_binding_mismatch")
-      end
-
-      reference = payload.fetch("reference")
-      unless reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
-        raise Denied.new("cancellation reference is invalid", code: "invalid_admission")
-      end
-
+      payload = decrypt_bound_cancellation_payload!(handoff:, surface:, transaction_ref:)
       transaction = step_up_transaction_for(surface:, transaction_ref:)
-      expected_reference = transaction.cancellation_handoff_ref
-      unless expected_reference.present? && expected_reference == reference &&
-          transaction.cancellation_handoff_ciphertext.present? &&
-          ActiveSupport::SecurityUtils.secure_compare(transaction.cancellation_handoff_ciphertext, handoff)
-        raise Denied.new("cancellation handoff binding mismatch", code: "return_binding_mismatch")
-      end
-
+      verify_stored_cancellation_handoff!(transaction:, reference: payload.fetch("reference"), handoff:)
       [transaction, payload]
     rescue ActiveSupport::MessageEncryptor::InvalidMessage, ActiveSupport::MessageVerifier::InvalidSignature,
            JSON::ParserError, KeyError, TypeError, ArgumentError
@@ -643,7 +712,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def issue_binding_and_transport!(transaction:, purpose:, base_browser_nonce:, base_token:,
-                                     restart_of:, store:)
+                                     restart_of:, store:, after_ended_ceremonies: false, entry_intent: nil)
       model = admission_binding_model(transaction.surface)
       model.connection_owner.connected_to(role: :writing) do
         model.transaction do
@@ -651,7 +720,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
           binding = create_or_reuse_binding!(
             transaction: locked_transaction, surface: locked_transaction.surface, purpose: purpose,
             base_browser_nonce: base_browser_nonce,
-            base_token: base_token, restart_of:, now: model.database_now,
+            base_token: base_token, restart_of:, now: model.database_now, after_ended_ceremonies:, entry_intent:,
           )
           code = issue_transport!(
             transaction: locked_transaction, surface: locked_transaction.surface, purpose: purpose,
@@ -663,7 +732,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
     end
 
     def create_or_reuse_binding!(transaction:, surface:, purpose:, base_browser_nonce:, base_token:,
-                                 restart_of:, now:)
+                                 restart_of:, now:, after_ended_ceremonies: false, entry_intent: nil)
       model = admission_binding_model(surface)
       parent_attributes = binding_parent_attributes(transaction)
       validate_base_token!(transaction: transaction, surface: surface, base_token: base_token)
@@ -674,6 +743,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
       existing = model.lock.find_by(parent_attributes.merge(purpose: purpose, retired_at: nil, redeemed_at: nil))
       if existing
+        unless existing.entry_intent == entry_intent
+          raise Denied.new("live admission opens another flow", code: "invalid_admission")
+        end
+
         ensure_binding_token_matches!(existing, base_token)
         ensure_binding_browser_matches!(existing, surface: surface, nonce: base_browser_nonce)
         return existing unless existing.expired?(now: now)
@@ -681,7 +754,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("admission expired; explicit restart is required", code: "expired_admission")
       end
 
-      if model.where(parent_attributes.merge(purpose: purpose)).where.not(redeemed_at: nil).exists?
+      redeemed = model.where(parent_attributes.merge(purpose: purpose)).where.not(redeemed_at: nil).to_a
+      if redeemed.any? &&
+          !(after_ended_ceremonies && redeemed.all? { |binding| admitted_ceremony_session(binding)&.cancelled? })
         raise Denied.new("admission redeemed; explicit cancel-and-start is required", code: "invalid_admission")
       end
 
@@ -696,6 +771,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
           purpose: purpose,
           base_token_id: base_token&.id,
           base_browser_digest: digest,
+          entry_intent: entry_intent,
           expires_at: expiry,
           created_at: now,
           updated_at: now,
@@ -806,6 +882,62 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       raise ArgumentError if expires_at <= Time.current
 
       payload
+    end
+
+    # Only a pending App/Com parent with the neutral `authentication` intent can switch: a fixed
+    # sign_in or sign_up intent would need an intent change, which D06 forbids. prompt=login keeps
+    # Sign In.
+    def validate_switch_target!(transaction:, target:)
+      decision_time = transaction.class.database_now
+      pending = transaction.status == OidcAuthorizationTransactionable::STATUS_PENDING
+      # Org has no public Sign Up (D06), so an Org parent never switches.
+      neutral = transaction.intent == "authentication" && transaction.surface != "org"
+      login_only = target == "sign_up" && transaction.oidc_prompt == "login"
+      unless SWITCH_TARGETS.include?(target) && pending && !transaction.expired?(now: decision_time) && neutral &&
+          !login_only
+        raise Denied.new("switch is unavailable", code: "invalid_admission")
+      end
+    end
+
+    def switch_handoff_encryptor
+      key = Rails.application.key_generator.generate_key("base-auth-switch-handoff", ActiveSupport::MessageEncryptor.key_len)
+      ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm")
+    end
+
+    def decrypt_bound_cancellation_payload!(handoff:, surface:, transaction_ref:)
+      unless handoff.is_a?(String) && handoff.present? && transaction_ref.is_a?(String) && transaction_ref.present?
+        raise Denied.new("cancellation handoff is invalid", code: "invalid_admission")
+      end
+
+      payload = decrypt_cancellation_handoff(handoff)
+      unless payload.fetch("surface") == surface.to_s && payload.fetch("transaction_ref") == transaction_ref.to_s
+        raise Denied.new("cancellation handoff binding mismatch", code: "return_binding_mismatch")
+      end
+
+      reference = payload.fetch("reference")
+      unless reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
+        raise Denied.new("cancellation reference is invalid", code: "invalid_admission")
+      end
+
+      payload
+    end
+
+    def verify_stored_cancellation_handoff!(transaction:, reference:, handoff:)
+      expected_reference = transaction.cancellation_handoff_ref
+      return if expected_reference.present? && expected_reference == reference &&
+        transaction.cancellation_handoff_ciphertext.present? &&
+        ActiveSupport::SecurityUtils.secure_compare(transaction.cancellation_handoff_ciphertext, handoff)
+
+      raise Denied.new("cancellation handoff binding mismatch", code: "return_binding_mismatch")
+    end
+
+    def authorization_transaction_for_exit(surface:, transaction_ref:)
+      model = OidcAuthorizationTransactionCoordinator.model_for(surface)
+      model.connection_owner.connected_to(role: :writing) do
+        model.find_by!(transaction_id: transaction_ref, surface: surface.to_s)
+      end
+    rescue ArgumentError, ActiveRecord::RecordNotFound
+      raise Denied.new("cancellation transaction missing", code: "invalid_admission")
     end
 
     def step_up_transaction_for(surface:, transaction_ref:)
@@ -1158,6 +1290,12 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         when :authorization_transaction then admission_parent_record(binding).intent
         when :step_up_ceremony_transaction then admission_parent_record(binding).purpose
         end
+      # A Switch admission opens exactly the flow it names, never the other one.
+      if binding.entry_intent.present?
+        return if actual == "authentication" && binding.entry_intent == expected_intent.to_s
+
+        raise Denied.new("admission entry intent mismatch", code: "invalid_admission")
+      end
       return if actual == expected_intent.to_s ||
         (actual == "authentication" && %w(sign_in sign_up).include?(expected_intent.to_s))
 

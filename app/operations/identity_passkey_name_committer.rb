@@ -26,7 +26,17 @@ class IdentityPasskeyNameCommitter
                     raise Denied, "Passkey rename requires current scoped Step-Up"
                   end
 
+                  next if passkey.description == description
+
                   passkey.update!(description: description)
+                  PasskeyAuditOutbox.record_for!(
+                    passkey: passkey,
+                    event_type: "passkey.description_changed",
+                    surface: surface_for(actor),
+                    actor_ref: actor.public_id,
+                    operation_ref: SecureRandom.uuid,
+                    occurred_at: actor.class.database_now,
+                  )
                 end
               end
             end
@@ -56,6 +66,15 @@ class IdentityPasskeyNameCommitter
       when VisitorPasskey then passkey.status_id == VisitorPasskeyStatus::ACTIVE && passkey.accessible?
       when OperatorPasskey then passkey.status_id == OperatorPasskeyStatus::ACTIVE
       else raise Denied, "unsupported passkey"
+      end
+    end
+
+    def surface_for(actor)
+      case actor
+      when Client then "app"
+      when Visitor then "com"
+      when Operator then "org"
+      else raise Denied, "unsupported passkey owner"
       end
     end
   end

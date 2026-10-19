@@ -13,6 +13,8 @@
 #  admin_locked_reason_note    :text
 #  birthdate                   :text
 #  deactivated_at              :datetime
+#  recovery_available_at       :datetime
+#  early_termination_available_at :datetime
 #  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null

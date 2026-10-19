@@ -13,7 +13,7 @@ module Base
         before_action :authorize_activity_log!
 
         def index
-          activities = activity_log.activities(activity_scope).limit(100)
+          activities = activity_log.app_activities(activity_scope, client: current_client, limit: 100)
           render inertia: true, props: activities_page_props(activities)
         rescue ActiveRecord::ActiveRecordError
           render inertia: true, props: activities_page_props(ClientChronicle.none)

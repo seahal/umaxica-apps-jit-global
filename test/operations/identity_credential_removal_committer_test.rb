@@ -257,7 +257,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     end
   end
 
-  test "removal retains terminal history and invalidates authority while preserving root sessions" do
+  test "removal deletes passkeys or retains terminal non-passkey credentials while preserving root sessions" do
     %i(app com org totp).each do |surface|
       actor, token, credential, terminal_status =
         case surface
@@ -339,17 +339,38 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
 
       assert removed, "surface=#{surface}"
 
-      credential.reload
-      status = (surface == :totp) ? credential.user_identity_totp_credential_status_id : credential.status_id
+      if credential.is_a?(ClientPasskey) || credential.is_a?(VisitorPasskey) || credential.is_a?(OperatorPasskey)
+        assert_raises(ActiveRecord::RecordNotFound) { credential.reload }
+        outbox_class =
+          case credential
+          when ClientPasskey then ClientPasskeyAuditOutbox
+          when VisitorPasskey then VisitorPasskeyAuditOutbox
+          when OperatorPasskey then OperatorPasskeyAuditOutbox
+          end
 
-      assert_equal terminal_status, status
-      assert_equal removed_id, credential.id
+        assert outbox_class.exists?(external_id: credential.external_id, event_type: "passkey.removed")
+      else
+        credential.reload
+
+        assert_equal terminal_status, credential.user_identity_totp_credential_status_id
+        assert_equal removed_id, credential.id
+      end
+
       assert_nil token.reload.last_step_up_at
       assert_equal "revoked", unfinished.reload.status
       assert_not_nil continuity.reload.revoked_at
       assert_predicate token, :currently_usable?
       assert_not StepUpBootstrapEligibilityQuery.call(actor: actor)
-      assert_not IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+      if credential.destroyed?
+        assert_raises(ArgumentError) do
+          IdentityCredentialRemovalCommitter.call!(actor: actor, credential: credential, current_session: token)
+        end
+      else
+        assert_not IdentityCredentialRemovalCommitter.call!(
+          actor: actor, credential: credential,
+          current_session: token,
+        )
+      end
     end
   end
 

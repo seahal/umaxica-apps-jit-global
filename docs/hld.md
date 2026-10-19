@@ -336,6 +336,6 @@ Sensitive columns leverage Active Record encryption.
 - Sequence diagrams and state flows live in `docs/uml/` (to be updated alongside DDS).
 - Environment variable catalog: the development PostgreSQL credentials are fixed literals declared
   inline in `compose.yaml`; only host-specific settings such as `UID` and `GID` live in the ignored
-  `.env` file (see `docs/operations/development-credential-provisioning.md`). There is no committed
-  `.env.example` template.
+  `.env` file (see `docs/operations/development-credential-provisioning.md`). The Dev Container
+  reads the committed `.env.container.devcontainer` through `env_file`.
 - Testing strategy captured in `docs/test.md`.

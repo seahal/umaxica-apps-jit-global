@@ -157,6 +157,8 @@ CREATE TABLE public.client_auth_admission_bindings (
     expires_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
+    entry_intent character varying,
+    CONSTRAINT client_admission_binding_entry_intent CHECK (((entry_intent IS NULL) OR ((entry_intent)::text = ANY ((ARRAY['sign_in'::character varying, 'sign_up'::character varying])::text[])))),
     CONSTRAINT client_admission_bindings_auth_proof_pair CHECK ((((auth_ceremony_session_id IS NULL) AND (confirmation_ref IS NULL)) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT client_admission_bindings_confirmation_requires_auth CHECK (((base_confirmed_at IS NULL) OR ((auth_ceremony_session_id IS NOT NULL) AND (confirmation_ref IS NOT NULL)))),
     CONSTRAINT client_admission_bindings_one_parent CHECK ((num_nonnulls(sign_in_flow_id, authorization_transaction_id, step_up_ceremony_transaction_id) = 1)),
@@ -497,7 +499,14 @@ CREATE TABLE public.client_oidc_authorization_transactions (
     authorization_grant_redeemed_at timestamp(6) with time zone,
     secret_sign_in_flow_id bigint,
     contract_epoch bigint,
+    canceled_at timestamp with time zone,
+    cancellation_handoff_digest character varying(64),
+    cancellation_handoff_ref uuid,
+    cancellation_handoff_ciphertext text,
     CONSTRAINT chk_client_oidc_authorization_transactions_contract_epoch CHECK (((contract_epoch IS NULL) OR (contract_epoch >= 1))),
+    CONSTRAINT client_oidc_auth_canceled_terminal CHECK (((canceled_at IS NULL) = ((status)::text <> 'canceled'::text))),
+    CONSTRAINT client_oidc_auth_cancellation_handoff_pair CHECK ((((cancellation_handoff_ref IS NULL) AND (cancellation_handoff_ciphertext IS NULL)) OR ((cancellation_handoff_ref IS NOT NULL) AND (cancellation_handoff_ciphertext IS NOT NULL)))),
+    CONSTRAINT client_oidc_auth_cancellation_handoff_valid CHECK (((cancellation_handoff_digest IS NULL) OR ((cancellation_handoff_digest)::text ~ '^[0-9a-f]{64}$'::text))),
     CONSTRAINT client_oidc_auth_transactions_result_generation_nonnegative CHECK ((result_generation >= 0))
 );
 
@@ -3129,10 +3138,10 @@ CREATE UNIQUE INDEX idx_active_op_app_grant_per_device_session ON public.op_app_
 
 
 --
--- Name: idx_auth_ceremony_sessions_on_tx_ref; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_auth_ceremony_sessions_on_live_tx_ref; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_auth_ceremony_sessions_on_tx_ref ON public.client_auth_ceremony_sessions USING btree (authorization_transaction_ref) WHERE (authorization_transaction_ref IS NOT NULL);
+CREATE UNIQUE INDEX idx_auth_ceremony_sessions_on_live_tx_ref ON public.client_auth_ceremony_sessions USING btree (authorization_transaction_ref) WHERE ((authorization_transaction_ref IS NOT NULL) AND (cancelled_at IS NULL));
 
 
 --
@@ -3262,10 +3271,24 @@ CREATE UNIQUE INDEX idx_on_cancellation_handoff_digest_0854d61a10 ON public.clie
 
 
 --
+-- Name: idx_on_cancellation_handoff_digest_5816193fc7; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_cancellation_handoff_digest_5816193fc7 ON public.client_oidc_authorization_transactions USING btree (cancellation_handoff_digest);
+
+
+--
 -- Name: idx_on_cancellation_handoff_ref_15a289d5f5; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_on_cancellation_handoff_ref_15a289d5f5 ON public.client_step_up_ceremony_transactions USING btree (cancellation_handoff_ref);
+
+
+--
+-- Name: idx_on_cancellation_handoff_ref_b7a59d357a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_on_cancellation_handoff_ref_b7a59d357a ON public.client_oidc_authorization_transactions USING btree (cancellation_handoff_ref);
 
 
 --
@@ -4829,6 +4852,9 @@ ALTER TABLE ONLY public.client_tokens
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261019035651'),
+('20261019035536'),
+('20261019032904'),
 ('20261017150000'),
 ('20261017140000'),
 ('20261017070000'),

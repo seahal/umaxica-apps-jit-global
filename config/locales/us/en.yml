@@ -1570,6 +1570,9 @@ en:
             session_revoked: Session ended
             security_change: Security settings changed
             session_security_alert: Session ended for security reasons
+            passkey_registered: Passkey registered
+            passkey_description_changed: Passkey name changed
+            passkey_removed: Passkey removed
           risks:
             none: None
             low: Low

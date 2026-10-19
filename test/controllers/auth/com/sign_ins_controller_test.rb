@@ -740,7 +740,8 @@ module Auth
         assert_response :success
         assert_equal "auth/com/sign_ins/new", inertia_component
         assert_empty inertia_props.fetch("social_providers")
-        assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+        # The first Sign In page of an OIDC parent offers Cancel as a POST form (D09).
+        assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("cancel_form").fetch("action")
         assert_equal %w(email passkey), inertia_props.fetch("methods").map { |method| method.fetch("key") }
       end
 

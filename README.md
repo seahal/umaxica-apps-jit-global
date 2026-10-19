@@ -80,8 +80,9 @@ the development lead and are never committed.
 
 See `docs/operations/development-credential-provisioning.md` for the full procedure. For the
 complete portable configuration contract, see `docs/operations/global-portability.md`.
-`.env.example` contains only non-secret local defaults; `.env.devcontainer.example` contains the
-Compose-DNS variant.
+`.env.container.devcontainer` contains the non-secret local defaults that
+`.devcontainer/compose.yaml` loads into `core`. Every process, whatever its runtime role, reads the
+Rails-standard `config/credentials/<env>.yml.enc`; there are no per-role credential bundles.
 
 ### The Bun toolchain
 
@@ -108,27 +109,20 @@ bun install --frozen-lockfile
 bin/setup
 ```
 
-`compose.yaml` owns shared infrastructure for both development modes. In Dev Container mode,
+`compose.yaml` owns shared infrastructure. Rails runs only in the Dev Container:
 `.devcontainer/compose.yaml` adds `core`, and the same three commands above are run by hand inside
 `core` — `devcontainer.json` declares no `postCreateCommand`, so creating the container neither
-fetches dependencies nor touches a database; in host-native mode, Rails runs directly on the VM and
-`podman compose up -d` starts only PostgreSQL, Valkey, FakeCloud, and observability services.
+fetches dependencies nor touches a database. Running Rails directly on the host is not supported.
 `compose.override.yaml` is the only other root Compose file. It is **untracked and gitignored**
 (since 2026-09-14), auto-discovered by a bare `podman compose`, and everything in it is
 profile-gated: it carries the opt-in `remote-access` Tailscale/sshd overlay of `core` and is where
 per-machine settings go. Being untracked is what keeps those settings per-machine; a fresh clone
 does not have the file, and does not need it. See the Dev Container startup documentation.
 
-```bash
-POSTGRESQL_USER=root
-POSTGRESQL_PASSWORD=development_password
-POSTGRESQL_DATABASE=db
-POSTGRESQL_REPLICATION_USER=replicator
-POSTGRESQL_REPLICATION_PASSWORD=development_replication_password
-```
-
-The values above are local defaults only. Override them in your shell or local Compose environment
-when you need different credentials.
+`config/database.yml` fixes the development and test connections to the Compose services: writers
+and test databases on `primary`, development replicas on `replica`, port `5432`, user `root`,
+password `development`. These are non-secret local values and are not read from the environment.
+Production connections still come from the `NEON_*` variables.
 
 WebAuthn trusted origins are derived from the public Auth host variables used by browser-facing
 links:
@@ -170,14 +164,14 @@ services to loopback as well (`5432`, `5433`, and `6379` to `6381` by default) s
 can use them; containers continue to use Compose DNS names. See
 `docs/operations/development-host-port-exposure.md`.
 
-| Surface                    | URL                                                                           |
-| :------------------------- | :---------------------------------------------------------------------------- |
-| Base                       | `http://base.{app,com,org}.localhost:3000`                                    |
-| Base (developer / network) | `http://base.{dev,net}.localhost:3000`                                        |
-| Auth                       | `http://auth.{app,com,org}.localhost:3000`                                    |
-| Core                       | `http://core.{app,com,org,net,dev}.localhost:3000`                            |
+| Surface                    | URL                                                                                                              |
+| :------------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| Base                       | `http://base.{app,com,org}.localhost:3000`                                                                       |
+| Base (developer / network) | `http://base.{dev,net}.localhost:3000`                                                                           |
+| Auth                       | `http://auth.{app,com,org}.localhost:3000`                                                                       |
+| Core                       | `http://core.{app,com,org,net,dev}.localhost:3000`                                                               |
 | Warp / Palm / Tech         | `http://warp.{app,com,org}.localhost:3000` / `http://palm.app.localhost:3000` / `http://tech.org.localhost:3000` |
-| Info / Help / Docs / News  | `http://{info,help,docs,news}.{app,com,org}.localhost:3000`                   |
+| Info / Help / Docs / News  | `http://{info,help,docs,news}.{app,com,org}.localhost:3000`                                                      |
 
 The application contract supplies PUBLIC and PRIVATE URL values in both supported modes; Compose
 supplies only service topology. Each route host constraint lists the configured host alongside its

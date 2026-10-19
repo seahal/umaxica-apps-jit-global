@@ -1635,24 +1635,27 @@ Sources: `app/models/concerns/oidc_authorization_transactionable.rb`,
 Tests read: `test/models/concerns/oidc_authorization_transactionable_test.rb`,
 `test/services/oidc_authorization_transaction_service_test.rb`.
 
-| Transition ID                      | Mutation kind         | From          | Event / Trigger            | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
-| ---------------------------------- | --------------------- | ------------- | -------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
-| idp-client-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!   | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-client-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!   | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-client-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                   | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-client-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success     | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-client-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant! | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| Transition ID                      | Mutation kind         | From          | Event / Trigger               | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
+| ---------------------------------- | --------------------- | ------------- | ----------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-client-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!      | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!      | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                      | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success        | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant!    | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T006 | DOCUMENTED_TRANSITION | pending       | prepare_cancellation_handoff! | pending       | pending; unexpired; row lock; same handoff is idempotent, another is refused             | cancellation_handoff_ref; cancellation_handoff_ciphertext               | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-client-oidc-authorization:T007 | DOCUMENTED_TRANSITION | pending       | cancel!                       | canceled      | pending; unexpired; handoff bound; row lock; canceled with the same digest is idempotent | canceled_at; cancellation_handoff_digest                                | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
 
 OIDC `state` is request CSRF correlation, not lifecycle duplication of status. No reference table or
-persisted canceled/failed/expired status. Expiry predicates check authorization and login-challenge
-independently; security transitions clamp deadlines and revoke linked Auth continuity without status
-change. consumed ends authentication transition but authorization grant redemption remains a second
-one-time fact; finalize_base! idempotently reuses persisted browser-session reference. Raw consume!
-lacks Base finalization fact, so consumed alone does not prove grant readiness. Row locking
-serializes authentication and redemption; test reads cover exact microsecond deadline neighbors,
-stale generation, overwritten authentication rejection and concurrent one winner. Auth-to-Base
-result uses opaque admission transport; code issuance then redemption creates RP session. No target
-external_result event is inferred.
+persisted failed/expired status; `canceled` is the D09 first-page Cancel (2026-10-19), reached only
+from pending, and register_authentication! refuses a canceled parent. Expiry predicates check
+authorization and login-challenge independently; security transitions clamp deadlines and revoke
+linked Auth continuity without status change. consumed ends authentication transition but
+authorization grant redemption remains a second one-time fact; finalize_base! idempotently reuses
+persisted browser-session reference. Raw consume! lacks Base finalization fact, so consumed alone
+does not prove grant readiness. Row locking serializes authentication and redemption; test reads
+cover exact microsecond deadline neighbors, stale generation, overwritten authentication rejection
+and concurrent one winner. Auth-to-Base result uses opaque admission transport; code issuance then
+redemption creates RP session. No target external_result event is inferred.
 
 ## idp-visitor-oidc-authorization
 
@@ -1667,24 +1670,27 @@ Sources: `app/models/concerns/oidc_authorization_transactionable.rb`,
 Tests read: `test/models/concerns/oidc_authorization_transactionable_test.rb`,
 `test/services/oidc_authorization_transaction_service_test.rb`.
 
-| Transition ID                       | Mutation kind         | From          | Event / Trigger            | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
-| ----------------------------------- | --------------------- | ------------- | -------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
-| idp-visitor-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!   | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-visitor-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!   | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-visitor-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                   | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-visitor-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success     | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-visitor-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant! | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| Transition ID                       | Mutation kind         | From          | Event / Trigger               | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
+| ----------------------------------- | --------------------- | ------------- | ----------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-visitor-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!      | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!      | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                      | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success        | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant!    | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T006 | DOCUMENTED_TRANSITION | pending       | prepare_cancellation_handoff! | pending       | pending; unexpired; row lock; same handoff is idempotent, another is refused             | cancellation_handoff_ref; cancellation_handoff_ciphertext               | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-visitor-oidc-authorization:T007 | DOCUMENTED_TRANSITION | pending       | cancel!                       | canceled      | pending; unexpired; handoff bound; row lock; canceled with the same digest is idempotent | canceled_at; cancellation_handoff_digest                                | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
 
 OIDC `state` is request CSRF correlation, not lifecycle duplication of status. No reference table or
-persisted canceled/failed/expired status. Expiry predicates check authorization and login-challenge
-independently; security transitions clamp deadlines and revoke linked Auth continuity without status
-change. consumed ends authentication transition but authorization grant redemption remains a second
-one-time fact; finalize_base! idempotently reuses persisted browser-session reference. Raw consume!
-lacks Base finalization fact, so consumed alone does not prove grant readiness. Row locking
-serializes authentication and redemption; test reads cover exact microsecond deadline neighbors,
-stale generation, overwritten authentication rejection and concurrent one winner. Auth-to-Base
-result uses opaque admission transport; code issuance then redemption creates RP session. No target
-external_result event is inferred.
+persisted failed/expired status; `canceled` is the D09 first-page Cancel (2026-10-19), reached only
+from pending, and register_authentication! refuses a canceled parent. Expiry predicates check
+authorization and login-challenge independently; security transitions clamp deadlines and revoke
+linked Auth continuity without status change. consumed ends authentication transition but
+authorization grant redemption remains a second one-time fact; finalize_base! idempotently reuses
+persisted browser-session reference. Raw consume! lacks Base finalization fact, so consumed alone
+does not prove grant readiness. Row locking serializes authentication and redemption; test reads
+cover exact microsecond deadline neighbors, stale generation, overwritten authentication rejection
+and concurrent one winner. Auth-to-Base result uses opaque admission transport; code issuance then
+redemption creates RP session. No target external_result event is inferred.
 
 ## idp-operator-oidc-authorization
 
@@ -1699,24 +1705,27 @@ Sources: `app/models/concerns/oidc_authorization_transactionable.rb`,
 Tests read: `test/models/concerns/oidc_authorization_transactionable_test.rb`,
 `test/services/oidc_authorization_transaction_service_test.rb`.
 
-| Transition ID                        | Mutation kind         | From          | Event / Trigger            | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
-| ------------------------------------ | --------------------- | ------------- | -------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
-| idp-operator-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!   | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-operator-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!   | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-operator-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                   | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-operator-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success     | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
-| idp-operator-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant! | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| Transition ID                        | Mutation kind         | From          | Event / Trigger               | To            | Guard                                                                                    | Side effect                                                             | Source file                                               | Confidence |
+| ------------------------------------ | --------------------- | ------------- | ----------------------------- | ------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- | ---------- |
+| idp-operator-oidc-authorization:T001 | DOCUMENTED_TRANSITION | pending       | register_authentication!      | authenticated | pending; transaction/login-challenge DB clock deadlines; row lock                        | actor/method/authentication time                                        | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T002 | DOCUMENTED_TRANSITION | authenticated | prepare_result_delivery!      | authenticated | unexpired/unfinalized; digest                                                            | generation +1; reset result_consumed_at; bounded TTL                    | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T003 | DOCUMENTED_TRANSITION | authenticated | consume!                      | consumed      | authenticated; unexpired; row lock                                                       | consumed_at                                                             | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T004 | DOCUMENTED_TRANSITION | authenticated | finalize_base! success        | consumed      | authenticated or previously finalized; matching generation; successful session reference | browser_session_ref; result_consumed_at; base_finalized_at; consumed_at | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T005 | DOCUMENTED_TRANSITION | consumed      | claim_authorization_grant!    | consumed      | finalized; unexpired; grant not redeemed                                                 | authorization_grant_redeemed_at                                         | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T006 | DOCUMENTED_TRANSITION | pending       | prepare_cancellation_handoff! | pending       | pending; unexpired; row lock; same handoff is idempotent, another is refused             | cancellation_handoff_ref; cancellation_handoff_ciphertext               | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
+| idp-operator-oidc-authorization:T007 | DOCUMENTED_TRANSITION | pending       | cancel!                       | canceled      | pending; unexpired; handoff bound; row lock; canceled with the same digest is idempotent | canceled_at; cancellation_handoff_digest                                | app/models/concerns/oidc_authorization_transactionable.rb | CONFIRMED  |
 
 OIDC `state` is request CSRF correlation, not lifecycle duplication of status. No reference table or
-persisted canceled/failed/expired status. Expiry predicates check authorization and login-challenge
-independently; security transitions clamp deadlines and revoke linked Auth continuity without status
-change. consumed ends authentication transition but authorization grant redemption remains a second
-one-time fact; finalize_base! idempotently reuses persisted browser-session reference. Raw consume!
-lacks Base finalization fact, so consumed alone does not prove grant readiness. Row locking
-serializes authentication and redemption; test reads cover exact microsecond deadline neighbors,
-stale generation, overwritten authentication rejection and concurrent one winner. Auth-to-Base
-result uses opaque admission transport; code issuance then redemption creates RP session. No target
-external_result event is inferred.
+persisted failed/expired status; `canceled` is the D09 first-page Cancel (2026-10-19), reached only
+from pending, and register_authentication! refuses a canceled parent. Expiry predicates check
+authorization and login-challenge independently; security transitions clamp deadlines and revoke
+linked Auth continuity without status change. consumed ends authentication transition but
+authorization grant redemption remains a second one-time fact; finalize_base! idempotently reuses
+persisted browser-session reference. Raw consume! lacks Base finalization fact, so consumed alone
+does not prove grant readiness. Row locking serializes authentication and redemption; test reads
+cover exact microsecond deadline neighbors, stale generation, overwritten authentication rejection
+and concurrent one winner. Auth-to-Base result uses opaque admission transport; code issuance then
+redemption creates RP session. No target external_result event is inferred.
 
 ## idp-client-oauth-callback
 

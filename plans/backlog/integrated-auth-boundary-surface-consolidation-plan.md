@@ -119,7 +119,7 @@ debugger-disable mechanism) are available. This does not block architecture appr
 resolved before claiming Rails checks green.
 
 The preceding baseline is historical. The current Compose-backed verification boundary is available
-when `.env.devcontainer.example` is selected explicitly: PostgreSQL `primary` and `valkey-kvs`
+when `.env.container.devcontainer` is selected explicitly: PostgreSQL `primary` and `valkey-kvs`
 resolve, the repository preflight succeeds, and the focused and full Rails suites have passed
 without changing application configuration or weakening tests. The debugger socket issue is handled
 only by the documented process-local `RUBY_DEBUG_ENABLE=0` invocation when required; the repository
@@ -1040,10 +1040,10 @@ credential-management coverage.
 
 The OTP delivery-event/DEBUG disclosure identified on 2026-10-03 is escalated as mandatory
 comprehensive remediation in the
-[accepted remediation plan](../../specs/otp-observability-secret-exposure-remediation/plan.md), under its
-[accepted handling decision](../../adr/otp-observability-secret-exposure-remediation.md). The R15
-secret-protection work remains open until that plan's relevant completion criteria are verified;
-recording the issue is not its resolution.
+[accepted remediation plan](../../specs/otp-observability-secret-exposure-remediation/plan.md),
+under its [accepted handling decision](../../adr/otp-observability-secret-exposure-remediation.md).
+The R15 secret-protection work remains open until that plan's relevant completion criteria are
+verified; recording the issue is not its resolution.
 
 - **AUTHORITY-1:** Auth may execute credential ceremonies, but cannot independently grant an
   Identity, Base Browser Session, RP Session, authorization policy decision, or authoritative AAL.

@@ -9,6 +9,8 @@ require "json"
 require "pg"
 require "rake"
 require "tempfile"
+require "active_record"
+require_relative "../lib/umaxica/test_environment/database_safety"
 
 abort "only --verify-only is supported" unless ARGV.empty? || ARGV == ["--verify-only"]
 verify_only = ARGV == ["--verify-only"]
@@ -27,11 +29,11 @@ File.open("#{root}/tmp/parallel-test-databases-#{run_id}.lock", File::RDWR | Fil
   manifest_path = File.realpath(ENV.fetch("POSTGRESQL_ISOLATED_TEST_MANIFEST"))
   abort "manifest must be under tmp/" unless manifest_path.start_with?("#{root}/tmp/")
   manifest = JSON.parse(File.read(manifest_path))
-  host = ENV.fetch("POSTGRESQL_TEST_HOST")
-  port = Integer(ENV.fetch("POSTGRESQL_PORT"), 10)
-  user = ENV.fetch("POSTGRESQL_USER")
-  admin_database = ENV.fetch("POSTGRESQL_DATABASE")
-  abort "unsafe administration database" if admin_database.match?(/\A(?:development|production)(?:_|\z)/)
+  safety = Umaxica::TestEnvironment::DatabaseSafety
+  host = safety::TEST_HOST
+  port = safety::TEST_PORT
+  user = safety::TEST_USER
+  admin_database = safety::ADMIN_DATABASE
   abort "manifest target mismatch" unless manifest.fetch("run_id") == run_id &&
     manifest.fetch("host") == host && manifest.fetch("port") == port && manifest.fetch("user") == user
 
@@ -57,7 +59,7 @@ File.open("#{root}/tmp/parallel-test-databases-#{run_id}.lock", File::RDWR | Fil
   ActiveRecord::Base.connection_handler.clear_all_connections!
 
   admin = PG.connect(
-    host:, port:, user:, password: ENV.fetch("POSTGRESQL_PASSWORD"),
+    host:, port:, user:, password: safety::TEST_PASSWORD,
     dbname: admin_database, connect_timeout: 3,
   )
   expected_comment = "Disposable isolated Codex PostgreSQL integrity verification 2026-09-24"

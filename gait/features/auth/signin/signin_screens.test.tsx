@@ -84,9 +84,23 @@ describe("sign-in method choice", () => {
       },
     ],
     registration_link: { key: "registration", label: "Need an account", href: "/sign/up?ri=jp" },
+    cancel_form: null,
+    switch_form: null,
+  };
+  const cancelForm = {
+    label: "Cancel",
+    action: "/sign/cancellation?ri=jp",
+    to: null,
+    authenticity_token: "csrf-value",
+  };
+  const switchForm = {
+    label: "Need an account",
+    action: "/sign/switch?ri=jp",
+    to: "sign_up",
+    authenticity_token: "csrf-value",
   };
 
-  it("renders app methods, native providers, separator, registration and text-only cancel in order", () => {
+  it("renders methods, providers, separator, then Switch and Cancel forms on an OIDC-bound page", () => {
     const markup = renderToStaticMarkup(
       <SignInMethodChoice
         {...props}
@@ -96,32 +110,31 @@ describe("sign-in method choice", () => {
           { key: "emergency", label: "Emergency", href: "/sign/in/emergency" },
         ]}
         social_providers={props.social_providers.slice(0, 2)}
-        cancel_label="Cancel"
+        registration_link={null}
+        cancel_form={cancelForm}
+        switch_form={switchForm}
       />,
     );
     expect(markup).toMatch(
-      />Email<.*>Passkey<.*>Emergency<.*action="\/social\/google\/session\?ri=jp".*action="\/social\/apple\/session\?ri=jp".*<hr[^>]*>.*>Need an account<.*<p[^>]*>Cancel<\/p>/su,
+      />Email<.*>Passkey<.*>Emergency<.*action="\/social\/google\/session\?ri=jp".*action="\/social\/apple\/session\?ri=jp".*<hr[^>]*>.*action="\/sign\/switch\?ri=jp".*action="\/sign\/cancellation\?ri=jp"/su,
     );
-    expect(markup).toMatch(/<p[^>]*>Cancel<\/p>/u);
-    const interactiveElements = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu)!;
-    expect(interactiveElements.some((element) => element.includes("Cancel"))).toBe(false);
-    expect(markup.match(/<form[^>]*method="post"/gu)).toHaveLength(2);
-    expect(markup.match(/name="authenticity_token" value="csrf-value"/gu)).toHaveLength(2);
+    expect(markup).not.toContain('href="/sign/up?ri=jp"');
+    expect(markup.match(/<form[^>]*method="post"/gu)).toHaveLength(4);
+    expect(markup.match(/name="authenticity_token" value="csrf-value"/gu)).toHaveLength(4);
+    expect(markup).toContain('name="to" value="sign_up"');
   });
 
-  it("appends text-only Cancel on com without app methods or a provider separator", () => {
+  it("keeps the local registration link and offers no Cancel or Switch when the server sent none", () => {
     const markup = renderToStaticMarkup(
       <SignInMethodChoice
         {...props}
         social_providers={[]}
-        cancel_label="Cancel"
       />,
     );
-    expect(markup).toMatch(/<p[^>]*>Cancel<\/p><\/div>$/u);
-    const controls = markup.match(/<(a|button|form)\b[^>]*>[^]*?<\/\1>/gu)!;
-    expect(controls.some((control) => control.includes("Cancel"))).toBe(false);
+    expect(markup).toContain('href="/sign/up?ri=jp"');
+    expect(markup).not.toContain("/sign/cancellation");
+    expect(markup).not.toContain("/sign/switch");
     expect(markup).not.toContain("<hr");
-    expect(markup).not.toContain("/sign/in/emergency");
   });
 
   it("omits optional Cancel and app-only methods and separator", () => {

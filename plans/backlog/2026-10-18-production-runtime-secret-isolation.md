@@ -84,16 +84,13 @@ US runtime is out of scope for this programme until another development environm
 
 Decide these before any further WU03A work:
 
-1. Keep, adapt or remove each partial result above. Removing the per-role database logins or bundles
-   is a destructive operation and needs explicit approval.
-   - Reconsider `config/credentials/development/`. Its 21 per-role `*.yml.enc` bundles were
-     committed on 2026-10-18 (`6a208dcb9`) to keep them with the repository; the matching `*.key`
-     files are ignored by `/config/credentials/*/*.key` and exist only on the development machine,
-     so losing them makes the committed bundles undecryptable. Decide whether the bundles stay in
-     git, how their keys are kept or regenerated, and whether this layout survives the chosen
-     pod/secret-store mechanism.
-2. Correct the ADR, `docs/security/role-secret-isolation.md` and `one.md` R5-WU03A so that they
-   describe the observed state and the chosen mechanism.
+1. Decided on 2026-10-19 (amendment in `adr/runtime-secret-isolation-deferred.md`): the per-role
+   development bundles, the `runtime_roles:provision` task, the per-role credentials selection and
+   the per-role database logins are removed. Development and test use one Rails-standard credentials
+   set, one `SECRET_KEY_BASE` and the fixed Dev Container database login. The partial results
+   described above are historical.
+2. When the deployed-environment mechanism is chosen, revise the ADR and
+   `docs/security/role-secret-isolation.md` to it.
 3. Decide whether WU18A/WU19 keep a hard dependency on WU03A, or whether `one.md` is amended.
 4. Then resolve the open decisions below.
 

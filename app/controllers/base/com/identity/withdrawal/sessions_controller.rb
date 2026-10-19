@@ -29,14 +29,6 @@ module Base
             },
           )
 
-          # GET /identity/withdrawal/session/new
-          # WithdrawalCeremonyReentry#new only assigns the screen state and relies on an implicit
-          # render, so this surface makes the Inertia render explicit.
-          def new
-            super
-            render_withdrawal_reentry_new
-          end
-
           # DELETE /identity/withdrawal/session
           # Ends the current withdrawal ceremony and returns to the sign-in surface.
           def destroy

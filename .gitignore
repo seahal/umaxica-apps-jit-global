@@ -33,7 +33,7 @@ I# See https://help.github.com/articles/ignoring-files for more about ignoring f
 /public/assets
 
 # Ignore vendor files for not to increase repository size huge
-/vendor
+/vendor/*
 
 
 # Added by Owner
@@ -105,8 +105,6 @@ node_modules
 /config/master.key
 /config/*.key
 /config/credentials/*.key
-# Per-role keys (lib/runtime_role.rb); each is handed only to that role's process.
-/config/credentials/*/*.key
 /*.key
 
 # The production credentials payload is provisioned out of band and never

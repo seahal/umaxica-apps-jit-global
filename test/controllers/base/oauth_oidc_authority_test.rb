@@ -1407,7 +1407,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_equal "state", query["state"]
   end
 
-  test "base app authorize prompt login starts a fresh ceremony" do
+  test "base app authorize prompt login and create start a fresh ceremony despite a session" do
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
@@ -1491,10 +1491,46 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     headers = harness.except("Cookie", "HTTP_COOKIE", "Authorization").merge(
       "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
     )
-    get(
-      "/oauth/authorize", params: oidc_authorize_params.merge(prompt: "login"),
-                          headers: headers,
-    )
+    # A first-party RP keeps the neutral authentication intent for login; create always signs up.
+    {
+      "login" => ["/sign/in", "authentication"],
+      "create" => ["/sign/up", "sign_up"],
+    }.each do |prompt, (expected_path, expected_intent)|
+      get(
+        "/oauth/authorize", params: oidc_authorize_params.merge(prompt: prompt),
+                            headers: headers,
+      )
+
+      # An existing session would redirect with a code; the ceremony form proves none was issued.
+      assert_response :success
+      form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+      submission = form.css("input").to_h { |input| [input["name"], input["value"]] }
+      post(form["action"], params: submission, headers: headers)
+
+      assert_response :redirect
+      target = URI.parse(jump_rt_url_from_location(response.location))
+
+      assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), target.host
+      assert_equal expected_path, target.path
+      entry_ref = Rack::Utils.parse_nested_query(target.query.to_s).fetch("entry_ref")
+      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(reference: entry_ref, surface: "app")
+
+      assert_equal expected_intent, ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).intent
+    end
+  ensure
+    ActionController::Base.allow_forgery_protection = protection
+  end
+
+  test "base com authorize prompt create starts sign-up with sign-up intent" do
+    protection = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = true
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host!(host)
+    https!
+    headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+    params = oidc_authorize_params(client_id: "core-com-jp", resource_type: "visitor").merge(prompt: "create")
+
+    get("/oauth/authorize", params: params, headers: headers)
 
     assert_response :success
     form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
@@ -1503,12 +1539,31 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     target = URI.parse(jump_rt_url_from_location(response.location))
+    entry_ref = Rack::Utils.parse_nested_query(target.query.to_s).fetch("entry_ref")
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(reference: entry_ref, surface: "com")
 
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), target.host
-    assert_equal "/sign/in", target.path
-    assert_predicate Rack::Utils.parse_nested_query(target.query.to_s)["entry_ref"], :present?
+    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), target.host
+    assert_equal "/sign/up", target.path
+    assert_equal "sign_up", VisitorOidcAuthorizationTransaction.find(binding.authorization_transaction_id).intent
   ensure
     ActionController::Base.allow_forgery_protection = protection
+  end
+
+  test "base org authorize rejects prompt create without starting a ceremony" do
+    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host!(host)
+    https!
+    params = oidc_authorize_params(client_id: "core-org-jp", resource_type: "operator").merge(prompt: "create")
+
+    assert_no_difference -> { OperatorOidcAuthorizationTransaction.count } do
+      get(
+        "/oauth/authorize", params: params,
+                            headers: { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" },
+      )
+    end
+
+    assert_response :bad_request
+    assert_equal "invalid_request", response.parsed_body.fetch("error")
   end
 
   test "base oauth authorize keeps first-party ceremony neutral when screen_hint requests signup" do

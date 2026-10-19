@@ -1,29 +1,27 @@
 # frozen_string_literal: true
 
-# The single trusted execution role of this process (R5-WU03A, docs/security/role-secret-isolation.md).
+# The single trusted execution role of this process (docs/security/role-secret-isolation.md).
 #
-# A role decides which encrypted credentials bundle this process may decrypt. It is read once from
-# the process environment at boot, before any credential or database connection is loaded, and is
-# never derived from request input (Host, `ri`, token claims). An unknown role aborts boot rather
-# than falling back to the shared bundle.
+# A role decides which controllers this process serves and which private signing keys it requires.
+# It is read once from the process environment at boot and is never derived from request input
+# (Host, `ri`, token claims). An unknown role aborts boot.
 #
-# Bundle layout per role, e.g. role `rp-core-app-jp` in development:
-#   config/credentials/development/rp-core-app-jp.yml.enc   encrypted values for that role only
-#   config/credentials/development/rp-core-app-jp.key       its key; only that role's process gets it
+# A role does not select credentials or a database login: every process reads the Rails-standard
+# config/credentials/<env>.yml.enc and the same database.yml (user decision 2026-10-19,
+# adr/runtime-secret-isolation-deferred.md).
 module RuntimeRole
-  # `shared` is the pre-R5 process that serves every surface with the environment-wide bundle
-  # (config/credentials/<env>.yml.enc). It is a bounded transitional role: it exists only because
-  # the development container is intentionally not split (user decision 2026-10-17) and every
-  # cell is still served by one listener. Exit condition: R5-WU19 cell activation, after which a
+  # `shared` is the pre-R5 process that serves every surface. It is a bounded transitional role: it
+  # exists only because the development container is intentionally not split (user decision
+  # 2026-10-17) and every cell is still served by one listener. Exit condition: R5-WU19 cell activation, after which a
   # cell process must boot with its own `rp-*` role and never as `shared`.
   SHARED = "shared"
 
-  # OP issuers: hold their realm's token signing key and OP database login.
+  # OP issuers: hold their realm's token signing key.
   OP_ROLES = %w(op-base-app op-base-com op-base-org).freeze
   # Auth ceremony hosts: hold OmniAuth, OTP, HMAC and sending secrets; no OP signer.
   AUTH_ROLES = %w(auth-app auth-com auth-org).freeze
-  # Twelve JP-development RP cells (one.md section 5.1): each holds only its own client assertion
-  # private key, its own cookie/session key and its own local store login.
+  # Twelve JP-development RP cells (one.md section 5.1): each requires only its own client assertion
+  # private key and serves only its own local store.
   RP_ROLES = %w(
     rp-base-app-ww rp-base-com-ww rp-base-org-ww rp-edit-org-ww rp-tech-org-ww
     rp-core-app-jp rp-core-com-jp rp-core-org-jp
@@ -50,34 +48,6 @@ module RuntimeRole
   def shared?(name = current)
     name == SHARED
   end
-
-  # Writer connections each role's PostgreSQL login may CONNECT to (replicas follow their writer).
-  # Everything else is refused by PostgreSQL grants, not by application code: a role process renders
-  # every connection with its own login, and an unlisted database simply denies that login.
-  # `queue` is still one shared Solid Queue store; per-role queue schemas are an open R5-WU03A item.
-  ROLE_CONNECTIONS = {}.tap do |map|
-    %w(app com org).each do |realm|
-      # OP: its realm OP store and the realm identity authority it validates against.
-      map["op-base-#{realm}"] = ["op_base_#{realm}", "#{realm}_zenith", "queue"]
-      # Auth ceremonies write OP-side ceremony rows and realm identity/preference/occurrence facts.
-      map["auth-#{realm}"] =
-        ["op_base_#{realm}", "#{realm}_zenith", "#{realm}_setting", "occurrence", "chronicle", "queue"]
-    end
-    RP_ROLES.each do |rp|
-      # rp-core-app-jp -> rp_core_app: a cell reaches only its own local store.
-      family, realm, = rp.delete_prefix("rp-").split("-")
-      map[rp] = ["rp_#{family}_#{realm}", "queue"]
-    end
-    map["domain-publishing"] = %w(publishing org_zenith queue)
-    map["domain-avatar"] = %w(avatar app_zenith queue)
-    map["domain-org"] = %w(org_zenith queue)
-  end.freeze
-
-  # Every role reads feature flags (Flipper preloads them per request) and nothing else in
-  # `primary`: SELECT on these two tables only. Blazer's saved queries in the same database stay
-  # out of reach of every role.
-  FLAG_DATABASE = "primary"
-  FLAG_TABLES = %w(flipper_features flipper_gates).freeze
 
   # The cell store connection of an RP role, e.g. rp-core-app-jp -> rp_core_app.
   def cell_connection(name = current)
@@ -115,25 +85,6 @@ module RuntimeRole
       BROWSER_ADMISSION_STATES.include?(state)
 
     state == "open"
-  end
-
-  # PostgreSQL login name for a role, e.g. rp-core-app-jp -> umaxica_role_rp_core_app_jp.
-  def database_login(name = current)
-    raise UnknownRole, "the shared role uses the maintenance login" if shared?(name)
-
-    "umaxica_role_#{name.tr("-", "_")}"
-  end
-
-  def connections_for(name = current)
-    ROLE_CONNECTIONS.fetch(name) { raise UnknownRole, "no connection grant for role #{name.inspect}" }
-  end
-
-  # Credentials paths for a non-shared role; `shared` keeps the Rails default per-environment files.
-  def credentials_paths(env:, root:, name: current)
-    return nil if shared?(name)
-
-    dir = File.join(root, "config", "credentials", env.to_s)
-    { content_path: File.join(dir, "#{name}.yml.enc"), key_path: File.join(dir, "#{name}.key") }
   end
 
   class UnownedRoute < ArgumentError; end

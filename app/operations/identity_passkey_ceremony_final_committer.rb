@@ -51,7 +51,6 @@ class IdentityPasskeyCeremonyFinalCommitter
     validate_transaction_state!
     consumption = IdentityPasskeyCeremonyResultConsumer.new(transaction: transaction, now: now).call(result_token)
     passkey = commit_passkey!(consumption.result)
-    record_audit!
     Commit.new(transaction: consumption.transaction, result: consumption.result, passkey: passkey)
   end
 
@@ -86,22 +85,26 @@ class IdentityPasskeyCeremonyFinalCommitter
         :description => result["description"].presence || I18n.t("sign.default_passkey_description"),
         **Webauthn::AuthenticatorMetadata.permit(result["authenticator_metadata"]),
       }
-      config.fetch(:record_class).create!(attributes)
+      PasskeyRegistrationOperation.call!(
+        actor: actor,
+        passkey_class: config.fetch(:record_class),
+        attributes: attributes.except(config.fetch(:owner_key)),
+        audit: {
+          event_type: "passkey.registered.settings",
+          surface: surface,
+          actor_ref: actor.public_id,
+          # The replay transaction is the authoritative operation binding.  Real result
+          # payloads carry the same reference, but older ceremony adapters may omit it from
+          # the decoded evidence; do not turn that harmless representation difference into a
+          # KeyError after the transaction has already been validated.
+          operation_ref: result["transaction_id"].presence || transaction.transaction_id,
+        },
+      )
     end
   rescue ActiveRecord::RecordNotUnique => e
-    raise IdentityPasskeyCeremonyContract::Error, "passkey credential is already registered: #{e.message}"
-  end
+    raise unless PasskeyRegistrationOperation.credential_id_conflict?(e)
 
-  def record_audit!
-    return if config[:audit_event_id].blank?
-
-    IdentityAudit.record!(
-      actor: actor,
-      event_id: config.fetch(:audit_event_id),
-      action: "passkey.register",
-      ip_address: ip_address,
-      user_agent: user_agent,
-    )
+    raise IdentityPasskeyCeremonyContract::Error, "passkey credential is already registered"
   end
 
   def result

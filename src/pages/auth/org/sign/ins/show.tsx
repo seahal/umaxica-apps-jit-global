@@ -1,10 +1,11 @@
+import Page from "@/components/ui/Page";
 // The org sign-in entry screen.
 //
 // It is not `AuthMethodChoice`, because one of the three methods is not a link: Entra ID starts
 // with a POST to the surface ceremony endpoint, which prepares the ceremony and hands the same POST
 // to the OmniAuth request phase with a 307. The button wording and shape are constrained by
 // docs/reference/third-party-sign-in-button-requirements.md.
-import Page from "@/components/ui/Page";
+import EntryExitForm, { type EntryExitFormProps } from "@/features/auth/EntryExitForm";
 import { csrfToken } from "@/lib/csrf";
 
 type SignInMethod = {
@@ -24,7 +25,8 @@ export type OrgSignInEntryProps = {
   description: string;
   methods: SignInMethod[];
   registration_link: SignInLink | null;
-  cancel_label?: string;
+  cancel_form: EntryExitFormProps | null;
+  switch_form: null;
 };
 
 // Entra is a form submit and Emergency Access is a link, but both are sign-in methods of equal
@@ -52,7 +54,7 @@ export default function OrgSignInEntry({
   description,
   methods,
   registration_link: registrationLink,
-  cancel_label: cancelLabel,
+  cancel_form: cancelForm,
 }: OrgSignInEntryProps) {
   return (
     <Page
@@ -111,7 +113,13 @@ export default function OrgSignInEntry({
           </a>
         </div>
       ) : null}
-      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
+      {cancelForm !== null && (
+        <EntryExitForm
+          form={cancelForm}
+          testId="sign-entry-cancel"
+          tone="muted"
+        />
+      )}
     </Page>
   );
 }

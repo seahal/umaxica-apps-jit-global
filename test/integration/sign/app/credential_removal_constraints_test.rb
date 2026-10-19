@@ -1267,7 +1267,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
            headers: http_headers_0
 
     assert_redirected_to base_app_identity_passkeys_url(ri: "jp", host: @base_host)
-    assert_equal ClientPasskeyStatus::DELETED, passkey.reload.status_id
+    assert_not ClientPasskey.exists?(passkey.id)
   end
 
   private

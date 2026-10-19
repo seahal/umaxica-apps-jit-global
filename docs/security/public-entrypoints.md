@@ -78,6 +78,11 @@ only the exact Base bootstrap permission. Its clean page requires scoped registr
 actor/session ownership and policy authorization. Available registration methods come from that
 transaction, and registration evidence cannot satisfy ordinary step-up freshness.
 
+`PUBLIC_SIGN_IN_UP` also covers Auth app/com/org `POST /sign/cancellation` and `POST /sign/switch`
+(D09 Cancel and D06 Switch). Both act only on the current browser's admitted first-page Auth
+ceremony for a pending OIDC parent, are CSRF-protected, and hand an encrypted single-use request to
+Base, which commits it only through a same-origin POST from the browser that started the parent.
+
 `PUBLIC_SIGN_IN_UP` also covers Auth app/com/org `GET` and `POST /sign/handoff` and Base app/com/org
 `POST /sign/completion`. Auth requires a matching admitted local flow and only returns its
 credential evidence. Base requires the issuing browser's flow binding and the exact Auth origin

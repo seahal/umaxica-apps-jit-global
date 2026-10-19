@@ -5,6 +5,7 @@ import Page from "@/components/ui/Page";
 // Which methods exist and where they lead are server decisions, so each entry arrives with a
 // finished label and a finished URL. The provider buttons are separate native forms rather than
 // links because the hand-off is a POST.
+import EntryExitForm, { type EntryExitFormProps } from "../EntryExitForm";
 import SocialProviderButton, { type SocialProvider } from "./SocialProviderButton";
 
 export type SignInMethodLink = {
@@ -18,8 +19,10 @@ export type SignInMethodChoiceProps = {
   description: string;
   methods: SignInMethodLink[];
   social_providers: SocialProvider[];
-  registration_link: SignInMethodLink;
-  cancel_label?: string;
+  /** A local entry's link to Sign Up; null on an OIDC-bound page, which moves only by Switch. */
+  registration_link: SignInMethodLink | null;
+  cancel_form: EntryExitFormProps | null;
+  switch_form: EntryExitFormProps | null;
 };
 
 export default function SignInMethodChoice({
@@ -28,7 +31,8 @@ export default function SignInMethodChoice({
   methods,
   social_providers: socialProviders,
   registration_link: registrationLink,
-  cancel_label: cancelLabel,
+  cancel_form: cancelForm,
+  switch_form: switchForm,
 }: SignInMethodChoiceProps) {
   return (
     <Page
@@ -59,17 +63,32 @@ export default function SignInMethodChoice({
         ))}
       </ul>
 
-      {cancelLabel !== undefined && socialProviders.length > 0 && <hr className="border-line" />}
+      {cancelForm !== null && socialProviders.length > 0 && <hr className="border-line" />}
 
-      <p className="text-base">
-        <a
-          href={registrationLink.href}
-          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
-        >
-          {registrationLink.label}
-        </a>
-      </p>
-      {cancelLabel !== undefined && <p className="text-base text-fg-muted">{cancelLabel}</p>}
+      {switchForm !== null && (
+        <EntryExitForm
+          form={switchForm}
+          testId="sign-entry-switch"
+          tone="muted"
+        />
+      )}
+      {registrationLink !== null && (
+        <p className="text-base">
+          <a
+            href={registrationLink.href}
+            className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
+          >
+            {registrationLink.label}
+          </a>
+        </p>
+      )}
+      {cancelForm !== null && (
+        <EntryExitForm
+          form={cancelForm}
+          testId="sign-entry-cancel"
+          tone="muted"
+        />
+      )}
     </Page>
   );
 }

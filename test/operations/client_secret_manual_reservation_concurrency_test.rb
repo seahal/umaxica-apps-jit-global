@@ -28,8 +28,10 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
           token
         end
       passkeys =
-        paths.map do |path|
-          actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key") if path == :passkey
+        paths.each_with_index.map do |path, _index|
+          actor.client_passkeys.create!(
+            webauthn_id: SecureRandom.uuid, public_key: "public-key",
+          ) if path == :passkey
         end
       now = Client.database_now
       count.times do

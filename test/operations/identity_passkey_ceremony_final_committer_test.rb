@@ -14,47 +14,46 @@ class IdentityPasskeyCeremonyFinalCommitterTest < ActiveSupport::TestCase
   test "commits a passkey for the app surface and records an audit event" do
     consumption = FakeConsumption.new
     passkey_record = Object.new
-    audit = nil
-    created_attrs = nil
+    allocation = nil
 
     with_stubs(
       result_hash: valid_result_hash, transaction: @transaction,
       consumer_result: consumption,
     ) do
       ClientPasskey.stub(:transaction, ->(&block) { block.call }) do
-        ClientPasskey.stub(
-          :create!, ->(attrs) {
-                      created_attrs = attrs
-                      passkey_record
-                    },
+        PasskeyRegistrationOperation.stub(
+          :call!, ->(**kwargs) {
+                    allocation = kwargs
+                    passkey_record
+                  },
         ) do
-          IdentityAudit.stub(:record!, ->(**kwargs) { audit = kwargs }) do
-            commit = IdentityPasskeyCeremonyFinalCommitter.call!(
-              result_token: "token",
-              actor: @actor,
-              session_ref: "session-1",
-              surface: "app",
-              ip_address: "1.2.3.4",
-              user_agent: "UA",
-              now: @now,
-            )
+          commit = IdentityPasskeyCeremonyFinalCommitter.call!(
+            result_token: "token",
+            actor: @actor,
+            session_ref: "session-1",
+            surface: "app",
+            ip_address: "1.2.3.4",
+            user_agent: "UA",
+            now: @now,
+          )
 
-            assert_same consumption.transaction, commit.transaction
-            assert_same consumption.result, commit.result
-            assert_same passkey_record, commit.passkey
-          end
+          assert_same consumption.transaction, commit.transaction
+          assert_same consumption.result, commit.result
+          assert_same passkey_record, commit.passkey
         end
       end
     end
 
-    assert_equal 7, created_attrs.fetch(:user_id)
-    assert_equal "webauthn-id-1", created_attrs.fetch(:webauthn_id)
-    assert_equal "public-key", created_attrs.fetch(:public_key)
-    assert_equal 5, created_attrs.fetch(:sign_count)
-    assert_equal "My Passkey", created_attrs.fetch(:description)
-    assert_equal "passkey.register", audit.fetch(:action)
-    assert_equal ClientChronicleEvent::PASSKEY_REGISTERED, audit.fetch(:event_id)
-    assert_equal "1.2.3.4", audit.fetch(:ip_address)
+    assert_same @actor, allocation.fetch(:actor)
+    assert_equal ClientPasskey, allocation.fetch(:passkey_class)
+    assert_equal "webauthn-id-1", allocation.fetch(:attributes).fetch(:webauthn_id)
+    assert_equal "public-key", allocation.fetch(:attributes).fetch(:public_key)
+    assert_equal 5, allocation.fetch(:attributes).fetch(:sign_count)
+    assert_equal "My Passkey", allocation.fetch(:attributes).fetch(:description)
+    assert_equal "passkey.registered.settings", allocation.fetch(:audit).fetch(:event_type)
+    assert_equal "app", allocation.fetch(:audit).fetch(:surface)
+    assert_equal "actor-1", allocation.fetch(:audit).fetch(:actor_ref)
+    assert_equal "txn-1", allocation.fetch(:audit).fetch(:operation_ref)
   end
 
   test "raises when the surface is invalid" do
@@ -163,23 +162,23 @@ class IdentityPasskeyCeremonyFinalCommitterTest < ActiveSupport::TestCase
     end
   end
 
-  test "raises when the passkey is already registered" do
+  test "propagates an unclassified uniqueness failure without claiming credential duplication" do
     with_stubs(
       result_hash: valid_result_hash, transaction: @transaction,
       consumer_result: FakeConsumption.new,
     ) do
       ClientPasskey.stub(:transaction, ->(&block) { block.call }) do
-        ClientPasskey.stub(:create!, ->(_attrs) { raise ActiveRecord::RecordNotUnique.new("dup") }) do
-          IdentityAudit.stub(:record!, ->(**) { }) do
-            error =
-              assert_raises(IdentityPasskeyCeremonyContract::Error) do
-                IdentityPasskeyCeremonyFinalCommitter.call!(
-                  result_token: "token", actor: @actor, session_ref: "session-1",
-                  surface: "app", now: @now,
-                )
-              end
-            assert_includes error.message, "passkey credential is already registered"
-          end
+        PasskeyRegistrationOperation.stub(
+          :call!, ->(**) { raise ActiveRecord::RecordNotUnique.new("dup") },
+        ) do
+          error =
+            assert_raises(ActiveRecord::RecordNotUnique) do
+              IdentityPasskeyCeremonyFinalCommitter.call!(
+                result_token: "token", actor: @actor, session_ref: "session-1",
+                surface: "app", now: @now,
+              )
+            end
+          assert_equal "dup", error.message
         end
       end
     end
@@ -235,9 +234,12 @@ class IdentityPasskeyCeremonyFinalCommitterTest < ActiveSupport::TestCase
   end
 
   class FakeTransaction
-    def initialize(expired: false, consumed: false)
+    attr_reader :transaction_id
+
+    def initialize(expired: false, consumed: false, transaction_id: "txn-1")
       @expired = expired
       @consumed = consumed
+      @transaction_id = transaction_id
     end
 
     def expired?(*)

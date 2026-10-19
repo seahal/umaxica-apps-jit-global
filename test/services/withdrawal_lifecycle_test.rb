@@ -95,8 +95,9 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     assert_predicate client.client_withdrawal_flows.recent_first.first, :withdrawal_requested?
   end
 
-  test "suspend! creates and discards a flow and deactivates a client" do
+  test "suspend! requires a persisted requested flow before deactivating a client" do
     client = clients(:one)
+    WithdrawalLifecycle.start!(actor: client, current_session_public_id: @session_public_id, request: @request)
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
       WithdrawalLifecycle.suspend!(actor: client, current_session_public_id: @session_public_id, request: @request)
@@ -110,6 +111,17 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     flow = client.client_withdrawal_flows.recent_first.first
 
     assert_predicate flow, :withdrawal_discarded?
+  end
+
+  test "suspend! refuses a direct request without a persisted withdrawal flow" do
+    client = clients(:one)
+
+    assert_raises(Sign::InvalidWithdrawalStateError) do
+      WithdrawalLifecycle.suspend!(actor: client, current_session_public_id: @session_public_id, request: @request)
+    end
+
+    assert_nil client.reload.deactivated_at
+    assert_empty client.client_withdrawal_flows
   end
 
   test "suspend! confirms a requested flow before discarding" do
@@ -128,6 +140,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client = clients(:one)
     future_purge_eligible_at = 10.days.from_now
     client.update_columns(deactivated_at: nil, purge_eligible_at: future_purge_eligible_at)
+    WithdrawalLifecycle.start!(actor: client, current_session_public_id: @session_public_id, request: @request)
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
       WithdrawalLifecycle.suspend!(actor: client, current_session_public_id: @session_public_id, request: @request)
@@ -140,6 +153,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client = clients(:one)
     deactivated_at = 2.days.ago
     client.update_columns(created_at: 3.days.ago, deactivated_at: deactivated_at, purge_eligible_at: Float::INFINITY)
+    WithdrawalLifecycle.start!(actor: client, current_session_public_id: @session_public_id, request: @request)
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
       WithdrawalLifecycle.suspend!(actor: client, current_session_public_id: @session_public_id, request: @request)
@@ -204,7 +218,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.client_withdrawal_flows.create!(
       status_id: ClientWithdrawalFlowStatus::DISCARDED,
       began_at: 2.days.ago,
-      discard_at: 2.days.ago,
+      discard_at: Float::INFINITY,
     )
 
     WithdrawalLifecycle.recover!(actor: client, request: @request)
@@ -216,7 +230,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     assert_equal Float::INFINITY, client.purge_eligible_at
   end
 
-  test "recover! creates a discarded flow when none exists" do
+  test "recover! materializes a discarded flow for a suspended legacy principal" do
     client = clients(:one)
     client.update_columns(
       withdrawal_started_at: 2.days.ago,
@@ -239,6 +253,11 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
       deactivated_at: 2.days.ago,
       discard_at: 2.days.ago,
       purge_eligible_at: 29.days.from_now,
+    )
+    visitor.visitor_withdrawal_flows.create!(
+      status_id: VisitorWithdrawalFlowStatus::DISCARDED,
+      began_at: 2.days.ago,
+      discard_at: Float::INFINITY,
     )
 
     WithdrawalLifecycle.recover!(actor: visitor, request: @request)
@@ -272,7 +291,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     client.client_withdrawal_flows.create!(
       status_id: ClientWithdrawalFlowStatus::DISCARDED,
       began_at: 10.days.ago,
-      discard_at: 10.days.ago,
+      discard_at: Float::INFINITY,
     )
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
@@ -298,6 +317,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
 
   test "suspend! deactivates a visitor" do
     visitor = visitors(:reserved_visitor)
+    WithdrawalLifecycle.start!(actor: visitor, current_session_public_id: @session_public_id, request: @request)
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
       WithdrawalLifecycle.suspend!(actor: visitor, current_session_public_id: @session_public_id, request: @request)
@@ -329,7 +349,7 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     visitor.visitor_withdrawal_flows.create!(
       status_id: VisitorWithdrawalFlowStatus::DISCARDED,
       began_at: 10.days.ago,
-      discard_at: 10.days.ago,
+      discard_at: Float::INFINITY,
     )
 
     AuthenticationSessionRevoker.stub(:tokens_for, TestTokenScope.new) do
@@ -354,5 +374,66 @@ class WithdrawalLifecycleTest < ActiveSupport::TestCase
     assert_raises(Sign::InvalidWithdrawalStateError) do
       WithdrawalLifecycle.start!(actor: operators(:one), request: @request)
     end
+  end
+
+  test "terminate! refuses an active retention hold" do
+    client = clients(:one)
+    deactivated_at = 10.days.ago
+    client.update_columns(
+      withdrawal_started_at: deactivated_at,
+      deactivated_at: deactivated_at,
+      discard_at: deactivated_at,
+      purge_eligible_at: 21.days.from_now,
+      withdrawn_at: deactivated_at,
+    )
+    client.client_withdrawal_flows.create!(
+      status_id: ClientWithdrawalFlowStatus::DISCARDED,
+      began_at: deactivated_at,
+      discard_at: Float::INFINITY,
+    )
+    client.client_retention_holds.create!(
+      reason_code: "legal_hold",
+      applied_at: Client.database_now,
+      expires_at: nil,
+    )
+
+    assert_raises(Sign::InvalidWithdrawalStateError) do
+      WithdrawalLifecycle.terminate!(actor: client, request: @request)
+    end
+
+    assert_nil client.reload.terminated_at
+    assert_predicate client.client_withdrawal_flows.recent_first.first, :withdrawal_discarded?
+  end
+
+  test "terminate! refuses an enforcement purge block" do
+    client = clients(:one)
+    deactivated_at = 10.days.ago
+    client.update_columns(
+      withdrawal_started_at: deactivated_at,
+      deactivated_at: deactivated_at,
+      discard_at: deactivated_at,
+      purge_eligible_at: 21.days.from_now,
+      withdrawn_at: deactivated_at,
+    )
+    client.client_withdrawal_flows.create!(
+      status_id: ClientWithdrawalFlowStatus::DISCARDED,
+      began_at: deactivated_at,
+      discard_at: Float::INFINITY,
+    )
+
+    blocking =
+      lambda do |public_id, flag|
+        assert_equal client.public_id, public_id
+        flag == :withdrawal_purge_blocked
+      end
+
+    AppEnforcementCase.stub(:principal_effect_blocking?, blocking) do
+      assert_raises(Sign::InvalidWithdrawalStateError) do
+        WithdrawalLifecycle.terminate!(actor: client, request: @request)
+      end
+    end
+
+    assert_nil client.reload.terminated_at
+    assert_predicate client.client_withdrawal_flows.recent_first.first, :withdrawal_discarded?
   end
 end

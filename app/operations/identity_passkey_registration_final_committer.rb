@@ -68,7 +68,9 @@ class IdentityPasskeyRegistrationFinalCommitter
       end
     rescue ActiveRecord::RecordNotFound, KeyError, TypeError
       refuse!("passkey registration record unavailable")
-    rescue ActiveRecord::RecordNotUnique
+    rescue ActiveRecord::RecordNotUnique => e
+      raise unless PasskeyRegistrationOperation.credential_id_conflict?(e)
+
       refuse!("passkey credential is already registered")
     rescue ActiveRecord::RecordInvalid
       refuse!("passkey credential was not accepted")
@@ -128,17 +130,17 @@ class IdentityPasskeyRegistrationFinalCommitter
       end
     end
 
-    def commit_ticket!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
+    def commit_ticket!(config, actor, token, transaction, payload, digest, _ip_address, _user_agent)
       config.fetch(:ticket_class).connected_to(role: :writing) do
         config.fetch(:ticket_class).transaction do
           token.device_session_record!.with_lock do
-            commit_under_device_lock!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
+            commit_under_device_lock!(config, actor, token, transaction, payload, digest)
           end
         end
       end
     end
 
-    def commit_under_device_lock!(config, actor, token, transaction, payload, digest, ip_address, user_agent)
+    def commit_under_device_lock!(config, actor, token, transaction, payload, digest)
       token.with_lock do
         record = config.fetch(:session_class).lock.find_by!(
           config.fetch(:token_key) => token.id,
@@ -159,7 +161,7 @@ class IdentityPasskeyRegistrationFinalCommitter
           refuse!("passkey registration already ended") if candidate.consumed_at || ceremony.completed?
           ensure_current_registration_authority!(actor, token, transaction)
 
-          credential = create_credential!(config, actor, candidate, ip_address, user_agent)
+          credential = create_credential!(config, actor, transaction, candidate)
           candidate.update!(consumed_at: now)
           transaction.commit_registration_consumption!(
             now: now, method: "passkey", registered_credential_ref: credential.public_id,
@@ -170,23 +172,32 @@ class IdentityPasskeyRegistrationFinalCommitter
       end
     end
 
-    def create_credential!(config, actor, candidate, ip_address, user_agent)
-      credential = config.fetch(:passkey_class).create!(
-        config.fetch(:owner_key) => actor.id,
-        :webauthn_id => candidate.webauthn_id,
-        :public_key => candidate.public_key,
-        :sign_count => candidate.sign_count,
-        :description => candidate.description,
-        :transports => candidate.transports,
-        **Webauthn::AuthenticatorMetadata.permit(candidate.metadata),
+    def create_credential!(config, actor, transaction, candidate)
+      event_type =
+        if transaction.purpose == "bootstrap"
+          "passkey.registered.signup"
+        else
+          "passkey.registered.settings"
+        end
+
+      PasskeyRegistrationOperation.call!(
+        actor: actor,
+        passkey_class: config.fetch(:passkey_class),
+        attributes: {
+          webauthn_id: candidate.webauthn_id,
+          public_key: candidate.public_key,
+          sign_count: candidate.sign_count,
+          description: candidate.description,
+          transports: candidate.transports,
+          **Webauthn::AuthenticatorMetadata.permit(candidate.metadata),
+        },
+        audit: {
+          event_type: event_type,
+          surface: config.fetch(:surface),
+          actor_ref: actor.public_id,
+          operation_ref: transaction.transaction_id,
+        },
       )
-      if config[:audit_event_id]
-        IdentityAudit.record!(
-          actor: actor, event_id: config.fetch(:audit_event_id), action: "passkey.register",
-          subject: credential, ip_address: ip_address, user_agent: user_agent,
-        )
-      end
-      credential
     end
 
     def ensure_current_registration_authority!(actor, token, transaction)

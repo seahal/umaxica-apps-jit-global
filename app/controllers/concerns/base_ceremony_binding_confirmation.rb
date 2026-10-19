@@ -256,6 +256,8 @@ module BaseCeremonyBindingConfirmation
   def signup_binding?(binding)
     return true if binding.purpose == "local_sign_up"
     return false unless binding.parent_kind == :authorization_transaction
+    # A Switch admission names its flow; the parent keeps its neutral intent.
+    return binding.entry_intent == "sign_up" if binding.entry_intent.present?
 
     parent = auth_binding_parent_record(binding)
     case parent

@@ -9,6 +9,7 @@ module Auth
         include ::AuthenticationModeSwitchGuard
         include ::AuthCeremonyAdmission
         include ::SignInPhaseBindingControllerSupport
+        include ::SignEntryExit
 
         AUTHENTICATION_MODE = :guest
         declare_authentication_mode! :guest, no_redirect: true
@@ -50,7 +51,6 @@ module Auth
 
           {
             title: t("sign.org.authentication.new.page_title"),
-            cancel_label: t("actions.cancel"),
             description: t("sign.org.authentication.new.description"),
             methods: [
               {
@@ -75,7 +75,18 @@ module Auth
                                    href: auth_org_sign_up_path(pt: pt, ri: region),
                                  }
                                end,
+            # D09 Cancel only: Org has no public Sign Up, so no Switch is offered.
+            **sign_entry_exit_forms(switch_to: nil, switch_label: nil),
           }
+        end
+
+        # Org has no public Sign Up, so there is no sign-up cycle to check.
+        def sign_entry_exit_sign_up_cycle_class = nil
+
+        def sign_entry_exit_cancellation_path = auth_org_sign_cancellation_path(ri: params[:ri])
+
+        def sign_entry_exit_switch_path
+          raise ArgumentError, "Org Sign In offers no Switch"
         end
       end
     end

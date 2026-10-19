@@ -266,7 +266,9 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     methods = inertia_props.fetch("methods")
 
-    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+    # The first Sign In page of an OIDC parent offers Cancel; Org has no public Sign Up, so no Switch.
+    assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("cancel_form").fetch("action")
+    assert_nil inertia_props.fetch("switch_form")
 
     assert_equal 2, methods.length
     assert_equal "provider", method_for("entra").fetch("kind")
@@ -1271,7 +1273,7 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     assert_nil inertia_props["registration_link"]
   end
 
-  test "local ceremony offers only text Cancel without a back link" do
+  test "first Sign In page offers RP Cancel, no Switch and no back link" do
     issuance = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "org",
       intent: "sign_in",
@@ -1514,7 +1516,9 @@ class Auth::Org::SignInsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     assert_not inertia_props.key?("back_to_root")
-    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+    # The first Sign In page of an OIDC parent offers Cancel; Org has no public Sign Up, so no Switch.
+    assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("cancel_form").fetch("action")
+    assert_nil inertia_props.fetch("switch_form")
   end
 
   test "rejects direct entry when logged in without account-switching guidance" do

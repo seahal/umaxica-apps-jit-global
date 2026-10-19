@@ -15,16 +15,18 @@ bundle exec rails test
 bun vitest run
 ```
 
-Orchestration supplies `POSTGRESQL_TEST_HOST` and `VALKEY_KVS_HOST`. Do not export
-`VALKEY_TEST_HOST`, `CACHE_REDIS_URL`, `RATE_LIMIT_REDIS_URL`, `AUTH_STATE_REDIS_URL`, or a run
-namespace before those commands. Rails generates `VALKEY_NAMESPACE_RUN_ID` when it is absent.
+Orchestration supplies `VALKEY_KVS_HOST`. Do not export `VALKEY_TEST_HOST`, `CACHE_REDIS_URL`,
+`RATE_LIMIT_REDIS_URL`, `AUTH_STATE_REDIS_URL`, or a run namespace before those commands. Rails
+generates `VALKEY_NAMESPACE_RUN_ID` when it is absent.
 
 `scripts/test-isolated` is an optional helper that claims a run id and deletes that run's namespaced
 keys on exit. It is not required to boot the suite.
 
-`POSTGRESQL_TEST_HOST` is required by `config/database.yml`; it does not fall back to
-`POSTGRESQL_HOST`. Rails validates every effective test database configuration before opening Active
-Record connections. `DATABASE_URL` and other database URL overrides cannot silently redirect a test
+`config/database.yml` fixes every test database to `primary:5432` as `root` (password
+`development`); no environment variable selects the test PostgreSQL target, so an exported variable
+cannot redirect a destructive preparation. `Umaxica::TestEnvironment::DatabaseSafety` holds the same
+fixed values and validates every effective test database configuration before opening Active Record
+connections. `DATABASE_URL` and other database URL overrides cannot silently redirect a test
 connection to a non-test database.
 
 Application auth-state and rate-limit keys include the run and worker identifiers. Parallel Minitest

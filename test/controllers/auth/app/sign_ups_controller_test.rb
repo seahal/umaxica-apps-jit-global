@@ -734,7 +734,11 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
 
     # The four entry points the page offers: two contact methods and two providers.
     assert_equal 4, inertia_props.fetch("methods").size + inertia_props.fetch("social_providers").size
-    assert_equal I18n.t("actions.cancel"), inertia_props.fetch("cancel_label")
+    # The first Sign Up page of an OIDC parent offers Cancel. This parent has the fixed sign_up
+    # intent that prompt=create produces, so no Switch to Sign In and no plain link to it (D06).
+    assert_equal "/sign/cancellation?ri=jp", inertia_props.fetch("cancel_form").fetch("action")
+    assert_nil inertia_props.fetch("switch_form")
+    assert_empty inertia_props.fetch("links")
   end
 
   test "shows telephone registration link" do

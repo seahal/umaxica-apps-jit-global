@@ -65,7 +65,7 @@ module PasskeyRegistrationFlow
       description: passkey_description(provider_name: metadata[:provider_name]),
       **metadata,
     )
-    save_passkey_registration!(passkey)
+    save_passkey_registration!(passkey, event_type: "passkey.registered.signup")
     passkey
   rescue Webauthn::ChallengeStore::ChallengeError => e
     Rails.logger.warn(JitLogEvent.format("#{passkey_registration_log_prefix}.challenge_error", message: e.message))
@@ -75,7 +75,9 @@ module PasskeyRegistrationFlow
     Rails.logger.warn(JitLogEvent.format("#{passkey_registration_log_prefix}.failed", message: e.message))
     render json: { error: I18n.t("errors.webauthn.verification_failed") }, status: :unprocessable_content
     nil
-  rescue ActiveRecord::RecordNotUnique
+  rescue ActiveRecord::RecordNotUnique => e
+    raise unless PasskeyRegistrationOperation.credential_id_conflict?(e)
+
     render json: { error: I18n.t("errors.webauthn.credential_already_registered") }, status: :conflict
     nil
   rescue ActiveRecord::RecordInvalid => e
@@ -112,7 +114,9 @@ module PasskeyRegistrationFlow
     Rails.logger.warn(JitLogEvent.format("#{passkey_registration_log_prefix}.commit_failed", message: e.message))
     render json: { error: I18n.t("errors.webauthn.verification_failed") },
            status: :unprocessable_content
-  rescue ActiveRecord::RecordNotUnique
+  rescue ActiveRecord::RecordNotUnique => e
+    raise unless PasskeyRegistrationOperation.credential_id_conflict?(e)
+
     render json: { error: I18n.t("errors.webauthn.credential_already_registered") }, status: :conflict
   rescue ActiveRecord::RecordInvalid => e
     Rails.logger.warn(JitLogEvent.format("#{passkey_registration_log_prefix}.persist_failed", message: e.message))
@@ -237,8 +241,12 @@ module PasskeyRegistrationFlow
     passkey_registration_passkeys.map { |passkey| { id: passkey.webauthn_id } }
   end
 
-  def save_passkey_registration!(passkey)
-    passkey.save!
+  def save_passkey_registration!(passkey, event_type: "passkey.registered.settings")
+    PasskeyRegistrationOperation.call!(
+      actor: passkey_registration_actor,
+      passkey: passkey,
+      audit: { event_type: event_type, surface: webauthn_surface.key.to_s },
+    )
   end
 
   def top_up_recovery_passcodes_after_passkey_registration

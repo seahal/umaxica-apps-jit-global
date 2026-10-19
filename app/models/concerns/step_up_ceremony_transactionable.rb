@@ -14,6 +14,7 @@ module StepUpCeremonyTransactionable
   STATUSES = %w(pending verified consumed canceled expired revoked).freeze
   PURPOSES = %w(step_up reauthentication bootstrap credential_registration credential_change).freeze
   RETENTION_PERIOD = 7.days
+  METHOD_ATTRIBUTE_SENTINEL = Object.new.freeze
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
@@ -190,6 +191,15 @@ module StepUpCeremonyTransactionable
   end
 
   public
+
+  # See StepUpSessionConsumable#method. The ceremony transaction also stores a
+  # `method` column, so it must retain Ruby's reflective Object#method(name)
+  # contract for Active Record internals.
+  def method(name = METHOD_ATTRIBUTE_SENTINEL)
+    return self[:method] if name.equal?(METHOD_ATTRIBUTE_SENTINEL)
+
+    Object.instance_method(:method).bind_call(self, name)
+  end
 
   def intent = purpose
 

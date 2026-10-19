@@ -9,6 +9,8 @@ class ChronicleRecordPolicy
       cookie|raw_session|session_id\z|session\z|raw_email|raw_ip
     /ix
   ALLOWED_DIGEST_KEYS = %w(session_id_digest).freeze
+  ALLOWED_REFERENCE_KEYS = %w(external_id).freeze
+  UUID_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   RESERVED_CONTEXT_KEYS = %w(request_id ip_address user_agent).freeze
   MAX_ERROR_MESSAGE_BYTES = 1.kilobyte
   SENSITIVE_VALUE_PATTERNS = [
@@ -64,6 +66,7 @@ class ChronicleRecordPolicy
         value.map { |entry| sanitize(entry, key: key) }
       when String
         return value if safe_categorical_value?(value, key: key)
+        return "[FILTERED]" if ALLOWED_REFERENCE_KEYS.include?(key.to_s)
 
         sanitize_string(value)
       else
@@ -127,6 +130,8 @@ class ChronicleRecordPolicy
     private
 
     def safe_categorical_value?(value, key:)
+      return value.match?(UUID_PATTERN) if ALLOWED_REFERENCE_KEYS.include?(key.to_s)
+
       key.to_s == "reason_code" && value.match?(/\A[a-z][a-z0-9_.-]{0,63}\z/)
     end
 

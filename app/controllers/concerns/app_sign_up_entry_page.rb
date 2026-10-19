@@ -14,6 +14,7 @@
 # `docs/reference/third-party-sign-in-button-requirements.md` places on the button.
 module AppSignUpEntryPage
   extend ActiveSupport::Concern
+  include SignEntryExit
 
   SIGN_UP_ENTRY_COMPONENT = "auth/app/sign_ups/new"
 
@@ -22,11 +23,11 @@ module AppSignUpEntryPage
   def sign_up_entry_page_props(suspended_notice: nil)
     {
       title: t("sign.app.registration.new.page_title"),
-      cancel_label: t("actions.cancel"),
       suspended_notice: suspended_notice,
       methods: suspended_notice ? [] : sign_up_entry_methods,
       social_providers: suspended_notice ? [] : sign_up_entry_social_providers,
-      links: suspended_notice ? [] : sign_up_entry_links,
+      links: (suspended_notice || sign_entry_parent_bound?) ? [] : sign_up_entry_links,
+      **sign_entry_exit_forms(switch_to: "sign_in", switch_label: t("sign.app.registration.new.links.sign_in")),
     }
   end
 
@@ -63,6 +64,12 @@ module AppSignUpEntryPage
       },
     ]
   end
+
+  def sign_entry_exit_sign_up_cycle_class = ClientSignUpFlow
+
+  def sign_entry_exit_cancellation_path = auth_app_sign_cancellation_path(ri: params[:ri])
+
+  def sign_entry_exit_switch_path = auth_app_sign_switch_path(ri: params[:ri])
 
   def sign_up_entry_links
     [

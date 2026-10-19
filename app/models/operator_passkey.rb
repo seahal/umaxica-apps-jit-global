@@ -27,7 +27,7 @@
 #
 # Indexes
 #
-#  index_operator_passkeys_on_external_id  (external_id)
+#  index_operator_passkeys_on_external_id_unique (external_id) UNIQUE
 #  index_operator_passkeys_on_staff_id     (staff_id)
 #  index_operator_passkeys_on_status_id    (status_id)
 #  index_operator_passkeys_on_webauthn_id  (webauthn_id) UNIQUE
@@ -41,7 +41,7 @@
 class OperatorPasskey < OrgPrincipalRecord
   include MfaStatusCredential
 
-  MAX_PASSKEYS_PER_STAFF = 4
+  MAX_PASSKEYS_PER_STAFF = 10
   attribute :status_id, default: OperatorPasskeyStatus::ACTIVE
 
   belongs_to :staff, inverse_of: :staff_passkeys, class_name: "Operator"
@@ -52,40 +52,27 @@ class OperatorPasskey < OrgPrincipalRecord
   validates :external_id, presence: true
   validates :public_key, presence: true
   validates :description, presence: true
+  validate :within_passkey_limit, on: :create
   validates :status_id, numericality: { only_integer: true }
   validates :sign_count, presence: true, numericality: { greater_than_or_equal_to: 0 }
-
-  validate :validate_slot_limit, on: :create
   before_validation :set_defaults, on: :create
-  around_create :create_with_slot_lock
 
   scope :active, -> { where(status_id: OperatorPasskeyStatus::ACTIVE) }
 
   private
 
-  # Terminal history remains available to bootstrap/recovery checks without occupying a registration slot.
-  def validate_slot_limit
-    return if staff_id.nil? || [OperatorPasskeyStatus::REVOKED].include?(status_id)
+  # Every retained row counts (REQ-P01); a removed Passkey is physically deleted and frees its place.
+  # This check alone races; PasskeyRegistrationOperation repeats it while holding the staff lock.
+  def within_passkey_limit
+    return if staff_id.nil?
 
     count =
       self.class.connection_class_for_self.connected_to(role: :writing) do
-        self.class.where(staff_id: staff_id).where.not(status_id: [OperatorPasskeyStatus::REVOKED]).count
+        self.class.where(staff_id: staff_id).count
       end
     return if count < MAX_PASSKEYS_PER_STAFF
 
     errors.add(:base, :too_many, message: "exceeds maximum passkeys per staff (#{MAX_PASSKEYS_PER_STAFF})")
-  end
-
-  # Validation alone cannot reserve capacity; every INSERT repeats the check under the owner lock.
-  def create_with_slot_lock
-    self.class.connection_class_for_self.connected_to(role: :writing) do
-      staff.with_lock do
-        validate_slot_limit
-        raise ActiveRecord::RecordInvalid, self if errors.any?
-
-        yield
-      end
-    end
   end
 
   def set_defaults

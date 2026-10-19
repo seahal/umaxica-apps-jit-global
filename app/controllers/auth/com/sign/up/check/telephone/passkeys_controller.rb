@@ -103,9 +103,14 @@ module Auth
 
               def passkey_registration_passkeys = VisitorPasskey.where(visitor_id: @sign_up_actor.id)
 
-              def save_passkey_registration!(passkey)
-                passkey.valid?
-                passkey.save!(validate: false)
+              def save_passkey_registration!(passkey, event_type: "passkey.registered.signup")
+                # Keep the normal model validations, including the Passkey limit, in the live COM
+                # sign-up path so this request reports them instead of persisting the credential.
+                PasskeyRegistrationOperation.call!(
+                  actor: @sign_up_actor,
+                  passkey: passkey,
+                  audit: { event_type: event_type, surface: "com" },
+                )
                 @sign_up_ticket.update!(pending_passkey_registration_id: passkey.id) if
                   @sign_up_ticket.has_attribute?(:pending_passkey_registration_id)
               end

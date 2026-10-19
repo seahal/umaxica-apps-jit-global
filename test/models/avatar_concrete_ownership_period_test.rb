@@ -38,7 +38,7 @@ class AvatarConcreteOwnershipPeriodTest < ActiveSupport::TestCase
         host: database.fetch(:host),
         port: database.fetch(:port),
         user: database.fetch(:username),
-        password: ENV.fetch("POSTGRESQL_PASSWORD"),
+        password: database.fetch(:password),
         dbname: database.fetch(:database),
         connect_timeout: 3,
       )
@@ -468,7 +468,7 @@ class AvatarConcreteOwnershipPeriodTest < ActiveSupport::TestCase
       host: database.fetch(:host),
       port: database.fetch(:port),
       user: database.fetch(:username),
-      password: ENV.fetch("POSTGRESQL_PASSWORD"),
+      password: database.fetch(:password),
       dbname: database.fetch(:database),
       connect_timeout: 3,
     )
