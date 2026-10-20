@@ -87,11 +87,11 @@ module OidcRpIdentityProvisioning
   def identity_for_binding(binding)
     case binding
     when ClientOidcIdentityBinding
-      ClientIdentity.find(binding.client_identity_id)
+      binding.association(:client_identity).tap { |owner| owner.reset_scope }.scope.take!
     when VisitorOidcIdentityBinding
-      VisitorIdentity.find(binding.visitor_identity_id)
+      binding.association(:visitor_identity).tap { |owner| owner.reset_scope }.scope.take!
     when OperatorOidcIdentityBinding
-      OperatorIdentity.find(binding.operator_identity_id)
+      binding.association(:operator_identity).tap { |owner| owner.reset_scope }.scope.take!
     else
       raise ActiveRecord::RecordNotFound, "OIDC identity binding class is not registered"
     end

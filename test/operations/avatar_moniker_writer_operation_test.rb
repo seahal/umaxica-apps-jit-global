@@ -137,7 +137,6 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   setup do
-    ParallelTestDatabaseCloner.verify_owned_worker_execution!
     AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
     HandleStatus.ensure_defaults!
     @handle = Handle.create!(
@@ -162,7 +161,7 @@ class AvatarMonikerWriterConcurrencyTest < ActiveSupport::TestCase
     end
   end
 
-  # Committed histories remain intact until the owned worker database is removed.
+  # Committed histories remain intact until the ordinary test database is reset.
 
   test "independent connections serialize concurrent renames without duplicate current rows" do
     assert_equal 1, @avatar.enterprise_ownership_periods.current.count

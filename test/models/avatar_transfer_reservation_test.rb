@@ -471,7 +471,6 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
   end
 
   test "concurrent same-key requests return one committed reservation" do
-    ParallelTestDatabaseCloner.verify_owned_worker_execution!
     organization = Enterprise.create!(name: "Registry race owner", title: "Registry")
     avatar = nil
     source_period = nil

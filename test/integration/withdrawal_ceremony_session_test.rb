@@ -179,6 +179,70 @@ class WithdrawalCeremonySessionTest < ActionDispatch::IntegrationTest
     assert_predicate ceremony.reload, :active?
   end
 
+  test "termination clears Inertia history on the next app page" do
+    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! host
+    client = create_client
+    client.update_columns(
+      created_at: 9.days.ago,
+      withdrawal_started_at: 8.days.ago,
+      deactivated_at: 8.days.ago,
+      discard_at: 8.days.ago,
+      purge_eligible_at: 23.days.from_now,
+      withdrawn_at: 8.days.ago,
+    )
+    client.client_withdrawal_flows.create!(
+      status_id: ClientWithdrawalFlowStatus::DISCARDED, began_at: 8.days.ago, discard_at: Float::INFINITY,
+    )
+    ceremony = ClientWithdrawalCeremony.issue!(
+      subject: client,
+      purpose: "termination",
+      request: ActionDispatch::TestRequest.create,
+    )
+    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
+
+    delete base_app_identity_withdrawal_url(ri: "jp", host: host), headers: browser_headers
+
+    assert_response :see_other
+    assert_predicate client.reload, :terminated?
+    get base_app_root_url(ri: "jp", host: host)
+
+    assert_response :success
+    assert inertia_page.fetch("clearHistory")
+  end
+
+  test "termination clears Inertia history on the next com page" do
+    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host! host
+    visitor = create_visitor
+    visitor.update_columns(
+      created_at: 9.days.ago,
+      withdrawal_started_at: 8.days.ago,
+      deactivated_at: 8.days.ago,
+      discard_at: 8.days.ago,
+      purge_eligible_at: 23.days.from_now,
+      withdrawn_at: 8.days.ago,
+    )
+    visitor.visitor_withdrawal_flows.create!(
+      status_id: VisitorWithdrawalFlowStatus::DISCARDED, began_at: 8.days.ago, discard_at: Float::INFINITY,
+    )
+    ceremony = VisitorWithdrawalCeremony.issue!(
+      subject: visitor,
+      purpose: "termination",
+      request: ActionDispatch::TestRequest.create,
+    )
+    cookies[withdrawal_ceremony_cookie_name] = "#{ceremony.public_id}:#{ceremony.plaintext_token}"
+
+    delete base_com_identity_withdrawal_url(ri: "jp", host: host), headers: browser_headers
+
+    assert_response :see_other
+    assert_predicate visitor.reload, :terminated?
+    get base_com_root_url(ri: "jp", host: host)
+
+    assert_response :success
+    assert inertia_page.fetch("clearHistory")
+  end
+
   private
 
   def withdrawal_ceremony_cookie_name

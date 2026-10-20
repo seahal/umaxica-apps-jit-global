@@ -93,7 +93,9 @@ module Base
               )
               raise ActiveRecord::RecordNotFound, "revocation not found" if chronicle.nil?
 
-              performer = Operator.find_by(id: chronicle.actor_id) if chronicle.actor_type == "Operator"
+              performer = chronicle.association(:actor).tap { |owner|
+                owner.reset_scope
+              }.scope.take if chronicle.actor_type == "Operator"
               render json: {
                 account: account_json(account),
                 event_uuid: chronicle.event_uuid,

@@ -115,11 +115,11 @@ class ProcessorErasureNotificationJob < ApplicationJob
   def subject_for(notification)
     case notification
     when ClientProcessorErasureNotification
-      request = ClientPrivacyRequest.find(notification.client_privacy_request_id)
-      Client.find(request.client_id)
+      request = notification.association(:client_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
+      request.association(:client).tap { |owner| owner.reset_scope }.scope.take!
     when VisitorProcessorErasureNotification
-      request = VisitorPrivacyRequest.find(notification.visitor_privacy_request_id)
-      Visitor.find(request.visitor_id)
+      request = notification.association(:visitor_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
+      request.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!
     else
       raise ArgumentError, "unsupported processor notification: #{notification.class.name}"
     end
@@ -127,8 +127,10 @@ class ProcessorErasureNotificationJob < ApplicationJob
 
   def privacy_request_for(notification)
     case notification
-    when ClientProcessorErasureNotification then ClientPrivacyRequest.find(notification.client_privacy_request_id)
-    when VisitorProcessorErasureNotification then VisitorPrivacyRequest.find(notification.visitor_privacy_request_id)
+    when ClientProcessorErasureNotification
+      notification.association(:client_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
+    when VisitorProcessorErasureNotification
+      notification.association(:visitor_privacy_request).tap { |owner| owner.reset_scope }.scope.take!
     else
       raise ArgumentError, "unsupported processor notification: #{notification.class.name}"
     end

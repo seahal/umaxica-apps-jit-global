@@ -139,9 +139,9 @@ module PasskeySignInFlow
 
   def passkey_sign_in_actor(passkey)
     case passkey
-    when ClientPasskey then Client.find(passkey.user_id)
-    when VisitorPasskey then Visitor.find(passkey.visitor_id)
-    when OperatorPasskey then Operator.find(passkey.staff_id)
+    when ClientPasskey then passkey.association(:user).tap { |owner| owner.reset_scope }.scope.take!
+    when VisitorPasskey then passkey.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!
+    when OperatorPasskey then passkey.association(:staff).tap { |owner| owner.reset_scope }.scope.take!
     else raise ArgumentError, "unsupported Passkey credential"
     end
   end

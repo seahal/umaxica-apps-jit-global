@@ -68,6 +68,7 @@ Current content-model references:
 - `docs/security/webauthn-rp-id-origin-boundary.md`
 - `docs/security/social-callback-boundary.md`
 - `docs/security/logout-session-management.md`
+- `docs/security/inertia-history-and-props.md`
 - `docs/security/preference-settings-authority.md`
 - `docs/architecture/sign-settings-to-acme-identity.md`
 - `docs/security/downstream-token-authority.md`

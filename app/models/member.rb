@@ -43,7 +43,6 @@ class Member < AppPrincipalRecord
   belongs_to :member_status,
              foreign_key: :status_id,
              inverse_of: :members
-  has_many :avatars, foreign_key: :client_id, dependent: :nullify, inverse_of: :member
   has_many :member_avatar_accesses, dependent: :destroy, inverse_of: :member
   has_many :member_avatar_visibilities, dependent: :destroy, inverse_of: :member
   has_many :member_avatar_oversights, dependent: :destroy, inverse_of: :member

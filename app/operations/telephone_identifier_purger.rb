@@ -7,9 +7,12 @@ class TelephoneIdentifierPurger
     def call(record:)
       owner, database =
         case record
-        when ClientTelephone then [Client.find(record.user_id), AppZenithRecord]
-        when VisitorTelephone then [Visitor.find(record.visitor_id), ComZenithRecord]
-        when OperatorTelephone then [Operator.find(record.staff_id), OrgZenithRecord]
+        when ClientTelephone
+          [record.association(:user).tap { |owner| owner.reset_scope }.scope.take!, AppZenithRecord]
+        when VisitorTelephone
+          [record.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!, ComZenithRecord]
+        when OperatorTelephone
+          [record.association(:staff).tap { |owner| owner.reset_scope }.scope.take!, OrgZenithRecord]
         else raise ArgumentError, "unsupported telephone identifier"
         end
       unless owner && (record.persisted? || record.destroyed?)

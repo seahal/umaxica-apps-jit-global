@@ -260,6 +260,9 @@ module OidcRpLogoutLauncher
     @sign_out_notice = consume_sign_out_notice
     return head(:not_found) unless @sign_out_notice
 
+    # Every surface's completion renderer reads this flag, either explicitly or through
+    # inertia_rails' default, so a completion reached in a later request still clears history.
+    session[:inertia_clear_history] = true
     render_oidc_rp_logout_completion
   end
 

@@ -5,7 +5,6 @@ STDERR.sync = true
 
 require "socket"
 require "ipaddr"
-require "json"
 require "fileutils"
 
 abort "Rails browser E2E requires RAILS_ENV=test and RACK_ENV=test" unless
@@ -29,13 +28,10 @@ abort "E2E requires the dedicated test credentials and test.key files" unless
   expected_credentials.file? && expected_key.file? &&
     Rails.application.config.credentials.content_path.realpath == expected_credentials.realpath &&
     Rails.application.config.credentials.key_path.realpath == expected_key.realpath
-abort "Rails browser E2E requires an isolated source fleet manifest" if
-  ENV.fetch("POSTGRESQL_ISOLATED_TEST_RUN_ID").empty? || ENV.fetch("POSTGRESQL_ISOLATED_TEST_MANIFEST").empty?
-require_relative "../../test/support/parallel_test_database_cloner"
 require_relative "../../test/support/valkey_test_isolation"
 require "puma"
 
-original_targets = nil
+databases_verified = false
 server = nil
 stopping = false
 %w(INT TERM).each do |signal|
@@ -46,46 +42,26 @@ stopping = false
 end
 
 begin
-  # Keep the same lock identity as the Minitest cloner, but fail rather than waiting on its run.
-  run_id = ENV.fetch("POSTGRESQL_ISOLATED_TEST_RUN_ID")
-  abort("invalid isolated run ID") unless run_id.match?(/\A[0-9]{8}[a-z0-9]{0,12}\z/)
+  # Share ordinary test databases with Minitest; concurrent runs are refused.
   FileUtils.mkdir_p(Rails.root.join("tmp"))
-  fleet_lock = Rails.root.join("tmp", "parallel-test-databases-#{run_id}.lock").open(File::RDWR | File::CREAT, 0o600)
-  abort("Source fleet is in use; select a separate isolated fleet") unless fleet_lock.flock(File::LOCK_EX | File::LOCK_NB)
-
-  Jit::Application.initializer(
-    "rails_browser_e2e.databases",
-    after: "active_record.initialize_database", before: :load_config_initializers,
-  ) do
-    # Trigger the registered Active Record initialization hook before retargeting its configs.
-    require "active_record/base"
-    Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!
-    ParallelTestDatabaseCloner.rebuild_isolated_worker_clones(1)
-    configurations = ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
-    original_targets = configurations.index_with(&:database)
-    configurations.each { |configuration| configuration._database = "#{configuration.database}_0" }
-    Umaxica::TestEnvironment::DatabaseSafety.verify_worker_catalog!(
-      configurations: configurations, worker: 0, workers: 1,
-      manifest_path: ParallelTestDatabaseCloner.isolated_worker_manifest_path(0),
-    )
-    ActiveRecord::Base.connection_handler.clear_all_connections!
-    ActiveRecord::Base.establish_connection(:primary)
-    clone_names = configurations.map(&:database)
-    clone_names.uniq!
-    puts "Rails E2E: verified #{clone_names.length} owned clone databases"
-  end
+  database_lock = Rails.root.join("tmp/parallel-test-databases.lock").open(File::RDWR | File::CREAT, 0o600)
+  abort("Test databases are in use by another test process") unless database_lock.flock(File::LOCK_EX | File::LOCK_NB)
 
   Rails.application.initialize!
-  owned_databases = original_targets.keys.map(&:database)
+  Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!
+  configurations = ActiveRecord::Base.configurations.configs_for(env_name: "test", include_hidden: true)
+  test_databases = configurations.map(&:database)
+  databases_verified = true
   pools = ActiveRecord::Base.connection_handler.connection_pool_list(:all)
   pools.each do |pool|
-    abort("E2E connection pool escaped owned clones") unless owned_databases.include?(pool.db_config.database)
+    abort("E2E connection pool escaped configured test databases") unless
+      test_databases.include?(pool.db_config.database)
     pool.with_connection do |connection|
       abort("E2E live database identity differs from its pool") unless
         connection.select_value("SELECT current_database()") == pool.db_config.database
     end
   end
-  puts "Rails E2E: verified #{pools.length} live connection pools target owned clones"
+  puts "Rails E2E: verified #{pools.length} live connection pools target configured test databases"
   abort("E2E CSRF protection is required") unless ActionController::Base.allow_forgery_protection
   abort("E2E requires test mail, SMS and job adapters") unless
     Rails.configuration.action_mailer.delivery_method == :test && Rails.configuration.sms_provider == "test" &&
@@ -125,17 +101,12 @@ rescue Interrupt
 ensure
   server&.stop(true)
   listener.close unless listener.closed?
-  if original_targets
+  if databases_verified
     begin
       ValkeyTestIsolation.cleanup_worker_keys!
     ensure
       ActiveRecord::Base.connection_handler.clear_all_connections!
-      original_targets.each { |configuration, database| configuration._database = database }
-      ParallelTestDatabaseCloner.cleanup_isolated_worker_manifest!(
-        ParallelTestDatabaseCloner.isolated_worker_manifest_path(0),
-      )
-      puts "Rails E2E: owned clone database cleanup complete"
     end
-    puts "Rails E2E: owned clones and Valkey scope cleaned; Puma stopped"
+    puts "Rails E2E: Valkey scope cleaned; database connections closed; Puma stopped"
   end
 end

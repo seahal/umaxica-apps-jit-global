@@ -624,9 +624,8 @@ module AuthenticationSequenceGate
 
   def sign_in_flow_principal(cycle)
     case cycle
-    when ClientSignInFlow then Client.find_by(id: cycle.principal_id)
-    when VisitorSignInFlow then Visitor.find_by(id: cycle.principal_id)
-    when OperatorSignInFlow then Operator.find_by(id: cycle.principal_id)
+    when ClientSignInFlow, VisitorSignInFlow, OperatorSignInFlow
+      cycle.association(:principal).tap { |owner| owner.reset_scope }.scope.take
     else raise ArgumentError, "unsupported sign-in flow: #{cycle.class.name}"
     end
   end

@@ -59,9 +59,9 @@ class OidcRefreshDeliveryQuery
 
     def actor_for(root_token)
       case root_token
-      when ClientToken then Client.find_by(id: root_token.user_id)
-      when VisitorToken then Visitor.find_by(id: root_token.visitor_id)
-      when OperatorToken then Operator.find_by(id: root_token.staff_id)
+      when ClientToken then root_token.association(:user).tap { |owner| owner.reset_scope }.scope.take
+      when VisitorToken then root_token.association(:visitor).tap { |owner| owner.reset_scope }.scope.take
+      when OperatorToken then root_token.association(:staff).tap { |owner| owner.reset_scope }.scope.take
       end
     end
 

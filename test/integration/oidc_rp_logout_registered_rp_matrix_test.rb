@@ -70,6 +70,34 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
       assert_not_predicate @root_token.reload, :currently_usable?
     end
 
+    test "#{client_id}: the cleanup-incomplete page after the parent COMMIT clears Inertia history" do
+      setup_rp(client_id)
+      failed = AcmeLogoutTransactionCoordinator::Result.new(
+        transaction: nil, status: :rejected, error: "invalid_request", error_description: "progress write failed",
+      )
+
+      AcmeLogoutTransactionCoordinator.stub(:advance!, ->(**) { failed }) do
+        confirm(authority_headers(@actor, @root_token))
+      end
+
+      assert_response :ok
+      assert_not_predicate @root_token.reload, :currently_usable?
+      assert inertia_page.fetch("clearHistory")
+    end
+
+    test "#{client_id}: the indeterminate page for an unknown COMMIT outcome clears Inertia history" do
+      setup_rp(client_id)
+      raise_unknown = ->(**) { raise AuthenticationLogoutCurrentSession::CommitOutcomeUnknown }
+
+      AuthenticationLogoutCurrentSession.stub(:call, raise_unknown) do
+        confirm(authority_headers(@actor, @root_token))
+      end
+
+      assert_response :service_unavailable
+      assert_includes response.body, I18n.t("sign.shared.sign_out.indeterminate_title")
+      assert inertia_page.fetch("clearHistory")
+    end
+
     test "#{client_id}: a different account at the IdP revokes neither account's parent" do
       setup_rp(client_id)
       other_actor = second_actor

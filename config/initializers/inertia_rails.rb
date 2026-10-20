@@ -10,3 +10,7 @@ InertiaRails.configure do |config|
   config.use_data_inertia_head_attribute = true
   config.use_script_element_for_initial_page = true
 end
+
+# DevTools records request URLs and props, redacting only a fixed key list, so it runs in
+# development alone. Pinning the value here also ignores INERTIA_DEVTOOLS_ENABLED elsewhere.
+InertiaRails::Devtools.config.enabled = Rails.env.development?

@@ -280,7 +280,10 @@ group :development do
   # Duplicate code detector.
   gem "flay", require: false
   # erd for rails
-  gem "rails-erd", require: false
+  # Use the local fork until voormedia/rails-erd accepts the scoped connection fix; 2.2.0 calls
+  # the deprecated ActiveRecord::Base.connection and fails under permanent_connection_checkout.
+  # FIXME: use rubygem's code.
+  gem "rails-erd", path: "vendor/fork/rails-erd", require: false
   gem "ruby-graphviz", require: false
 end
 

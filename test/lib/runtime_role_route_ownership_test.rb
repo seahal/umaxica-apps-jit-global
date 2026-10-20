@@ -7,8 +7,19 @@ require "test_helper"
 class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  # Framework engines are not application surfaces; a role process does not serve them.
-  FRAMEWORK_PREFIXES = %w(rails/ active_storage/ action_mailbox/ turbo/).freeze
+  # Framework engines are not application surfaces; a role process does not serve them. The
+  # inertia_rails DevTools routes are drawn in every environment but only match in development;
+  # the test below shows they are unreachable here.
+  FRAMEWORK_PREFIXES = %w(rails/ active_storage/ action_mailbox/ turbo/ inertia_rails/devtools/).freeze
+
+  test "inertia_rails DevTools routes are unreachable outside development" do
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("/_inertia/devtools/entries")
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path("/_inertia/devtools/entries/1")
+    end
+  end
 
   test "every routed application controller has an owning role" do
     unowned =

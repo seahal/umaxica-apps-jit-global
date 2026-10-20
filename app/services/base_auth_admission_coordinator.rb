@@ -1179,9 +1179,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       return if binding.base_token_id.nil?
 
       case binding
-      when ClientAuthAdmissionBinding then ClientToken.find_by(id: binding.base_token_id)
-      when VisitorAuthAdmissionBinding then VisitorToken.find_by(id: binding.base_token_id)
-      when OperatorAuthAdmissionBinding then OperatorToken.find_by(id: binding.base_token_id)
+      when ClientAuthAdmissionBinding, VisitorAuthAdmissionBinding, OperatorAuthAdmissionBinding
+        binding.association(:base_token).tap { |owner| owner.reset_scope }.scope.take
       else raise Denied.new("admission binding is invalid", code: "invalid_admission")
       end
     end
@@ -1241,9 +1240,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def admission_root_actor(token)
       case token
-      when ClientToken then Client.find_by(id: token.user_id)
-      when VisitorToken then Visitor.find_by(id: token.visitor_id)
-      when OperatorToken then Operator.find_by(id: token.staff_id)
+      when ClientToken then token.association(:user).tap { |owner| owner.reset_scope }.scope.take
+      when VisitorToken then token.association(:visitor).tap { |owner| owner.reset_scope }.scope.take
+      when OperatorToken then token.association(:staff).tap { |owner| owner.reset_scope }.scope.take
       else raise Denied.new("Base token is invalid", code: "session_binding_mismatch")
       end
     end

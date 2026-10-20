@@ -9,7 +9,6 @@ class AvatarConcreteOwnershipPeriodTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "a newly committed Avatar requires one concrete ownership period" do
-    ParallelTestDatabaseCloner.verify_owned_worker_execution!
     database = AvatarRecord.connection_db_config.configuration_hash
     capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
     lifecycle_state = AvatarLifecycleState.find_by!(key: "active")
@@ -442,8 +441,6 @@ class AvatarConcreteOwnershipPeriodTest < ActiveSupport::TestCase
   private
 
   def committed_avatar(prefix)
-    ParallelTestDatabaseCloner.verify_owned_worker_execution!
-
     AvatarTestFactory.create!(
       moniker: "p7-#{SecureRandom.hex(5)}",
       capability: AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL),

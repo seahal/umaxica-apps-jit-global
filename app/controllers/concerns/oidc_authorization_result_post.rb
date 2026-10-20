@@ -4,7 +4,7 @@
 # Auth navigates to the matching Base host with a non-authorizing result lookup.
 # Base renders its own confirmation form; only a receiver-local POST with standard
 # Rails forgery protection accepts the stored evidence. Durable transaction binding
-# and finalization state live in PostgreSQL, permitting exact retries while valid.
+# and finalization state live in PostgreSQL.
 # Neither an Auth Origin nor a null Origin substitutes for Base's CSRF protection.
 module OidcAuthorizationResultPost
   extend ActiveSupport::Concern
@@ -99,13 +99,7 @@ module OidcAuthorizationResultPost
       reference: params[:result_ref], surface: oidc_result_surface,
       transaction_ref: params[:transaction_ref], expected_intent: transaction.intent,
     )
-    browser_nonce = base_admission_browser_nonce
     resume_authorization!(transaction, result_generation: payload.fetch("result_generation"))
-    # Root issuance rotates the Rails session against fixation. Retain only this already-proven
-    # nonce so the exact browser can retry a finalized result without creating a second root.
-    return if transaction.reload.base_finalized_at.blank?
-
-    session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = browser_nonce
   end
 
   # D09/D06: Auth's first-page Cancel or Switch arrives as a cross-site GET; Base commits it only

@@ -12,10 +12,6 @@ module PublishingAuthorityApiEndpoint
   extend ActiveSupport::Concern
 
   EDIT_CLIENT_ID = "edit-org-ww"
-  # The twelve fixed Publishing cells (four content families x three audiences).
-  CELLS = %w(docs help info news).product(%w(app com org)).to_h do |surface, audience|
-    ["#{surface}/#{audience}", "Publishing::#{surface.camelize}::#{audience.camelize}::Entry"]
-  end.freeze
 
   private
 
@@ -48,7 +44,22 @@ module PublishingAuthorityApiEndpoint
   end
 
   def publishing_entry_class
-    CELLS.fetch("#{params[:surface]}/#{params[:audience]}") { raise ActiveRecord::RecordNotFound }.constantize
+    # The twelve fixed Publishing cells (four content families x three audiences).
+    case [params[:surface], params[:audience]]
+    when ["docs", "app"] then Publishing::Docs::App::Entry
+    when ["docs", "com"] then Publishing::Docs::Com::Entry
+    when ["docs", "org"] then Publishing::Docs::Org::Entry
+    when ["help", "app"] then Publishing::Help::App::Entry
+    when ["help", "com"] then Publishing::Help::Com::Entry
+    when ["help", "org"] then Publishing::Help::Org::Entry
+    when ["info", "app"] then Publishing::Info::App::Entry
+    when ["info", "com"] then Publishing::Info::Com::Entry
+    when ["info", "org"] then Publishing::Info::Org::Entry
+    when ["news", "app"] then Publishing::News::App::Entry
+    when ["news", "com"] then Publishing::News::Com::Entry
+    when ["news", "org"] then Publishing::News::Org::Entry
+    else raise ActiveRecord::RecordNotFound
+    end
   end
 
   def publishing_entries_query

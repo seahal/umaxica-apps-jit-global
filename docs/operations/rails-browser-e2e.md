@@ -28,27 +28,18 @@ production secrets or services. The bootstrap requires the dedicated
 `RAILS_MASTER_KEY` override, and uses a new synthetic cookie signing secret for each invocation.
 Test cache is memory; KVS uses test DBs 4 and 6.
 
-This command intentionally requires an **existing, disposable isolated source fleet**, prepared
-through the repository's PostgreSQL isolation workflow, rather than adopting ordinary `test_*` DBs.
-Select its run ID and its matching catalog identity manifest under this checkout's `tmp/`:
+This command uses the ordinary `test_*` PostgreSQL databases in `config/database.yml`, prepared
+through the [database workflow](db-workflow.md). It requires no isolated source fleet, manifest,
+receipt or PostgreSQL run ID. Prepare current schemas and public-page reference data before running:
 
 ```bash
-export POSTGRESQL_ISOLATED_TEST_RUN_ID=<source-run-id>
-export POSTGRESQL_ISOLATED_TEST_MANIFEST="$PWD/tmp/acceptance-isolated-<source-run-id>.json"
 bun run test:e2e:rails
 ```
 
-The source run ID uses eight digits followed by up to twelve lowercase letters/digits. A manifest is
-an ownership receipt, not a list of arbitrary names: it must match the configured host, port, owner,
-database OIDs and the existing disposable comment. Do not hand-author one for unknown DBs. For a new
-workstation without such a fleet, isolated PostgreSQL provisioning is a prerequisite; this command
-does not provision a server or rebuild the source fleet. Source databases must have current migrated
-schemas and public-page reference data. Do not run the source rebuild helper without the
-repository's risk/recovery approval for that destructive operation.
-
-The runner takes the same fleet lock as Minitest/rebuilds. Use a separate source fleet for
-concurrent development tests. Existing worker `_0` databases cause a refusal, never forced deletion.
-The listener `127.0.0.1:3198` is reserved before DB preparation. Chromium uses
+The runner acquires `tmp/parallel-test-databases.lock`, shared with Minitest, and refuses a
+concurrent test process. Do not run database preparation or resets concurrently. It creates and
+drops no PostgreSQL databases. Existing databases from the retired isolated workflow remain
+untouched. The listener `127.0.0.1:3198` is reserved before DB preparation. Chromium uses
 `http://auth.app.localhost:3198`; no remote application URL is configurable. Browser DNS is pinned
 to loopback. Playwright request forwarding connects to the literal loopback address with the Auth
 Host header, so a workstation DNS override cannot redirect the run elsewhere. `webServer` waits for
@@ -85,32 +76,22 @@ an explicit artifact/redaction policy for synthetic credentials and tokens.
 
 ## Data ownership, reset and recovery
 
-Before application initializers/eager loading, the bootstrap reuses `DatabaseSafety` and
-`ParallelTestDatabaseCloner` to create one new `_0` clone per source database, records their
-OID/owner/comment receipts, verifies them, and retargets all Rails connections. Before accepting
-browser traffic it opens every registered connection pool and verifies `current_database()` against
-the owned clone target. Replicas address those same owned clones. Source DBs are read only as
-templates; HTTP requests never use them. No fixtures or Minitest transactions are loaded. The
-startup script's explicit data preparation section currently prepares only the public availability
-switch. Keep future database setup there, after clone verification, using explicit application-owned
-data APIs; the clone receipt cleanup owns all resulting persisted test data. Public reference data
-comes from the source snapshot. Scenario-specific data must be inserted through a reviewed setup
-path after clone verification, before HTTP starts; never invoke ordinary `db:reset`, fixture loading
-against the source, or an HTTP reset endpoint. Currently this suite contains one read-only scenario.
-Each invocation gets fresh DB clones, a fresh browser context and a unique Valkey run/worker scope.
-Do not add independently mutable scenarios to a shared server without per-scenario data lifecycle.
+The bootstrap uses the ordinary configured test databases. `DatabaseSafety` checks effective
+connection targets before Active Record initialization and verifies the catalog before HTTP service.
+Before accepting browser traffic, every registered connection pool checks `current_database()`
+against its configured test target. Reader roles retain their ordinary test configuration.
 
-On success, failure or graceful INT/TERM, Puma drains/stops, connections disconnect, only the owned
-Valkey prefixes are removed, and the cloner verifies the receipt and absence of active connections
-before dropping its new clones. Cleanup failure is reported, not treated as success. Re-running the
-command is the normal safe data reset. It does not mutate/rebuild the source fleet.
+No fixtures or Minitest transactions are loaded. Startup explicitly prepares only the process-local
+public availability switch; reference data must already be present in the prepared test databases.
+The existing public scenario is read-only. Each invocation has a fresh browser context and unique
+Valkey run/worker scope, but PostgreSQL data persists. Adding mutable scenarios requires an explicit
+per-scenario synthetic-data lifecycle; this runner does not provide database reset.
 
-SIGKILL, machine failure, or exhausted shutdown grace can leave clones/keys and their receipts. The
-next run refuses existing clones. Preserve `tmp/isolated-<source-run>-worker-0-*.json` and the
-printed Valkey scope for ownership review. Confirm no owning server/process/connections remain;
-recovery must revalidate the original OIDs, owner, comment and prefixes using the existing cloner
-cleanup method. Never delete a database based only on its name; never FLUSHDB/FLUSHALL. If identity
-changed, preserve it for investigation. There is intentionally no automatic adoption of stale DBs.
+On success, failure or graceful INT/TERM, Puma stops, database connections close and only the owned
+Valkey prefixes are removed. No PostgreSQL database is deleted or rebuilt. SIGKILL or exhausted
+grace can leave namespaced Valkey keys; retain the printed scope and verify no owner remains before
+scoped cleanup. Never use FLUSHDB/FLUSHALL. The OS releases the process lock on exit. Retired
+isolated-workflow databases and receipt files require separate inventory and cleanup approval.
 
 ## Boundaries and next scenarios
 
@@ -137,8 +118,8 @@ inspection, and an artifact policy. Passkeys, full SSO, Jump/Away and Edge remai
 scope.
 
 The existing CI has no Rails browser E2E job. This command is not silently appended to CI or
-`config/ci.rb`: CI must first supply an isolated fleet/credentials and install Chromium. The suite
-is serial and local by design.
+`config/ci.rb`: CI must first prepare the ordinary test databases/credentials and install Chromium.
+The suite is serial and local by design.
 
 The lifecycle follows Playwright's official
 [webServer documentation](https://playwright.dev/docs/test-webserver) and uses

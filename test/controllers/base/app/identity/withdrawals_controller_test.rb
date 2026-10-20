@@ -159,4 +159,32 @@ class Base::App::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
 
     assert_response :redirect
   end
+
+  test "deactivation clears Inertia history on the page that follows it" do
+    patch base_app_identity_withdrawal_url(ri: "jp", host: @host),
+          params: { ack_schedule_purge: "1" }, headers: @headers
+    patch base_app_identity_withdrawal_url(ri: "jp", host: @host),
+          params: { ack_deactivate_today: "1" }, headers: @headers
+
+    assert_response :see_other
+    follow_redirect!(headers: { "Host" => @host })
+
+    assert_response :success
+    assert inertia_page.fetch("clearHistory")
+  end
+
+  test "ending the withdrawal ceremony session clears Inertia history on the next page" do
+    patch base_app_identity_withdrawal_url(ri: "jp", host: @host),
+          params: { ack_schedule_purge: "1" }, headers: @headers
+    patch base_app_identity_withdrawal_url(ri: "jp", host: @host),
+          params: { ack_deactivate_today: "1" }, headers: @headers
+    follow_redirect!(headers: { "Host" => @host })
+    delete base_app_identity_withdrawal_session_url(ri: "jp", host: @host), headers: { "Host" => @host }
+
+    assert_response :see_other
+    get base_app_root_url(ri: "jp", host: @host), headers: { "Host" => @host }
+
+    assert_response :success
+    assert inertia_page.fetch("clearHistory")
+  end
 end

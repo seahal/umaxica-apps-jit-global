@@ -93,7 +93,7 @@ sample_staff_public_id = "2222222222222222"
 sample_staff_secret = "22222222222222222222222222222222"
 sample_staff_email_address = "sample-staff@example.test"
 
-user = Client.find_or_initialize_by(public_id: "sample_user")
+user = Client.find_or_initialize_by(public_id: "sample_userxxxxxxxxxx")
 user.status_id = ClientStatus::ACTIVE
 user.visibility_id = ClientVisibility::USER
 user.mfa_level_id = ClientMfaLevel::NOTHING

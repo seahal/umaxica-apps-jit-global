@@ -60,6 +60,37 @@ module Base
                  clear_history: true
         end
 
+        # A failure after the parent COMMIT still ends the signed-in session, so it ends on an
+        # Inertia page that clears history. An HTML page cannot: inertia_rails drops the session
+        # clear flag on any non-redirect response, before the next Inertia page could read it.
+        def render_oidc_rp_logout_cleanup_incomplete
+          @sign_out_cleanup_incomplete = true
+          render_oidc_logout_result_page(
+            title: t("sign.shared.sign_out.completed_title"), description: sign_out_completed_description, status: :ok,
+          )
+        end
+
+        def render_oidc_rp_logout_indeterminate
+          render_oidc_logout_result_page(
+            title: t("sign.shared.sign_out.indeterminate_title"),
+            description: t("sign.shared.sign_out.indeterminate_description"),
+            status: :service_unavailable,
+          )
+        end
+
+        def render_oidc_logout_result_page(title:, description:, status:)
+          render inertia: "base/com/oidc/logouts/show",
+                 props: {
+                   title: title,
+                   active: false,
+                   description: description,
+                   form: nil,
+                   home_link: { label: t("sign.shared.sign_out.home_link"), href: sign_out_home_path },
+                 },
+                 status: status,
+                 clear_history: true
+        end
+
         def sign_out_edit_page_props
           active = sign_out_active_context_present?
 

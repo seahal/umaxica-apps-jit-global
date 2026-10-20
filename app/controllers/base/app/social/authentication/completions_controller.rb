@@ -127,9 +127,9 @@ module Base
               allow_incomplete: true,
             )
             ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
-            unless ceremony.completed?
-              return complete_admitted_social_signup!(commit, commit.identity.provider, binding)
-            end
+            # A committed signup is never completed again here: that would issue a root login to
+            # whichever browser presents the pre-login browser binding.
+            raise IdentitySocialCeremonyContract::Error, "social completion is not finished" unless ceremony.completed?
 
             flow = ClientSignUpFlow.find_by!(public_id: commit.result["actor_ref"])
             reference = flow.completed_requirements.fetch("social_signup").fetch("completion_ref")
@@ -204,7 +204,6 @@ module Base
           def complete_social_signup_local_login!(commit, normalized_provider, binding, ceremony)
             flow = ClientSignInFlow.find(binding.sign_in_flow_id)
             bind_social_signup_local_parent!(commit.user, flow, normalized_provider, ceremony)
-            browser_nonce = base_admission_browser_nonce
             result = log_in(
               commit.user, establishment: :root_login, sign_in_flow: flow,
                            established_authentication_method: normalized_provider,
@@ -216,7 +215,6 @@ module Base
               return handle_social_login_failure!(sign_in_result)
             end
 
-            session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = browser_nonce
             record_social_signup_completion!(commit, flow.public_id)
             ceremony.complete! unless ceremony.completed?
             destination =

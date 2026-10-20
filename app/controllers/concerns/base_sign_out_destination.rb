@@ -61,6 +61,37 @@ module BaseSignOutDestination
     render_oidc_end_session_confirmation
   end
 
+  # A failure after the parent COMMIT still ends the signed-in session, so it ends on an Inertia
+  # page that clears history. An HTML page cannot: inertia_rails drops the session clear flag on
+  # any non-redirect response, before the next Inertia page could read it.
+  def render_oidc_rp_logout_cleanup_incomplete
+    @sign_out_cleanup_incomplete = true
+    render_sign_out_result_page(
+      title: I18n.t("sign.shared.sign_out.completed_title"), description: sign_out_completed_description, status: :ok,
+    )
+  end
+
+  def render_oidc_rp_logout_indeterminate
+    render_sign_out_result_page(
+      title: I18n.t("sign.shared.sign_out.indeterminate_title"),
+      description: I18n.t("sign.shared.sign_out.indeterminate_description"),
+      status: :service_unavailable,
+    )
+  end
+
+  def render_sign_out_result_page(title:, description:, status:)
+    render inertia: "#{controller_path}/edit",
+           props: {
+             title: title,
+             active: false,
+             description: description,
+             form: nil,
+             **sign_out_return_link_props(back_to_dashboard: false),
+           },
+           status: status,
+           clear_history: true
+  end
+
   # The authenticated sign-out confirmation returns to Dashboard.
   def sign_out_root_path
     public_send(

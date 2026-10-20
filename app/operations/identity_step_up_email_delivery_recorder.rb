@@ -81,11 +81,11 @@ class IdentityStepUpEmailDeliveryRecorder
     def binding_for(credential)
       case credential
       when ClientEmail
-        [Client.find(credential.user_id), ClientStepUpCeremonyTransaction, ClientStepUpSession, :user_token,
-         Email::App::OtpMailer,]
+        actor = credential.association(:user).tap { |owner| owner.reset_scope }.scope.take!
+        [actor, ClientStepUpCeremonyTransaction, ClientStepUpSession, :user_token, Email::App::OtpMailer]
       when VisitorEmail
-        [Visitor.find(credential.visitor_id), VisitorStepUpCeremonyTransaction, VisitorStepUpSession, :visitor_token,
-         Email::Com::OtpMailer,]
+        actor = credential.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!
+        [actor, VisitorStepUpCeremonyTransaction, VisitorStepUpSession, :visitor_token, Email::Com::OtpMailer]
       else
         raise ArgumentError, "step-up email surface unsupported"
       end

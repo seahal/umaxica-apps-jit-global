@@ -17,7 +17,6 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   ].freeze
 
   setup do
-    ParallelTestDatabaseCloner.verify_owned_worker_execution!
     ClientStatus.ensure_defaults!
     ClientVisibility.ensure_defaults!
     ClientIdentityState.ensure_defaults!
@@ -103,7 +102,7 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     Client.where(id: @client.id).delete_all if @client
   end
 
-  # Avatar, organization identities and committed histories use whole-worker cleanup.
+  # Avatar, organization identities and committed histories use the test database lifecycle.
 
   test "two independent requests cannot create multiple pending transfers for one Avatar" do
     assert_equal 1, @avatar.enterprise_ownership_periods.current.count

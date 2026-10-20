@@ -109,8 +109,8 @@ class SignUpTermination
     return if cycle.principal_id.blank?
 
     case cycle
-    when ClientSignUpFlow then Client.find(cycle.principal_id)
-    when VisitorSignUpFlow then Visitor.find(cycle.principal_id)
+    when ClientSignUpFlow, VisitorSignUpFlow
+      cycle.association(:principal).tap { |owner| owner.reset_scope }.scope.take!
     else raise ArgumentError, "unsupported sign-up cycle realm"
     end
   end

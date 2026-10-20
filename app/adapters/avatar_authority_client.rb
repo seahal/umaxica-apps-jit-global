@@ -98,7 +98,7 @@ class AvatarAuthorityClient
 
   def groups = request(:get, "/groups")
 
-  def group(ref) = request(:get, "/groups/#{escape(ref)}")
+  def fetch_group(ref) = request(:get, "/groups/#{escape(ref)}")
 
   def create_group(attributes) = request(:post, "/groups", { group: attributes })
 

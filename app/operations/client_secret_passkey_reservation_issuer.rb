@@ -190,7 +190,7 @@ class ClientSecretPasskeyReservationIssuer
       now = Client.database_now
       return owned if owned.discard_at != Float::INFINITY && owned.discard_at <= now
 
-      actor = Client.find(owned.client_id)
+      actor = owned.association(:client).tap { |owner| owner.reset_scope }.scope.take!
       context = ActorValuesContext.empty.with(subject: actor, actor_type: :client, tld: :app, surface: :sign)
       candidates = ClientSecretCredential.where(issuance_id: owned.id, client_id: actor.id).order(:id).lock.to_a
       if candidates.any? { |candidate| candidate.claimed_at || candidate.revoked_at }

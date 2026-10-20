@@ -84,6 +84,9 @@ module BaseSettingsWithdrawalFlow
     # as though termination succeeded when the destructive operation was refused.
     ::WithdrawalLifecycle.terminate!(actor: actor, request: request)
     consume_current_withdrawal_ceremony!
+    # Suspension already cleared the signed-in history; the withdrawal pages shown since then
+    # belong to an account that no longer exists.
+    session[:inertia_clear_history] = true
 
     safe_redirect_to(
       withdrawal_public_fallback_path,

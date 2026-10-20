@@ -71,7 +71,7 @@ class IdentitySocialCeremonyFinalCommitter
       client_id: flow.principal_id,
       provider:,
     ).sole
-    user = Client.find(identity.client_id)
+    user = identity.association(:client).tap { |owner| owner.reset_scope }.scope.take!
     unless flow.completed? && flow.pending_contact_type == "social_identity" && identity.released_at.nil? &&
         identity.state == "active" && identity.subject == provider_subject && user.login_allowed?
       raise IdentitySocialCeremonyContract::Error, "social completion source is unavailable"

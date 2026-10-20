@@ -19,7 +19,7 @@ class ClientSecretSignInReceipt < OpBaseAppRecord
 
   def verify_successful_commit!
     flow = ClientSignInFlow.lock.find(sign_in_flow_id)
-    token = ClientToken.find_by(id: flow.token_id, user_id: flow.principal_id)
+    token = flow.association(:token).tap { |owner| owner.reset_scope }.scope.find_by(user_id: flow.principal_id)
     client_ref_matches = Client.exists?(id: flow.principal_id, public_id: client_ref)
     claim =
       AppZenithRecord.connected_to(role: :writing) do

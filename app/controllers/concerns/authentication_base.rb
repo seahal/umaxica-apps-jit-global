@@ -119,13 +119,6 @@ module AuthenticationBase
   ).transform_keys(&:to_sym).freeze
   BULLETIN_SESSION_KEY = :sign_in_checkpoint
   BULLETIN_TIMEOUT = 2.hours
-  OIDC_RP_SESSION_KEYS = %i(
-    oidc_code_verifier
-    oidc_state
-    oidc_nonce
-    oidc_pt
-    oidc_pending_flows
-  ).freeze
 
   # AuthenticationToken TTLs
   ACCESS_TOKEN_TTL = ::SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL
@@ -443,18 +436,6 @@ module AuthenticationBase
     clear_dbsc_cookie!
   end
 
-  def preserved_oidc_rp_session_state
-    OIDC_RP_SESSION_KEYS.index_with do |key|
-      session[key]
-    end.compact
-  end
-
-  def restore_oidc_rp_session_state!(state)
-    state.each do |key, value|
-      session[key] = value
-    end
-  end
-
   # The capacity gate counts active sessions; the token model also enforces a total ceiling and
   # is the last line. When the model refuses what the gate allowed, the actor is at a limit the
   # gate did not see, so the one retry under the lock goes to the ordinary resolution instead of
@@ -523,10 +504,9 @@ module AuthenticationBase
     token_record = issuance.fetch(:token_record)
     # Session-fixation rotation happens now, before the caller writes the
     # sign-in flow locator into the new Rails session. It grants nothing by
-    # itself: authentication lives in the cookies set after commit.
-    oidc_rp_session_state = preserved_oidc_rp_session_state
+    # itself: authentication lives in the cookies set after commit. Nothing from
+    # the pre-login session survives the rotation.
     reset_session
-    restore_oidc_rp_session_state!(oidc_rp_session_state)
 
     @current_resource = resource
     @current_session = token_record
@@ -3170,88 +3150,6 @@ module AuthenticationBase
     @current_session = token_record_connection_owner.connected_to(role: :writing, &find_logic)
   end
 
-  # A cross-store OIDC retry may already have committed the Base Browser
-  # Session before the authorization-code response was delivered. Reissue the
-  # credentials from that same root token instead of calling log_in again and
-  # creating a second Browser Session. The token row remains the credential
-  # authority; no raw refresh token is reconstructed from persistence.
-  def reissue_login_credentials_for_existing_session(resource:, token_record:, token_kind_id: "BROWSER_WEB",
-                                                     authentication_event_at: nil)
-    return { status: :login_forbidden } unless resource&.active?
-
-    token_model = token_class_for_resource(resource)
-    issuance = rotate_existing_session_credentials(
-      resource: resource,
-      token_record: token_record,
-      token_model: token_model,
-      token_kind_id: token_kind_id,
-      authentication_event_at: authentication_event_at,
-    )
-    return { status: :login_failed } unless issuance
-
-    install_reissued_login_credentials(resource, issuance)
-  end
-
-  def rotate_existing_session_credentials(
-    resource:, token_record:, token_model:, token_kind_id:, authentication_event_at:
-  )
-    token_record_connection_owner(token_model).connected_to(role: :writing) do
-      token_model.transaction do
-        lookup = { public_id: token_record.public_id }
-        lookup[resource_foreign_key] = resource.id
-        locked = token_model.lock.find_by(lookup)
-        next nil unless locked&.active_status?
-
-        now = token_model.database_now
-        refresh_plain = locked.rotate_refresh_token!(now: now)
-        access_expires_at = access_token_expires_at_for(locked, now: now)
-        access_token = encode_login_access_token(
-          resource,
-          locked,
-          token_kind_id: token_kind_id,
-          dpop_jkt: token_record_attribute(locked, :dpop_jkt),
-          access_expires_at: access_expires_at,
-          authentication_event_at: authentication_event_at,
-        )
-        {
-          token: locked,
-          access_token: access_token,
-          refresh_token: refresh_plain,
-          access_expires_at: access_expires_at,
-          now: now,
-        }
-      end
-    end
-  end
-
-  def install_reissued_login_credentials(resource, issuance)
-    oidc_rp_session_state = preserved_oidc_rp_session_state
-    reset_session
-    restore_oidc_rp_session_state!(oidc_rp_session_state)
-    clear_previous_login_cookies!
-
-    @current_resource = resource
-    @current_session = issuance.fetch(:token)
-    @current_session_public_id = token_session_public_id(@current_session)
-    set_login_auth_cookies(
-      @current_session,
-      issuance.fetch(:access_token),
-      issuance.fetch(:refresh_token),
-      issuance.fetch(:access_expires_at),
-    )
-    issue_dbsc_registration_header_for(@current_session)
-    populate_current_attributes!(resource, nil)
-    @_current_resource_resolved = true
-
-    login_success_payload(
-      @current_session,
-      issuance.fetch(:access_token),
-      issuance.fetch(:refresh_token),
-      issuance.fetch(:access_expires_at),
-      issuance.fetch(:now),
-    )
-  end
-
   def token_class_for_resource(resource)
     if resource.is_a?(::Client)
       ::ClientToken
@@ -3261,15 +3159,6 @@ module AuthenticationBase
       ::VisitorToken
     else
       token_class
-    end
-  end
-
-  def find_browser_session_for_oidc(resource, public_id)
-    token_model = token_class_for_resource(resource)
-    token_record_connection_owner(token_model).connected_to(role: :writing) do
-      lookup = { public_id: public_id }
-      lookup[resource_foreign_key] = resource.id
-      token_model.active_status.find_by(lookup)
     end
   end
 
@@ -3641,7 +3530,7 @@ module AuthenticationBase
   end
 
   private :check_totp_requirement_before_session_rotation, :resource_connection_owner,
-          :preserved_oidc_rp_session_state, :restore_oidc_rp_session_state!, :store_authentication_return_target!,
+          :store_authentication_return_target!,
           :commit_login_session!, :commit_login_session_in_ticket_transaction!, :with_sign_in_flow_issuance_lock,
           :write_secret_sign_in_receipt!,
           :lock_sign_in_flow_for_issuance!, :advance_sign_in_flow_to_issuance!, :complete_sign_in_flow_issuance!,

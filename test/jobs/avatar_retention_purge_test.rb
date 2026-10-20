@@ -67,7 +67,6 @@ class AvatarRetentionPurgeTest < ActiveJob::TestCase
   end
 
   test "concurrent ownership deferrals converge on one row" do
-    ParallelTestDatabaseCloner.verify_owned_worker_execution!
     organization = Enterprise.create!(name: "Retention race owner", title: "RetOwner")
     avatar = nil
     AvatarRecord.transaction do

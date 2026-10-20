@@ -26,23 +26,23 @@ class TestEnvironmentEdgeContractTest < ActiveSupport::TestCase
   end
 
   test "database catalog accepts an array and reports absent server identity" do
-    manifest = Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!(
+    catalog = Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!(
       configurations: [database_config],
       environment: database_environment,
       catalog_databases: ["test_primary_db", "test_primary_db"],
     )
 
-    assert_equal ["test_primary_db"], manifest.fetch(:catalog_databases)
-    assert_nil manifest.fetch(:server_address)
-    assert_nil manifest.fetch(:server_port)
-    assert_nil manifest.fetch(:server_version)
+    assert_equal ["test_primary_db"], catalog.fetch(:catalog_databases)
+    assert_nil catalog.fetch(:server_address)
+    assert_nil catalog.fetch(:server_port)
+    assert_nil catalog.fetch(:server_version)
   end
 
   test "database preparation rejects a blank list after trimming" do
     error =
       assert_raises(Umaxica::TestEnvironment::ConfigurationError) do
         Umaxica::TestEnvironment::DatabaseSafety.prepare_database_names!(
-          manifest: {
+          catalog: {
             test_databases: ["test_primary_db"],
             writable_test_databases: ["test_primary_db"],
           },

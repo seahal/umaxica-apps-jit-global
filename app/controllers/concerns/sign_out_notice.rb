@@ -109,6 +109,9 @@ module SignOutNotice
   def render_sign_out_indeterminate!
     response.headers["Cache-Control"] = SIGN_OUT_NOTICE_CACHE_CONTROL
     response.headers["Referrer-Policy"] = SIGN_OUT_REFERRER_POLICY
+    # The session may already be revoked. Clearing the history of a session that survived only
+    # costs a server round trip on Back, so the unknown outcome takes the signed-out side.
+    session[:inertia_clear_history] = true
     if respond_to?(:render_oidc_rp_logout_indeterminate, true)
       render_oidc_rp_logout_indeterminate
     else

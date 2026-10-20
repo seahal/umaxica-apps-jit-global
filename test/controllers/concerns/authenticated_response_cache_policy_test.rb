@@ -358,7 +358,8 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_not inertia_page.fetch("clearHistory")
+    # inertia_rails omits clearHistory from the page object when it is false.
+    assert_not inertia_page.fetch("clearHistory", false)
   end
 
   test "an anonymous public HTML page carries the Global default no-store" do
@@ -607,7 +608,8 @@ class AuthenticatedResponseCachePolicyTest < ActionDispatch::IntegrationTest
     get base_app_root_url(ri: "jp", host: @host), headers: host_headers(@host)
 
     assert_response :success
-    assert_not inertia_page.fetch("clearHistory")
+    # inertia_rails omits clearHistory from the page object when it is false.
+    assert_not inertia_page.fetch("clearHistory", false)
   end
 
   # Stale credentials on an :open page are detached and the request continues anonymously. If it

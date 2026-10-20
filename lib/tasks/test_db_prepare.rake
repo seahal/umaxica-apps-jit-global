@@ -12,14 +12,14 @@ namespace :db do
   namespace :test do
     desc "Override db:test:prepare to run db:migrate instead of db:schema:load"
     task prepare: :environment do
-      manifest = Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!
+      catalog = Umaxica::TestEnvironment::DatabaseSafety.verify_catalog!
       selected_databases = Umaxica::TestEnvironment::DatabaseSafety.prepare_database_names!(
-        manifest:,
+        catalog:,
       )
-      puts "Test database manifest: admin=#{manifest.fetch(:admin_database)} " \
-           "databases=#{manifest.fetch(:test_databases).join(",")} " \
-           "server=#{manifest[:server_address]}:#{manifest[:server_port]} " \
-           "version=#{manifest[:server_version]}"
+      puts "Test database catalog: admin=#{catalog.fetch(:admin_database)} " \
+           "databases=#{catalog.fetch(:test_databases).join(",")} " \
+           "server=#{catalog[:server_address]}:#{catalog[:server_port]} " \
+           "version=#{catalog[:server_version]}"
       puts "Test database migration scope: #{selected_databases.join(",")}"
 
       ActiveRecord::Tasks::DatabaseTasks.with_temporary_pool_for_each(env: "test") do |pool|

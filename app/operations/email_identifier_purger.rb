@@ -7,9 +7,12 @@ class EmailIdentifierPurger
     def call(record:)
       owner, database =
         case record
-        when ClientEmail then [Client.find_by(id: record.user_id), AppZenithRecord]
-        when VisitorEmail then [Visitor.find_by(id: record.visitor_id), ComZenithRecord]
-        when OperatorEmail then [Operator.find_by(id: record.staff_id), OrgZenithRecord]
+        when ClientEmail
+          [record.association(:user).tap { |owner| owner.reset_scope }.scope.take, AppZenithRecord]
+        when VisitorEmail
+          [record.association(:visitor).tap { |owner| owner.reset_scope }.scope.take, ComZenithRecord]
+        when OperatorEmail
+          [record.association(:staff).tap { |owner| owner.reset_scope }.scope.take, OrgZenithRecord]
         else raise ArgumentError, "unsupported email identifier"
         end
       unless owner && (record.persisted? || record.destroyed?)

@@ -28,7 +28,7 @@ module Base
       end
 
       def show
-        result = relay!(avatar_authority.group(params.expect(:id)))
+        result = relay!(avatar_authority.fetch_group(params.expect(:id)))
         render(json: result.data) if result
       end
 

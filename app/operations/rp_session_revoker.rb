@@ -132,11 +132,11 @@ class RpSessionRevoker < ApplicationService
   def current_token_for(device_session)
     case device_session
     when ClientDeviceSession
-      ClientToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+      device_session.client_tokens.find_by(id: device_session.current_refresh_token_id)
     when VisitorDeviceSession
-      VisitorToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+      device_session.visitor_tokens.find_by(id: device_session.current_refresh_token_id)
     when OperatorDeviceSession
-      OperatorToken.find_by(id: device_session.current_refresh_token_id, device_session_id: device_session.id)
+      device_session.staff_tokens.find_by(id: device_session.current_refresh_token_id)
     else
       raise ArgumentError, "unsupported Device Session class: #{device_session.class.name}"
     end

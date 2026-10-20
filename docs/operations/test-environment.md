@@ -1,4 +1,4 @@
-# Isolated Rails test environment
+# Rails test environment
 
 Rails tests use explicit test-only PostgreSQL databases and Valkey logical databases declared in
 `config/valkey.yml`. A test process must not inherit the development host or the development Valkey
@@ -19,9 +19,6 @@ Orchestration supplies `VALKEY_KVS_HOST`. Do not export `VALKEY_TEST_HOST`, `CAC
 `RATE_LIMIT_REDIS_URL`, `AUTH_STATE_REDIS_URL`, or a run namespace before those commands. Rails
 generates `VALKEY_NAMESPACE_RUN_ID` when it is absent.
 
-`scripts/test-isolated` is an optional helper that claims a run id and deletes that run's namespaced
-keys on exit. It is not required to boot the suite.
-
 `config/database.yml` fixes every test database to `primary:5432` as `root` (password
 `development`); no environment variable selects the test PostgreSQL target, so an exported variable
 cannot redirect a destructive preparation. `Umaxica::TestEnvironment::DatabaseSafety` holds the same
@@ -40,5 +37,6 @@ unless the test uses `OutboundHttpStub` (or another explicit test adapter) for t
 request.
 
 For a standalone Puma server exercised by TypeScript Playwright and Chromium, see
-[Rails browser E2E](rails-browser-e2e.md). That command creates verified owned clones from an
-explicit isolated source fleet and enables real CSRF only in its browser-server process.
+[Rails browser E2E](rails-browser-e2e.md). That command uses the ordinary configured test databases
+and enables real CSRF only in its browser-server process. Neither command requires a PostgreSQL
+manifest or per-run database fleet. Both share a process lock and must not run concurrently.

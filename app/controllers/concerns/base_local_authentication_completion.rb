@@ -70,9 +70,7 @@ module BaseLocalAuthenticationCompletion
   def complete_local_login_response!(result, locator:)
     case result.fetch(:status)
     when :success
-      # log_in rotates Base's Rails session. Preserve only this browser's locator for a bounded
-      # idempotent result retry, without rotating the flow's nonce or reissuing credentials.
-      session[SignInCycleLocator::SESSION_KEYS.fetch(local_login_surface.to_sym)] = locator
+      # log_in rotates Base's Rails session; nothing from the pre-login session is carried over.
       redirect_to(local_login_success_path, status: :see_other)
     when :already_finalized
       if current_session&.id == result.fetch(:token_id)

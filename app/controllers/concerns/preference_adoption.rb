@@ -406,9 +406,9 @@ module PreferenceAdoption
 
   def preference_resource_for(resource_pref)
     case resource_pref
-    when ClientPreference then Client.find(resource_pref.user_id)
-    when OperatorPreference then Operator.find(resource_pref.staff_id)
-    when VisitorPreference then Visitor.find(resource_pref.visitor_id)
+    when ClientPreference then resource_pref.association(:user).tap { |owner| owner.reset_scope }.scope.take!
+    when OperatorPreference then resource_pref.association(:staff).tap { |owner| owner.reset_scope }.scope.take!
+    when VisitorPreference then resource_pref.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!
     end
   end
 

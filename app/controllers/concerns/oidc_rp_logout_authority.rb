@@ -4,6 +4,9 @@
 # The Base end-session receiver for the Browser RP graph. The challenge identifies a durable
 # transaction, but it never authenticates an arbitrary authority operation: the transaction's
 # registered client selects the realm and its RP Session selects the parent Browser Session.
+#
+# The including controller defines `render_oidc_rp_logout_cleanup_incomplete`, the page shown when
+# the parent is revoked but a later step failed.
 module OidcRpLogoutAuthority
   extend ActiveSupport::Concern
 
@@ -265,9 +268,7 @@ module OidcRpLogoutAuthority
     )
     clear_base_authority_cookies!
     response.set_header("Cache-Control", "no-store")
-    @sign_out_cleanup_incomplete = true
-    @render_surface_erb_layout = true
-    render "auth/shared/sign_outs/complete", status: :ok
+    render_oidc_rp_logout_cleanup_incomplete
   end
 
   def browser_rp_logout_parent_state

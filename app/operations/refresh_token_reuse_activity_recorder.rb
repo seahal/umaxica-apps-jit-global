@@ -35,21 +35,21 @@ class RefreshTokenReuseActivityRecorder
       [
         ClientChronicle,
         ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
-        Client.find(@token.user_id),
+        @token.association(:user).tap { |owner| owner.reset_scope }.scope.take!,
         "app",
       ]
     when VisitorToken
       [
         ClientChronicle,
         ClientChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
-        Visitor.find(@token.visitor_id),
+        @token.association(:visitor).tap { |owner| owner.reset_scope }.scope.take!,
         "com",
       ]
     when OperatorToken
       [
         OperatorChronicle,
         OperatorChronicleEvent::REFRESH_TOKEN_REUSE_DETECTED,
-        Operator.find(@token.staff_id),
+        @token.association(:staff).tap { |owner| owner.reset_scope }.scope.take!,
         "org",
       ]
     else

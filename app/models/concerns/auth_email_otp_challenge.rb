@@ -304,9 +304,9 @@ module AuthEmailOtpChallenge
   def email_otp_owner(contact)
     case contact
     when ClientEmail
-      Client.find_by(id: contact.user_id)
+      contact.association(:user).tap { |owner| owner.reset_scope }.scope.take
     when VisitorEmail
-      Visitor.find_by(id: contact.visitor_id)
+      contact.association(:visitor).tap { |owner| owner.reset_scope }.scope.take
     else raise ArgumentError, "unsupported email authentication Contact"
     end
   end

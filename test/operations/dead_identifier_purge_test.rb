@@ -3,6 +3,23 @@
 require "test_helper"
 
 class DeadIdentifierPurgeTest < ActiveSupport::TestCase
+  test "email purge refuses a changed owner reference even after the previous owner was cached" do
+    email = ClientEmail.create!(
+      user: clients(:one), raw_address: "cached-owner@example.com", confirm_policy: true,
+      created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+    )
+    email = ClientEmail.preload(:user).find(email.id)
+
+    assert_equal clients(:one).id, email.user.id
+
+    email.user_id = clients(:two).id
+    error = assert_raises(ArgumentError) { EmailIdentifierPurger.call(record: email) }
+
+    assert_equal "email purge owner mismatch", error.message
+    assert ClientEmail.exists?(email.id)
+    assert_equal clients(:one).id, email.reload.user_id
+  end
+
   %w(app com org).each do |realm|
     test "#{realm} repeated dead email generates independently salted history rows without reserving the destination" do
       model, history_model, owner, owner_key =

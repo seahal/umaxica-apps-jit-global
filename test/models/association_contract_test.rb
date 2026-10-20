@@ -31,6 +31,26 @@ class AssociationContractTest < ActiveSupport::TestCase
                  "#{violations.sort.join("\n")}"
   end
 
+  test "associations declaring inverse_of resolve to an existing inverse association" do
+    Rails.application.eager_load!
+
+    violations =
+      application_models.flat_map do |model|
+        model.reflect_on_all_associations.filter_map do |association|
+          next unless association.options[:inverse_of]
+          next if association.polymorphic?
+
+          association.check_validity_of_inverse!
+          nil
+        rescue ActiveRecord::InverseOfAssociationNotFoundError
+          "#{model.name}.#{association.name} (inverse_of: :#{association.options[:inverse_of]})"
+        end
+      end
+
+    assert_empty violations.sort,
+                 "Declare the inverse association or correct inverse_of:\n#{violations.sort.join("\n")}"
+  end
+
   private
 
   def application_models

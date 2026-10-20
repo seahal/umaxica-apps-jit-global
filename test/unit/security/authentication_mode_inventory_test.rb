@@ -125,6 +125,9 @@ module Security
           controller_name = route.defaults[:controller]
           action_name = route.defaults[:action]
           next if controller_name.blank? || action_name.blank?
+          # Development-only inertia_rails DevTools; RuntimeRoleRouteOwnershipTest shows these
+          # routes do not match outside development.
+          next if controller_name == "inertia_rails/devtools/entries"
 
           controller_class = "#{controller_name.camelize}Controller".safe_constantize
           next if controller_class.blank?

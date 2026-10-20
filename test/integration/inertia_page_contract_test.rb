@@ -615,7 +615,8 @@ class InertiaPageContractTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert initial_page.fetch("encryptHistory")
-    assert_not initial_page.fetch("clearHistory")
+    # inertia_rails omits clearHistory from the page object when it is false.
+    assert_not initial_page.fetch("clearHistory", false)
 
     http_headers_4 =
       begin
@@ -694,7 +695,7 @@ class InertiaPageContractTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert response.parsed_body.fetch("encryptHistory")
-    assert_not response.parsed_body.fetch("clearHistory")
+    assert_not response.parsed_body.fetch("clearHistory", false)
   end
 
   # The page url is origin-relative by protocol: it never names a host, so one tenant's host cannot

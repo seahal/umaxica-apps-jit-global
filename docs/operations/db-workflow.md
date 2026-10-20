@@ -1,7 +1,7 @@
 # Database Operations Workflow
 
-This application uses approximately 25 PostgreSQL databases. Follow these development and test
-environment rules to avoid schema-change incidents.
+This application uses multiple PostgreSQL databases. Follow these development and test environment
+rules to avoid schema-change incidents.
 
 ## Schema Authority
 
@@ -10,11 +10,11 @@ environment rules to avoid schema-change incidents.
 Every configured `migrations_paths` directory under `db/` must exist. Reserved databases (`search`,
 `storage`) keep empty directories so Rails cannot skip an owner silently.
 
-Committed `db/*_structure.sql` files are schema-only PostgreSQL dumps generated from the isolated
-test database fleet. They contain schema metadata (including `schema_migrations`) but no business
-rows. `schema_format` remains `:sql` and `dump_schema_after_migration` is `false` in every
-environment. The dumps are a reproducibility artifact, not a replacement for applying migrations to
-a clean database.
+Committed `db/*_structure.sql` files are schema-only PostgreSQL dumps generated from the test
+databases. They contain schema metadata (including `schema_migrations`) but no business rows.
+`schema_format` remains `:sql` and `dump_schema_after_migration` is `false` in every environment.
+The dumps are a reproducibility artifact, not a replacement for applying migrations to a clean
+database.
 
 `bin/rails db:verify_no_schema_drift` regenerates the configured dumps and compares them with the
 committed files. A worktree with intentionally regenerated but uncommitted dumps is expected to
@@ -46,7 +46,7 @@ Until the split happens, this repository still prepares the full fleet as one un
 ## Principles
 
 1. **Do not use incremental `bin/rails db:migrate` on a branch with in-progress table-rename
-   migrations.** Prepare a newly created, owned isolated fleet with
+   migrations.** Prepare the configured test databases with
    `RAILS_ENV=test bin/rails db:test:prepare` so every database is rebuilt from migrations.
 2. **Do not write silent-skip helpers such as `rename_table_if_present`.** Use
    `rename_table_strict`, provided by `MigrationHelpers::SafeTableRename`.
@@ -69,15 +69,16 @@ tables across roughly 25 databases frequently violates that assumption:
 The installed Rails `db:migrate` initializes an empty database from an available structure dump.
 That also imports migration version receipts without the business/reference rows produced by data
 migrations. Consequently, drop/create followed by ordinary migrate is not proof of reconstruction.
-The repository's `db:test:prepare` verifies the isolated database manifest and selected database
-names, then invokes `DatabaseTasks.migrate(skip_initialize: true)` for each selected writer. This
-executes migrations without importing dump receipts. Existing database contents are not reset.
+The repository's `db:test:prepare` verifies the configured test database catalog and selected
+database names, then invokes `DatabaseTasks.migrate(skip_initialize: true)` for each selected
+writer. This executes migrations without importing dump receipts. Existing database contents are not
+reset.
 
 ## Commands
 
 ```bash
-# First create and register a new owned isolated fleet using the isolation tooling.
-# Supply POSTGRESQL_ISOLATED_TEST_MANIFEST and POSTGRESQL_TEST_PREPARE_DATABASES.
+# The configured test databases must exist. POSTGRESQL_TEST_PREPARE_DATABASES
+# lists the writable test databases; the Dev Container environment supplies it.
 RAILS_ENV=test bin/rails db:test:prepare
 
 bin/rails db:verify_no_schema_drift
@@ -85,67 +86,37 @@ bin/rails db:verify_no_schema_drift
 # the committed db/*_structure.sql files. Reports schema drift and exits 1 otherwise.
 ```
 
-For an existing manifest-verified disposable fleet that must be rebuilt under the same database
-names, run `bundle exec scripts/postgresql-rebuild-isolated-test-fleet` with `RAILS_ENV=test`,
-`PARALLEL_WORKERS=1`, `POSTGRESQL_ISOLATED_TEST_RUN_ID`, `POSTGRESQL_ISOLATED_TEST_MANIFEST`,
-`POSTGRESQL_TEST_PREPARE_DATABASES`, and the required PostgreSQL test connection variables set. This
-explicit destructive command validates all 20 database identities and refuses active sessions before
-dropping them. Identifier HMAC maintenance roles are cluster-wide and survive database drop; the
-command derives only this fleet's twelve realm/channel caller and definer names, rejects unexpected
-role authority, memberships and dependencies outside their owning database, and drops the orphaned
-roles only after the databases are gone. It then recreates and re-identifies the fleet, runs
-migration files with `db:test:prepare`'s `skip_initialize` path, and checks `db:migrate`. Missing
-roles from a migration that was never reached are expected; unrelated and shared roles are not
-selected. A failed role preflight stops before database drop. Do not use this command for shared,
-development or production databases.
+## Ordinary test databases and parallel workers
 
-Use the same command with `--verify-only` to run the database/role preflight without deletion,
-recreation or migrations. Unknown arguments fail explicitly. A run-specific PostgreSQL advisory lock
-prevents two instances of this rebuild command from operating on the same fleet concurrently; active
-database sessions still prevent rebuild.
+Tests use the fixed `test_*` databases in `config/database.yml`. There is no per-run PostgreSQL
+fleet, manifest file, OID receipt or isolated-run environment variable. `db:test:prepare` checks the
+configured test catalog and the explicit preparation list, then applies migrations without resetting
+existing data. It does not create an additional database fleet.
 
-The command also acquires the suite's run-specific process lock before boot/catalog checks and
-refuses an active test run. `PARALLEL_WORKERS=1` remains an administrative rebuild precondition, not
-a restriction on ordinary parallel tests. Do not rebuild a fleet while its workers are running.
+Rails forks the test processes. The existing `ParallelTestDatabaseCloner` retains the ordinary
+schema-stamped `test_*_<worker>` copies and explicitly selects the primary connection. Its SQL
+TEMPLATE copies preserve migration-created reference rows and function ownership; Rails' default
+schema-loading preparation still cannot reproduce these. See the
+[reference-data backlog](../../plans/backlog/2026-10-20-reference-data-outside-migrations.md).
+`PARALLEL_WORKERS=1` uses the configured base test databases directly and needs no worker receipt.
 
-## Parallel isolated workers
+Avatar COMMIT and independent-connection tests use the same ordinary test database path. Their real
+constraints, commits and concurrency assertions remain enabled. Committed rows are not undone by
+transactional fixture rollback; tests retain their existing scoped synthetic-principal cleanup. The
+ordinary clone cache checks schema freshness, not data cleanliness. Preparing migrations alone does
+not reset committed rows. A dirty test database needs an explicitly authorized reset; do not
+silently delete history or introduce a second database mode to hide contamination.
 
-With an existing verified parent manifest, normal Rails tests may use a positive `PARALLEL_WORKERS`
-count. The existing `ParallelTestDatabaseCloner` provisions fresh worker-suffixed copies of the
-twenty normally migrated parent catalogs. It refuses existing worker names rather than adopting or
-force-dropping them. Each worker receives a private creation receipt containing its actual database
-OIDs/owners/comments and verifies both parent and worker identities before establishing connections.
-The framework's default connection is explicitly `primary`; YAML order does not determine it.
+Minitest and browser E2E acquire `tmp/parallel-test-databases.lock` and refuse another owning
+process. Do not run database preparation or reset concurrently with either command. E2E uses the
+configured base test databases; it creates and drops no PostgreSQL databases.
 
-The parent retains the process lock through Minitest's exit-time execution and verified worker
-cleanup. Suite cleanup uses Minitest's public `after_run` hook, after parallel worker shutdown;
-standalone construction runners retain parent-only exit cleanup. Children do not unlock or clean up
-the parent's resources. Cleanup requires matching receipts and inactive connections, drops only
-those worker databases, and atomically records completion. It does not terminate connections, remove
-shared databases or delete copied HMAC roles. Keep receipts under `tmp/` for failed-run diagnosis.
-If a run was interrupted or names/OIDs changed, preserve the resources for review; do not bypass the
-creation/identity checks or reuse stale copies. The existing cleanup entry point can reconcile a
-proven worker receipt in a verified test process; it refuses non-test admission, mismatched objects
-and reused completed names.
+The former isolated-fleet implementation and rebuild command are retired. Existing databases,
+cluster roles, manifests and receipts are not deleted or adopted by this change. Any future cleanup
+requires a separately reviewed inventory, risk and recovery plan. Historical evidence continues to
+refer to the retired workflow and is not an instruction to execute it.
 
-Committed-history cases call the existing cloner's `verify_owned_worker_execution!` before writes.
-It verifies live parent/worker creation receipts and rejects missing receipts, mixed targets or
-non-test admission. A small selection may execute serially despite a configured worker count; these
-cases refuse the parent template rather than falling back to shared storage. Use an affected
-collection that actually starts verified disposable workers, and retain its command/output. Add no
-dummy tests, skip or mock substitute. The current seven-file Avatar collection (58 cases) runs with
-four workers in the verified environment.
-
-Retain committed Avatar/owner/history/operation rows for whole-worker cleanup. Mutable test-created
-cross-DB membership/unit rows and synthetic Persona/principal rows need scoped cleanup when other
-fixtures reconstruct principal IDs; leaving those joins alive can alias a new fixture principal and
-return a missing collective. That scoped cleanup does not delete Avatar ownership history or
-authorize production data changes. Always check the final process status and post-exit catalogs;
-test counts alone do not prove cleanup.
-
-These environment checks do not prove Avatar's real-COMMIT temporal invariants or isolation-level
-concurrency. Those behavior tests must still run with the actual constraints enabled in disposable
-worker catalogs. Static configuration checks and copied schema alone are insufficient.
+See the [replacement decision](../../adr/ordinary-test-databases-without-isolated-fleet.md).
 
 ## Setting preference public-ID capacity transition
 
@@ -209,56 +180,27 @@ retained foreign-key or historical-data obligations are absent. The focused and 
 this extension is recorded in
 [`V2J6`](../../evidence/2026-10-12-public-id-capacity-extension-V2J6.md).
 
-## Cluster role creation evidence
+## Cluster role ownership
 
-Database ownership does not prove PostgreSQL role creation ownership. Before the isolated rebuild
-command deletes existing fleet HMAC roles, the manifest must contain `created_roles` entries with
-exact `name` and `oid` values, plus `role_creation_log_sha256` for the successful creation record.
-Keep the actual record at `role_creation_log_path` in the manifest. For an older manifest with an
-already recorded checksum but no path, explicitly supply `POSTGRESQL_ISOLATED_ROLE_CREATION_LOG`.
-The command verifies the file checksum and exact CREATE ROLE names before any database drop;
-supplying another file or reconstructing a receipt from current names is insufficient. The actual
-role set and OIDs must match; missing metadata, duplicate entries or changed identities stop before
-database drop. Role attribute, membership and foreign-dependency checks still apply. This is not
-permission to adopt or delete an unknown cluster role.
-
-The applied identifier-HMAC maintenance migrations are not a safe shared-cluster rollback path:
-their historical `down` implementations contain unconditional `DROP ROLE` statements after the
-database objects are removed. Do not roll those migrations back in a shared or development cluster,
-and do not treat a database drop as role ownership evidence. A future repair must be forward-only or
-must establish and verify creation ownership, role attributes, memberships and dependencies before
-any role deletion can be considered. The run-owned rebuild command above is the only current
-deletion path, and it refuses missing or mismatched creation receipts.
-
-For a fresh run, first verify that its unique database and role names are absent, create its owned
-databases, and record their OIDs/owner/comment. Run normal migrations from source, retain the actual
-successful CREATE ROLE record, and record the resulting role OIDs. Never reconstruct creation
-ownership solely from current names or dependencies. A failed manifest write can be recovered by
-read-only identity checks on resources whose creation was observed; it does not justify recreation.
-
-Rebuilding creates new database and role identities. The command captures the normal
-`bundle exec rails db:test:prepare` and `bundle exec rails db:migrate` output in a private local
-file under `tmp/`, then replaces the manifest's creation-record path, checksum and role OIDs with
-the actual replacement objects. Preserve this file locally; do not commit raw migration logs.
-Migration failure remains failure even when receipts for partially created resources are retained.
-Missing or mismatched creation evidence stops further cleanup rather than adopting unknown roles.
-The previous role OIDs are not ownership metadata for replacement objects. Only run-owned disposable
-resources are eligible; shared/production resources remain excluded. This reconstruction does not
-prove Avatar ownership COMMIT or concurrency behavior; those require their own dynamic checks.
+Identifier-HMAC maintenance roles are cluster-wide. Dropping a database does not establish ownership
+of the roles left behind. Historical maintenance migration `down` methods contain unconditional
+`DROP ROLE` operations; do not use them as a shared-cluster cleanup path. Removal requires explicit
+risk/recovery approval and independently verified ownership, authority and dependencies. The retired
+isolated-fleet rebuild command is no longer available.
 
 ## Troubleshooting a broken test database
 
-Symptoms seen on 2026-10-20, and what fixed them. Prefer the rebuild script above. These notes are
-for diagnosing why it is needed.
+Symptoms observed on 2026-10-20 explain why migration preparation and database reset are different
+operations. Reset requires explicit risk/recovery approval.
 
-| Symptom in `bin/rails test`                                                                                                                    | Cause                                                                                                                                                                                                                                                    | Fix                                                                                             |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Thousands of `ActiveRecord::InvalidForeignKey` errors while loading fixtures, for example `client_passkeys` referencing a missing `clients` id | A non-transactional test failed before cleanup and left committed rows. PostgreSQL 18 revalidates foreign keys when fixture loading re-enables them                                                                                                      | Rebuild the fleet. `db:test:prepare` alone keeps the leftover rows when no migration is pending |
-| Hundreds of `Couldn't find OpAppProtocolEpoch with 'id'=1` (also Com/Org) or `identifier rotation function owner is invalid`                   | The databases were built by loading `db/*_structure.sql` (`db:test:load_schema`, or `db:migrate` on an empty database without `skip_initialize`). Reference rows that migrations insert are not in the dumps, and loaded functions carry the wrong owner | Rebuild from migrations only. Do not use schema load for the test fleet                         |
-| `undefined method 'internal_string_options_for_primary_key'` at boot                                                                           | Rails revision change; see `evidence/2026-10-20-rails-182206b-compatibility-R3K9.md`                                                                                                                                                                     | Already fixed in `config/initializers/schema_migration_if_not_exists.rb`                        |
+| Symptom in `bin/rails test`                                                                                                                    | Cause                                                                                                                                                                                                                                                    | Fix                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Thousands of `ActiveRecord::InvalidForeignKey` errors while loading fixtures, for example `client_passkeys` referencing a missing `clients` id | A non-transactional test failed before cleanup and left committed rows. PostgreSQL 18 revalidates foreign keys when fixture loading re-enables them                                                                                                      | Reset the affected test databases after approval. `db:test:prepare` alone keeps the leftover rows when no migration is pending |
+| Hundreds of `Couldn't find OpAppProtocolEpoch with 'id'=1` (also Com/Org) or `identifier rotation function owner is invalid`                   | The databases were built by loading `db/*_structure.sql` (`db:test:load_schema`, or `db:migrate` on an empty database without `skip_initialize`). Reference rows that migrations insert are not in the dumps, and loaded functions carry the wrong owner | Rebuild from migrations only. Do not use schema load for the test fleet                                                        |
+| `undefined method 'internal_string_options_for_primary_key'` at boot                                                                           | Rails revision change; see `evidence/2026-10-20-rails-182206b-compatibility-R3K9.md`                                                                                                                                                                     | Already fixed in `config/initializers/schema_migration_if_not_exists.rb`                                                       |
 
-When the rebuild script cannot be used, for example without an isolated-fleet manifest, this manual
-sequence rebuilt the test databases from migrations on 2026-10-20:
+The following destructive sequence was used on 2026-10-20. It is a recovery reference, not
+authorized setup: obtain explicit risk/recovery approval before executing it.
 
 ```bash
 # POSTGRESQL_TEST_PREPARE_DATABASES must list every current writable test database (32 on
@@ -273,7 +215,7 @@ bin/rails test
 ```
 
 Run a database-heavy experiment (for example adding validations to many models at once) only against
-a fleet you will rebuild afterwards. The failing tests leave committed rows behind.
+test databases with an approved recovery plan. The failing tests leave committed rows behind.
 
 The long-term fix is tracked in `plans/backlog/2026-10-20-reference-data-outside-migrations.md`.
 
@@ -348,10 +290,10 @@ current-row partial unique index.
 The seven approved administrative and enforcement reason-note columns use non-deterministic Active
 Record Encryption. The corresponding focused test verifies both round-trip decryption and that a
 newly persisted database value does not contain the plaintext. Populated structure dumps have been
-generated from the isolated test databases and are deterministic on repeat dump. On 2026-09-21, the
-isolated test fleet was rebuilt from migrations, seeded twice, and dumped twice; all configured
-database versions reached their expected current migration and the two dump sets matched. The
-reconstruction verification is recorded in `evidence/2026-09-21-phase-09-reconstruction-X4Y5.md`.
+generated from test databases and are deterministic on repeat dump. On 2026-09-21, the isolated test
+fleet was rebuilt from migrations, seeded twice, and dumped twice; all configured database versions
+reached their expected current migration and the two dump sets matched. The reconstruction
+verification is recorded in `evidence/2026-09-21-phase-09-reconstruction-X4Y5.md`.
 
 ## ORG Telephone public-identity transition
 
@@ -426,8 +368,9 @@ Apply the owning database's two migrations in order:
 The validation migration deliberately uses `disable_ddl_transaction!`; Strong Migrations rejects
 check validation inside a transaction that blocks writes. A down/up rehearsal must show that the
 temporary checks are restored on down and the final `NOT NULL` metadata is restored on up. Generate
-the affected structure dump from the same isolated database after the final state. This procedure
-does not authorize production/shared-data changes, consumer cutover, or a broad identifier reset.
+the affected structure dump from the same approved test database after the final state. This
+procedure does not authorize production/shared-data changes, consumer cutover, or a broad identifier
+reset.
 
 ## Staff identity audit-event bigint transition
 

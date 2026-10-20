@@ -53,6 +53,9 @@ module WithdrawalCeremonyAuthentication
       record_withdrawal_ceremony_occurrence!("withdrawal.ceremony_revoked", ceremony.subject, ceremony)
     end
     clear_withdrawal_ceremony_cookie!
+    # The withdrawal pages shown under this ceremony stay in the tab's encrypted history until the
+    # next Inertia page clears it; the callers redirect, which carries the flag to that page.
+    session[:inertia_clear_history] = true
     @current_withdrawal_ceremony = nil
     @current_withdrawal_subject = nil
   end

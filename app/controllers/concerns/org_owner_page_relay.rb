@@ -26,7 +26,7 @@ module OrgOwnerPageRelay
       "X-Browser-Format" => request.format.symbol.to_s, "X-Browser-Url-Options" => default_url_options.to_json,
     }
     result =
-      if request.get?
+      if request.get? || request.head?
         client.get(path, forwarded, extra_headers: context)
       else
         client.post(path, forwarded, extra_headers: context)
