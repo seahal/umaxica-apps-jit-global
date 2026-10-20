@@ -234,4 +234,8 @@ class OperatorBulletinTest < ActiveSupport::TestCase
 
     assert_not OperatorBulletin.exists?(bulletin.id)
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorBulletin)
+  end
 end

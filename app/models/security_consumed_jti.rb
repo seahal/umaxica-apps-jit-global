@@ -31,4 +31,6 @@ class SecurityConsumedJti < OpBaseAppRecord
       Digest::SHA256.hexdigest(jti.to_s)
     end
   end
+
+  validates :expires_at, :issuer, :jti_digest, :purpose, exclusion: { in: [nil] }
 end

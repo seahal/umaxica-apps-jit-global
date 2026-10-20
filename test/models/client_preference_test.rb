@@ -97,9 +97,9 @@ class ClientPreferenceTest < ActiveSupport::TestCase
 
   test "does not overwrite existing public_id" do
     user = clients(:sample_user)
-    pref = ClientPreference.create!(user: user, public_id: "user_pref_custom_1")
+    pref = ClientPreference.create!(user: user, public_id: "user_pref_custom_1xxx")
 
-    assert_equal "user_pref_custom_1", pref.public_id
+    assert_equal "user_pref_custom_1xxx", pref.public_id
   end
 
   test "loading an existing preference preserves stored defaults" do
@@ -124,5 +124,9 @@ class ClientPreferenceTest < ActiveSupport::TestCase
 
     assert_predicate user.user_preference, :present?
     assert_equal user.id, user.user_preference.user_id
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::ClientPreference)
   end
 end

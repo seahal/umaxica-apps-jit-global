@@ -53,4 +53,6 @@ class OrganizationEntraConnection < OrgRpRecord
   validates :entra_tenant_id, uniqueness: { scope: :organization_id }
   validates :entra_client_id, uniqueness: { scope: :entra_tenant_id }
   validates :entra_tenant_id, format: { with: ENTRA_TENANT_ID_FORMAT, message: :uuid_format }
+  validates :entra_tenant_id, length: { maximum: 36 }
+  validates :entra_client_id, length: { maximum: 255 }
 end

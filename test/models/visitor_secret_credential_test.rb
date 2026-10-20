@@ -141,6 +141,10 @@ class VisitorSecretCredentialTest < ActiveSupport::TestCase
     assert_equal secret_credential.public_id, secret_credential.to_param
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::VisitorSecretCredential)
+  end
+
   private
 end
 

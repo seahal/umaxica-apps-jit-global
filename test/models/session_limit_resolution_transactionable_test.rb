@@ -10,7 +10,9 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   # Session revocation commits sign-out flows, and no fixture clears those tables. A leftover
   # flow references a token that the next fixture load deletes, and PostgreSQL 18 re-validates
   # foreign keys when fixture loading re-enforces them, so every later fixture load fails.
-  SIGN_OUT_FLOW_CLASSES = [ClientSignOutFlow, VisitorSignOutFlow, OperatorSignOutFlow].freeze
+  # Resolution writers also commit chronicle rows, which later owner-scoped history tests would read.
+  SIGN_OUT_FLOW_CLASSES = [ClientSignOutFlow, VisitorSignOutFlow, OperatorSignOutFlow,
+                           ClientChronicle, OperatorChronicle,].freeze
 
   setup do
     @sign_out_flow_watermarks = SIGN_OUT_FLOW_CLASSES.index_with { |klass| klass.maximum(:id) || 0 }

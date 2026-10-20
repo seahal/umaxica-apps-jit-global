@@ -63,7 +63,7 @@ reserved_visitor:
   visibility_id: <%= VisitorVisibility::VISITOR %>
   mfa_level_id: <%= VisitorMfaLevel::NOTHING %>
   mfa_status_id: <%= VisitorMfaStatus::UNCONFIGURED %>
-  public_id: "reserved_visitor"
+  public_id: "reserved_visitorxxxxx"
   discard_at: <%= 20.years.from_now %>
   purge_eligible_at: <%= 20.years.from_now %>
   created_at: <%= Time.current %>

@@ -104,4 +104,8 @@ class HandleTest < ActiveSupport::TestCase
     assert_not @handle.destroy
     assert @handle.errors[:base].any? { |message| message.include?("active avatars") }
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::Handle)
+  end
 end

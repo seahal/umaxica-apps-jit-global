@@ -7,6 +7,9 @@ module PublishingEntryRecord
   included do
     include PublicId
 
+    # SQL requires a value but permits blank locale strings; preserve that distinction.
+    validates :locale, exclusion: { in: [nil], message: :blank }, on: :create
+
     family = name.deconstantize
     belongs_to :current_revision, class_name: "#{family}::EntryRevision", optional: true
     has_many :revisions, class_name: "#{family}::EntryRevision", inverse_of: :entry,

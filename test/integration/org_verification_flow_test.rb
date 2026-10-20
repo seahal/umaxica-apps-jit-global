@@ -22,7 +22,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
       staff: @staff,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      public_id: "ovf#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     @headers =

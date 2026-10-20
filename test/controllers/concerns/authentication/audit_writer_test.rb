@@ -10,7 +10,7 @@ module Authentication
 
     setup do
       @user = Client.create!(
-        public_id: "audit_#{SecureRandom.hex(6)}",
+        public_id: PublicId.generate,
         status_id: ClientStatus::ACTIVE,
         visibility_id: ClientVisibility::USER,
       )

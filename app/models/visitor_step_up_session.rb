@@ -37,6 +37,7 @@ class VisitorStepUpSession < OpBaseComRecord
 
   belongs_to :visitor_token, inverse_of: :step_up_session
 
+  validates :step_up_ceremony_transaction_ref, uniqueness: true, allow_nil: true
   validates :scope, presence: true
   validates :return_to, presence: true
   validates :visitor_token_id, uniqueness: true
@@ -44,6 +45,7 @@ class VisitorStepUpSession < OpBaseComRecord
   validates :status, presence: true, inclusion: { in: STATUSES }
   validates :discard_at, presence: true
   validates :attempt_count, presence: true, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :email_code_digest, length: { maximum: 64 }
 
   scope :for_visitor_token, ->(visitor_token) { where(visitor_token_id: visitor_token.id) }
   scope :recent_first, -> { order(created_at: :desc) }

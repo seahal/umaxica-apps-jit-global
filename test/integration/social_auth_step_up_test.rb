@@ -11,7 +11,7 @@ class SocialAuthStepUpTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     @user = Client.create!(
       status_id: ClientStatus::ACTIVE,
-      public_id: "soc_aal1_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       last_step_up_at: nil,
     )
   end

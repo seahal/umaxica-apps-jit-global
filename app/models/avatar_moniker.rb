@@ -33,6 +33,10 @@ class AvatarMoniker < AvatarRecord
             if: :current_temporal_row?
   validates :moniker, avatar_moniker: true
   validates :valid_from, presence: true
+  # Malformed UTF-8 raises inside these validators (blank? is evaluated first); AvatarMonikerValidator
+  # reports it instead. nil is not a String, so it still reaches the nil check.
+  validates :moniker, length: { maximum: 512 }, exclusion: { in: [nil] },
+                      if: -> { !moniker.is_a?(String) || moniker.valid_encoding? }
 
   before_validation :normalize_moniker_to_nfc
 

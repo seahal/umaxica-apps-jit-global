@@ -7,8 +7,8 @@
 module PublicId
   extend ActiveSupport::Concern
 
+  # adr/identifier-contract.md fixes NanoID storage at the generation length.
   GENERATION_SIZE = 21
-  STORAGE_SIZE = 25
   MAX_COLLISION_RETRIES = 3
 
   class << self
@@ -27,7 +27,7 @@ module PublicId
     around_create :retry_public_id_collision
     validate :public_id_immutable_after_create, on: :update
 
-    validates :public_id, presence: true, length: { maximum: STORAGE_SIZE }, uniqueness: true
+    validates :public_id, presence: true, length: { is: GENERATION_SIZE }, uniqueness: true
   end
 
   public

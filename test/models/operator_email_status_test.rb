@@ -42,7 +42,7 @@ class OperatorEmailStatusTest < ActiveSupport::TestCase
       address: "staff@example.com",
       staff_id: staff.id,
       staff_email_status_id: status.id,
-      public_id: "email#{SecureRandom.hex(6)}",
+      public_id: PublicId.generate,
     )
 
     assert_raises(ActiveRecord::RecordNotDestroyed) do

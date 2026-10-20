@@ -24,6 +24,7 @@ class ClientSecretCredential < AppZenithRecord
   validate :terminal_issuance_cannot_confirm_candidate
   validate :confirmation_has_source_audit, on: :update
   validate :persisted_confirmation_is_immutable, on: :update
+  validates :claim_sign_in_flow_ref, length: { maximum: 21 }
 
   scope :available_at, ->(at) {
     where.not(confirmed_at: nil).where(claimed_at: nil, claim_operation_id: nil, revoked_at: nil)
@@ -99,6 +100,16 @@ class ClientSecretCredential < AppZenithRecord
   def _write_attribute(name, value)
     verify_lifecycle_assignment!(name)
     super
+  end
+
+  # Rails' generated attribute writers no longer pass through _write_attribute, so each lifecycle
+  # fact also guards its own writer. revoked_at keeps its explicit writer below.
+  %w(claimed_at claim_operation_id claim_sign_in_flow_ref claim_ceremony_session_id consumed_at confirmed_at
+     discard_at).each do |fact|
+    define_method(:"#{fact}=") do |value|
+      verify_lifecycle_assignment!(fact)
+      super(value)
+    end
   end
 
   def commit_storage_confirmation!(actor_context:, at:)

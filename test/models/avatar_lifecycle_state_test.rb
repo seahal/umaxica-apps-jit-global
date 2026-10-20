@@ -44,4 +44,49 @@ class AvatarLifecycleStateTest < ActiveSupport::TestCase
   test "deleted is terminal" do
     assert_predicate avatar_lifecycle_states(:deleted), :terminal
   end
+  BOOLEAN_FIELDS = %i(
+    can_create_content visible_by_default editable_by_owner restorable_by_owner followable
+    group_attachable discoverable moderation_visible terminal
+  ).freeze
+
+  BOOLEAN_FIELDS.each do |field|
+    test "#{field} preserves both boolean values and database null rejection" do
+      state = AvatarLifecycleState.new(
+        key: "consistency-probe", title: "Consistency probe", sort_order: 999,
+        can_create_content: false, visible_by_default: false, editable_by_owner: false,
+        restorable_by_owner: false, followable: false, group_attachable: false,
+        discoverable: false, moderation_visible: false, terminal: false,
+      )
+      state.save!
+
+      assert_same false, state.reload[field]
+      state.update!(field => true)
+
+      assert_same true, state.reload[field]
+      state[field] = nil
+      error =
+        assert_raises(ActiveRecord::NotNullViolation) do
+          AvatarLifecycleState.transaction(requires_new: true) { state.save!(validate: false) }
+        end
+      assert_equal field.to_s, error.cause.result.error_field(PG::Result::PG_DIAG_COLUMN_NAME)
+      assert_same true, state.reload[field]
+    end
+
+    test "#{field} rejects nil and empty input before creation" do
+      [nil, ""].each do |value|
+        state = AvatarLifecycleState.new(
+          key: "consistency-probe", title: "Consistency probe", sort_order: 999,
+          can_create_content: false, visible_by_default: false, editable_by_owner: false,
+          restorable_by_owner: false, followable: false, group_attachable: false,
+          discoverable: false, moderation_visible: false, terminal: false,
+        )
+        state[field] = value
+
+        assert_not state.valid?
+        assert_not_empty state.errors[field]
+        assert_raises(ActiveRecord::RecordInvalid) { state.save! }
+        assert_predicate state, :new_record?
+      end
+    end
+  end
 end

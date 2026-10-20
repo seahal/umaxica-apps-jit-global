@@ -6,6 +6,8 @@ module Publishing
       class EntrySlug < PublishingRecord
         self.table_name = "publishing_help_com_entry_slugs"
         include PublishingEntrySlugRecord
+
+        validates :slug, exclusion: { in: [nil] }
       end
     end
   end

@@ -73,7 +73,7 @@ _fixture:
 #
 one:
   id: 1
-  public_id: staff_pref_00000001
+  public_id: "staff_pref_00000001xx"
   staff_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
   consented: false
   functional: false
@@ -82,7 +82,7 @@ one:
 
 two:
   id: 2
-  public_id: staff_pref_00000002
+  public_id: "staff_pref_00000002xx"
   staff_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
   consented: false
   functional: false

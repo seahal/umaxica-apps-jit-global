@@ -13,4 +13,8 @@ class OpComOutboxEvent < OpBaseComRecord
             :stable_event_ref, :delivery_attempts, :next_attempt_at, presence: true
   validates :target_realm, inclusion: { in: [REALM] }
   validates :delivery_attempts, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :target_realm, length: { maximum: 3 }
+  validates :event_type, :last_error_code, :target_client_id, length: { maximum: 64 }
+  validates :stable_event_ref, length: { maximum: 128 }
+  validates :target_endpoint_identity, length: { maximum: 255 }
 end

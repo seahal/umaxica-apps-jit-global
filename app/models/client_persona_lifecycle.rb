@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class ClientPersonaLifecycle < AppRpRecord
+  validates :client_persona_id, uniqueness: true
+
   STATES = AuthorityResourceLifecycleStateValue::VALUES
 
   belongs_to :client_persona, inverse_of: :lifecycle

@@ -12,6 +12,10 @@ class IndividualOwnershipTransferRequest < ComRpRecord
   belongs_to :source_visitor, class_name: "Visitor", inverse_of: false
   belongs_to :destination_visitor, class_name: "Visitor", inverse_of: false
 
+  validates :individual_id,
+            uniqueness: { conditions: -> { where(status: PENDING) } },
+            on: :create, if: -> { status == PENDING }
+
   validates :status, inclusion: { in: STATUSES }
   validates :expected_ownership_revision, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validate :parties_must_differ

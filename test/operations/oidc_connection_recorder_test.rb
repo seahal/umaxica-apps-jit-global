@@ -6,7 +6,7 @@ require "test_helper"
 class OidcConnectionRecorderTest < ActiveSupport::TestCase
   setup do
     ClientStatus.ensure_defaults!
-    @user = Client.create!(public_id: "recorder_#{SecureRandom.hex(5)}", status_id: ClientStatus::ACTIVE)
+    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
     @client = Data.define(:client_id).new("core-app-jp")
   end
 

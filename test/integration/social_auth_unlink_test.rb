@@ -25,7 +25,7 @@ class SocialAuthUnlinkTest < ActionDispatch::IntegrationTest
 
     @user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "unlink_test_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
     )
     ClientEmail.create!(
       user: @user,

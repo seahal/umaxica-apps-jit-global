@@ -78,4 +78,5 @@ class AgentMembership < OrgRpRecord
               conditions: -> { where(primary: true, revoked_at: nil, ends_at: nil) },
             },
             if: :primary?
+  validates :agent_id, :bureau_id, :bureau_unit_id, exclusion: { in: [nil] }
 end

@@ -109,4 +109,8 @@ class ClientSecretCredentialTest < ActiveSupport::TestCase
     assert_nil credential.reload.revoked_at
     assert_equal Float::INFINITY, credential.discard_at
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::ClientSecretCredential)
+  end
 end

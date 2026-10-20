@@ -11,6 +11,7 @@ class AvatarGroupConcreteOwnershipPeriod < AvatarRecord
   validates :owner_surface, inclusion: { in: OWNER_SURFACES }
   validates :owner_collective_public_id, presence: true
   validates :valid_from, presence: true
+  validates :owner_collective_public_id, length: { maximum: 255 }
 
   scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
 

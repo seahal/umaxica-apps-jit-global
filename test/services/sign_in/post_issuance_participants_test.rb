@@ -207,11 +207,11 @@ module SignIn
     private
 
     def create_client
-      Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::ACTIVE)
+      Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
     end
 
     def create_visitor
-      Visitor.create!(public_id: "v_#{SecureRandom.hex(8)}", status_id: VisitorStatus::ACTIVE)
+      Visitor.create!(public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE)
     end
 
     def create_operator

@@ -286,9 +286,9 @@ module Auth
       end
 
       test "should get new with existing preference refresh cookie" do
-        token, verifier = AppPreference.generate_refresh_token(public_id: "app-pref-existing")
+        token, verifier = AppPreference.generate_refresh_token(public_id: "app-pref-existingxxxx")
         preference = AppPreference.create!(
-          public_id: "app-pref-existing",
+          public_id: "app-pref-existingxxxx",
           token_digest: AppPreference.digest_refresh_token(verifier),
           jti: SecureRandom.uuid,
           status_id: AppPreferenceStatus::NOTHING,

@@ -20,7 +20,7 @@ class OrgVerificationI18nTest < ActionDispatch::IntegrationTest
       staff: @staff,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      public_id: "ov_i18n_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     @headers = begin

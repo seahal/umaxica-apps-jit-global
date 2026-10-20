@@ -182,6 +182,10 @@ class TelephoneOccurrenceTest < ActiveSupport::TestCase
     assert_not record.valid?
     assert_predicate record.errors[:body], :any?
   end
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::TelephoneOccurrence)
+  end
+
   private
 
   def build_occurrence(klass, attrs = {})

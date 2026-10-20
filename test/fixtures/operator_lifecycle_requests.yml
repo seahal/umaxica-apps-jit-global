@@ -45,7 +45,7 @@ _fixture:
   model_class: OperatorLifecycleRequest
 
 pending_withdraw_one:
-  public_id: "ABCabc123def456ghi78"
+  public_id: "ABCabc123def456ghi78x"
   action: withdraw
   status: pending
   target_operator: one
@@ -55,7 +55,7 @@ pending_withdraw_one:
   updated_at: <%= Time.current %>
 
 pending_withdraw_two:
-  public_id: "XYZxyz789def456abc12"
+  public_id: "XYZxyz789def456abc12x"
   action: withdraw
   status: pending
   target_operator: two
@@ -65,7 +65,7 @@ pending_withdraw_two:
   updated_at: <%= Time.current %>
 
 pending_join_one:
-  public_id: "Join000123def456ghi7"
+  public_id: "Join000123def456ghi7x"
   action: join
   status: pending
   target_email: "new@example.com"
@@ -76,7 +76,7 @@ pending_join_one:
   updated_at: <%= Time.current %>
 
 approved_withdraw_one:
-  public_id: "Appr000123def456ghi7"
+  public_id: "Appr000123def456ghi7x"
   action: withdraw
   status: approved
   target_operator: one

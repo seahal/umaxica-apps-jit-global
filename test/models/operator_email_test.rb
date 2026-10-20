@@ -188,4 +188,8 @@ class OperatorEmailTest < ActiveSupport::TestCase
     assert_not extra_email.valid?
     assert_includes extra_email.errors[:base], "exceeds maximum emails per staff (#{OperatorEmail::MAX_EMAILS_PER_STAFF})"
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorEmail)
+  end
 end

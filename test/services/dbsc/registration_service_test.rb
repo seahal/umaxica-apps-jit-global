@@ -32,7 +32,7 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
 
   test "sets app preference to active dbsc state" do
     preference = AppPreference.create!(
-      public_id: SecureRandom.hex(10),
+      public_id: PublicId.generate,
       binding_method_id: AppPreferenceBindingMethod::NOTHING,
       dbsc_status_id: AppPreferenceDbscStatus::NOTHING,
       status_id: AppPreferenceStatus::NOTHING,

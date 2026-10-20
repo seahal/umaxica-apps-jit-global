@@ -41,11 +41,11 @@ CREATE TABLE public.schema_migrations (
 
 CREATE TABLE public.visitor_notification_records (
     id bigint CONSTRAINT visitor_notifications_id_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT visitor_notifications_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT visitor_notifications_public_id_not_null NOT NULL,
     visitor_id bigint CONSTRAINT visitor_notifications_visitor_id_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT visitor_notifications_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT visitor_notifications_updated_at_not_null NOT NULL,
-    CONSTRAINT visitor_notification_records_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_visitor_notification_records_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -120,6 +120,8 @@ CREATE INDEX index_visitor_notification_records_on_visitor_id ON public.visitor_
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
 ('20261012092105'),
 ('20261012092005'),
 ('20260612000001'),

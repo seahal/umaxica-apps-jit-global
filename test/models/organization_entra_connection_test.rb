@@ -191,6 +191,10 @@ class OrganizationEntraConnectionTest < ActiveSupport::TestCase
     assert_not OrganizationEntraConnection.respond_to?(:upsert_from_token)
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OrganizationEntraConnection)
+  end
+
   private
 
   def build_connection(overrides = {})

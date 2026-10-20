@@ -518,4 +518,8 @@ class OperatorTokenTest < ActiveSupport::TestCase
   test "find_from_signed_ref returns nil for invalid signature" do
     assert_nil OperatorToken.find_from_signed_ref("invalid-signed-ref")
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorToken)
+  end
 end

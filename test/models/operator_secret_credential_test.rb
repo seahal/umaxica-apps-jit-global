@@ -175,6 +175,10 @@ class OperatorSecretCredentialTest < ActiveSupport::TestCase
     assert_not_empty record2.errors[:public_id]
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorSecretCredential)
+  end
+
   private
 
   def create_secret_credential!

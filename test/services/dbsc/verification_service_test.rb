@@ -39,7 +39,7 @@ class DbscVerificationServiceTest < ActiveSupport::TestCase
 
   test "validates active app preference proof with current challenge" do
     preference = AppPreference.create!(
-      public_id: SecureRandom.hex(10),
+      public_id: PublicId.generate,
       binding_method_id: AppPreferenceBindingMethod::DBSC,
       dbsc_status_id: AppPreferenceDbscStatus::ACTIVE,
       status_id: AppPreferenceStatus::NOTHING,

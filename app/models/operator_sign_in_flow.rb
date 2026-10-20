@@ -100,7 +100,9 @@ class OperatorSignInFlow < OpBaseOrgRecord
   validates :state_id, presence: true,
                        inclusion: { in: ->(record) { record.class::STATE_IDS } }
   # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :token_id, uniqueness: true, allow_nil: true, if: :will_save_change_to_token_id?
   validate :completed_state_has_completed_at
+  validates :result_digest, length: { maximum: 64 }
 
   before_validation :assign_default_state_id
 end

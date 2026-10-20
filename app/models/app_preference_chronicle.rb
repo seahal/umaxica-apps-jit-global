@@ -59,6 +59,7 @@ class AppPreferenceChronicle < ChronicleRecord
 
   validates :event_id, length: { maximum: 255 }
   validates :level_id, length: { maximum: 255 }
+  validates :subject_id, exclusion: { in: [nil] }
   # Helper methods for compatibility
   def app_preference
     return if subject_id.blank?

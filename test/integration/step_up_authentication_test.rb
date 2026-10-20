@@ -18,7 +18,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "stepup_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     @token.update!(created_at: 1.hour.ago)
@@ -138,7 +138,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "stepup_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     other_token.update!(created_at: 1.hour.ago)
@@ -304,7 +304,7 @@ class StepUpAuthenticationTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "stepup_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     # Synthetic evidence isolates contact mutation; the public Base operation owns freshness.

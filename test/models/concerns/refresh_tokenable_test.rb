@@ -12,7 +12,7 @@ class RefreshTokenableTest < ActiveSupport::TestCase
     ClientTokenDbscStatus.find_or_create_by!(id: ClientTokenDbscStatus::NOTHING)
 
     @user = Client.create!(
-      public_id: "u_#{SecureRandom.hex(8)}",
+      public_id: PublicId.generate,
       status_id: ClientStatus::ACTIVE,
       created_at: 1.day.ago,
       updated_at: 1.day.ago,

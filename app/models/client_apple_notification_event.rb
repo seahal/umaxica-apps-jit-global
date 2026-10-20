@@ -15,6 +15,7 @@ class ClientAppleNotificationEvent < AppPrincipalRecord
   validates :status, inclusion: { in: STATUSES }
   validates :processing_attempts, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :received_at, :occurred_at, presence: true
+  validates :event_type, :status, length: { maximum: 32 }
 
   scope :due, ->(now = Time.current) { where(status: %w(received retrying)).where(next_retry_at: ..now) }
 

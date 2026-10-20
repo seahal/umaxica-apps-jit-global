@@ -1,0 +1,36 @@
+# frozen_string_literal: true
+
+class FixNanoidPublicIdLengthAvatar < ActiveRecord::Migration[8.2]
+  # adr/identifier-contract.md: NanoID public_id is varchar(21) with an exact-length CHECK.
+  # [table, previous varchar limit (nil = unbounded), replaced capacity check name, its expression]
+  TABLES = [
+    [:avatars, nil, "avatars_public_id_max_length", "char_length(public_id::text) <= 25"],
+    [:avatar_agent_bindings, 21, nil, nil],
+    [:avatar_bureau_agent_grants, 21, nil, nil],
+    [:avatar_enterprise_persona_grants, 21, nil, nil],
+    [:avatar_groups, nil, "avatar_groups_public_id_max_length", "char_length(public_id::text) <= 25"],
+    [:avatar_individual_bindings, 21, nil, nil],
+    [:avatar_ownership_transfers, 21, nil, nil],
+    [:avatar_persona_bindings, 21, nil, nil],
+    [:avatar_transfer_reservations, 21, nil, nil],
+    [:group_avatar_memberships, nil, "group_avatar_memberships_public_id_max_length", "char_length(public_id::text) <= 25"],
+    [:handles, nil, "handles_public_id_max_length", "char_length(public_id::text) <= 25"],
+  ].freeze
+
+  def up
+    TABLES.each do |table, previous_limit, capacity_check, _expression|
+      remove_check_constraint(table, name: capacity_check) if capacity_check
+      # Narrowing the type is reviewed here: every stored value is a 21-character NanoID.
+      safety_assured { change_column(table, :public_id, :string, limit: 21) } unless previous_limit == 21
+      add_check_constraint(table, "char_length(public_id) = 21", name: "chk_#{table}_pid", validate: false)
+    end
+  end
+
+  def down
+    TABLES.reverse_each do |table, previous_limit, capacity_check, expression|
+      remove_check_constraint(table, name: "chk_#{table}_pid")
+      safety_assured { change_column(table, :public_id, :string, limit: previous_limit) } unless previous_limit == 21
+      add_check_constraint(table, expression, name: capacity_check) if capacity_check
+    end
+  end
+end

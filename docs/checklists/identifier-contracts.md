@@ -746,3 +746,24 @@ triggers for additional tables.
   bytes, RP/origin, expiry, burn and session-issuance boundaries are unchanged. Static checks do not
   prove committed concurrent collision behavior or live WebAuthn-provider behavior. Evidence is
   revision-scoped and is not a permanent PASS for future code.
+
+## ID-3r — Publishing immutable taxonomy snapshot references
+
+- Basis: ID-3/ID-4 and the accepted
+  [Publishing taxonomy architecture](../../adr/publishing-taxonomy-architecture.md). Scope: both
+  `vocabulary_public_id_snapshot` and `term_public_id_snapshot` on the 24 single/multiple version
+  assignment models, not the resource's own `public_id` or a new issuing domain.
+- Preserve the current 21-character physical snapshot-reference capacity independently of the shared
+  owned-ID capacity 25. Creating a snapshot with a 22-character reference is rejected by the model;
+  raw SQL independently encounters the existing varchar bound before derivation. Empty/nil model
+  references retain their existing presence errors.
+- Given nonblank supplied references of length 20/21 or an existing accepted string-cast false,
+  creation still succeeds and stores the live authoritative vocabulary/term identifiers. Persisted
+  snapshot identity is canonical, never the supplied forgery. Existing DB derivation and deferred
+  completeness checks remain authoritative; no new trigger or source-identity rewrite is implied.
+- Given an existing snapshot, attempted overlong replacement still raises the established
+  ReadOnlyRecord error; direct bounded SQL mutation remains refused and leaves history unchanged.
+- Check:
+  [all-family snapshot capacity tests](../../test/models/publishing/snapshot_public_id_capacity_contract_test.rb),
+  snapshot integrity/immutability tests and actual DB column/check definitions. This criterion does
+  not resolve the separate owned-Publishing-ID capacity/ADR conflict or authorize schema expansion.

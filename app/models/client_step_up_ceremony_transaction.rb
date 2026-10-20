@@ -51,6 +51,8 @@ class ClientStepUpCeremonyTransaction < OpBaseAppRecord
 
   ceremony_surface "app"
 
+  validates :cancellation_handoff_digest, :result_digest, length: { maximum: 64 }
+
   private
 
   def permitted_ceremony_methods = %w(passkey totp email_otp)

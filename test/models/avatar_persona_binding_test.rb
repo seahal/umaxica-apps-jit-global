@@ -156,6 +156,10 @@ class AvatarPersonaBindingTest < ActiveSupport::TestCase
     assert_equal original_revoked_at, binding.reload.revoked_at
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::AvatarPersonaBinding)
+  end
+
   private
 
   def build_persona

@@ -5,7 +5,7 @@ require "test_helper"
 
 class WithdrawableTest < ActiveSupport::TestCase
   test "recovery and permanent deletion boundary at purge deadline" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
@@ -18,7 +18,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "withdrawable methods available on user" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
 
     assert_respond_to user, :withdrawn?
     assert_respond_to user, :active?
@@ -35,14 +35,14 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   # withdrawn? tests
   test "withdrawn? returns true when withdrawn_at is set" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: Time.current)
 
     assert_predicate user, :withdrawn?
   end
 
   test "withdrawn? returns false when withdrawn_at is nil" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil)
 
     assert_not user.withdrawn?
@@ -50,28 +50,28 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   # active? tests
   test "active? returns true when withdrawn_at is nil" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil)
 
     assert_predicate user, :active?
   end
 
   test "active? returns false when withdrawn_at is set" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: Time.current)
 
     assert_not user.active?
   end
 
   test "active? returns false when deactivated_at is set" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil, deactivated_at: Time.current)
 
     assert_not user.active?
   end
 
   test "suspended? returns true between deactivation and purge" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(
       withdrawn_at: nil, deactivated_at: Time.current, discard_at: Time.current,
       purge_eligible_at: 31.days.from_now,
@@ -83,7 +83,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "closing? returns true after withdrawal starts before suspension" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil, withdrawal_started_at: Time.current, deactivated_at: nil)
 
     assert_predicate user, :closing?
@@ -91,7 +91,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "can_recover? waits one hour after suspension" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 30.minutes.ago,
@@ -107,7 +107,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "early_terminatable? waits seven days after suspension" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 6.days.ago,
@@ -123,7 +123,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "terminated? returns true after purge deadline" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 32.days.ago,
@@ -139,14 +139,14 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   # recovery_deadline tests
   test "recovery_deadline returns nil when not suspended" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil)
 
     assert_nil user.recovery_deadline
   end
 
   test "recovery_deadline returns purge_eligible_at while suspended" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     deadline = 30.days.from_now
     user.update_columns(
       withdrawn_at: nil,
@@ -160,7 +160,7 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   # can_recover? tests
   test "can_recover? returns true during suspended recovery window" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 2.hours.ago,
@@ -172,14 +172,14 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "can_recover? returns false when not suspended" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil)
 
     assert_not user.can_recover?
   end
 
   test "can_recover? returns false at purge deadline" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
@@ -191,7 +191,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "can_recover? returns false after purge deadline" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 32.days.ago,
@@ -203,7 +203,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "can_recover? returns true when 1 second before purge deadline" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
@@ -216,21 +216,21 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   # permanently_deletable? tests
   test "permanently_deletable? returns false when active" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil)
 
     assert_not user.permanently_deletable?
   end
 
   test "permanently_deletable? returns false for withdrawn marker without purge eligibility" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: 15.days.ago)
 
     assert_not user.permanently_deletable?
   end
 
   test "permanently_deletable? returns true at purge deadline" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 31.days.ago,
@@ -242,7 +242,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "permanently_deletable? returns true after purge deadline" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update_columns(
       withdrawn_at: nil,
       deactivated_at: 32.days.ago,
@@ -255,10 +255,10 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   # withdrawn scope test
   test "withdrawn scope returns only withdrawn clients" do
-    user1 = Client.find_by!(public_id: "one_id")
+    user1 = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user1.update!(withdrawn_at: 1.day.ago)
 
-    user2 = Client.find_by!(public_id: "two_id")
+    user2 = Client.find_by!(public_id: "two_idxxxxxxxxxxxxxxx")
     user2.update!(withdrawn_at: nil)
 
     withdrawn_users = Client.withdrawn
@@ -338,14 +338,14 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "withdrawal_in_progress? returns true when closing" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil, withdrawal_started_at: Time.current, deactivated_at: nil)
 
     assert_predicate user, :withdrawal_in_progress?
   end
 
   test "withdrawal_in_progress? returns true when suspended" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(
       withdrawn_at: nil, deactivated_at: Time.current, discard_at: Time.current,
       purge_eligible_at: 31.days.from_now,
@@ -355,7 +355,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "withdrawal_in_progress? returns false when neither closing nor suspended" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     user.update!(withdrawn_at: nil, withdrawal_started_at: nil, deactivated_at: nil)
 
     assert_not user.withdrawal_in_progress?

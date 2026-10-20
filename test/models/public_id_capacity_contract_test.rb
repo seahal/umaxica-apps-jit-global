@@ -4,12 +4,18 @@ require "test_helper"
 
 class PublicIdCapacityContractTest < ActiveSupport::TestCase
   TARGETS = [
-    [Client, "clients", "clients_public_id_max_length"],
-    [Visitor, "visitors", "visitors_public_id_max_length"],
-    [AppPreference, "app_preferences", "app_preferences_public_id_max_length"],
-    [ComPreference, "com_preferences", "com_preferences_public_id_max_length"],
-    [OrgPreference, "org_preferences", "org_preferences_public_id_max_length"],
+    [Client, "clients", "chk_clients_pid"],
+    [Visitor, "visitors", "chk_visitors_pid"],
+    [AppPreference, "app_preferences", "chk_app_preferences_pid"],
+    [ComPreference, "com_preferences", "chk_com_preferences_pid"],
+    [OrgPreference, "org_preferences", "chk_org_preferences_pid"],
   ].freeze
+
+  # These tables are not written through the PublicId NanoID concern, so adr/identifier-contract.md's
+  # fixed 21-character storage does not apply yet; they keep the earlier 25-character capacity check.
+  NON_NANOID_CAPACITY_TABLES = %w(logout_transactions members post_versions posts).freeze
+  LEGACY_CAPACITY = /char_length\(public_id(?:::text)?\) <= 25/
+  FIXED_LENGTH = /char_length\(\(?public_id\)?(?:::text)?\) = 21/
 
   CAPACITY_TABLES = {
     AppZenithRecord => %w(
@@ -65,15 +71,15 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
   end
 
   TARGETS.each do |model, table, constraint_name|
-    test "#{model.name} has a database public identity capacity constraint" do
+    test "#{model.name} has the fixed-length public identity constraint" do
       model.connection_pool.with_connection do |connection|
         constraint = connection.check_constraints(table).find { |item| item.name == constraint_name }
 
         assert constraint, "#{constraint_name} must be registered on #{table}"
-        assert_match(/char_length\(public_id(?:::text)?\) <= 25/, constraint.expression)
+        assert_match(/char_length\(\(?public_id\)?(?:::text)?\) = 21/, constraint.expression)
 
         record = model.create!
-        long_value = "a" * 26
+        long_value = "a" * 22
 
         assert_raises(ActiveRecord::StatementInvalid) do
           connection.transaction(requires_new: true) do
@@ -90,13 +96,16 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
 
   CAPACITY_TABLES.each do |record_class, tables|
     tables.each do |table|
-      test "#{table} has a database public identity capacity constraint" do
+      test "#{table} has its public identity length constraint" do
         record_class.connection_pool.with_connection do |connection|
-          constraint_name = "#{table}_public_id_max_length"
+          legacy = NON_NANOID_CAPACITY_TABLES.include?(table)
+          constraint_name = legacy ? "#{table}_public_id_max_length" : "chk_#{table}_pid"
           constraint = connection.check_constraints(table).find { |item| item.name == constraint_name }
 
           assert constraint, "#{constraint_name} must be registered on #{table}"
-          assert_match(/char_length\(public_id(?:::text)?\) <= 25/, constraint.expression)
+          expected = legacy ? LEGACY_CAPACITY : FIXED_LENGTH
+
+          assert_match(expected, constraint.expression)
         end
       end
     end

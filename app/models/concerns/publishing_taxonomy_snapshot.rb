@@ -19,6 +19,10 @@ module PublishingTaxonomySnapshot
 
     validates :vocabulary_public_id_snapshot, :vocabulary_key_snapshot, :vocabulary_kind_snapshot,
               :term_public_id_snapshot, :term_slug_snapshot, :term_name_snapshot, :locale_snapshot, presence: true
+    # Existing varchar(21) references reject longer input before the authoritative DB derivation.
+    # Shorter supplied values remain valid and are replaced; updates retain ReadOnlyRecord refusal.
+    validates :vocabulary_public_id_snapshot, :term_public_id_snapshot,
+              length: { maximum: 21 }, on: :create
   end
 
   # Public rendering shape. Database identifiers never appear here.

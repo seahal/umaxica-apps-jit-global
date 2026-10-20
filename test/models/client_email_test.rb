@@ -594,6 +594,10 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_operator ClientEmail.effective_binding.where(address_digest: digest).count, :<=, 1
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::ClientEmail)
+  end
+
   private
 
   def create_emails_concurrently(first_address, second_address)

@@ -10,6 +10,7 @@ class OpComProtocolEpoch < OpBaseComRecord
   validates :realm, inclusion: { in: [REALM] }, presence: true
   validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, presence: true
   validates :changed_at, presence: true
+  validates :realm, length: { maximum: 3 }
 
   class << self
     public

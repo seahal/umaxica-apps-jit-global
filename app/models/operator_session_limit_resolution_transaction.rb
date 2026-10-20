@@ -21,6 +21,12 @@ class OperatorSessionLimitResolutionTransaction < OpBaseOrgRecord
 
   validates :actor_ref, :browser_binding_digest, :started_at, :expires_at,
             presence: true
+  validates :sign_in_flow_id,
+            uniqueness: { conditions: -> { where(state_id: SessionLimitResolutionTransactionable::OPEN_STATES) } },
+            on: :create, if: -> { SessionLimitResolutionTransactionable::OPEN_STATES.include?(state_id) }
+  validates :actor_ref,
+            uniqueness: { conditions: -> { where(waiting_slot: SessionLimitResolutionTransactionable::WAITING_SLOT) } },
+            on: :create, if: -> { waiting_slot == SessionLimitResolutionTransactionable::WAITING_SLOT }
   validates :challenge_digest, presence: true, uniqueness: true
   # belongs_to_required_by_default is disabled, so keep these explicit checks.
   # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo

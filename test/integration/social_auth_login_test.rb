@@ -98,7 +98,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_google_user_#{SecureRandom.hex(4)}"
 
     # Create existing user with Google identity
-    existing_user = Client.create!(status_id: ClientStatus::NOTHING, public_id: "ex_#{SecureRandom.hex(4)}")
+    existing_user = Client.create!(status_id: ClientStatus::NOTHING, public_id: PublicId.generate)
     ClientGoogleIdentity.create!(
       user: existing_user,
       uid: existing_uid,
@@ -549,7 +549,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_google_welcome_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "wel_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     ClientGoogleIdentity.create!(
@@ -963,7 +963,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_google_session_limit_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "lim_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     ClientGoogleIdentity.create!(
@@ -1430,7 +1430,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_google_transport_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "trn_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     identity = ClientGoogleIdentity.create!(
@@ -1691,7 +1691,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_google_signup_entry_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "sug_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     ClientGoogleIdentity.create!(
@@ -4220,7 +4220,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Apple login with existing identity does not create new user" do
     existing_uid = "existing_apple_user_#{SecureRandom.hex(4)}"
 
-    existing_user = Client.create!(status_id: ClientStatus::NOTHING, public_id: "ex_ap_#{SecureRandom.hex(4)}")
+    existing_user = Client.create!(status_id: ClientStatus::NOTHING, public_id: PublicId.generate)
     ClientAppleIdentity.create!(
       user: existing_user,
       uid: existing_uid,
@@ -4666,7 +4666,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_apple_dashboard_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "apd_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     ClientAppleIdentity.create!(
@@ -5116,7 +5116,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_apple_signup_entry_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "sua_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     ClientAppleIdentity.create!(
@@ -7405,7 +7405,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     existing_user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "at_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     identity = ClientGoogleIdentity.create!(

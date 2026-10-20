@@ -91,12 +91,12 @@ class OperatorSignUpFlow < OpBaseOrgRecord
   validates :status_id, presence: true,
                         inclusion: { in: ->(record) { record.class::STATUS_IDS } }
   # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
-  validates :step, presence: true, inclusion: { in: ->(record) { record.class::STEPS } },
-                   if: ->(record) { record.class.const_defined?(:STEPS, false) }
-  validates :state, presence: true, if: ->(record) { record.has_attribute?(:state) }
+  validates :step, presence: true, inclusion: { in: STEPS }
+  validates :state, presence: true
   validate :legacy_state_matches_status
   validate :step_matches_status
   validate :completed_status_has_completed_at
+  validates :result_digest, length: { maximum: 64 }
 
   before_validation :assign_default_status_id
   before_validation :sync_legacy_state_from_status

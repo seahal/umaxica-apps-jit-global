@@ -59,7 +59,7 @@ class ClientTelephoneStatusTest < ActiveSupport::TestCase
 
   test "restrict_with_error prevents deletion when telephones exist" do
     status = ClientTelephoneStatus.find(ClientTelephoneStatus::VERIFIED)
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     ClientTelephone.create!(
       number: "+81901234567",
       user_id: user.id,

@@ -348,3 +348,14 @@ the independent-connection concurrency cases; it does not replace them or the cu
   `retention_policy_pending` deferral; encrypted moniker history is preserved. The absence of
   ownership periods does not authorize deletion. Personal-data retention duration and final
   deletion/anonymization policy remain unresolved and are not inferred from this deferral mechanism.
+
+## AV-10 — Explicit lifecycle catalog booleans
+
+- Scope: creation of AvatarLifecycleState reference records under the
+  [lifecycle authority ADR](../../adr/avatar-lifecycle-state-authority.md).
+- Each capability, visibility, owner-restoration and terminal flag has an explicit true or false
+  value. False persists as a valid value; nil and empty boolean inputs are rejected before model
+  insertion. PostgreSQL NOT NULL independently rejects validation-disabled NULL writes.
+- Current catalog values, lifecycle transition edges and projected existing-record behavior remain
+  unchanged. Check [catalog model tests](../../test/models/avatar_lifecycle_state_test.rb),
+  lifecycle transition tests and the Avatar authority lifecycle invariant.

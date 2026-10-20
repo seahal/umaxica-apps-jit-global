@@ -13,7 +13,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "wd#{SecureRandom.hex(8)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
     )
@@ -21,7 +21,7 @@ class WithdrawalLifecycleSecurityTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "wo#{SecureRandom.hex(8)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
     )

@@ -168,7 +168,7 @@ class PersonaEnterpriseModelLayerTest < ActiveSupport::TestCase
           [
             {
               client_identity_id: identity.id,
-              public_id: "dup-#{SecureRandom.hex(8)}",
+              public_id: PublicId.generate,
               title: "P4",
               created_at: Time.current,
               updated_at: Time.current,

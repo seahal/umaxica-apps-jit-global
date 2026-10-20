@@ -32,4 +32,8 @@ class OperatorNotificationRecordTest < ActiveSupport::TestCase
     assert_equal operator, notification.operator
     assert_includes operator.notification_records, notification
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorNotificationRecord)
+  end
 end

@@ -188,4 +188,8 @@ class OperatorTelephoneTest < ActiveSupport::TestCase
 
     assert_includes duplicate.errors.details[:number].pluck(:error), :taken
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorTelephone)
+  end
 end

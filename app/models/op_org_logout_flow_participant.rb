@@ -15,4 +15,7 @@ class OpOrgLogoutFlowParticipant < OpBaseOrgRecord
   validates :realm, inclusion: { in: [REALM] }
   validates :delivery_attempts, numericality: { only_integer: true, greater_than_or_equal_to: 0 },
                                 presence: true
+  validates :realm, length: { maximum: 3 }
+  validates :client_id, :last_error_code, length: { maximum: 64 }
+  validates :endpoint_identity, :issuer, :sid, length: { maximum: 255 }
 end

@@ -8,6 +8,8 @@ class OpComGrant < OpBaseComRecord
 
   belongs_to :visitor_device_session, class_name: "VisitorDeviceSession", foreign_key: :device_session_id,
                                       inverse_of: :op_com_grants
+  # FIXME: The checker requests a token FK deliberately removed for stable device-session
+  # ownership; D3 preserves historical grants and requires a new decision before adding an FK.
   belongs_to :visitor_token, inverse_of: :op_com_grants
 
   validates :public_id, presence: true, uniqueness: true, length: { maximum: 21 }

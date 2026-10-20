@@ -623,6 +623,7 @@ CREATE TABLE public.chronicle_retention_policies (
     permanent boolean NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_chronicle_retention_policies_duration_days CHECK ((duration_days >= 0)),
     CONSTRAINT chk_chronicle_retention_policies_permanent_duration CHECK (((permanent = false) OR (duration_days = 0)))
 );
 
@@ -4138,6 +4139,8 @@ ALTER TABLE ONLY public.org_preference_chronicles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020110001'),
+('20261020110000'),
 ('20261009204220'),
 ('20261009204011'),
 ('20260926130000'),

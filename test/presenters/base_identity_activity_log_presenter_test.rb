@@ -109,8 +109,8 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   end
 
   test "merges persisted legacy and common passkey history under owner scope before limiting" do
-    client = Client.create!
-    other = Client.create!
+    client = fresh_client
+    other = fresh_client
     policy =
       ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |record|
         record.name = "Security"
@@ -148,7 +148,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   end
 
   test "an owner without history yields no activity and the limit must be a positive integer" do
-    client = Client.create!
+    client = fresh_client
     presenter = Base::Identity::ActivityLogPresenter.new(surface: :app)
     scope = ClientChronicle.where(subject_type: "Client", subject_id: client.id)
 
@@ -161,7 +161,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   end
 
   test "equal occurrence times across legacy and common history order by creation time" do
-    client = Client.create!
+    client = fresh_client
     policy =
       ChronicleRetentionPolicy.find_or_create_by!(code: "security") do |record|
         record.name = "Security"
@@ -190,7 +190,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   end
 
   test "legacy history inserted out of occurrence order still returns the latest occurrence first" do
-    client = Client.create!
+    client = fresh_client
     occurred_at = Time.utc(2026, 10, 1, 12)
     later = ClientChronicle.create!(
       actor: client, subject_type: "Client", subject_id: client.id,
@@ -229,7 +229,7 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   end
 
   test "deduplicates legacy and common passkey facts only with matching stable references" do
-    client = Client.create!
+    client = fresh_client
     external_id = SecureRandom.uuid
     operation_ref = SecureRandom.uuid
     occurred_at = Time.utc(2026, 10, 1, 12)
@@ -332,5 +332,14 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
     assert_equal "Safari / macOS", safari_row.fetch(:device)
     assert_match(/unknown|不明/i, unknown_row.fetch(:device))
     assert_match(/unknown|不明/i, non_hash_row.fetch(:device))
+  end
+
+  private
+
+  # Fixture loading resets the clients id sequence, so a new Client can reuse an id that a
+  # non-transactional test already wrote committed chronicle rows for. Those rows are not this
+  # client's history; the test transaction restores them afterwards.
+  def fresh_client
+    Client.create!.tap { |client| ClientChronicle.where(subject_type: "Client", subject_id: client.id).delete_all }
   end
 end

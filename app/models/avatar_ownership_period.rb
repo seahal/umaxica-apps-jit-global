@@ -43,6 +43,7 @@ class AvatarOwnershipPeriod < AvatarRecord
   validates :owner_collective_public_id, presence: true
   validates :valid_from, presence: true
   validates :id, length: { maximum: 255 }
+  validates :avatar_id, :owner_organization_id, exclusion: { in: [nil] }
 
   scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
 

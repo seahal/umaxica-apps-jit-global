@@ -35,4 +35,7 @@ class OpAppConsumedJti < OpBaseAppRecord
 
   validates :realm, inclusion: { in: [REALM] }, presence: true
   validates :purpose, :issuer, :client_id, :jti_digest, :expires_at, :consumed_at, presence: true
+  validates :realm, length: { maximum: 3 }
+  validates :client_id, :jti_digest, :purpose, length: { maximum: 64 }
+  validates :issuer, length: { maximum: 255 }
 end

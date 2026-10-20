@@ -51,6 +51,8 @@ class VisitorStepUpCeremonyTransaction < OpBaseComRecord
 
   ceremony_surface "com"
 
+  validates :cancellation_handoff_digest, :result_digest, length: { maximum: 64 }
+
   private
 
   def permitted_ceremony_methods = %w(passkey email_otp)

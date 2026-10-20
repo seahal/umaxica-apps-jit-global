@@ -18,8 +18,12 @@ class RpWarpAppOpSessionBinding < RpWarpAppRecord
                             dependent: :restrict_with_error
 
   validates :issuer, :realm, :client_id, :sid, presence: true
+  validates :sid, uniqueness: { scope: %i(issuer realm client_id) }, on: :create
   validates :realm, inclusion: { in: [REALM] }
   validates :client_id, inclusion: { in: [CLIENT_ID] }
+  validates :realm, length: { maximum: 3 }
+  validates :client_id, length: { maximum: 64 }
+  validates :issuer, :sid, length: { maximum: 255 }
 
   public
 

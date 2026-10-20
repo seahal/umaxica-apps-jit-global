@@ -6,7 +6,7 @@ require "test_helper"
 class OidcConnectionRecordTest < ActiveSupport::TestCase
   setup do
     ClientStatus.ensure_defaults!
-    @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::ACTIVE)
+    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
   end
 
   test "status helpers classify active and revoked connections" do

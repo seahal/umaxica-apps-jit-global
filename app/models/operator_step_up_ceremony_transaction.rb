@@ -51,6 +51,8 @@ class OperatorStepUpCeremonyTransaction < OpBaseOrgRecord
 
   ceremony_surface "org"
 
+  validates :cancellation_handoff_digest, :result_digest, length: { maximum: 64 }
+
   private
 
   def permitted_ceremony_methods = %w(passkey)

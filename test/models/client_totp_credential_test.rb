@@ -32,7 +32,7 @@ require "test_helper"
 
 class ClientTotpCredentialTest < ActiveSupport::TestCase
   def setup
-    @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
     ClientTotpCredentialStatus.find_or_create_by!(id: ClientTotpCredentialStatus::NOTHING)
     @status = ClientTotpCredentialStatus.find(ClientTotpCredentialStatus::ACTIVE)
 
@@ -253,5 +253,9 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::RecordNotDestroyed) { @user.reload.destroy! }
     assert ClientTotpCredential.exists?(record.id)
     assert Client.exists?(@user.id)
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::ClientTotpCredential)
   end
 end

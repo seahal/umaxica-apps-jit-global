@@ -16,6 +16,7 @@ class GroupAvatarMembership < AvatarRecord
   validates :avatar_id, uniqueness: { scope: :avatar_group_id, conditions: -> { where(removed_at: nil) } }
   validate :removed_at_not_before_assigned_at
   validate :removed_timestamp_matches_state
+  validates :assigned_at, exclusion: { in: [nil] }
 
   before_validation :default_assigned_at, on: :create
 

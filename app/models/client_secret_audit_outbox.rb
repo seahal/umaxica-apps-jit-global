@@ -25,6 +25,7 @@ class ClientSecretAuditOutbox < AppZenithRecord
                                          greater_than_or_equal_to: 0,
                                          less_than_or_equal_to: 20, }, allow_nil: true
   validate :issuance_purge_authority_snapshot
+  validates :event_name, :reason, length: { maximum: 128 }
 
   class << self
     public

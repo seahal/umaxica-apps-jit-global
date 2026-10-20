@@ -659,6 +659,8 @@ ja:
       client_secret_credential:
         client: 利用者
         issuance: Secret の発行操作
+      agent:
+        title: タイトル
       agent_assignment:
         assigned_at: 割当日時
       app_enforcement_appeal:
@@ -675,6 +677,8 @@ ja:
         muter_avatar_id: ミュート実行Avatar
       avatar_persona_binding:
         persona_id: 紐付け先ペルソナ
+      bureau:
+        title: タイトル
       client:
         identity_state: ID状態
         mfa_level: MFAレベル
@@ -706,6 +710,7 @@ ja:
         source_record_id: ソースレコードID
       client_persona:
         client_identity_id: ClientIdentity
+        title: タイトル
       client_secret_audit_outbox:
         actor_public_ref: 実行主体の参照
         client_ref: Clientの参照
@@ -726,6 +731,12 @@ ja:
       com_enforcement_appeal:
         reason_code: 申し立て理由
         statement: 申し立て内容
+      company:
+        title: タイトル
+      enterprise:
+        title: タイトル
+      individual:
+        title: タイトル
       individual_assignment:
         assigned_at: 割当日時
       operator_identity:
@@ -920,6 +931,9 @@ ja:
     ack_schedule_purge: 削除予定確認
     active_avatars: active avatars
     address: メールアドレス
+    agent_id: エージェントID
+    agent_public_id: エージェント参照
+    app_enforcement_case_id: APP制限措置ID
     app_preference_languages: 言語設定
     app_preference_regions: 地域設定
     app_preference_themes: テーマ設定
@@ -932,10 +946,13 @@ ja:
     base: ベース
     birthdate: 生年月日
     body: 本文
+    bureau_id: 部局ID
+    can_create_content: コンテンツ作成可否
     canceled_at: 取消日時
     capability_id: ケイパビリティID
     client_emails: メールアドレス
     client_id: クライアントID
+    client_persona_id: ペルソナID
     client_preference_themes: テーマ設定
     client_preference_timezones: タイムゾーン設定
     client_telephones: 電話番号
@@ -943,6 +960,36 @@ ja:
     code: コード
     code_challenge: コードチャレンジ
     code_challenge_method: コードチャレンジ方式
+    com_enforcement_case_id: COM制限措置ID
+    company_id: 会社ID
+    content_digest: コンテンツダイジェスト
+    discoverable: 検索表示可否
+    editable_by_owner: 所有者による編集可否
+    effective_from: 公開開始日時
+    enterprise_id: エンタープライズID
+    followable: フォロー可否
+    group_attachable: グループ追加可否
+    individual_id: 個人ID
+    key: キー
+    locale: ロケール
+    moderation_visible: モデレーション表示可否
+    op_session_binding_id: OPセッション結合ID
+    org_enforcement_case_id: ORG制限措置ID
+    persona_id: ペルソナID
+    sid: セッション参照
+    jti_digest: イベントダイジェスト
+    subject: 主体参照
+    transfer_reservation_id: 移管予約
+    avatar_id: アバター
+    attempt_number: 試行番号
+    actor_ref: 主体参照
+    sign_in_flow_id: サインインフロー
+    step_up_ceremony_transaction_ref: 追加認証取引参照
+    token_id: ルートセッション参照
+    storage_key: 保存先参照
+    persona_public_id: ペルソナ参照
+    restorable_by_owner: 所有者による復元可否
+    terminal: 終端状態
     transaction_id: トランザクションID
     com_preference_languages: 言語設定
     com_preference_regions: 地域設定
@@ -1001,6 +1048,7 @@ ja:
     pass_code: 認証コード
     password_digest: パスワードダイジェスト
     performant: パフォーマンスCookie
+    position: 表示順
     preference: 設定
     preference_id: 設定ID
     presented_at: 提示日時
@@ -1018,6 +1066,7 @@ ja:
     result_jti: 結果JTI
     role: ロール
     secret_credential_value: シークレット
+    sequence: 連番
     sign_count: 署名回数
     social_provider: ソーシャルプロバイダー
     source_record_id: ソースレコードID
@@ -1040,6 +1089,7 @@ ja:
     target_operator: 対象オペレーター
     targetable: ターゲティングCookie
     telephone_occurrence_id: 電話発生ID
+    term_public_id_snapshot: 用語公開IDのスナップショット
     token: トークン
     token_expires_at: トークン有効期限
     uid: UID
@@ -1048,8 +1098,10 @@ ja:
     user_occurrence_id: ユーザー発生ID
     user_secret_credential_kind: シークレット種別
     user_token_id: ユーザートークンID
+    visible_by_default: 標準表示可否
     visitor: ビジター
     visitor_token_id: ビジタートークンID
+    vocabulary_public_id_snapshot: 語彙公開IDのスナップショット
     webauthn_id: WebAuthn ID
   auth:
     app:

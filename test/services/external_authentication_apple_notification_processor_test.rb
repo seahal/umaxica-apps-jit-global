@@ -6,7 +6,7 @@ class ExternalAuthenticationAppleNotificationProcessorTest < ActiveSupport::Test
   fixtures :client_statuses
 
   test "consent revocation disables the legacy Apple credential and every app session" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "n#{SecureRandom.hex(8)}")
+    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
     identity = ClientAppleIdentity.create!(
       user: client,
       provider: "apple",
@@ -35,7 +35,7 @@ class ExternalAuthenticationAppleNotificationProcessorTest < ActiveSupport::Test
   end
 
   test "account deletion is terminal and cannot regress to consent revocation" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "n#{SecureRandom.hex(8)}")
+    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
     identity = ClientAppleIdentity.create!(
       user: client,
       provider: "apple",
@@ -84,7 +84,7 @@ class ExternalAuthenticationAppleNotificationProcessorTest < ActiveSupport::Test
   end
 
   test "does not apply an older account deletion after a newer consent revocation" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "n#{SecureRandom.hex(8)}")
+    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
     identity = ClientAppleIdentity.create!(
       user: client,
       provider: "apple",

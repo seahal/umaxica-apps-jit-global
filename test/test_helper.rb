@@ -82,6 +82,7 @@ require_relative "support/oidc_authorization_response_helper"
 require_relative "support/auth_ceremony_entry_helper"
 require_relative "support/auth_email_mfa_helper"
 require_relative "support/strict_loading_association_preloader"
+require_relative "support/public_id_fixed_length_assertions"
 
 # Inject the Turnstile stub for the whole suite. Application code resolves the verifier
 # through Turnstile::VerifierFactory, so no production class knows about the test suite.
@@ -414,6 +415,7 @@ module ActiveSupport
     include LoginCooldownHelper
     include OutboundHttpStub
     include AuthCeremonyEntryHelper
+    include PublicIdFixedLengthAssertions
 
     # Physical cores, not logical processors (SMT/vCPUs): measured on a 16-core/32-thread host --
     # `PARALLEL_WORKERS=32` (one per logical thread) took 37s on a 3000-test subset versus 22-24s

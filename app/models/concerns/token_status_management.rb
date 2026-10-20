@@ -81,6 +81,7 @@ module TokenStatusManagement
           last_step_up_aal: nil,
           last_step_up_method: nil, last_step_up_purpose: nil, last_step_up_audience: nil,
           last_step_up_session_public_id: nil, last_step_up_phishing_resistant: false,
+          # FIXME: Remediation D6 retains nullable cleared evidence; NOT NULL would break revocation.
           last_step_up_user_verified: nil, last_step_up_credential_ref: nil,
           last_step_up_full_reauthentication: nil, last_step_up_resource_ref: nil,
           last_step_up_tenant_ref: nil,

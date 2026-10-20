@@ -32,4 +32,8 @@ class PersonaAssignment < AppRpRecord
 
   belongs_to :persona, class_name: "ClientPersona", inverse_of: :persona_assignments
   belongs_to :client_identity, inverse_of: :persona_assignments
+
+  validates :persona_id,
+            uniqueness: { scope: :client_identity_id, conditions: -> { where(revoked_at: nil) } },
+            on: :create, if: -> { revoked_at.nil? }
 end

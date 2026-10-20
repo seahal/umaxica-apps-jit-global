@@ -8,6 +8,9 @@ module PublishingEntryRevisionRecord
     include PublicId
     include PublishingEncryptedContent
 
+    validates :sequence,
+              numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: 2_147_483_647 }
+
     family = name.deconstantize
     belongs_to :entry, class_name: "#{family}::Entry", inverse_of: :revisions
     belongs_to :restored_from_revision, class_name: "#{family}::EntryRevision", optional: true

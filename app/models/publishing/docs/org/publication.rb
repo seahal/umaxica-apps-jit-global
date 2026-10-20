@@ -6,6 +6,8 @@ module Publishing
       class Publication < PublishingRecord
         self.table_name = "publishing_docs_org_publications"
         include PublishingPublicationRecord
+
+        validates :created_by_operator_public_id, :ended_by_operator_public_id, length: { maximum: 21 }
       end
     end
   end

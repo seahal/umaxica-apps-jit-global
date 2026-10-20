@@ -62,4 +62,6 @@ class OperatorEntraIdentity < OrgRpRecord
   validates :entra_tenant_id, uniqueness: { scope: :entra_object_id }
   validates :entra_tenant_id, format: { with: ENTRA_ID_FORMAT, message: :uuid_format }
   validates :entra_object_id, format: { with: ENTRA_ID_FORMAT, message: :uuid_format }
+  validates :entra_object_id, :entra_tenant_id, length: { maximum: 36 }
+  validates :evidence_issuer, :evidence_subject, length: { maximum: 512 }
 end

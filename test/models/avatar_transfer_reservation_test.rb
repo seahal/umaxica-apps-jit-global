@@ -532,6 +532,10 @@ class AvatarTransferReservationTest < ActiveSupport::TestCase
     threads&.each(&:join)
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::AvatarTransferReservation)
+  end
+
   private
 
   def enterprise_period_for(avatar, public_id)

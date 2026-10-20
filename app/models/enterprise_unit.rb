@@ -56,4 +56,8 @@ class EnterpriseUnit < AppRpRecord
   has_many :ancestors, through: :ancestor_links, source: :ancestor
   has_many :descendants, through: :descendant_links, source: :descendant
   has_many :persona_memberships, dependent: :restrict_with_error, inverse_of: :enterprise_unit
+
+  validates :enterprise_id, exclusion: { in: [nil] }
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: { scope: %i(enterprise_id) }, allow_nil: true, if: :will_save_change_to_id?
 end

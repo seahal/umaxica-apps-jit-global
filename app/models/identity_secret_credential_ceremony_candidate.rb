@@ -10,4 +10,5 @@ class IdentitySecretCredentialCeremonyCandidate < OpBaseAppRecord
   validates :enabled, inclusion: { in: [true, false] }
   validates :surface, inclusion: { in: IdentitySecretCredentialCeremonyContract::SURFACES }
   validates :operation, inclusion: { in: IdentitySecretCredentialCeremonyContract::OPERATIONS }
+  validates :name, exclusion: { in: [nil] }
 end

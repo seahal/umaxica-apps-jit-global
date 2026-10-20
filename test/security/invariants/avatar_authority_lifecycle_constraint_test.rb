@@ -6,7 +6,7 @@ require_relative "../../support/avatar_test_factory"
 
 class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
   setup do
-    [ClientStatus, ClientVisibility, ClientIdentityState, HandleStatus].each do |klass|
+    [ClientStatus, ClientVisibility, ClientIdentityState, HandleStatus, AvatarMembershipStatus].each do |klass|
       klass.ensure_defaults! if klass.respond_to?(:ensure_defaults!)
     end
     AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
@@ -53,9 +53,9 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
     assert_raises(ActiveRecord::StatementInvalid) do
       AvatarRecord.lease_connection.execute(<<~SQL.squish)
         INSERT INTO avatar_memberships
-          (avatar_id, actor_id, role_id, valid_from, valid_to, created_at, updated_at)
+          (avatar_id, actor_id, role_id, avatar_membership_status_id, valid_from, valid_to, created_at, updated_at)
         VALUES
-          (#{avatar.id}, 910001, #{avatar_roles(:viewer).id}, #{valid_from}, #{valid_to}, #{now}, #{now})
+          (#{avatar.id}, 910001, #{avatar_roles(:viewer).id}, #{AvatarMembershipStatus::ACTIVE}, #{valid_from}, #{valid_to}, #{now}, #{now})
       SQL
     end
   end
@@ -77,17 +77,17 @@ class AvatarAuthorityLifecycleConstraintTest < ActiveSupport::TestCase
 
     AvatarRecord.lease_connection.execute(<<~SQL.squish)
       INSERT INTO avatar_memberships
-        (avatar_id, actor_id, role_id, valid_from, valid_to, created_at, updated_at)
+        (avatar_id, actor_id, role_id, avatar_membership_status_id, valid_from, valid_to, created_at, updated_at)
       VALUES
-        (#{avatar.id}, 910002, #{avatar_roles(:viewer).id}, #{valid_from}, 'infinity', #{now}, #{now})
+        (#{avatar.id}, 910002, #{avatar_roles(:viewer).id}, #{AvatarMembershipStatus::ACTIVE}, #{valid_from}, 'infinity', #{now}, #{now})
     SQL
 
     assert_raises(ActiveRecord::RecordNotUnique) do
       AvatarRecord.lease_connection.execute(<<~SQL.squish)
         INSERT INTO avatar_memberships
-          (avatar_id, actor_id, role_id, valid_from, valid_to, created_at, updated_at)
+          (avatar_id, actor_id, role_id, avatar_membership_status_id, valid_from, valid_to, created_at, updated_at)
         VALUES
-          (#{avatar.id}, 910002, #{avatar_roles(:viewer).id}, #{valid_from}, 'infinity', #{now}, #{now})
+          (#{avatar.id}, 910002, #{avatar_roles(:viewer).id}, #{AvatarMembershipStatus::ACTIVE}, #{valid_from}, 'infinity', #{now}, #{now})
       SQL
     end
   end

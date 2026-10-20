@@ -17,7 +17,7 @@ class DatabaseConsistencyTest < ActiveSupport::TestCase
     email = ClientEmail.new(
       address: "test@example.com",
       user_id: clients(:one).id,
-      public_id: "test_public_id_12345",
+      public_id: "test_public_id_12345x",
     )
 
     assert_predicate email, :valid?
@@ -31,7 +31,7 @@ class DatabaseConsistencyTest < ActiveSupport::TestCase
     duplicate = ClientEmail.new(
       address: "other@example.com",
       user_id: clients(:one).id,
-      public_id: "test_public_id_12345",
+      public_id: "test_public_id_12345x",
     )
 
     assert_not duplicate.valid?

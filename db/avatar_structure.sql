@@ -166,6 +166,7 @@ CREATE TABLE public.avatar_agent_bindings (
     public_id character varying(21) CONSTRAINT avatar_agent_bindings_public_id_not_null1 NOT NULL,
     assigned_at timestamp(6) with time zone CONSTRAINT avatar_agent_bindings_assigned_at_not_null1 NOT NULL,
     revoked_at timestamp(6) with time zone,
+    CONSTRAINT chk_avatar_agent_bindings_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_avatar_agent_bindings_revoked_after_assigned CHECK (((revoked_at IS NULL) OR (revoked_at >= assigned_at)))
 );
 
@@ -277,6 +278,7 @@ CREATE TABLE public.avatar_bureau_agent_grants (
     CONSTRAINT chk_avatar_bureau_agent_grants_authority_surface CHECK (((granted_by_surface)::text = 'org'::text)),
     CONSTRAINT chk_avatar_bureau_agent_grants_capability CHECK (((capability)::text = ANY ((ARRAY['avatar.view'::character varying, 'avatar.update'::character varying, 'avatar.group.manage'::character varying, 'avatar.group.attach'::character varying, 'avatar.group.detach'::character varying])::text[]))),
     CONSTRAINT chk_avatar_bureau_agent_grants_nonblank CHECK (((char_length(btrim((agent_public_id)::text)) > 0) AND (char_length(btrim((public_id)::text)) > 0) AND (char_length(btrim((capability)::text)) > 0) AND (char_length(btrim((granted_by_actor_public_id)::text)) > 0))),
+    CONSTRAINT chk_avatar_bureau_agent_grants_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_avatar_bureau_agent_grants_revocation_order CHECK (((revoked_at IS NULL) OR (revoked_at >= granted_at)))
 );
 
@@ -501,6 +503,7 @@ CREATE TABLE public.avatar_enterprise_persona_grants (
     CONSTRAINT chk_avatar_enterprise_persona_grants_authority_surface CHECK (((granted_by_surface)::text = 'app'::text)),
     CONSTRAINT chk_avatar_enterprise_persona_grants_capability CHECK (((capability)::text = ANY ((ARRAY['avatar.view'::character varying, 'avatar.update'::character varying, 'avatar.group.manage'::character varying, 'avatar.group.attach'::character varying, 'avatar.group.detach'::character varying])::text[]))),
     CONSTRAINT chk_avatar_enterprise_persona_grants_nonblank CHECK (((char_length(btrim((persona_public_id)::text)) > 0) AND (char_length(btrim((public_id)::text)) > 0) AND (char_length(btrim((capability)::text)) > 0) AND (char_length(btrim((granted_by_actor_public_id)::text)) > 0))),
+    CONSTRAINT chk_avatar_enterprise_persona_grants_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_avatar_enterprise_persona_grants_revocation_order CHECK (((revoked_at IS NULL) OR (revoked_at >= granted_at)))
 );
 
@@ -717,7 +720,7 @@ ALTER SEQUENCE public.avatar_group_ownership_periods_id_seq OWNED BY public.avat
 
 CREATE TABLE public.avatar_groups (
     id bigint NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     account_surface character varying NOT NULL,
     account_public_id character varying NOT NULL,
     name character varying NOT NULL,
@@ -726,9 +729,9 @@ CREATE TABLE public.avatar_groups (
     archived_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT avatar_groups_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
     CONSTRAINT chk_avatar_groups_account_surface CHECK (((account_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying, 'com'::character varying])::text[]))),
     CONSTRAINT chk_avatar_groups_archive_state CHECK ((((state)::text = 'archived'::text) = (archived_at IS NOT NULL))),
+    CONSTRAINT chk_avatar_groups_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_avatar_groups_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'archived'::character varying])::text[])))
 );
 
@@ -765,6 +768,7 @@ CREATE TABLE public.avatar_individual_bindings (
     public_id character varying(21) CONSTRAINT avatar_individual_bindings_public_id_not_null1 NOT NULL,
     assigned_at timestamp(6) with time zone CONSTRAINT avatar_individual_bindings_assigned_at_not_null1 NOT NULL,
     revoked_at timestamp(6) with time zone,
+    CONSTRAINT chk_avatar_individual_bindings_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_avatar_individual_bindings_revoked_after_assigned CHECK (((revoked_at IS NULL) OR (revoked_at >= assigned_at)))
 );
 
@@ -904,7 +908,7 @@ CREATE TABLE public.avatar_memberships (
     id bigint NOT NULL,
     actor_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
-    avatar_membership_status_id bigint,
+    avatar_membership_status_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     granted_by_actor_id bigint,
     role_id bigint DEFAULT 0 NOT NULL,
@@ -1033,7 +1037,7 @@ CREATE TABLE public.avatar_ownership_periods (
     valid_from timestamp with time zone NOT NULL,
     valid_to timestamp with time zone DEFAULT 'infinity'::timestamp with time zone NOT NULL,
     owner_surface character varying,
-    owner_collective_public_id character varying,
+    owner_collective_public_id character varying NOT NULL,
     CONSTRAINT chk_avatar_ownership_periods_avatar_ownership_status_id_positiv CHECK (((avatar_ownership_status_id IS NULL) OR (avatar_ownership_status_id >= 0))),
     CONSTRAINT chk_avatar_ownership_periods_owner_reference CHECK ((((owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND (owner_collective_public_id IS NOT NULL) AND ((owner_collective_public_id)::text <> ''::text))),
     CONSTRAINT chk_avatar_ownership_periods_strict_interval CHECK ((valid_from < valid_to))
@@ -1118,7 +1122,8 @@ CREATE TABLE public.avatar_ownership_transfers (
     CONSTRAINT chk_avatar_ownership_transfer_owner_changed CHECK ((((from_owner_surface)::text <> (to_owner_surface)::text) OR ((from_owner_collective_public_id)::text <> (to_owner_collective_public_id)::text))),
     CONSTRAINT chk_avatar_ownership_transfer_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'cancelled'::character varying, 'expired'::character varying])::text[]))),
     CONSTRAINT chk_avatar_ownership_transfer_surfaces CHECK ((((from_owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((to_owner_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((request_actor_surface)::text = ANY ((ARRAY['app'::character varying, 'org'::character varying])::text[])) AND ((from_owner_surface)::text = (request_actor_surface)::text))),
-    CONSTRAINT chk_avatar_ownership_transfer_terminal_facts CHECK (((((state)::text = 'pending'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'accepted'::text) AND (accepted_at IS NOT NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND ((accept_actor_surface)::text = (to_owner_surface)::text) AND (accept_actor_public_id IS NOT NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'cancelled'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NOT NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND ((cancel_actor_surface)::text = (from_owner_surface)::text) AND (cancel_actor_public_id IS NOT NULL)) OR (((state)::text = 'expired'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NOT NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL))))
+    CONSTRAINT chk_avatar_ownership_transfer_terminal_facts CHECK (((((state)::text = 'pending'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'accepted'::text) AND (accepted_at IS NOT NULL) AND (cancelled_at IS NULL) AND (expired_at IS NULL) AND ((accept_actor_surface)::text = (to_owner_surface)::text) AND (accept_actor_public_id IS NOT NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)) OR (((state)::text = 'cancelled'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NOT NULL) AND (expired_at IS NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND ((cancel_actor_surface)::text = (from_owner_surface)::text) AND (cancel_actor_public_id IS NOT NULL)) OR (((state)::text = 'expired'::text) AND (accepted_at IS NULL) AND (cancelled_at IS NULL) AND (expired_at IS NOT NULL) AND (accept_actor_surface IS NULL) AND (accept_actor_public_id IS NULL) AND (cancel_actor_surface IS NULL) AND (cancel_actor_public_id IS NULL)))),
+    CONSTRAINT chk_avatar_ownership_transfers_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1182,6 +1187,7 @@ CREATE TABLE public.avatar_persona_bindings (
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_avatar_persona_bindings_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_avatar_persona_bindings_revoked_after_assigned CHECK (((revoked_at IS NULL) OR (revoked_at >= assigned_at)))
 );
 
@@ -1323,6 +1329,7 @@ CREATE TABLE public.avatar_transfer_reservations (
     CONSTRAINT chk_avatar_transfer_reservations_idempotency_uuid CHECK (((idempotency_key)::text ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'::text)),
     CONSTRAINT chk_avatar_transfer_reservations_nonblank CHECK (((char_length(btrim((public_id)::text)) > 0) AND (char_length(btrim((request_fingerprint)::text)) > 0))),
     CONSTRAINT chk_avatar_transfer_reservations_operation_kind CHECK (((operation_kind)::text = ANY ((ARRAY['enterprise_to_enterprise'::character varying, 'enterprise_to_bureau'::character varying, 'bureau_to_enterprise'::character varying, 'bureau_to_bureau'::character varying])::text[]))),
+    CONSTRAINT chk_avatar_transfer_reservations_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_avatar_transfer_reservations_state CHECK (((state)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'cancelled'::character varying, 'expired'::character varying])::text[]))),
     CONSTRAINT chk_avatar_transfer_reservations_within_five_days CHECK (((expires_at - requested_at) <= '5 days'::interval))
 );
@@ -1361,15 +1368,15 @@ CREATE TABLE public.avatars (
     image_data jsonb,
     lock_version integer DEFAULT 0 NOT NULL,
     owner_organization_id character varying,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     representing_organization_id character varying,
     updated_at timestamp(6) with time zone NOT NULL,
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT avatars_shreddable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT avatars_discarded_at_not_null NOT NULL,
     lifecycle_state_id bigint NOT NULL,
     ownership_integrity_version bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT avatars_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
-    CONSTRAINT chk_avatars_capability_id_positive CHECK ((capability_id >= 0))
+    CONSTRAINT chk_avatars_capability_id_positive CHECK ((capability_id >= 0)),
+    CONSTRAINT chk_avatars_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1622,7 +1629,7 @@ ALTER SEQUENCE public.client_avatar_visibilities_id_seq OWNED BY public.client_a
 
 CREATE TABLE public.group_avatar_memberships (
     id bigint NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     avatar_group_id bigint NOT NULL,
     avatar_id bigint NOT NULL,
     role character varying DEFAULT 'member'::character varying NOT NULL,
@@ -1632,11 +1639,12 @@ CREATE TABLE public.group_avatar_memberships (
     removed_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_group_avatar_memberships_pid CHECK ((char_length((public_id)::text) = 21)),
+    CONSTRAINT chk_group_avatar_memberships_position CHECK (("position" >= 0)),
     CONSTRAINT chk_group_avatar_memberships_removed_after_assigned CHECK (((removed_at IS NULL) OR (removed_at >= assigned_at))),
     CONSTRAINT chk_group_avatar_memberships_removed_state CHECK ((((state)::text = 'removed'::text) = (removed_at IS NOT NULL))),
     CONSTRAINT chk_group_avatar_memberships_role CHECK (((role)::text = 'member'::text)),
-    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'removed'::character varying])::text[]))),
-    CONSTRAINT group_avatar_memberships_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_group_avatar_memberships_state CHECK (((state)::text = ANY ((ARRAY['active'::character varying, 'removed'::character varying])::text[])))
 );
 
 
@@ -1696,7 +1704,7 @@ CREATE TABLE public.handle_assignments (
     assigned_by_actor_id bigint,
     avatar_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    handle_assignment_status_id bigint,
+    handle_assignment_status_id bigint NOT NULL,
     handle_id bigint NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     valid_from timestamp with time zone NOT NULL,
@@ -1761,12 +1769,12 @@ CREATE TABLE public.handles (
     cooldown_until timestamp with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     handle character varying NOT NULL,
-    handle_status_id bigint,
+    handle_status_id bigint NOT NULL,
     is_system boolean DEFAULT false NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_handles_handle_status_id_positive CHECK (((handle_status_id IS NULL) OR (handle_status_id >= 0))),
-    CONSTRAINT handles_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_handles_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -3150,13 +3158,6 @@ CREATE UNIQUE INDEX idx_avatar_agent_bindings_active_avatar ON public.avatar_age
 
 
 --
--- Name: idx_avatar_agent_bindings_active_pair; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_avatar_agent_bindings_active_pair ON public.avatar_agent_bindings USING btree (avatar_id, agent_id) WHERE (revoked_at IS NULL);
-
-
---
 -- Name: idx_avatar_bureau_agent_grants_active_subject_capability; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3297,13 +3298,6 @@ CREATE UNIQUE INDEX idx_avatar_individual_bindings_active_individual ON public.a
 
 
 --
--- Name: idx_avatar_individual_bindings_active_pair; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_avatar_individual_bindings_active_pair ON public.avatar_individual_bindings USING btree (avatar_id, individual_id) WHERE (revoked_at IS NULL);
-
-
---
 -- Name: idx_avatar_ownership_periods_avatar_id_all_rows; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3329,13 +3323,6 @@ CREATE UNIQUE INDEX idx_avatar_ownership_transfers_one_pending ON public.avatar_
 --
 
 CREATE UNIQUE INDEX idx_avatar_persona_bindings_active_avatar ON public.avatar_persona_bindings USING btree (avatar_id) WHERE (revoked_at IS NULL);
-
-
---
--- Name: idx_avatar_persona_bindings_active_pair; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_avatar_persona_bindings_active_pair ON public.avatar_persona_bindings USING btree (avatar_id, persona_id) WHERE (revoked_at IS NULL);
 
 
 --
@@ -3472,13 +3459,6 @@ CREATE UNIQUE INDEX index_avatar_blocks_on_blocker_and_blocked_avatar_id ON publ
 
 
 --
--- Name: index_avatar_blocks_on_blocker_avatar_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_avatar_blocks_on_blocker_avatar_id ON public.avatar_blocks USING btree (blocker_avatar_id);
-
-
---
 -- Name: index_avatar_follows_on_followed_avatar_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3490,13 +3470,6 @@ CREATE INDEX index_avatar_follows_on_followed_avatar_id ON public.avatar_follows
 --
 
 CREATE UNIQUE INDEX index_avatar_follows_on_follower_and_followed_avatar_id ON public.avatar_follows USING btree (follower_avatar_id, followed_avatar_id);
-
-
---
--- Name: index_avatar_follows_on_follower_avatar_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_avatar_follows_on_follower_avatar_id ON public.avatar_follows USING btree (follower_avatar_id);
 
 
 --
@@ -3532,13 +3505,6 @@ CREATE INDEX index_avatar_individual_bindings_on_individual_id ON public.avatar_
 --
 
 CREATE UNIQUE INDEX index_avatar_individual_bindings_on_public_id ON public.avatar_individual_bindings USING btree (public_id);
-
-
---
--- Name: index_avatar_lifecycle_events_on_avatar_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_avatar_lifecycle_events_on_avatar_id ON public.avatar_lifecycle_events USING btree (avatar_id);
 
 
 --
@@ -3630,13 +3596,6 @@ CREATE INDEX index_avatar_mutes_on_muted_avatar_id ON public.avatar_mutes USING 
 --
 
 CREATE UNIQUE INDEX index_avatar_mutes_on_muter_and_muted_avatar_id ON public.avatar_mutes USING btree (muter_avatar_id, muted_avatar_id);
-
-
---
--- Name: index_avatar_mutes_on_muter_avatar_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_avatar_mutes_on_muter_avatar_id ON public.avatar_mutes USING btree (muter_avatar_id);
 
 
 --
@@ -4354,6 +4313,22 @@ CREATE CONSTRAINT TRIGGER avatar_transfer_reservations_source_period_avatar_inte
 
 
 --
+-- Name: avatar_agent_bindings fk_avatar_agent_bindings_on_avatar_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_agent_bindings
+    ADD CONSTRAINT fk_avatar_agent_bindings_on_avatar_id FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: avatar_individual_bindings fk_avatar_individual_bindings_on_avatar_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_individual_bindings
+    ADD CONSTRAINT fk_avatar_individual_bindings_on_avatar_id FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: avatar_lifecycle_events fk_avatar_lifecycle_events_from_state_key; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4367,6 +4342,22 @@ ALTER TABLE ONLY public.avatar_lifecycle_events
 
 ALTER TABLE ONLY public.avatar_lifecycle_events
     ADD CONSTRAINT fk_avatar_lifecycle_events_to_state_key FOREIGN KEY (to_state_key) REFERENCES public.avatar_lifecycle_states(key);
+
+
+--
+-- Name: avatar_persona_bindings fk_avatar_persona_bindings_on_avatar_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.avatar_persona_bindings
+    ADD CONSTRAINT fk_avatar_persona_bindings_on_avatar_id FOREIGN KEY (avatar_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: handle_assignments fk_handle_assignments_on_assigned_by_actor_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.handle_assignments
+    ADD CONSTRAINT fk_handle_assignments_on_assigned_by_actor_id FOREIGN KEY (assigned_by_actor_id) REFERENCES public.avatars(id) ON DELETE RESTRICT;
 
 
 --
@@ -4864,6 +4855,15 @@ ALTER TABLE ONLY public.client_avatar_deletions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
+('20261020120001'),
+('20261020120000'),
+('20261020110001'),
+('20261020110000'),
+('20261019111130'),
+('20261019110926'),
+('20261019110922'),
 ('20261012130001'),
 ('20261012130000'),
 ('20261012093102'),

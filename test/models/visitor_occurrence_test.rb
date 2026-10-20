@@ -57,6 +57,10 @@ class VisitorOccurrenceTest < ActiveSupport::TestCase
     assert_not invalid.valid?
     assert_not_empty invalid.errors[:event_type]
   end
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::VisitorOccurrence)
+  end
+
   private
 
   def build_occurrence(klass, attrs = {})

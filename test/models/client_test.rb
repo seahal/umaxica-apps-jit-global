@@ -82,7 +82,7 @@ class ClientTest < ActiveSupport::TestCase
     end
 
     @user =
-      Client.create!(public_id: "u_#{SecureRandom.hex(8)}") do |u|
+      Client.create!(public_id: PublicId.generate) do |u|
         u.status_id = ClientStatus::NOTHING
       end
   end
@@ -183,7 +183,7 @@ class ClientTest < ActiveSupport::TestCase
 
   test "invalid visibility_id is rejected by foreign key" do
     user = Client.new(
-      public_id: "u_fk_#{SecureRandom.hex(6)}",
+      public_id: PublicId.generate,
       status_id: ClientStatus::NOTHING,
       visibility_id: 9_999,
     )
@@ -208,13 +208,13 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "boundary values: public_id must be unique" do
-    existing_user = Client.create!(public_id: "duplicate-id", status_id: ClientStatus::NOTHING)
+    existing_user = Client.create!(public_id: "duplicate-idxxxxxxxxx", status_id: ClientStatus::NOTHING)
 
-    duplicate_user = Client.new(public_id: "duplicate-id")
+    duplicate_user = Client.new(public_id: "duplicate-idxxxxxxxxx")
 
     assert_not duplicate_user.valid?
     assert_not_empty duplicate_user.errors[:public_id]
-    assert_equal "duplicate-id", existing_user.reload.public_id
+    assert_equal "duplicate-idxxxxxxxxx", existing_user.reload.public_id
   end
 
   test "boundary values: public_id length" do
@@ -261,14 +261,14 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "purge_eligible_at query picks clients with past purge_eligible_at" do
-    user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago)
+    user = Client.create!(public_id: PublicId.generate, discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago)
 
     assert_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
   test "purge_eligible_at query excludes clients with future purge_eligible_at" do
     user = Client.create!(
-      public_id: "u_#{SecureRandom.hex(8)}", discard_at: 30.minutes.from_now,
+      public_id: PublicId.generate, discard_at: 30.minutes.from_now,
       purge_eligible_at: 1.hour.from_now,
     )
 
@@ -276,7 +276,7 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "purge_eligible_at query excludes clients with default purge_eligible_at" do
-    user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}")
+    user = Client.create!(public_id: PublicId.generate)
 
     assert_not_includes Client.where(purge_eligible_at: ..Time.current), user
   end
@@ -727,5 +727,9 @@ class ClientTest < ActiveSupport::TestCase
     @user = Client.includes(:client_passkeys, :client_telephones).find(@user.id)
 
     assert_predicate @user, :passkey_login_available?
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::Client)
   end
 end

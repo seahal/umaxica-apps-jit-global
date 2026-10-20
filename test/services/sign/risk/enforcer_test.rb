@@ -60,7 +60,7 @@ module Sign
         token = ClientToken.create!(
           user: @user,
           discard_at: 1.day.from_now,
-          public_id: "test_step_up_#{SecureRandom.hex(4)}",
+          public_id: PublicId.generate,
           last_step_up_at: 1.minute.ago,
           last_step_up_scope: "settings_email",
         )
@@ -82,7 +82,7 @@ module Sign
         token = OperatorToken.create!(
           staff: staff,
           discard_at: 1.day.from_now,
-          public_id: "stf_#{SecureRandom.hex(4)}",
+          public_id: PublicId.generate,
           last_step_up_at: 1.minute.ago,
           last_step_up_scope: "settings_passkey",
         )
@@ -116,7 +116,7 @@ module Sign
         token = ClientToken.create!(
           user: @user,
           discard_at: 1.day.from_now,
-          public_id: "test_#{SecureRandom.hex(4)}",
+          public_id: PublicId.generate,
           # Default status/kind should trigger if FKs exist.
           # If FK check fails, we might need to assume fixtures loaded statuses.
         )

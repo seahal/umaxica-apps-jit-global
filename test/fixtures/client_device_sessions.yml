@@ -13,7 +13,7 @@
 #
 one:
   id: <%= ActiveRecord::FixtureSet.identify(:one) %>
-  public_id: client-device-one
+  public_id: "client-device-onexxxx"
   user_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
   status_id: 1
   current_refresh_token_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
@@ -22,7 +22,7 @@ one:
 
 two:
   id: <%= ActiveRecord::FixtureSet.identify(:two) %>
-  public_id: client-device-two
+  public_id: "client-device-twoxxxx"
   user_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
   status_id: 1
   current_refresh_token_id: <%= ActiveRecord::FixtureSet.identify(:two) %>

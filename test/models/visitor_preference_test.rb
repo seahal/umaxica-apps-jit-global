@@ -79,9 +79,9 @@ class VisitorPreferenceTest < ActiveSupport::TestCase
   end
 
   test "does not overwrite existing public_id" do
-    preference = VisitorPreference.create!(visitor: Visitor.create!, public_id: "visitor_pref_custom")
+    preference = VisitorPreference.create!(visitor: Visitor.create!, public_id: "visitor_pref_customxx")
 
-    assert_equal "visitor_pref_custom", preference.public_id
+    assert_equal "visitor_pref_customxx", preference.public_id
   end
 
   test "loading an existing preference preserves stored defaults" do
@@ -139,5 +139,9 @@ class VisitorPreferenceTest < ActiveSupport::TestCase
     )
 
     assert_equal "approved", preference.adult_content_gate
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::VisitorPreference)
   end
 end

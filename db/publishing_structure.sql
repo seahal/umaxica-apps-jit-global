@@ -10526,174 +10526,6 @@ CREATE INDEX idx_news_org_vs_voc ON public.publishing_news_org_version_single_ta
 
 
 --
--- Name: idx_on_entry_revision_id_0e042ce215; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_0e042ce215 ON public.publishing_info_org_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_335482b5b7; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_335482b5b7 ON public.publishing_docs_com_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_89d55e3ea8; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_89d55e3ea8 ON public.publishing_info_app_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_936880ceca; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_936880ceca ON public.publishing_news_com_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_943136696e; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_943136696e ON public.publishing_news_app_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_ae3645a48c; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_ae3645a48c ON public.publishing_docs_app_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_af519933a0; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_af519933a0 ON public.publishing_news_org_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_c4b49013a6; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_c4b49013a6 ON public.publishing_help_org_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_dadda0980d; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_dadda0980d ON public.publishing_info_com_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_e430280ab1; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_e430280ab1 ON public.publishing_help_com_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_f220c8f97e; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_f220c8f97e ON public.publishing_docs_org_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_revision_id_f987c52794; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_revision_id_f987c52794 ON public.publishing_help_app_revision_media_usages USING btree (entry_revision_id);
-
-
---
--- Name: idx_on_entry_version_id_0ee210b2b5; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_0ee210b2b5 ON public.publishing_help_app_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_2a922bfe07; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_2a922bfe07 ON public.publishing_info_com_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_2cc4568c50; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_2cc4568c50 ON public.publishing_news_com_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_45404796f4; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_45404796f4 ON public.publishing_news_app_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_4cd943f55f; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_4cd943f55f ON public.publishing_docs_org_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_5047b8eaae; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_5047b8eaae ON public.publishing_help_org_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_85c8b1949a; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_85c8b1949a ON public.publishing_news_org_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_c7a3fd4207; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_c7a3fd4207 ON public.publishing_docs_app_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_d118d04df1; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_d118d04df1 ON public.publishing_info_app_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_d451e876f4; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_d451e876f4 ON public.publishing_docs_com_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_d7a15f73b8; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_d7a15f73b8 ON public.publishing_info_org_version_media_usages USING btree (entry_version_id);
-
-
---
--- Name: idx_on_entry_version_id_de9d71656a; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_entry_version_id_de9d71656a ON public.publishing_help_com_version_media_usages USING btree (entry_version_id);
-
-
---
 -- Name: idx_on_media_file_id_01928b5218; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -10869,13 +10701,6 @@ CREATE UNIQUE INDEX index_publishing_docs_app_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_docs_app_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_app_entry_revisions_on_entry_id ON public.publishing_docs_app_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_docs_app_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -10894,13 +10719,6 @@ CREATE INDEX index_publishing_docs_app_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_docs_app_entry_slugs_on_public_id ON public.publishing_docs_app_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_docs_app_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_app_entry_versions_on_entry_id ON public.publishing_docs_app_entry_versions USING btree (entry_id);
 
 
 --
@@ -10946,13 +10764,6 @@ CREATE UNIQUE INDEX index_publishing_docs_app_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_docs_app_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_app_taxonomy_terms_on_vocabulary_id ON public.publishing_docs_app_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_docs_app_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -10974,13 +10785,6 @@ CREATE UNIQUE INDEX index_publishing_docs_com_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_docs_com_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_com_entry_revisions_on_entry_id ON public.publishing_docs_com_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_docs_com_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -10999,13 +10803,6 @@ CREATE INDEX index_publishing_docs_com_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_docs_com_entry_slugs_on_public_id ON public.publishing_docs_com_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_docs_com_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_com_entry_versions_on_entry_id ON public.publishing_docs_com_entry_versions USING btree (entry_id);
 
 
 --
@@ -11051,13 +10848,6 @@ CREATE UNIQUE INDEX index_publishing_docs_com_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_docs_com_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_com_taxonomy_terms_on_vocabulary_id ON public.publishing_docs_com_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_docs_com_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11079,13 +10869,6 @@ CREATE UNIQUE INDEX index_publishing_docs_org_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_docs_org_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_org_entry_revisions_on_entry_id ON public.publishing_docs_org_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_docs_org_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11104,13 +10887,6 @@ CREATE INDEX index_publishing_docs_org_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_docs_org_entry_slugs_on_public_id ON public.publishing_docs_org_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_docs_org_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_org_entry_versions_on_entry_id ON public.publishing_docs_org_entry_versions USING btree (entry_id);
 
 
 --
@@ -11156,13 +10932,6 @@ CREATE UNIQUE INDEX index_publishing_docs_org_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_docs_org_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_docs_org_taxonomy_terms_on_vocabulary_id ON public.publishing_docs_org_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_docs_org_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11184,13 +10953,6 @@ CREATE UNIQUE INDEX index_publishing_help_app_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_help_app_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_app_entry_revisions_on_entry_id ON public.publishing_help_app_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_help_app_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11209,13 +10971,6 @@ CREATE INDEX index_publishing_help_app_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_help_app_entry_slugs_on_public_id ON public.publishing_help_app_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_help_app_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_app_entry_versions_on_entry_id ON public.publishing_help_app_entry_versions USING btree (entry_id);
 
 
 --
@@ -11261,13 +11016,6 @@ CREATE UNIQUE INDEX index_publishing_help_app_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_help_app_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_app_taxonomy_terms_on_vocabulary_id ON public.publishing_help_app_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_help_app_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11289,13 +11037,6 @@ CREATE UNIQUE INDEX index_publishing_help_com_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_help_com_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_com_entry_revisions_on_entry_id ON public.publishing_help_com_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_help_com_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11314,13 +11055,6 @@ CREATE INDEX index_publishing_help_com_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_help_com_entry_slugs_on_public_id ON public.publishing_help_com_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_help_com_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_com_entry_versions_on_entry_id ON public.publishing_help_com_entry_versions USING btree (entry_id);
 
 
 --
@@ -11366,13 +11100,6 @@ CREATE UNIQUE INDEX index_publishing_help_com_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_help_com_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_com_taxonomy_terms_on_vocabulary_id ON public.publishing_help_com_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_help_com_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11394,13 +11121,6 @@ CREATE UNIQUE INDEX index_publishing_help_org_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_help_org_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_org_entry_revisions_on_entry_id ON public.publishing_help_org_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_help_org_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11419,13 +11139,6 @@ CREATE INDEX index_publishing_help_org_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_help_org_entry_slugs_on_public_id ON public.publishing_help_org_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_help_org_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_org_entry_versions_on_entry_id ON public.publishing_help_org_entry_versions USING btree (entry_id);
 
 
 --
@@ -11471,13 +11184,6 @@ CREATE UNIQUE INDEX index_publishing_help_org_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_help_org_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_help_org_taxonomy_terms_on_vocabulary_id ON public.publishing_help_org_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_help_org_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11499,13 +11205,6 @@ CREATE UNIQUE INDEX index_publishing_info_app_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_info_app_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_app_entry_revisions_on_entry_id ON public.publishing_info_app_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_info_app_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11524,13 +11223,6 @@ CREATE INDEX index_publishing_info_app_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_info_app_entry_slugs_on_public_id ON public.publishing_info_app_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_info_app_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_app_entry_versions_on_entry_id ON public.publishing_info_app_entry_versions USING btree (entry_id);
 
 
 --
@@ -11576,13 +11268,6 @@ CREATE UNIQUE INDEX index_publishing_info_app_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_info_app_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_app_taxonomy_terms_on_vocabulary_id ON public.publishing_info_app_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_info_app_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11604,13 +11289,6 @@ CREATE UNIQUE INDEX index_publishing_info_com_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_info_com_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_com_entry_revisions_on_entry_id ON public.publishing_info_com_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_info_com_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11629,13 +11307,6 @@ CREATE INDEX index_publishing_info_com_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_info_com_entry_slugs_on_public_id ON public.publishing_info_com_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_info_com_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_com_entry_versions_on_entry_id ON public.publishing_info_com_entry_versions USING btree (entry_id);
 
 
 --
@@ -11681,13 +11352,6 @@ CREATE UNIQUE INDEX index_publishing_info_com_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_info_com_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_com_taxonomy_terms_on_vocabulary_id ON public.publishing_info_com_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_info_com_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11709,13 +11373,6 @@ CREATE UNIQUE INDEX index_publishing_info_org_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_info_org_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_org_entry_revisions_on_entry_id ON public.publishing_info_org_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_info_org_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11734,13 +11391,6 @@ CREATE INDEX index_publishing_info_org_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_info_org_entry_slugs_on_public_id ON public.publishing_info_org_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_info_org_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_org_entry_versions_on_entry_id ON public.publishing_info_org_entry_versions USING btree (entry_id);
 
 
 --
@@ -11786,13 +11436,6 @@ CREATE UNIQUE INDEX index_publishing_info_org_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_info_org_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_info_org_taxonomy_terms_on_vocabulary_id ON public.publishing_info_org_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_info_org_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11828,13 +11471,6 @@ CREATE UNIQUE INDEX index_publishing_news_app_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_news_app_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_app_entry_revisions_on_entry_id ON public.publishing_news_app_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_news_app_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11853,13 +11489,6 @@ CREATE INDEX index_publishing_news_app_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_news_app_entry_slugs_on_public_id ON public.publishing_news_app_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_news_app_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_app_entry_versions_on_entry_id ON public.publishing_news_app_entry_versions USING btree (entry_id);
 
 
 --
@@ -11905,13 +11534,6 @@ CREATE UNIQUE INDEX index_publishing_news_app_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_news_app_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_app_taxonomy_terms_on_vocabulary_id ON public.publishing_news_app_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_news_app_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11933,13 +11555,6 @@ CREATE UNIQUE INDEX index_publishing_news_com_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_news_com_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_com_entry_revisions_on_entry_id ON public.publishing_news_com_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_news_com_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11958,13 +11573,6 @@ CREATE INDEX index_publishing_news_com_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_news_com_entry_slugs_on_public_id ON public.publishing_news_com_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_news_com_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_com_entry_versions_on_entry_id ON public.publishing_news_com_entry_versions USING btree (entry_id);
 
 
 --
@@ -12010,13 +11618,6 @@ CREATE UNIQUE INDEX index_publishing_news_com_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_news_com_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_com_taxonomy_terms_on_vocabulary_id ON public.publishing_news_com_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_news_com_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12038,13 +11639,6 @@ CREATE UNIQUE INDEX index_publishing_news_org_entries_on_public_id ON public.pub
 
 
 --
--- Name: index_publishing_news_org_entry_revisions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_org_entry_revisions_on_entry_id ON public.publishing_news_org_entry_revisions USING btree (entry_id);
-
-
---
 -- Name: index_publishing_news_org_entry_revisions_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12063,13 +11657,6 @@ CREATE INDEX index_publishing_news_org_entry_slugs_on_entry_id ON public.publish
 --
 
 CREATE UNIQUE INDEX index_publishing_news_org_entry_slugs_on_public_id ON public.publishing_news_org_entry_slugs USING btree (public_id);
-
-
---
--- Name: index_publishing_news_org_entry_versions_on_entry_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_org_entry_versions_on_entry_id ON public.publishing_news_org_entry_versions USING btree (entry_id);
 
 
 --
@@ -12115,13 +11702,6 @@ CREATE UNIQUE INDEX index_publishing_news_org_taxonomy_terms_on_public_id ON pub
 
 
 --
--- Name: index_publishing_news_org_taxonomy_terms_on_vocabulary_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_publishing_news_org_taxonomy_terms_on_vocabulary_id ON public.publishing_news_org_taxonomy_terms USING btree (vocabulary_id);
-
-
---
 -- Name: index_publishing_news_org_version_media_usages_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12154,13 +11734,6 @@ CREATE UNIQUE INDEX uidx_docs_app_ent_id_locale ON public.publishing_docs_app_en
 --
 
 CREATE UNIQUE INDEX uidx_docs_app_rev_id_entry ON public.publishing_docs_app_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_docs_app_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_docs_app_rev_id_entry_locale ON public.publishing_docs_app_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -12255,13 +11828,6 @@ CREATE UNIQUE INDEX uidx_docs_app_ver_id_entry ON public.publishing_docs_app_ent
 
 
 --
--- Name: uidx_docs_app_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_docs_app_ver_id_entry_locale ON public.publishing_docs_app_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_docs_app_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12343,13 +11909,6 @@ CREATE UNIQUE INDEX uidx_docs_com_ent_id_locale ON public.publishing_docs_com_en
 --
 
 CREATE UNIQUE INDEX uidx_docs_com_rev_id_entry ON public.publishing_docs_com_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_docs_com_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_docs_com_rev_id_entry_locale ON public.publishing_docs_com_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -12444,13 +12003,6 @@ CREATE UNIQUE INDEX uidx_docs_com_ver_id_entry ON public.publishing_docs_com_ent
 
 
 --
--- Name: uidx_docs_com_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_docs_com_ver_id_entry_locale ON public.publishing_docs_com_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_docs_com_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12532,13 +12084,6 @@ CREATE UNIQUE INDEX uidx_docs_org_ent_id_locale ON public.publishing_docs_org_en
 --
 
 CREATE UNIQUE INDEX uidx_docs_org_rev_id_entry ON public.publishing_docs_org_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_docs_org_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_docs_org_rev_id_entry_locale ON public.publishing_docs_org_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -12633,13 +12178,6 @@ CREATE UNIQUE INDEX uidx_docs_org_ver_id_entry ON public.publishing_docs_org_ent
 
 
 --
--- Name: uidx_docs_org_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_docs_org_ver_id_entry_locale ON public.publishing_docs_org_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_docs_org_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12721,13 +12259,6 @@ CREATE UNIQUE INDEX uidx_help_app_ent_id_locale ON public.publishing_help_app_en
 --
 
 CREATE UNIQUE INDEX uidx_help_app_rev_id_entry ON public.publishing_help_app_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_help_app_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_help_app_rev_id_entry_locale ON public.publishing_help_app_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -12822,13 +12353,6 @@ CREATE UNIQUE INDEX uidx_help_app_ver_id_entry ON public.publishing_help_app_ent
 
 
 --
--- Name: uidx_help_app_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_help_app_ver_id_entry_locale ON public.publishing_help_app_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_help_app_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12910,13 +12434,6 @@ CREATE UNIQUE INDEX uidx_help_com_ent_id_locale ON public.publishing_help_com_en
 --
 
 CREATE UNIQUE INDEX uidx_help_com_rev_id_entry ON public.publishing_help_com_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_help_com_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_help_com_rev_id_entry_locale ON public.publishing_help_com_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -13011,13 +12528,6 @@ CREATE UNIQUE INDEX uidx_help_com_ver_id_entry ON public.publishing_help_com_ent
 
 
 --
--- Name: uidx_help_com_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_help_com_ver_id_entry_locale ON public.publishing_help_com_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_help_com_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13099,13 +12609,6 @@ CREATE UNIQUE INDEX uidx_help_org_ent_id_locale ON public.publishing_help_org_en
 --
 
 CREATE UNIQUE INDEX uidx_help_org_rev_id_entry ON public.publishing_help_org_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_help_org_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_help_org_rev_id_entry_locale ON public.publishing_help_org_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -13200,13 +12703,6 @@ CREATE UNIQUE INDEX uidx_help_org_ver_id_entry ON public.publishing_help_org_ent
 
 
 --
--- Name: uidx_help_org_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_help_org_ver_id_entry_locale ON public.publishing_help_org_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_help_org_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13288,13 +12784,6 @@ CREATE UNIQUE INDEX uidx_info_app_ent_id_locale ON public.publishing_info_app_en
 --
 
 CREATE UNIQUE INDEX uidx_info_app_rev_id_entry ON public.publishing_info_app_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_info_app_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_info_app_rev_id_entry_locale ON public.publishing_info_app_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -13389,13 +12878,6 @@ CREATE UNIQUE INDEX uidx_info_app_ver_id_entry ON public.publishing_info_app_ent
 
 
 --
--- Name: uidx_info_app_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_info_app_ver_id_entry_locale ON public.publishing_info_app_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_info_app_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13477,13 +12959,6 @@ CREATE UNIQUE INDEX uidx_info_com_ent_id_locale ON public.publishing_info_com_en
 --
 
 CREATE UNIQUE INDEX uidx_info_com_rev_id_entry ON public.publishing_info_com_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_info_com_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_info_com_rev_id_entry_locale ON public.publishing_info_com_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -13578,13 +13053,6 @@ CREATE UNIQUE INDEX uidx_info_com_ver_id_entry ON public.publishing_info_com_ent
 
 
 --
--- Name: uidx_info_com_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_info_com_ver_id_entry_locale ON public.publishing_info_com_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_info_com_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13666,13 +13134,6 @@ CREATE UNIQUE INDEX uidx_info_org_ent_id_locale ON public.publishing_info_org_en
 --
 
 CREATE UNIQUE INDEX uidx_info_org_rev_id_entry ON public.publishing_info_org_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_info_org_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_info_org_rev_id_entry_locale ON public.publishing_info_org_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -13767,13 +13228,6 @@ CREATE UNIQUE INDEX uidx_info_org_ver_id_entry ON public.publishing_info_org_ent
 
 
 --
--- Name: uidx_info_org_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_info_org_ver_id_entry_locale ON public.publishing_info_org_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_info_org_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -13855,13 +13309,6 @@ CREATE UNIQUE INDEX uidx_news_app_ent_id_locale ON public.publishing_news_app_en
 --
 
 CREATE UNIQUE INDEX uidx_news_app_rev_id_entry ON public.publishing_news_app_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_news_app_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_news_app_rev_id_entry_locale ON public.publishing_news_app_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -13956,13 +13403,6 @@ CREATE UNIQUE INDEX uidx_news_app_ver_id_entry ON public.publishing_news_app_ent
 
 
 --
--- Name: uidx_news_app_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_news_app_ver_id_entry_locale ON public.publishing_news_app_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_news_app_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -14044,13 +13484,6 @@ CREATE UNIQUE INDEX uidx_news_com_ent_id_locale ON public.publishing_news_com_en
 --
 
 CREATE UNIQUE INDEX uidx_news_com_rev_id_entry ON public.publishing_news_com_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_news_com_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_news_com_rev_id_entry_locale ON public.publishing_news_com_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -14145,13 +13578,6 @@ CREATE UNIQUE INDEX uidx_news_com_ver_id_entry ON public.publishing_news_com_ent
 
 
 --
--- Name: uidx_news_com_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_news_com_ver_id_entry_locale ON public.publishing_news_com_entry_versions USING btree (id, entry_id, locale);
-
-
---
 -- Name: uidx_news_com_ver_id_locale; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -14233,13 +13659,6 @@ CREATE UNIQUE INDEX uidx_news_org_ent_id_locale ON public.publishing_news_org_en
 --
 
 CREATE UNIQUE INDEX uidx_news_org_rev_id_entry ON public.publishing_news_org_entry_revisions USING btree (id, entry_id);
-
-
---
--- Name: uidx_news_org_rev_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_news_org_rev_id_entry_locale ON public.publishing_news_org_entry_revisions USING btree (id, entry_id, locale);
 
 
 --
@@ -14331,13 +13750,6 @@ CREATE UNIQUE INDEX uidx_news_org_term_slug ON public.publishing_news_org_taxono
 --
 
 CREATE UNIQUE INDEX uidx_news_org_ver_id_entry ON public.publishing_news_org_entry_versions USING btree (id, entry_id);
-
-
---
--- Name: uidx_news_org_ver_id_entry_locale; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uidx_news_org_ver_id_entry_locale ON public.publishing_news_org_entry_versions USING btree (id, entry_id, locale);
 
 
 --
@@ -18982,6 +18394,8 @@ ALTER TABLE ONLY public.publishing_help_org_revision_media_usages
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020090000'),
+('20261019110830'),
 ('20260906120000'),
 ('20260906000001'),
 ('20260810013000'),

@@ -21,5 +21,9 @@ class ClientTokenKind < OpBaseAppRecord
 
   DEFAULTS = [BROWSER_WEB, CLIENT_IOS, CLIENT_ANDROID].freeze
 
-  has_many :client_tokens, dependent: :restrict_with_error
+  # The token table retains its user_* keys across the principal rename.
+  has_many :client_tokens,
+           foreign_key: :user_token_kind_id,
+           dependent: :restrict_with_error,
+           inverse_of: :user_token_kind
 end

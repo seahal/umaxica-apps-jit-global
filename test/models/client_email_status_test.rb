@@ -38,7 +38,7 @@ class ClientEmailStatusTest < ActiveSupport::TestCase
   test "restrict_with_error prevents deletion when emails exist" do
     status = ClientEmailStatus.find(ClientEmailStatus::VERIFIED)
     # Create a user identity email with this status
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     ClientEmail.create!(
       id: SecureRandom.uuid,
       address: "test@example.com",

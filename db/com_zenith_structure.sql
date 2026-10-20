@@ -132,7 +132,7 @@ CREATE TABLE public.ar_internal_metadata (
 CREATE TABLE public.com_enforcement_appeals (
     id bigint NOT NULL,
     com_enforcement_case_id bigint NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     state character varying DEFAULT 'submitted'::character varying NOT NULL,
     reason_code character varying NOT NULL,
     statement text,
@@ -143,8 +143,8 @@ CREATE TABLE public.com_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[]))),
-    CONSTRAINT com_enforcement_appeals_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_com_enforcement_appeals_pid CHECK ((char_length((public_id)::text) = 21)),
+    CONSTRAINT chk_com_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
 );
 
 
@@ -401,13 +401,13 @@ ALTER SEQUENCE public.com_enforcement_principal_links_id_seq OWNED BY public.com
 
 CREATE TABLE public.companies (
     id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     title character varying NOT NULL,
-    CONSTRAINT companies_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_companies_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -570,7 +570,7 @@ CREATE TABLE public.company_ownership_transfer_requests (
     company_id bigint NOT NULL,
     source_visitor_id bigint NOT NULL,
     destination_visitor_id bigint CONSTRAINT company_ownership_transfer_requ_destination_visitor_id_not_null NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
     expected_ownership_revision integer CONSTRAINT company_ownership_transfer__expected_ownership_revisio_not_null NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
@@ -581,11 +581,11 @@ CREATE TABLE public.company_ownership_transfer_requests (
     invalidated_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_company_ownership_transfer_requests_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_company_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_company_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_company_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[]))),
-    CONSTRAINT company_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_company_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
 );
 
 
@@ -685,12 +685,12 @@ CREATE TABLE public.company_units (
     id bigint NOT NULL,
     company_id bigint NOT NULL,
     parent_id bigint,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT company_units_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_company_units_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -752,14 +752,14 @@ ALTER SEQUENCE public.company_view_grants_id_seq OWNED BY public.company_view_gr
 CREATE TABLE public.core_com_visitor_bridges (
     id bigint NOT NULL,
     visitor_id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     rp_client_id character varying DEFAULT 'core_com'::character varying NOT NULL,
     audience character varying DEFAULT 'umaxica-core-com'::character varying NOT NULL,
     host character varying DEFAULT 'jpx.umaxica.com'::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT core_com_visitor_bridges_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_core_com_visitor_bridges_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -859,14 +859,14 @@ ALTER SEQUENCE public.individual_administration_grants_id_seq OWNED BY public.in
 
 CREATE TABLE public.individual_assignments (
     id bigint NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     individual_id bigint NOT NULL,
     visitor_identity_id bigint NOT NULL,
     assigned_at timestamp(6) with time zone NOT NULL,
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT individual_assignments_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_individual_assignments_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1125,7 +1125,7 @@ CREATE TABLE public.individual_ownership_transfer_requests (
     individual_id bigint NOT NULL,
     source_visitor_id bigint CONSTRAINT individual_ownership_transfer_reques_source_visitor_id_not_null NOT NULL,
     destination_visitor_id bigint CONSTRAINT individual_ownership_transfer_r_destination_visitor_id_not_null NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
     expected_ownership_revision integer CONSTRAINT individual_ownership_transf_expected_ownership_revisio_not_null NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
@@ -1136,11 +1136,11 @@ CREATE TABLE public.individual_ownership_transfer_requests (
     invalidated_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_individual_ownership_transfer_requests_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_individual_transfer_requests_distinct_parties CHECK ((source_visitor_id <> destination_visitor_id)),
     CONSTRAINT chk_individual_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_individual_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
-    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[]))),
-    CONSTRAINT individual_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_individual_transfer_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'cancelled'::character varying, 'expired'::character varying, 'invalidated'::character varying])::text[])))
 );
 
 
@@ -1268,13 +1268,13 @@ ALTER SEQUENCE public.individual_view_grants_id_seq OWNED BY public.individual_v
 CREATE TABLE public.individuals (
     id bigint NOT NULL,
     visitor_identity_id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     moniker character varying,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     title character varying NOT NULL,
-    CONSTRAINT individuals_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_individuals_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1312,11 +1312,11 @@ CREATE TABLE public.schema_migrations (
 
 CREATE TABLE public.visitor_accounts (
     id bigint CONSTRAINT client_accounts_id_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT client_accounts_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT client_accounts_public_id_not_null NOT NULL,
     visitor_id bigint CONSTRAINT client_accounts_customer_id_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT client_accounts_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT client_accounts_updated_at_not_null NOT NULL,
-    CONSTRAINT visitor_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_visitor_accounts_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1539,6 +1539,7 @@ CREATE TABLE public.visitor_emails (
     step_up_otp_last_issued_at timestamp(6) with time zone,
     binding_finalized_at timestamp(6) with time zone,
     binding_released_at timestamp(6) with time zone,
+    CONSTRAINT chk_visitor_emails_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT visitor_email_step_up_failures_nonnegative CHECK ((step_up_otp_failures >= 0)),
     CONSTRAINT visitor_emails_binding_digest_nonblank CHECK (((binding_finalized_at IS NULL) OR ((address_digest IS NOT NULL) AND ((address_digest)::text ~ '[^[:space:]]'::text)))),
     CONSTRAINT visitor_emails_binding_digest_unicode_nonblank CHECK (((binding_finalized_at IS NULL) OR ((address_digest IS NOT NULL) AND ((address_digest)::text ~ '[^[:space:]   -     　]'::text)))),
@@ -1582,7 +1583,8 @@ CREATE TABLE public.visitor_enforcement_recovery_ceremonies (
     ip_digest bytea,
     user_agent_digest bytea,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_visitor_enforcement_recovery_ceremonies_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1646,7 +1648,7 @@ ALTER SEQUENCE public.visitor_identifier_rotation_audits_id_seq OWNED BY public.
 
 CREATE TABLE public.visitor_identities (
     id bigint CONSTRAINT client_visitors_id_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT client_visitors_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT client_visitors_public_id_not_null NOT NULL,
     issuer character varying CONSTRAINT client_visitors_issuer_not_null NOT NULL,
     subject character varying CONSTRAINT client_visitors_subject_not_null NOT NULL,
     audience character varying CONSTRAINT client_visitors_audience_not_null NOT NULL,
@@ -1656,7 +1658,7 @@ CREATE TABLE public.visitor_identities (
     lock_version integer DEFAULT 0 CONSTRAINT client_visitors_lock_version_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT client_visitors_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT client_visitors_updated_at_not_null NOT NULL,
-    CONSTRAINT visitor_identities_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_visitor_identities_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1893,7 +1895,9 @@ CREATE TABLE public.visitor_passkeys (
     authenticator_attachment character varying,
     provider_name character varying,
     metadata_source character varying,
-    uv_verified_at timestamp(6) with time zone
+    uv_verified_at timestamp(6) with time zone,
+    CONSTRAINT chk_visitor_passkeys_pid CHECK ((char_length((public_id)::text) = 21)),
+    CONSTRAINT chk_visitor_passkeys_sign_count CHECK ((sign_count >= 0))
 );
 
 
@@ -2602,7 +2606,8 @@ CREATE TABLE public.visitor_preferences (
     public_id character varying(21) CONSTRAINT visitor_preferences_public_id_not_null1 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    explicit_fields jsonb DEFAULT '[]'::jsonb
+    explicit_fields jsonb DEFAULT '[]'::jsonb,
+    CONSTRAINT chk_visitor_preferences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -2682,6 +2687,7 @@ CREATE TABLE public.visitor_privacy_requests (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT visitor_privacy_requests_purged_at_not_null NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_visitor_privacy_requests_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_visitor_privacy_requests_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -2807,7 +2813,8 @@ CREATE TABLE public.visitor_processor_erasure_notifications (
     CONSTRAINT chk_visitor_proc_erase_notifications_generation_positive CHECK ((delivery_generation > 0)),
     CONSTRAINT chk_visitor_proc_erase_notifications_idempotency_digest CHECK (((delivery_idempotency_key_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT chk_visitor_proc_erase_notifications_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT chk_visitor_proc_erase_notifications_retry_count_nonnegative CHECK ((retry_count >= 0))
+    CONSTRAINT chk_visitor_proc_erase_notifications_retry_count_nonnegative CHECK ((retry_count >= 0)),
+    CONSTRAINT chk_visitor_processor_erasure_notifications_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -2880,6 +2887,7 @@ CREATE TABLE public.visitor_retention_holds (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT visitor_retention_holds_purged_at_not_null NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_visitor_retention_holds_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_visitor_retention_holds_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -2908,7 +2916,8 @@ ALTER SEQUENCE public.visitor_retention_holds_id_seq OWNED BY public.visitor_ret
 --
 
 CREATE TABLE public.visitor_secret_credential_kinds (
-    id bigint CONSTRAINT customer_secret_kinds_id_not_null NOT NULL
+    id bigint CONSTRAINT customer_secret_kinds_id_not_null NOT NULL,
+    CONSTRAINT chk_visitor_secret_credential_kinds_id CHECK ((id >= 0))
 );
 
 
@@ -2996,7 +3005,8 @@ CREATE TABLE public.visitor_secret_credentials (
     revoked_at timestamp(6) with time zone,
     locked_at timestamp(6) with time zone,
     last_failed_at timestamp(6) with time zone,
-    CONSTRAINT chk_customer_secrets_retention_order CHECK ((discard_at <= purge_eligible_at))
+    CONSTRAINT chk_customer_secrets_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT chk_visitor_secret_credentials_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -3128,6 +3138,7 @@ CREATE TABLE public.visitor_telephones (
     binding_finalized_at timestamp(6) with time zone,
     binding_released_at timestamp(6) with time zone,
     otp_last_sent_at timestamp(6) with time zone,
+    CONSTRAINT chk_visitor_telephones_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT visitor_telephones_binding_digest_nonblank CHECK (((binding_finalized_at IS NULL) OR ((number_digest IS NOT NULL) AND ((number_digest)::text ~ '[^[:space:]]'::text)))),
     CONSTRAINT visitor_telephones_binding_digest_unicode_nonblank CHECK (((binding_finalized_at IS NULL) OR ((number_digest IS NOT NULL) AND ((number_digest)::text ~ '[^[:space:]   -     　]'::text)))),
     CONSTRAINT visitor_telephones_binding_effective_digest_present CHECK (((binding_finalized_at IS NULL) OR ((number_digest IS NOT NULL) AND ((number_digest)::text <> ''::text)))),
@@ -3200,7 +3211,8 @@ CREATE TABLE public.visitor_withdrawal_ceremonies (
     user_agent_digest bytea,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_visitor_withdrawal_ceremonies_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -3231,7 +3243,7 @@ CREATE TABLE public.visitor_withdrawal_flow_events (
     id bigint CONSTRAINT visitor_withdrawal_cycle_events_id_not_null NOT NULL,
     visitor_withdrawal_flow_id bigint CONSTRAINT visitor_withdrawal_cycle_ev_visitor_withdrawal_cycle_i_not_null NOT NULL,
     visitor_id bigint CONSTRAINT visitor_withdrawal_cycle_events_visitor_id_not_null NOT NULL,
-    from_status_id bigint,
+    from_status_id bigint NOT NULL,
     to_status_id bigint CONSTRAINT visitor_withdrawal_cycle_events_to_status_id_not_null NOT NULL,
     occurred_at timestamp(6) with time zone CONSTRAINT visitor_withdrawal_cycle_events_occurred_at_not_null NOT NULL,
     token_public_id character varying(64) DEFAULT ''::character varying CONSTRAINT visitor_withdrawal_cycle_events_token_public_id_not_null NOT NULL,
@@ -3305,7 +3317,8 @@ CREATE TABLE public.visitor_withdrawal_flows (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT visitor_withdrawal_cycles_purged_at_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT visitor_withdrawal_cycles_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT visitor_withdrawal_cycles_updated_at_not_null NOT NULL,
-    CONSTRAINT chk_visitor_withdrawal_cycles_retention_order CHECK ((discard_at <= purge_eligible_at))
+    CONSTRAINT chk_visitor_withdrawal_cycles_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT chk_visitor_withdrawal_flows_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -3339,7 +3352,7 @@ CREATE TABLE public.visitors (
     created_at timestamp(6) with time zone CONSTRAINT customers_created_at_not_null NOT NULL,
     lock_version integer DEFAULT 0 CONSTRAINT customers_lock_version_not_null NOT NULL,
     mfa_level_enabled boolean DEFAULT false CONSTRAINT customers_multi_factor_enabled_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT customers_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT customers_public_id_not_null NOT NULL,
     status_id bigint DEFAULT 2 CONSTRAINT customers_status_id_not_null NOT NULL,
     visibility_id bigint DEFAULT 1 CONSTRAINT customers_visibility_id_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT customers_updated_at_not_null NOT NULL,
@@ -3366,7 +3379,7 @@ CREATE TABLE public.visitors (
     CONSTRAINT chk_visitors_admin_locked_reason_code CHECK (((admin_locked_reason_code IS NULL) OR ((admin_locked_reason_code)::text = ANY ((ARRAY['abuse'::character varying, 'security_incident'::character varying, 'chargeback'::character varying, 'terms_violation'::character varying, 'support_request'::character varying, 'legal_hold'::character varying, 'operator_error_recovery'::character varying, 'other'::character varying])::text[])))),
     CONSTRAINT chk_visitors_authentication_epoch_nonnegative CHECK ((authentication_epoch >= 0)),
     CONSTRAINT chk_visitors_birthdate_length CHECK (((birthdate IS NULL) OR (char_length(birthdate) <= 1000))),
-    CONSTRAINT visitors_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_visitors_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -5178,20 +5191,6 @@ CREATE INDEX idx_on_visitor_id_status_id_expires_at_f1c3d6493a ON public.visitor
 
 
 --
--- Name: idx_on_visitor_privacy_request_id_4225260194; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_visitor_privacy_request_id_4225260194 ON public.visitor_processor_erasure_notifications USING btree (visitor_privacy_request_id);
-
-
---
--- Name: idx_on_visitor_processor_erasure_notification_id_da29c17a62; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_on_visitor_processor_erasure_notification_id_da29c17a62 ON public.visitor_processor_erasure_notification_attempts USING btree (visitor_processor_erasure_notification_id);
-
-
---
 -- Name: idx_on_visitor_secret_credential_kind_id_80c2fa07fe; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5465,13 +5464,6 @@ CREATE UNIQUE INDEX index_individuals_on_public_id ON public.individuals USING b
 
 
 --
--- Name: index_individuals_on_visitor_identity_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_individuals_on_visitor_identity_id ON public.individuals USING btree (visitor_identity_id);
-
-
---
 -- Name: index_visitor_accounts_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5563,13 +5555,6 @@ CREATE UNIQUE INDEX index_visitor_enforcement_recovery_ceremonies_on_token_diges
 
 
 --
--- Name: index_visitor_enforcement_recovery_ceremonies_on_visitor_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_visitor_enforcement_recovery_ceremonies_on_visitor_id ON public.visitor_enforcement_recovery_ceremonies USING btree (visitor_id);
-
-
---
 -- Name: index_visitor_identities_on_issuer_and_subject_and_audience; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5595,13 +5580,6 @@ CREATE UNIQUE INDEX index_visitor_identities_on_source_record_id ON public.visit
 --
 
 CREATE INDEX index_visitor_identities_on_status_id ON public.visitor_identities USING btree (status_id);
-
-
---
--- Name: index_visitor_oidc_identity_bindings_on_visitor_identity_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_visitor_oidc_identity_bindings_on_visitor_identity_id ON public.visitor_oidc_identity_bindings USING btree (visitor_identity_id);
 
 
 --
@@ -5885,13 +5863,6 @@ CREATE INDEX index_visitor_privacy_requests_on_response_due_at ON public.visitor
 
 
 --
--- Name: index_visitor_privacy_requests_on_visitor_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_visitor_privacy_requests_on_visitor_id ON public.visitor_privacy_requests USING btree (visitor_id);
-
-
---
 -- Name: index_visitor_processor_erasure_notifications_on_discard_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5931,13 +5902,6 @@ CREATE UNIQUE INDEX index_visitor_retention_holds_on_public_id ON public.visitor
 --
 
 CREATE INDEX index_visitor_retention_holds_on_purge_eligible_at ON public.visitor_retention_holds USING btree (purge_eligible_at) WHERE (purge_eligible_at < 'infinity'::timestamp with time zone);
-
-
---
--- Name: index_visitor_retention_holds_on_visitor_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_visitor_retention_holds_on_visitor_id ON public.visitor_retention_holds USING btree (visitor_id);
 
 
 --
@@ -6022,13 +5986,6 @@ CREATE UNIQUE INDEX index_visitor_withdrawal_ceremonies_on_public_id ON public.v
 --
 
 CREATE UNIQUE INDEX index_visitor_withdrawal_ceremonies_on_token_digest ON public.visitor_withdrawal_ceremonies USING btree (token_digest);
-
-
---
--- Name: index_visitor_withdrawal_ceremonies_on_visitor_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_visitor_withdrawal_ceremonies_on_visitor_id ON public.visitor_withdrawal_ceremonies USING btree (visitor_id);
 
 
 --
@@ -6306,6 +6263,14 @@ ALTER TABLE ONLY public.company_units
 
 
 --
+-- Name: core_com_visitor_bridges fk_core_com_visitor_bridges_on_visitor_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.core_com_visitor_bridges
+    ADD CONSTRAINT fk_core_com_visitor_bridges_on_visitor_id FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: individual_memberships fk_individual_memberships_unit_same_company; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6578,14 +6543,6 @@ ALTER TABLE ONLY public.visitor_preference_date_formats
 
 
 --
--- Name: visitor_processor_erasure_notifications fk_rails_4944a6f18c; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitor_processor_erasure_notifications
-    ADD CONSTRAINT fk_rails_4944a6f18c FOREIGN KEY (visitor_privacy_request_id) REFERENCES public.visitor_privacy_requests(id);
-
-
---
 -- Name: company_administration_grants fk_rails_4cef54cbd2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6647,22 +6604,6 @@ ALTER TABLE ONLY public.visitor_preference_themes
 
 ALTER TABLE ONLY public.individual_memberships
     ADD CONSTRAINT fk_rails_59516aa7d8 FOREIGN KEY (granted_by_individual_id) REFERENCES public.individuals(id) ON DELETE SET NULL;
-
-
---
--- Name: visitor_withdrawal_ceremonies fk_rails_5cdc4d0fad; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitor_withdrawal_ceremonies
-    ADD CONSTRAINT fk_rails_5cdc4d0fad FOREIGN KEY (visitor_id) REFERENCES public.visitors(id);
-
-
---
--- Name: visitor_withdrawal_flow_events fk_rails_606617dd12; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitor_withdrawal_flow_events
-    ADD CONSTRAINT fk_rails_606617dd12 FOREIGN KEY (visitor_withdrawal_flow_id) REFERENCES public.visitor_withdrawal_flows(id);
 
 
 --
@@ -7138,11 +7079,43 @@ ALTER TABLE ONLY public.company_unit_closures
 
 
 --
+-- Name: visitor_accounts fk_visitor_accounts_on_visitor_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_accounts
+    ADD CONSTRAINT fk_visitor_accounts_on_visitor_id FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: visitor_processor_erasure_notifications fk_visitor_erasure_notifications_on_privacy_request_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_processor_erasure_notifications
+    ADD CONSTRAINT fk_visitor_erasure_notifications_on_privacy_request_id FOREIGN KEY (visitor_privacy_request_id) REFERENCES public.visitor_privacy_requests(id) ON DELETE CASCADE;
+
+
+--
 -- Name: visitor_processor_erasure_notification_attempts fk_visitor_proc_erase_attempt_notification; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
     ADD CONSTRAINT fk_visitor_proc_erase_attempt_notification FOREIGN KEY (visitor_processor_erasure_notification_id) REFERENCES public.visitor_processor_erasure_notifications(id) ON DELETE CASCADE;
+
+
+--
+-- Name: visitor_withdrawal_ceremonies fk_visitor_withdrawal_ceremonies_on_visitor_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_withdrawal_ceremonies
+    ADD CONSTRAINT fk_visitor_withdrawal_ceremonies_on_visitor_id FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE CASCADE;
+
+
+--
+-- Name: visitor_withdrawal_flow_events fk_visitor_withdrawal_flow_events_on_flow_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_withdrawal_flow_events
+    ADD CONSTRAINT fk_visitor_withdrawal_flow_events_on_flow_id FOREIGN KEY (visitor_withdrawal_flow_id) REFERENCES public.visitor_withdrawal_flows(id) ON DELETE CASCADE;
 
 
 --
@@ -7152,6 +7125,17 @@ ALTER TABLE ONLY public.visitor_processor_erasure_notification_attempts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
+('20261020120001'),
+('20261020120000'),
+('20261020110001'),
+('20261020110000'),
+('20261020100001'),
+('20261020100000'),
+('20261019120007'),
+('20261019120006'),
+('20261019120005'),
 ('20261019120004'),
 ('20261019120002'),
 ('20261019120000'),

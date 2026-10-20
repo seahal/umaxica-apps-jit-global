@@ -8,11 +8,16 @@ class ClientSecretIssuance < AppZenithRecord
   attr_readonly :client_id, :origin_operation_id, :origin, :attempt_number,
                 :browser_session_ref, :sign_up_flow_ref, :planned_count, :expires_at
 
+  validates :attempt_number, uniqueness: { scope: :origin_operation_id }, on: :create
+
   validate :cancellation_is_immutable, on: :update
   validate :cancellation_has_source_audit, on: :update
   validate :confirmation_is_immutable, on: :update
   validate :presentation_is_immutable, on: :update
   validate :signup_completion_has_source_audit, on: :update
+  validates :attempt_number, :origin, :origin_operation_id, :planned_count, exclusion: { in: [nil] }
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: { scope: %i(client_id) }, allow_nil: true, if: :will_save_change_to_id?
 
   public
 
@@ -24,6 +29,15 @@ class ClientSecretIssuance < AppZenithRecord
   def _write_attribute(name, value)
     verify_persisted_fact_assignment!(name, value)
     super
+  end
+
+  # Rails' generated attribute writers no longer pass through _write_attribute, so each persisted
+  # fact also guards its own writer.
+  %w(presented_at confirmed_at signup_completed_at canceled_at).each do |fact|
+    define_method(:"#{fact}=") do |value|
+      verify_persisted_fact_assignment!(fact, value)
+      super(value)
+    end
   end
 
   def state(at:)

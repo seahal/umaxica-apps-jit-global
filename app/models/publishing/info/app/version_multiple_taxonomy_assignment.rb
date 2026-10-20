@@ -10,6 +10,13 @@ module Publishing
 
         belongs_to :entry_version, class_name: "Publishing::Info::App::EntryVersion",
                                    inverse_of: :multiple_taxonomy_assignments
+        validates :position,
+                  numericality: { only_integer: true,
+                                  greater_than_or_equal_to: 0,
+                                  less_than_or_equal_to: 2_147_483_647, },
+                  on: :create
+        validates :term_path_snapshot, exclusion: { in: [nil] }
+
         scope :ordered, -> { order(:position) }
 
         def self.expected_kind = Publishing::TaxonomyKind::MULTIPLE_ORDERED_FLAT

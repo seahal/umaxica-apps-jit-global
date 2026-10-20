@@ -56,7 +56,7 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
 
   def setup
     @user = Client.create!(
-      public_id: "u_#{SecureRandom.hex(8)}",
+      public_id: PublicId.generate,
       status_id: ClientStatus::NOTHING,
       created_at: 1.day.ago,
       updated_at: 1.day.ago,

@@ -47,4 +47,7 @@ class ClientDeviceSession < OpBaseAppRecord
   has_many :op_app_grants, foreign_key: :device_session_id,
                            dependent: :restrict_with_exception,
                            inverse_of: :client_device_session
+
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: { scope: %i(user_id) }, allow_nil: true, if: :will_save_change_to_id?
 end

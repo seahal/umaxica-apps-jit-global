@@ -21,4 +21,7 @@ class VisitorProcessorErasureNotification < ComPrincipalRecord
            class_name: "VisitorProcessorErasureNotificationAttempt",
            inverse_of: :notification,
            dependent: :delete_all
+
+  validates :delivery_idempotency_key_digest, length: { maximum: 64 }
+  validates :delivery_idempotency_key_digest, exclusion: { in: [nil] }
 end

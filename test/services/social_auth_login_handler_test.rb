@@ -23,7 +23,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
   test "authenticates an existing identity linked to a user" do
     client = Client.create!(
       status_id: ClientStatus::ACTIVE,
-      public_id: "sah_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       birthdate: "2000-01-01",
     )
     identity = create_active_external_identity(

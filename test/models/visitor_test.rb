@@ -311,4 +311,8 @@ class VisitorTest < ActiveSupport::TestCase
 
     assert_predicate visitor, :passkey_login_available?
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::Visitor)
+  end
 end

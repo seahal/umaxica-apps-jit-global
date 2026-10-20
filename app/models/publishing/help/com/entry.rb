@@ -10,6 +10,10 @@ module Publishing
         SURFACE = "help"
         AUDIENCE = "com"
         REGION_CODE = "jp"
+
+        validates :archived_by_operator_public_id, length: { maximum: 21 }
+        # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+        validates :id, uniqueness: { scope: %i(locale) }, allow_nil: true, if: :will_save_change_to_id?
       end
     end
   end

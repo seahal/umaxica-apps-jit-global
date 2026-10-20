@@ -14,9 +14,13 @@ class RpBaseComIdentityBinding < RpBaseComRecord
                                  dependent: :restrict_with_error
 
   validates :issuer, :realm, :client_id, :subject, presence: true
+  validates :subject, uniqueness: { scope: %i(issuer realm client_id) }, on: :create
   validates :realm, inclusion: { in: [REALM] }
   validates :client_id, inclusion: { in: [CLIENT_ID] }
   validate :identity_attributes_are_immutable
+  validates :realm, length: { maximum: 3 }
+  validates :client_id, length: { maximum: 64 }
+  validates :issuer, :subject, length: { maximum: 255 }
 
   private
 

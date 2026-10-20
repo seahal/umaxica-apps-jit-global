@@ -224,6 +224,7 @@ CREATE TABLE public.area_occurrences (
     updated_at timestamp(6) with time zone NOT NULL,
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT area_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT area_occurrences_discarded_at_not_null NOT NULL,
+    CONSTRAINT chk_area_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_area_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -420,6 +421,7 @@ CREATE TABLE public.client_occurrences (
     context jsonb DEFAULT '{}'::jsonb CONSTRAINT user_occurrences_context_not_null NOT NULL,
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT user_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT user_occurrences_discarded_at_not_null NOT NULL,
+    CONSTRAINT chk_client_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_user_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -613,6 +615,7 @@ CREATE TABLE public.domain_occurrences (
     updated_at timestamp(6) with time zone NOT NULL,
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT domain_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT domain_occurrences_discarded_at_not_null NOT NULL,
+    CONSTRAINT chk_domain_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_domain_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -839,6 +842,7 @@ CREATE TABLE public.email_occurrences (
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT email_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT email_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_email_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
+    CONSTRAINT chk_email_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_email_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -1065,6 +1069,7 @@ CREATE TABLE public.ip_occurrences (
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT ip_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT ip_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_ip_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
+    CONSTRAINT chk_ip_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_ip_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -1302,6 +1307,7 @@ CREATE TABLE public.jwt_occurrences (
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT jwt_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT jwt_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_jwt_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
+    CONSTRAINT chk_jwt_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_jwt_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -1402,6 +1408,7 @@ CREATE TABLE public.operator_occurrences (
     context jsonb DEFAULT '{}'::jsonb CONSTRAINT staff_occurrences_context_not_null NOT NULL,
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_occurrences_discarded_at_not_null NOT NULL,
+    CONSTRAINT chk_operator_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_staff_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -1573,6 +1580,7 @@ CREATE TABLE public.telephone_occurrences (
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT telephone_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT telephone_occurrences_discarded_at_not_null NOT NULL,
     CONSTRAINT chk_telephone_occurrences_memo_length CHECK ((char_length((memo)::text) <= 1000)),
+    CONSTRAINT chk_telephone_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_telephone_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -1673,7 +1681,8 @@ CREATE TABLE public.visitor_occurrences (
     status_id bigint DEFAULT 0 CONSTRAINT customer_occurrences_status_id_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT customer_occurrences_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT customer_occurrences_updated_at_not_null NOT NULL,
-    CONSTRAINT chk_customer_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
+    CONSTRAINT chk_customer_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at)),
+    CONSTRAINT chk_visitor_occurrences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1738,6 +1747,7 @@ CREATE TABLE public.zip_occurrences (
     updated_at timestamp(6) with time zone NOT NULL,
     purge_eligible_at timestamp with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT zip_occurrences_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT zip_occurrences_discarded_at_not_null NOT NULL,
+    CONSTRAINT chk_zip_occurrences_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_zip_occurrences_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -3932,6 +3942,8 @@ ALTER TABLE ONLY public.zip_occurrences
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
 ('20260921133000'),
 ('20260918150000'),
 ('20260616150022'),

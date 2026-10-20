@@ -10,6 +10,8 @@ module Organization
 
   class_methods do
     def organization_interface_validations
+      # FIXME: The checker treats projected-attribute guards as nullable columns; remediation C7
+      # preserves existing partial saves until the checker/contract mismatch is resolved.
       validates :name, presence: true, if: -> { has_attribute?(:name) }
       validates :title, presence: true, length: { in: 1..10 },
                         format: { with: /\A[A-Za-z0-9]{1,10}\z/ }, if: -> { has_attribute?(:title) }

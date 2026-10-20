@@ -122,7 +122,7 @@ class AgentBureauModelLayerTest < ActiveSupport::TestCase
           [
             {
               operator_identity_id: identity.id,
-              public_id: "dup-#{SecureRandom.hex(8)}",
+              public_id: PublicId.generate,
               title: "Agent3",
               created_at: Time.current,
               updated_at: Time.current,

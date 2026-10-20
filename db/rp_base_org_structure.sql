@@ -188,7 +188,8 @@ CREATE TABLE public.rp_principals (
     public_id character varying(21) NOT NULL,
     disabled_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_rp_principals_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -227,7 +228,8 @@ CREATE TABLE public.rp_refresh_attempts (
     expires_at timestamp(6) with time zone NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_rp_base_org_refresh_attempts_shape CHECK ((expected_installed_generation >= 0))
+    CONSTRAINT chk_rp_base_org_refresh_attempts_shape CHECK ((expected_installed_generation >= 0)),
+    CONSTRAINT chk_rp_refresh_attempts_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -266,7 +268,8 @@ CREATE TABLE public.rp_sessions (
     contract_epoch bigint DEFAULT 1 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_rp_base_org_sessions_shape CHECK (((installed_generation >= 0) AND (contract_epoch >= 1)))
+    CONSTRAINT chk_rp_base_org_sessions_shape CHECK (((installed_generation >= 0) AND (contract_epoch >= 1))),
+    CONSTRAINT chk_rp_sessions_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -490,6 +493,34 @@ CREATE UNIQUE INDEX idx_rp_base_org_sessions_public_id ON public.rp_sessions USI
 
 
 --
+-- Name: index_rp_event_receipts_on_op_session_binding_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rp_event_receipts_on_op_session_binding_id ON public.rp_event_receipts USING btree (op_session_binding_id);
+
+
+--
+-- Name: index_rp_identity_bindings_on_principal_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rp_identity_bindings_on_principal_id ON public.rp_identity_bindings USING btree (principal_id);
+
+
+--
+-- Name: index_rp_op_session_bindings_on_identity_binding_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rp_op_session_bindings_on_identity_binding_id ON public.rp_op_session_bindings USING btree (identity_binding_id);
+
+
+--
+-- Name: index_rp_refresh_attempts_on_session_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_rp_refresh_attempts_on_session_id ON public.rp_refresh_attempts USING btree (session_id);
+
+
+--
 -- Name: rp_event_receipts fk_rp_base_org_event_receipts_op_binding; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -536,6 +567,9 @@ ALTER TABLE ONLY public.rp_sessions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
+('20261019111033'),
 ('20261016220057'),
 ('20261016220037');
 

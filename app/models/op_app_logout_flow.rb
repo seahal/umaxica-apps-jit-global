@@ -16,4 +16,8 @@ class OpAppLogoutFlow < OpBaseAppRecord
   validates :public_id, :realm, :target_root_ref, :idempotency_digest, :browser_binding_digest,
             :expires_at, :audit_ref, presence: true
   validates :realm, inclusion: { in: [REALM] }
+  validates :realm, length: { maximum: 3 }
+  validates :public_id, length: { maximum: 21 }
+  validates :audit_ref, length: { maximum: 128 }
+  validates :target_root_ref, length: { maximum: 255 }
 end

@@ -138,6 +138,9 @@ class ClientToken < OpBaseAppRecord
   validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
 
   validate :enforce_concurrent_session_limit, on: :create
+  validates :device_session_id, :user_id, exclusion: { in: [nil] }
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: { scope: %i(device_session_id) }, allow_nil: true, if: :will_save_change_to_id?
 
   private
 

@@ -20,5 +20,10 @@ class OperatorTokenKind < OpBaseOrgRecord
 
   DEFAULTS = [BROWSER_WEB, CLIENT_IOS, CLIENT_ANDROID].freeze
 
-  has_many :staff_tokens, class_name: "OperatorToken", dependent: :restrict_with_error
+  # The token table retains its staff_* keys across the principal rename.
+  has_many :staff_tokens,
+           class_name: "OperatorToken",
+           foreign_key: :staff_token_kind_id,
+           dependent: :restrict_with_error,
+           inverse_of: :staff_token_kind
 end

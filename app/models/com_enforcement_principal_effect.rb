@@ -3,6 +3,8 @@
 
 # adr/unified-enforcement.md, Principal effects (com realm).
 class ComEnforcementPrincipalEffect < ComPrincipalRecord
+  validates :com_enforcement_case_id, uniqueness: true
+
   self.table_name = "com_enforcement_principal_effects"
 
   belongs_to :enforcement_case, class_name: "ComEnforcementCase", foreign_key: :com_enforcement_case_id,

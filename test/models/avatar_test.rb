@@ -156,7 +156,7 @@ class AvatarTest < ActiveSupport::TestCase
 
   test "create_with_owner delegates with an explicit owner and stores the period" do
     create_user_and_status
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
 
@@ -181,7 +181,7 @@ class AvatarTest < ActiveSupport::TestCase
   end
 
   test "role associations" do
-    user = Client.find_by!(public_id: "one_id")
+    user = Client.find_by!(public_id: "one_idxxxxxxxxxxxxxxx")
     avatar = AvatarTestFactory.create!(
       moniker: "Role Test", capability: @capability, active_handle: @handle,
     )
@@ -260,8 +260,12 @@ class AvatarTest < ActiveSupport::TestCase
 
   def create_user_and_status
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
-    Client.find_or_create_by!(public_id: "one_id") do |u|
+    Client.find_or_create_by!(public_id: "one_idxxxxxxxxxxxxxxx") do |u|
       u.status_id = ClientStatus::NOTHING
     end
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::Avatar)
   end
 end

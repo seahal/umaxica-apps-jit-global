@@ -135,6 +135,9 @@ class VisitorToken < OpBaseComRecord
   validates :public_id, uniqueness: true, length: { maximum: 21 }
 
   validate :enforce_concurrent_session_limit, on: :create
+  validates :device_session_id, :visitor_id, exclusion: { in: [nil] }
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: { scope: %i(device_session_id) }, allow_nil: true, if: :will_save_change_to_id?
   attr_accessor :skip_session_limit_check
 
   private

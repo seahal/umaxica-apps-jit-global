@@ -52,6 +52,10 @@ class IndividualAssignmentTest < ActiveSupport::TestCase
     assert_equal 2, IndividualAssignment.where(individual: individual, visitor_identity: identity).count
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::IndividualAssignment)
+  end
+
   private
 
   def build_individual_and_identity

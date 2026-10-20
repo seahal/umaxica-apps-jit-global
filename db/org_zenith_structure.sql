@@ -146,14 +146,14 @@ ALTER SEQUENCE public.agent_administration_grants_id_seq OWNED BY public.agent_a
 
 CREATE TABLE public.agent_assignments (
     id bigint NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     agent_id bigint NOT NULL,
     operator_identity_id bigint NOT NULL,
     assigned_at timestamp(6) with time zone NOT NULL,
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT agent_assignments_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_agent_assignments_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -412,7 +412,7 @@ CREATE TABLE public.agent_ownership_transfer_requests (
     agent_id bigint NOT NULL,
     source_operator_id bigint NOT NULL,
     destination_operator_id bigint CONSTRAINT agent_ownership_transfer_reque_destination_operator_id_not_null NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
     expected_ownership_revision integer CONSTRAINT agent_ownership_transfer_re_expected_ownership_revisio_not_null NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
@@ -423,7 +423,7 @@ CREATE TABLE public.agent_ownership_transfer_requests (
     invalidated_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT agent_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
+    CONSTRAINT chk_agent_ownership_transfer_requests_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_agent_transfer_requests_distinct_parties CHECK ((source_operator_id <> destination_operator_id)),
     CONSTRAINT chk_agent_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_agent_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
@@ -555,13 +555,13 @@ ALTER SEQUENCE public.agent_view_grants_id_seq OWNED BY public.agent_view_grants
 CREATE TABLE public.agents (
     id bigint NOT NULL,
     operator_identity_id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     moniker character varying,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     title character varying NOT NULL,
-    CONSTRAINT agents_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_agents_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -736,7 +736,7 @@ CREATE TABLE public.bureau_ownership_transfer_requests (
     bureau_id bigint NOT NULL,
     source_operator_id bigint NOT NULL,
     destination_operator_id bigint CONSTRAINT bureau_ownership_transfer_requ_destination_operator_id_not_null NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     status character varying DEFAULT 'pending'::character varying NOT NULL,
     expected_ownership_revision integer CONSTRAINT bureau_ownership_transfer_r_expected_ownership_revisio_not_null NOT NULL,
     requested_at timestamp(6) with time zone NOT NULL,
@@ -747,7 +747,7 @@ CREATE TABLE public.bureau_ownership_transfer_requests (
     invalidated_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT bureau_ownership_transfer_requests_public_id_max_length CHECK ((char_length((public_id)::text) <= 25)),
+    CONSTRAINT chk_bureau_ownership_transfer_requests_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_bureau_transfer_requests_distinct_parties CHECK ((source_operator_id <> destination_operator_id)),
     CONSTRAINT chk_bureau_transfer_requests_expiry_after_request CHECK ((requested_at < expires_at)),
     CONSTRAINT chk_bureau_transfer_requests_revision_nonnegative CHECK ((expected_ownership_revision >= 0)),
@@ -851,12 +851,12 @@ CREATE TABLE public.bureau_units (
     id bigint NOT NULL,
     bureau_id bigint NOT NULL,
     parent_id bigint,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT bureau_units_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_bureau_units_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -917,13 +917,13 @@ ALTER SEQUENCE public.bureau_view_grants_id_seq OWNED BY public.bureau_view_gran
 
 CREATE TABLE public.bureaus (
     id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     name character varying DEFAULT ''::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     title character varying NOT NULL,
-    CONSTRAINT bureaus_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_bureaus_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -953,14 +953,14 @@ ALTER SEQUENCE public.bureaus_id_seq OWNED BY public.bureaus.id;
 CREATE TABLE public.core_org_operator_bridges (
     id bigint NOT NULL,
     operator_id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     rp_client_id character varying DEFAULT 'core_org'::character varying NOT NULL,
     audience character varying DEFAULT 'umaxica-core-org'::character varying NOT NULL,
     host character varying DEFAULT 'jpx.umaxica.org'::character varying NOT NULL,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT core_org_operator_bridges_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_core_org_operator_bridges_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1187,11 +1187,11 @@ ALTER SEQUENCE public.legacy_operator_department_accounts_id_seq OWNED BY public
 
 CREATE TABLE public.operator_accounts (
     id bigint CONSTRAINT staff_accounts_id_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT staff_accounts_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT staff_accounts_public_id_not_null NOT NULL,
     staff_id bigint CONSTRAINT staff_accounts_staff_id_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT staff_accounts_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT staff_accounts_updated_at_not_null NOT NULL,
-    CONSTRAINT operator_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_operator_accounts_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1294,7 +1294,8 @@ CREATE TABLE public.operator_bulletins (
     body text,
     read_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone CONSTRAINT staff_bulletins_created_at_not_null NOT NULL,
-    updated_at timestamp(6) with time zone CONSTRAINT staff_bulletins_updated_at_not_null NOT NULL
+    updated_at timestamp(6) with time zone CONSTRAINT staff_bulletins_updated_at_not_null NOT NULL,
+    CONSTRAINT chk_operator_bulletins_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1341,6 +1342,7 @@ CREATE TABLE public.operator_capability_grants (
     CONSTRAINT chk_operator_capability_grants_capability_with_tech CHECK (((capability)::text = ANY ((ARRAY['support.console.read'::character varying, 'support.account.read.app'::character varying, 'support.account.read.com'::character varying, 'support.session.revoke.app'::character varying, 'support.session.revoke.com'::character varying, 'enforcement.read.app'::character varying, 'enforcement.read.com'::character varying, 'enforcement.apply.app'::character varying, 'enforcement.apply.com'::character varying, 'enforcement.approve.app'::character varying, 'enforcement.approve.com'::character varying, 'enforcement.release.app'::character varying, 'enforcement.release.com'::character varying, 'enforcement.review_appeal.app'::character varying, 'enforcement.review_appeal.com'::character varying, 'iam.capability.read'::character varying, 'iam.capability.grant'::character varying, 'iam.capability.revoke'::character varying, 'tech.access'::character varying])::text[]))),
     CONSTRAINT chk_operator_capability_grants_granter CHECK (((((origin)::text = 'grant'::text) AND (granted_by_operator_id IS NOT NULL) AND (granted_by_operator_id <> operator_id)) OR (((origin)::text = 'bootstrap'::text) AND (granted_by_operator_id IS NULL)))),
     CONSTRAINT chk_operator_capability_grants_origin CHECK (((origin)::text = ANY ((ARRAY['grant'::character varying, 'bootstrap'::character varying])::text[]))),
+    CONSTRAINT chk_operator_capability_grants_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_operator_capability_grants_reason_code CHECK ((((reason_code)::text = ANY ((ARRAY['bootstrap'::character varying, 'duty_assignment'::character varying, 'incident_response'::character varying, 'access_review'::character varying])::text[])) AND (((origin)::text = 'bootstrap'::text) = ((reason_code)::text = 'bootstrap'::text)))),
     CONSTRAINT chk_operator_capability_grants_revocation CHECK ((((revoked_at IS NULL) AND (revoke_reason_code IS NULL) AND (revoked_by_operator_id IS NULL)) OR ((revoked_at IS NOT NULL) AND (revoke_reason_code IS NOT NULL) AND ((revoke_reason_code)::text = ANY ((ARRAY['duty_ended'::character varying, 'access_review'::character varying, 'security_incident'::character varying, 'operator_error_recovery'::character varying])::text[]))))),
     CONSTRAINT chk_operator_capability_grants_validity_window CHECK ((isfinite(starts_at) AND isfinite(expires_at) AND (expires_at > starts_at) AND (expires_at <= (starts_at + '366 days'::interval))))
@@ -1446,7 +1448,8 @@ CREATE TABLE public.operator_emails (
     promotional boolean DEFAULT true CONSTRAINT staff_emails_promotional_not_null NOT NULL,
     notifiable boolean DEFAULT true CONSTRAINT staff_emails_notifiable_not_null NOT NULL,
     subscribable boolean DEFAULT true CONSTRAINT staff_emails_subscribable_not_null NOT NULL,
-    address_digest character varying
+    address_digest character varying,
+    CONSTRAINT chk_operator_emails_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1485,7 +1488,8 @@ CREATE TABLE public.operator_entra_identities (
     status_id bigint DEFAULT 0 NOT NULL,
     last_authenticated_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_operator_entra_identities_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1643,7 +1647,7 @@ ALTER SEQUENCE public.operator_identifier_rotation_audits_id_seq OWNED BY public
 
 CREATE TABLE public.operator_identities (
     id bigint CONSTRAINT staff_personnels_id_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT staff_personnels_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT staff_personnels_public_id_not_null NOT NULL,
     issuer character varying CONSTRAINT staff_personnels_issuer_not_null NOT NULL,
     subject character varying CONSTRAINT staff_personnels_subject_not_null NOT NULL,
     audience character varying CONSTRAINT staff_personnels_audience_not_null NOT NULL,
@@ -1653,7 +1657,7 @@ CREATE TABLE public.operator_identities (
     lock_version integer DEFAULT 0 CONSTRAINT staff_personnels_lock_version_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT staff_personnels_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT staff_personnels_updated_at_not_null NOT NULL,
-    CONSTRAINT operator_identities_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_operator_identities_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1729,7 +1733,8 @@ CREATE TABLE public.operator_lifecycle_requests (
     executed_at timestamp(6) with time zone,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_operator_lifecycle_requests_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1935,7 +1940,8 @@ CREATE TABLE public.operator_passkeys (
     authenticator_attachment character varying,
     provider_name character varying,
     metadata_source character varying,
-    uv_verified_at timestamp(6) with time zone
+    uv_verified_at timestamp(6) with time zone,
+    CONSTRAINT chk_operator_passkeys_sign_count CHECK ((sign_count >= 0))
 );
 
 
@@ -2644,7 +2650,8 @@ CREATE TABLE public.operator_preferences (
     motion character varying DEFAULT 'standard'::character varying CONSTRAINT staff_preferences_motion_not_null NOT NULL,
     density character varying DEFAULT 'standard'::character varying CONSTRAINT staff_preferences_density_not_null NOT NULL,
     page_size character varying DEFAULT 'infinity'::character varying CONSTRAINT staff_preferences_items_per_page_not_null NOT NULL,
-    explicit_fields jsonb DEFAULT '[]'::jsonb
+    explicit_fields jsonb DEFAULT '[]'::jsonb,
+    CONSTRAINT chk_operator_preferences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -2759,6 +2766,7 @@ CREATE TABLE public.operator_secret_credentials (
     revoked_at timestamp(6) with time zone,
     locked_at timestamp(6) with time zone,
     last_failed_at timestamp(6) with time zone,
+    CONSTRAINT chk_operator_secret_credentials_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_staff_secrets_retention_order CHECK ((discard_at <= purge_eligible_at))
 );
 
@@ -2886,7 +2894,8 @@ CREATE TABLE public.operator_telephones (
     staff_identity_telephone_status_id bigint DEFAULT 0 CONSTRAINT staff_telephones_staff_identity_telephone_status_id_not_null NOT NULL,
     number_digest character varying,
     otp_last_sent_at timestamp(6) with time zone,
-    public_id character varying(25) CONSTRAINT operator_telephones_public_id_not_null1 NOT NULL
+    public_id character varying(21) CONSTRAINT operator_telephones_public_id_not_null1 NOT NULL,
+    CONSTRAINT chk_operator_telephones_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -3012,13 +3021,13 @@ CREATE TABLE public.operator_workspace_accounts (
     id bigint NOT NULL,
     staff_id bigint NOT NULL,
     department_id bigint,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     moniker character varying,
     lock_version integer DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     status_id bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT operator_workspace_accounts_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_operator_workspace_accounts_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -3108,7 +3117,7 @@ ALTER SEQUENCE public.operators_id_seq OWNED BY public.operators.id;
 CREATE TABLE public.org_enforcement_appeals (
     id bigint NOT NULL,
     org_enforcement_case_id bigint NOT NULL,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     state character varying DEFAULT 'submitted'::character varying NOT NULL,
     reason_code character varying NOT NULL,
     statement text,
@@ -3119,8 +3128,8 @@ CREATE TABLE public.org_enforcement_appeals (
     redacted_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT chk_org_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[]))),
-    CONSTRAINT org_enforcement_appeals_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_org_enforcement_appeals_pid CHECK ((char_length((public_id)::text) = 21)),
+    CONSTRAINT chk_org_enforcement_appeals_state CHECK (((state)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'approved'::character varying, 'rejected'::character varying, 'redacted'::character varying])::text[])))
 );
 
 
@@ -3414,7 +3423,8 @@ CREATE TABLE public.organization_entra_connections (
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    entra_credential_key character varying NOT NULL
+    entra_credential_key character varying NOT NULL,
+    CONSTRAINT chk_organization_entra_connections_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -5940,13 +5950,6 @@ CREATE INDEX index_agent_memberships_on_revoked_by_agent_id ON public.agent_memb
 
 
 --
--- Name: index_agents_on_operator_identity_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_agents_on_operator_identity_id ON public.agents USING btree (operator_identity_id);
-
-
---
 -- Name: index_agents_on_public_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6266,13 +6269,6 @@ CREATE INDEX index_operator_lifecycle_requests_on_target_email ON public.operato
 --
 
 CREATE INDEX index_operator_lifecycle_requests_on_target_operator_id ON public.operator_lifecycle_requests USING btree (target_operator_id);
-
-
---
--- Name: index_operator_oidc_identity_bindings_on_operator_identity_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_operator_oidc_identity_bindings_on_operator_identity_id ON public.operator_oidc_identity_bindings USING btree (operator_identity_id);
 
 
 --
@@ -6894,11 +6890,99 @@ ALTER TABLE ONLY public.bureau_units
 
 
 --
+-- Name: core_org_operator_bridges fk_core_org_operator_bridges_on_operator_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.core_org_operator_bridges
+    ADD CONSTRAINT fk_core_org_operator_bridges_on_operator_id FOREIGN KEY (operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: departments fk_departments_on_department_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.departments
     ADD CONSTRAINT fk_departments_on_department_status_id FOREIGN KEY (department_status_id) REFERENCES public.department_statuses(id);
+
+
+--
+-- Name: operator_accounts fk_operator_accounts_on_staff_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_accounts
+    ADD CONSTRAINT fk_operator_accounts_on_staff_id FOREIGN KEY (staff_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_entra_identities fk_operator_entra_identities_on_connection_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_entra_identities
+    ADD CONSTRAINT fk_operator_entra_identities_on_connection_id FOREIGN KEY (connection_id) REFERENCES public.organization_entra_connections(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_lifecycle_requests fk_operator_lifecycle_requests_on_approved_by_operator_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_lifecycle_requests
+    ADD CONSTRAINT fk_operator_lifecycle_requests_on_approved_by_operator_id FOREIGN KEY (approved_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_lifecycle_requests fk_operator_lifecycle_requests_on_executed_by_operator_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_lifecycle_requests
+    ADD CONSTRAINT fk_operator_lifecycle_requests_on_executed_by_operator_id FOREIGN KEY (executed_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_lifecycle_requests fk_operator_lifecycle_requests_on_rejected_by_operator_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_lifecycle_requests
+    ADD CONSTRAINT fk_operator_lifecycle_requests_on_rejected_by_operator_id FOREIGN KEY (rejected_by_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_lifecycle_requests fk_operator_lifecycle_requests_on_target_operator_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_lifecycle_requests
+    ADD CONSTRAINT fk_operator_lifecycle_requests_on_target_operator_id FOREIGN KEY (target_operator_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_workspace_account_memberships fk_operator_workspace_account_memberships_on_staff_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_workspace_account_memberships
+    ADD CONSTRAINT fk_operator_workspace_account_memberships_on_staff_id FOREIGN KEY (staff_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_workspace_accounts fk_operator_workspace_accounts_on_department_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_workspace_accounts
+    ADD CONSTRAINT fk_operator_workspace_accounts_on_department_id FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: operator_workspace_accounts fk_operator_workspace_accounts_on_staff_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_workspace_accounts
+    ADD CONSTRAINT fk_operator_workspace_accounts_on_staff_id FOREIGN KEY (staff_id) REFERENCES public.operators(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: operator_workspace_accounts fk_operator_workspace_accounts_on_status_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_workspace_accounts
+    ADD CONSTRAINT fk_operator_workspace_accounts_on_status_id FOREIGN KEY (status_id) REFERENCES public.operator_workspace_account_statuses(id) ON DELETE RESTRICT;
 
 
 --
@@ -7828,6 +7912,13 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
+('20261020110001'),
+('20261020110000'),
+('20261019120007'),
+('20261019120006'),
+('20261019120005'),
 ('20261019120004'),
 ('20261019120002'),
 ('20261016210005'),

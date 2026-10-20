@@ -32,11 +32,11 @@ CREATE TABLE public.ar_internal_metadata (
 
 CREATE TABLE public.operator_notification_records (
     id bigint CONSTRAINT staff_notifications_id_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT staff_notifications_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT staff_notifications_public_id_not_null NOT NULL,
     staff_id bigint CONSTRAINT staff_notifications_staff_id_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT staff_notifications_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT staff_notifications_updated_at_not_null NOT NULL,
-    CONSTRAINT operator_notification_records_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_operator_notification_records_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -65,11 +65,11 @@ ALTER SEQUENCE public.operator_notification_records_id_seq OWNED BY public.opera
 
 CREATE TABLE public.operator_notifications (
     id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     staff_notification_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT operator_notifications_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_operator_notifications_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -190,6 +190,8 @@ ALTER TABLE ONLY public.operator_notifications
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
 ('20261012092106'),
 ('20261012092006'),
 ('20260612000001'),

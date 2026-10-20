@@ -546,9 +546,9 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
   test "current_db_sign_in_flow_for_sequence resumes an actorless flow only for an OIDC-started ceremony" do
     [
-      [:app, Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE),
+      [:app, Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE),
        ClientSignInFlow, :pending_login_user_id,],
-      [:com, Visitor.create!(public_id: "v_#{SecureRandom.hex(6)}", status_id: VisitorStatus::ACTIVE),
+      [:com, Visitor.create!(public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE),
        VisitorSignInFlow, :pending_login_visitor_id,],
       [:org, Operator.create!(status_id: OperatorStatus::ACTIVE),
        OperatorSignInFlow, :pending_login_staff_id,],
@@ -852,7 +852,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "sign_in_guardrail_participant builds a real guardrail participant bound to the resolved actor" do
-    actor = Client.create!(public_id: "u_#{SecureRandom.hex(6)}", status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
     @harness.current_resource = actor
     cycle = FakeCycle.new
 

@@ -124,6 +124,10 @@ documentation, longevity and observability are coequal. Category order is not pr
   configuration explicit and observable. Keep production independent of test-only requirements.
 - **MUST:** read required Ruby environment variables with one-argument `ENV.fetch("NAME")`; read
   optional variables with `ENV["NAME"]` and an explicit nil branch. Code-side defaults are defects.
+- **MUST:** never give database NULL a meaning. NULL must not encode a state, a decision or a third
+  boolean value, and code must not branch on whether a persisted column is NULL. Represent every
+  state explicitly with NOT NULL columns, status reference tables or enums. Boolean columns are NOT
+  NULL.
 - **MUST:** preserve unchanged external contracts, persistent data, identity/security state and
   audit history. Persist authoritative audit, security, compliance and purchase events as records.
 - **MUST:** obtain explicit risk and recovery-plan approval before destructive or irreversible

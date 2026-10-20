@@ -78,6 +78,7 @@ class OperatorCapabilityGrant < OrgPrincipalRecord
   validates :revoke_reason_code, inclusion: { in: REVOKE_REASON_CODES }, allow_nil: true
   validate :validity_window_is_bounded
   validate :granter_shape_matches_origin
+  validates :ticket_id, length: { maximum: 64 }
 
   scope :unrevoked, -> { where(revoked_at: nil) }
   scope :in_force,

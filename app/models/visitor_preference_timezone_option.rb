@@ -39,6 +39,9 @@ class VisitorPreferenceTimezoneOption < ComPrincipalRecord
            inverse_of: :option,
            dependent: :restrict_with_error
 
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: true, allow_nil: true, if: :will_save_change_to_id?
+
   def self.ensure_defaults!
     insert_missing_fixed_ids!(DEFAULTS)
   end

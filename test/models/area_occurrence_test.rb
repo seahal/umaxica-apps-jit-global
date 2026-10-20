@@ -101,6 +101,10 @@ class AreaOccurrenceTest < ActiveSupport::TestCase
 
     assert_occurrence_lifecycle_defaults(record)
   end
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::AreaOccurrence)
+  end
+
   private
 
   def build_occurrence(klass, attrs = {})

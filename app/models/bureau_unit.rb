@@ -56,4 +56,8 @@ class BureauUnit < OrgRpRecord
   has_many :ancestors, through: :ancestor_links, source: :ancestor
   has_many :descendants, through: :descendant_links, source: :descendant
   has_many :agent_memberships, dependent: :restrict_with_error, inverse_of: :bureau_unit
+
+  validates :bureau_id, exclusion: { in: [nil] }
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: { scope: %i(bureau_id) }, allow_nil: true, if: :will_save_change_to_id?
 end

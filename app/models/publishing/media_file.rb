@@ -4,8 +4,13 @@ module Publishing
   class MediaFile < PublishingRecord
     self.table_name = "publishing_media_files"
 
+    # FIXME: Shared PublicId permits 25 characters while chk_media_files_pid requires exactly 21;
+    # remediation D2a preserves the DB contract until a separate identifier decision reconciles them.
     include PublicId
     include PublishingMediaUploader::Attachment[:file]
+
+    validates :storage_key, uniqueness: true, on: :create
+    validates :byte_size, :content_type, :digest, :digest_algorithm, :storage_key, exclusion: { in: [nil] }
 
     before_validation :assign_shrine_file_metadata, if: -> { file.present? }
     after_save :sync_store_key_after_promote, if: -> { file.present? }

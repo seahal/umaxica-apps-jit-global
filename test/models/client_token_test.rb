@@ -83,7 +83,7 @@ class ClientTokenTest < ActiveSupport::TestCase
   def setup
     @user = Client.create!(
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
-      public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING,
+      public_id: PublicId.generate, status_id: ClientStatus::NOTHING,
     )
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
@@ -183,7 +183,7 @@ class ClientTokenTest < ActiveSupport::TestCase
   end
 
   test "token device session must belong to the same user" do
-    other_user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    other_user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
     other_token = ClientToken.create!(user: other_user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     error =
@@ -259,14 +259,14 @@ class ClientTokenTest < ActiveSupport::TestCase
   end
 
   test "can load one fixture" do
-    token_one = ClientToken.find_by!(public_id: "651")
+    token_one = ClientToken.find_by!(public_id: "651xxxxxxxxxxxxxxxxxx")
 
     assert_not_nil token_one
     assert_not_nil token_one.user_id
   end
 
   test "can load two fixture" do
-    token_two = ClientToken.find_by!(public_id: "615")
+    token_two = ClientToken.find_by!(public_id: "615xxxxxxxxxxxxxxxxxx")
 
     assert_not_nil token_two
     assert_not_nil token_two.user_id
@@ -660,7 +660,7 @@ class ClientTokenTest < ActiveSupport::TestCase
   end
 
   test "rotate_refresh! rejects revoked compromised and expired tokens" do
-    user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
     revoked = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     compromised = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     expired = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
@@ -708,5 +708,9 @@ class ClientTokenTest < ActiveSupport::TestCase
 
   test "find_from_signed_ref returns nil for invalid signature" do
     assert_nil ClientToken.find_from_signed_ref("invalid-signed-ref")
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::ClientToken)
   end
 end

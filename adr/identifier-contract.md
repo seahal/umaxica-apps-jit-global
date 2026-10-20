@@ -32,9 +32,11 @@ existing permitted paths.
 ### Self-controlled non-secret opaque identity
 
 Use the existing CSPRNG-backed NanoID implementation with its verified alphabet and standard
-generation length 21. Standard string/varchar storage capacity is 25. The extra capacity is not
-permission to generate arbitrary lengths or accept arbitrary legacy formats. Generation, storage
-capacity and explicitly supported compatibility are independently verified.
+generation length 21. Storage is fixed to the generation length: every NanoID `public_id` column is
+`varchar(21)` with a `char_length(public_id) = 21` CHECK constraint, and the model validates exactly
+21 characters. (Amended by the user on 2026-10-20. The earlier storage capacity of 25 is withdrawn:
+NanoID is always 21 characters, and the extra capacity only let values the generator never produces
+reach the database.) Generation and storage are verified together.
 
 NanoID avoids embedding time, sequence, region or business membership into an opaque value. Do not
 replace it with a custom PRNG, post-generation case transformation, binary storage or fixed-width
@@ -135,8 +137,9 @@ authorized here.
 
 ## Consequences and current limitations
 
-Consistency is defined by semantic role rather than matching spelling. Capacity 25 does not justify
-invalidating valid long issued references: any necessary bounded transition must name its actual
+Consistency is defined by semantic role rather than matching spelling. Fixing NanoID storage at 21
+characters applies to NanoID `public_id` columns only; it does not justify invalidating valid long
+issued references of other identifier kinds. Any necessary bounded transition must name its actual
 consumers and exit condition. Ordinary creation does not accept arbitrary caller-specified owned
 identity; authorized import is a separate path. Bulk writers explicitly supply identities or fail at
 the database, and cannot hide missing inserted rows as successful completion.

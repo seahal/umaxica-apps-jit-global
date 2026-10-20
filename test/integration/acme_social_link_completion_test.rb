@@ -27,7 +27,7 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "sign callback stages the social link until the Auth receiver POST" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "linkcompl_#{SecureRandom.hex(4)}")
+    user = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
     uid = "completion_google_#{SecureRandom.hex(4)}"
     setup_google_mock_auth(uid: uid, token: "completion_token")
 

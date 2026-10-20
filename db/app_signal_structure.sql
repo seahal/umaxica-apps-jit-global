@@ -32,11 +32,11 @@ CREATE TABLE public.ar_internal_metadata (
 
 CREATE TABLE public.client_notification_records (
     id bigint CONSTRAINT user_notifications_id_not_null NOT NULL,
-    public_id character varying DEFAULT ''::character varying CONSTRAINT user_notifications_public_id_not_null NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying CONSTRAINT user_notifications_public_id_not_null NOT NULL,
     user_id bigint CONSTRAINT user_notifications_user_id_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT user_notifications_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT user_notifications_updated_at_not_null NOT NULL,
-    CONSTRAINT client_notification_records_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_client_notification_records_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -65,11 +65,11 @@ ALTER SEQUENCE public.client_notification_records_id_seq OWNED BY public.client_
 
 CREATE TABLE public.member_notifications (
     id bigint NOT NULL,
-    public_id character varying DEFAULT ''::character varying NOT NULL,
+    public_id character varying(21) DEFAULT ''::character varying NOT NULL,
     user_notification_id bigint NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    CONSTRAINT member_notifications_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_member_notifications_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -190,6 +190,8 @@ ALTER TABLE ONLY public.member_notifications
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
 ('20261012092104'),
 ('20261012092004'),
 ('20260612000001'),

@@ -513,3 +513,22 @@ stage, not an unmanaged-table exception; see the staged transition above. Comple
 ownership, eight-role classification, reference bounds, sequence/partition and executable regression
 coverage before declaring I acceptance complete. These scoped mappings do not provide that global
 evidence.
+
+### Publishing taxonomy snapshot references
+
+`vocabulary_public_id_snapshot` and `term_public_id_snapshot` on all 24 Publishing single/multiple
+version assignment models are frozen reference copies, not newly issued resource identities. Their
+current physical capacity remains 21, with exact-21 persisted values derived by the existing DB
+insertion trigger from the live vocabulary/term. The source rows also retain their current exact-21
+contract pending the separate owned-ID capacity review. This does not reduce PublicId's shared
+capacity 25 or authorize broad widening of historical references.
+
+The model validates only a creation-time maximum 21: larger inputs cannot reach the existing varchar
+before the trigger, whereas shorter accepted nonblank input is still replaced by the DB. Empty/nil
+references retain the existing model presence rule. The creation scope preserves the
+immutable-update ReadOnlyRecord contract for an attempted overlong replacement. The database, not
+apply_snapshot's supplied values, remains the authority for persisted historical rendering. See
+[ID-3r](../checklists/identifier-contracts.md#id-3r--publishing-immutable-taxonomy-snapshot-references)
+and the explicit all-24-model matrix in
+[`snapshot_public_id_capacity_contract_test.rb`](../../test/models/publishing/snapshot_public_id_capacity_contract_test.rb).
+Existing snapshot triggers are retained; this mapping authorizes no new trigger or data migration.

@@ -238,6 +238,7 @@ class Avatar < AvatarRecord
 
   validates :public_id, presence: true, uniqueness: true
   validates :capability_id, numericality: { only_integer: true, greater_than: 0 }
+  validates :lifecycle_state_id, exclusion: { in: [nil] }
 
   before_validation :default_lifecycle_state, on: :create
 

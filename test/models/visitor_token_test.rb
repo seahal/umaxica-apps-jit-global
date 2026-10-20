@@ -302,6 +302,10 @@ class VisitorTokenTest < ActiveSupport::TestCase
       assert_equal token.purge_eligible_at.to_i, replacement.purge_eligible_at.to_i
     end
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::VisitorToken)
+  end
 end
 
 # DAMP local helper copy for former shared test support.

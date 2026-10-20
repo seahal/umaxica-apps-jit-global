@@ -100,17 +100,15 @@ class Core::Com::Api::V0::SessionsControllerTest < ActionDispatch::IntegrationTe
     assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
   end
 
-  test "a blank visitor public id is rejected without falling back to the database key" do
+  # adr/identifier-contract.md fixes public_id at exactly 21 characters, so a visitor can no longer
+  # hold a blank public id that would invite a fallback to the database key.
+  test "a blank visitor public id cannot be stored, so the database key fallback is unreachable" do
     visitor = visitors(:reserved_visitor)
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = oidc_access_token_for(visitor)
-    visitor.update_columns(public_id: "")
 
-    get("/api/v0/session", headers: json_headers)
-
-    assert_response :unauthorized
-    assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
-  ensure
-    visitors(:reserved_visitor).update_columns(public_id: "reserved_visitor")
+    assert_raises(ActiveRecord::CheckViolation) do
+      Visitor.transaction(requires_new: true) { visitor.update_columns(public_id: "") }
+    end
+    assert_equal 21, visitor.reload.public_id.length
   end
 
   private

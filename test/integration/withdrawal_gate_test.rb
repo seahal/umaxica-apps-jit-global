@@ -27,7 +27,7 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
       user: @deactivated_user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "deactivated_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     satisfy_user_verification(@token)
@@ -143,7 +143,7 @@ class WithdrawalGateTest < ActionDispatch::IntegrationTest
       user: normal_user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "normal_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     satisfy_user_verification(normal_token)

@@ -205,6 +205,8 @@ module StepUpCeremonyTransactionable
 
   def verified? = status == STATUS_VERIFIED
 
+  # FIXME: Remediation D6 retains nil user_verified before evidence exists; reconcile the checker
+  # without changing pending transactions into recorded negative verification.
   def record_verification!(method:, aal:, phishing_resistant:, user_verified:, verified_at:, verified_credential_ref:)
     self.class.connection_owner.connected_to(role: :writing) do
       with_lock do

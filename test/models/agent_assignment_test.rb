@@ -52,6 +52,10 @@ class AgentAssignmentTest < ActiveSupport::TestCase
     assert_equal 2, AgentAssignment.where(agent: agent, operator_identity: identity).count
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::AgentAssignment)
+  end
+
   private
 
   def build_agent_and_identity

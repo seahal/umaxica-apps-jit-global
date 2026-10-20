@@ -36,7 +36,7 @@
 #
 one:
   id: 1
-  public_id: user_pref_000000001
+  public_id: "user_pref_000000001xx"
   user: one
   consented: false
   functional: false
@@ -45,7 +45,7 @@ one:
 
 two:
   id: 2
-  public_id: user_pref_000000002
+  public_id: "user_pref_000000002xx"
   user: two
   consented: false
   functional: false

@@ -12,6 +12,10 @@ class RpBaseAppCallbackState < RpBaseAppRecord
             :pkce_verifier_ciphertext, :issuer, :realm, :client_id, :expires_at, presence: true
   validates :realm, inclusion: { in: [REALM] }
   validates :client_id, inclusion: { in: [CLIENT_ID] }
+  validates :realm, length: { maximum: 3 }
+  validates :client_id, length: { maximum: 64 }
+  validates :pkce_challenge, length: { maximum: 128 }
+  validates :issuer, length: { maximum: 255 }
 
   public
 

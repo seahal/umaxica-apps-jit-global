@@ -4864,7 +4864,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
   def create_social_client
     user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      public_id: "soc_#{SecureRandom.hex(6)}",
+      public_id: PublicId.generate,
       birthdate: "2000-02-03",
       last_step_up_at: 1.minute.ago,
     )

@@ -16,6 +16,10 @@ module PublishingTaxonomyTermRecord
                         dependent: :restrict_with_exception
 
     validates :locale, presence: true
+    # FIXME: A slug uniqueness validator would change the DB duplicate exception contract
+    # verified by TaxonomyConstraintsTest and TaxonomyRetirementTest; D1 retains this contract.
+    # FIXME: Sibling-position preflight also changes D1 when slug and position both conflict;
+    # TaxonomyUniquenessExceptionContractTest covers the C20 trial and its reversion.
     validates :slug, format: { with: /\A[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\z/ }
     validates :name, presence: true
 

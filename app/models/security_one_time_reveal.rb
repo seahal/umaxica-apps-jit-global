@@ -20,4 +20,7 @@ class SecurityOneTimeReveal < OpBaseAppRecord
       end
     end
   end
+
+  validates :actor_id, :actor_type, :encrypted_payload, :expires_at, :jti_digest, :purpose,
+            :session_nonce_digest, exclusion: { in: [nil] }
 end

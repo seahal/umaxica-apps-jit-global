@@ -6,6 +6,8 @@ class AvatarPurgeDeferral < AvatarRecord
 
   validates :reason_code, presence: true
   validates :attempt_count, numericality: { only_integer: true, greater_than: 0 }
+  validates :reason_code, length: { maximum: 100 }
+  validates :first_observed_at, exclusion: { in: [nil] }
 
   public
 

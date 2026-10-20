@@ -21,7 +21,7 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
 
   test "finalizes a pending telephone sign-up after passkey setup" do
     user = Client.create!(
-      public_id: "c_#{SecureRandom.hex(8)}",
+      public_id: PublicId.generate,
       status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       visibility_id: ClientVisibility::USER,
       mfa_level_id: ClientMfaLevel::NOTHING,
@@ -100,7 +100,7 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
 
   test "raises when the required passkey is missing and rolls back the registration" do
     user = Client.create!(
-      public_id: "c_#{SecureRandom.hex(8)}",
+      public_id: PublicId.generate,
       status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       visibility_id: ClientVisibility::USER,
       mfa_level_id: ClientMfaLevel::NOTHING,

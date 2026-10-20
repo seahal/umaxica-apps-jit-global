@@ -36,6 +36,9 @@ class Member < AppPrincipalRecord
 
   attribute :status_id, default: MemberStatus::NOTHING
 
+  validates :public_id, uniqueness: true
+  validates :public_id, exclusion: { in: [nil] }
+
   belongs_to :user, class_name: "Client", inverse_of: :owned_members
   belongs_to :member_status,
              foreign_key: :status_id,

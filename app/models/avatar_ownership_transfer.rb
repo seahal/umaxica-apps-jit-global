@@ -19,6 +19,7 @@ class AvatarOwnershipTransfer < AvatarRecord
                          if: -> { requested_at.present? && expires_at.present? }
   validate :source_and_target_owners_differ
   validate :actor_surfaces_match_terminal_state
+  validates :expires_at, :requested_at, exclusion: { in: [nil] }
 
   scope :pending, -> { where(state: "pending") }
 

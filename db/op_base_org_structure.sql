@@ -343,6 +343,7 @@ CREATE TABLE public.op_org_grants (
     authentication_epoch bigint,
     CONSTRAINT chk_op_org_grants_authentication_epoch CHECK (((authentication_epoch IS NULL) OR (authentication_epoch >= 0))),
     CONSTRAINT chk_op_org_grants_contract_epoch CHECK (((contract_epoch IS NULL) OR (contract_epoch >= 1))),
+    CONSTRAINT chk_op_org_grants_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_op_org_grants_refresh_delivery_all_or_none CHECK ((((refresh_delivery_ciphertext IS NULL) AND (refresh_delivery_predecessor_digest IS NULL) AND (refresh_delivery_expires_at IS NULL)) OR ((refresh_delivery_ciphertext IS NOT NULL) AND (refresh_delivery_predecessor_digest IS NOT NULL) AND (refresh_delivery_expires_at IS NOT NULL))))
 );
 
@@ -571,7 +572,8 @@ CREATE TABLE public.operator_device_sessions (
     revoke_reason character varying,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
-    last_network_hmac character varying
+    last_network_hmac character varying,
+    CONSTRAINT chk_operator_device_sessions_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -778,6 +780,7 @@ CREATE TABLE public.operator_oidc_authorization_transactions (
     cancellation_handoff_ref uuid,
     cancellation_handoff_ciphertext text,
     CONSTRAINT chk_operator_oidc_authorization_transactions_contract_epoch CHECK (((contract_epoch IS NULL) OR (contract_epoch >= 1))),
+    CONSTRAINT chk_operator_oidc_txns_max_age CHECK ((oidc_max_age >= 0)),
     CONSTRAINT operator_oidc_auth_canceled_terminal CHECK (((canceled_at IS NULL) = ((status)::text <> 'canceled'::text))),
     CONSTRAINT operator_oidc_auth_cancellation_handoff_pair CHECK ((((cancellation_handoff_ref IS NULL) AND (cancellation_handoff_ciphertext IS NULL)) OR ((cancellation_handoff_ref IS NOT NULL) AND (cancellation_handoff_ciphertext IS NOT NULL)))),
     CONSTRAINT operator_oidc_auth_cancellation_handoff_valid CHECK (((cancellation_handoff_digest IS NULL) OR ((cancellation_handoff_digest)::text ~ '^[0-9a-f]{64}$'::text))),
@@ -817,7 +820,8 @@ CREATE TABLE public.operator_oidc_connections (
     last_used_at timestamp(6) with time zone,
     revoked_at timestamp(6) with time zone,
     created_at timestamp(6) with time zone CONSTRAINT staff_oidc_connections_created_at_not_null NOT NULL,
-    updated_at timestamp(6) with time zone CONSTRAINT staff_oidc_connections_updated_at_not_null NOT NULL
+    updated_at timestamp(6) with time zone CONSTRAINT staff_oidc_connections_updated_at_not_null NOT NULL,
+    CONSTRAINT chk_operator_oidc_connections_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -862,7 +866,8 @@ CREATE TABLE public.operator_passkey_ceremony_candidates (
     consumed_at timestamp with time zone,
     lock_version bigint DEFAULT 0 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
-    updated_at timestamp(6) with time zone NOT NULL
+    updated_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT chk_operator_passkey_candidates_sign_count CHECK ((sign_count >= 0))
 );
 
 
@@ -1113,6 +1118,7 @@ CREATE TABLE public.operator_sign_in_flows (
     authentication_method character varying,
     authentication_event_at timestamp(6) with time zone,
     authentication_context character varying,
+    CONSTRAINT chk_operator_sign_in_flows_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_operator_sign_in_flows_state_completed_at CHECK (((state_id = 100) = (completed_at IS NOT NULL))),
     CONSTRAINT chk_org_sign_in_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_org_sign_in_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
@@ -1227,7 +1233,8 @@ CREATE TABLE public.operator_sign_out_flows (
     created_at timestamp(6) with time zone CONSTRAINT operator_sign_out_cycles_created_at_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT operator_sign_out_cycles_updated_at_not_null NOT NULL,
     CONSTRAINT chk_operator_sign_out_cycles_retention_order CHECK ((discard_at <= purge_eligible_at)),
-    CONSTRAINT chk_operator_sign_out_cycles_token_expiry_order CHECK ((access_expires_at <= refresh_expires_at))
+    CONSTRAINT chk_operator_sign_out_cycles_token_expiry_order CHECK ((access_expires_at <= refresh_expires_at)),
+    CONSTRAINT chk_operator_sign_out_flows_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1305,6 +1312,7 @@ CREATE TABLE public.operator_sign_up_flows (
     base_finalized_at timestamp(6) with time zone,
     authentication_method character varying,
     authentication_event_at timestamp(6) with time zone,
+    CONSTRAINT chk_operator_sign_up_flows_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_org_sign_up_sequence_tickets_lifetime_order CHECK ((issued_at < expires_at)),
     CONSTRAINT chk_org_sign_up_sequence_tickets_retention_order CHECK ((discard_at <= purge_eligible_at)),
     CONSTRAINT operator_sign_up_flows_authentication_evidence_valid CHECK ((((authentication_method IS NULL) AND (authentication_event_at IS NULL)) OR (((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])) AND (authentication_event_at IS NOT NULL) AND (principal_id IS NOT NULL)))),
@@ -1373,8 +1381,8 @@ CREATE TABLE public.operator_step_up_ceremony_transactions (
     step_up_required boolean DEFAULT true CONSTRAINT operator_step_up_ceremony_transaction_step_up_required_not_null NOT NULL,
     user_verification_required boolean DEFAULT false CONSTRAINT operator_step_up_ceremony_t_user_verification_required_not_null NOT NULL,
     full_reauthentication_required boolean DEFAULT false CONSTRAINT operator_step_up_ceremony_t_full_reauthentication_requ_not_null NOT NULL,
-    audience character varying,
-    token_binding character varying,
+    audience character varying NOT NULL,
+    token_binding character varying NOT NULL,
     require_session_binding boolean DEFAULT true CONSTRAINT operator_step_up_ceremony_tran_require_session_binding_not_null NOT NULL,
     tenant_ref character varying,
     user_verified boolean,
@@ -1434,6 +1442,7 @@ CREATE TABLE public.operator_step_up_sessions (
     passkey_origin character varying,
     passkey_challenge_expires_at timestamp(6) with time zone,
     passkey_challenge_consumed_at timestamp(6) with time zone,
+    CONSTRAINT chk_operator_step_up_sessions_attempt_count CHECK ((attempt_count >= 0)),
     CONSTRAINT operator_step_up_challenge_bound CHECK (((passkey_challenge IS NULL) OR ((step_up_ceremony_transaction_ref IS NOT NULL) AND (passkey_challenge_ref IS NOT NULL) AND (passkey_rp_id IS NOT NULL) AND (passkey_origin IS NOT NULL) AND (passkey_challenge_expires_at IS NOT NULL) AND (passkey_challenge_expires_at <= discard_at))))
 );
 
@@ -1684,6 +1693,7 @@ CREATE TABLE public.operator_tokens (
     CONSTRAINT chk_operator_tokens_authentication_epoch CHECK (((authentication_epoch IS NULL) OR (authentication_epoch >= 0))),
     CONSTRAINT chk_operator_tokens_contract_epoch CHECK (((contract_epoch IS NULL) OR (contract_epoch >= 1))),
     CONSTRAINT chk_operator_tokens_established_authentication_method CHECK (((established_authentication_method IS NULL) OR ((established_authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'entra'::character varying])::text[])))),
+    CONSTRAINT chk_operator_tokens_pid CHECK ((char_length((public_id)::text) = 21)),
     CONSTRAINT chk_staff_tokens_kind_id_positive CHECK ((staff_token_kind_id >= 0)),
     CONSTRAINT chk_staff_tokens_status_id_positive CHECK ((staff_token_status_id >= 0))
 );
@@ -2714,6 +2724,13 @@ CREATE UNIQUE INDEX idx_operator_resolution_waiting_actor ON public.operator_ses
 
 
 --
+-- Name: idx_operator_session_limit_resolution_txns_on_state_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_operator_session_limit_resolution_txns_on_state_id ON public.operator_session_limit_resolution_transactions USING btree (state_id);
+
+
+--
 -- Name: index_op_org_grants_on_oidc_client_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2746,6 +2763,13 @@ CREATE UNIQUE INDEX index_op_org_grants_on_refresh_token_digest ON public.op_org
 --
 
 CREATE INDEX index_op_org_grants_on_revoked_at ON public.op_org_grants USING btree (revoked_at);
+
+
+--
+-- Name: index_op_outbox_events_on_logout_flow_participant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_op_outbox_events_on_logout_flow_participant_id ON public.op_outbox_events USING btree (logout_flow_participant_id);
 
 
 --
@@ -2823,13 +2847,6 @@ CREATE INDEX index_operator_device_sessions_on_refresh_token_family_id ON public
 --
 
 CREATE INDEX index_operator_device_sessions_on_revoked_at ON public.operator_device_sessions USING btree (revoked_at);
-
-
---
--- Name: index_operator_device_sessions_on_staff_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_operator_device_sessions_on_staff_id ON public.operator_device_sessions USING btree (staff_id);
 
 
 --
@@ -3509,6 +3526,14 @@ ALTER TABLE ONLY public.operator_tokens
 
 
 --
+-- Name: operator_tokens fk_operator_tokens_on_oidc_connection_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_tokens
+    ADD CONSTRAINT fk_operator_tokens_on_oidc_connection_id FOREIGN KEY (oidc_connection_id) REFERENCES public.operator_oidc_connections(id) ON DELETE SET NULL;
+
+
+--
 -- Name: operator_tokens fk_operator_tokens_on_staff_id_and_device_session_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3771,6 +3796,16 @@ ALTER TABLE ONLY public.operator_email_ceremony_transactions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
+('20261020120001'),
+('20261020120000'),
+('20261020110001'),
+('20261020110000'),
+('20261019110846'),
+('20261019110842'),
+('20261019110838'),
+('20261019110834'),
 ('20261019035659'),
 ('20261019035544'),
 ('20261019032927'),

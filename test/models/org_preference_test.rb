@@ -66,15 +66,15 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     assert_equal 21, preference.public_id.length
   end
 
-  test "validates public_id maximum length" do
+  test "validates the fixed public_id length" do
     preference = OrgPreference.new(public_id: "a" * 26)
 
     assert_not preference.valid?
-    assert preference.errors.of_kind?(:public_id, :too_long)
+    assert preference.errors.of_kind?(:public_id, :wrong_length)
   end
 
   test "does not overwrite existing public_id" do
-    custom_id = "custom_public_id_123"
+    custom_id = "custom_public_id_123x"
     preference = OrgPreference.create!(public_id: custom_id)
 
     assert_equal custom_id, preference.public_id
@@ -255,5 +255,9 @@ class OrgPreferenceTest < ActiveSupport::TestCase
     )
 
     assert_equal "approved", preference.adult_content_gate
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OrgPreference)
   end
 end

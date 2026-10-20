@@ -9,8 +9,12 @@ class AvatarBureauOwnershipPeriod < AvatarRecord
            inverse_of: :ownership_period
 
   validates :bureau_public_id, presence: true
+  validates :avatar_id,
+            uniqueness: { conditions: -> { where("valid_to = 'infinity'::timestamp with time zone") } },
+            on: :create, if: -> { valid_to == Float::INFINITY }
   validates :valid_from, presence: true
   validate :valid_interval
+  validates :bureau_public_id, :transferred_by_actor_public_id, length: { maximum: 255 }
 
   scope :current, -> { where("valid_to = 'infinity'::timestamp with time zone") }
 

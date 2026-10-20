@@ -34,7 +34,7 @@ reserved_client:
   client_status_id: 1
   status_id: 1
   user: reserved_user
-  public_id: "reserved_client"
+  public_id: "reserved_clientxxxxxx"
   moniker: "Reserved client"
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>

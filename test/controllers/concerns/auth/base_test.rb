@@ -597,7 +597,7 @@ module Auth
       ClientTokenStatus.ensure_defaults!
 
       Client.create!(
-        public_id: "u_#{SecureRandom.hex(8)}",
+        public_id: PublicId.generate,
         status_id: ClientStatus::ACTIVE,
         visibility_id: ClientVisibility::USER,
         mfa_level_id: ClientMfaLevel::NOTHING,

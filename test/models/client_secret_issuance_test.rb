@@ -132,6 +132,10 @@ class ClientSecretIssuanceTest < ActiveSupport::TestCase
     no_expiry = ClientSecretIssuance.new(planned_count: 1)
     assert_raises(ArgumentError) { no_expiry.state(at: deadline) }
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::ClientSecretIssuance)
+  end
 end
 
 class ClientSecretIssuancePersistenceTest < ActiveSupport::TestCase

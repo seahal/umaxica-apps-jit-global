@@ -19,6 +19,8 @@ class ClientExternalIdentity < AppPrincipalRecord
   validates :issuer, :subject, :audience, :verification_authority, presence: true
   validates :state, inclusion: { in: STATES }
   validates :verified_at, presence: true
+  validates :provider, length: { maximum: 16 }
+  validates :state, length: { maximum: 32 }
 
   scope :effective_binding, -> { where(released_at: nil) }
 

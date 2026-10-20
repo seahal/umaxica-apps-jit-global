@@ -154,19 +154,15 @@ class CoreBrowserApiBoundaryTest < ActionDispatch::IntegrationTest
     assert_not_includes response.body, %("#{client.id}")
   end
 
-  test "a blank public id is rejected without falling back to the database key" do
+  # adr/identifier-contract.md fixes public_id at exactly 21 characters, so a principal can no
+  # longer hold a blank public id that would invite a fallback to the database key.
+  test "a blank public id cannot be stored, so the database key fallback is unreachable" do
     client = clients(:one)
-    access_token = oidc_access_token_for(client)
-    original_public_id = client.public_id
-    client.update_columns(public_id: "")
-    cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
 
-    get("/api/v0/session", headers: json_headers)
-
-    assert_response :unauthorized
-    assert_equal "urn:umaxica:problem:authentication-required", response.parsed_body.fetch("type")
-  ensure
-    clients(:one).update_columns(public_id: original_public_id) if defined?(original_public_id)
+    assert_raises(ActiveRecord::CheckViolation) do
+      Client.transaction(requires_new: true) { client.update_columns(public_id: "") }
+    end
+    assert_equal 21, client.reload.public_id.length
   end
 
   test "a context claim that disagrees with the current Base root is rejected from the cookie boundary" do

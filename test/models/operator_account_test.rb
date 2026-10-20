@@ -43,4 +43,8 @@ class OperatorAccountTest < ActiveSupport::TestCase
     assert_not duplicate.valid?
     assert duplicate.errors.of_kind?(:staff_id, :taken)
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorAccount)
+  end
 end

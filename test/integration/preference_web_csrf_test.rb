@@ -293,7 +293,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "csrf_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     auth_headers = {
@@ -404,7 +404,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "csrf_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     auth_headers = {

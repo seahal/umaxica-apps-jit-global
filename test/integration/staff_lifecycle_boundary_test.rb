@@ -10,7 +10,7 @@ class StaffLifecycleBoundaryTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     host! @host
     @staff = operators(:one)
-    @token = OperatorToken.create!(staff: @staff, public_id: "ol#{SecureRandom.hex(8)}")
+    @token = OperatorToken.create!(staff: @staff, public_id: PublicId.generate)
     mark_token_step_up_satisfied_for_test(@token, scope: "operator_lifecycle")
   end
 

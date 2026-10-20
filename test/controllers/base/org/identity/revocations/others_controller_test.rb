@@ -86,7 +86,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
       staff: @operator,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      public_id: "org_other_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     other.update!(created_at: 1.hour.ago)
@@ -165,7 +165,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
       staff: @operator,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
-      public_id: "org_other_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
 

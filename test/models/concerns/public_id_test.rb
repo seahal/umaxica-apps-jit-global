@@ -63,31 +63,30 @@ class PublicIdTest < ActiveSupport::TestCase
 
   test "existing public_id is not overridden" do
     dummy_instance = DummyModel.new
-    dummy_instance.public_id = "existingid123456789"
+    dummy_instance.public_id = "existingid12345678901"
     dummy_instance.save!
 
-    assert_equal "existingid123456789", dummy_instance.public_id
+    assert_equal "existingid12345678901", dummy_instance.public_id
   end
 
-  test "existing public_id may use the twenty-five character storage capacity" do
-    value = "legacy-compatible-public"[0, 25]
-    dummy_instance = DummyModel.new(public_id: value)
+  test "public_id accepts exactly the 21-character NanoID length" do
+    dummy_instance = DummyModel.new(public_id: "a" * 21)
 
-    dummy_instance.save!
-
-    assert_equal value, dummy_instance.public_id
+    assert_predicate dummy_instance, :valid?
   end
 
-  test "public_id rejects values above the storage capacity" do
-    dummy_instance = DummyModel.new(public_id: "a" * 26)
+  test "public_id rejects one character below and above the fixed length" do
+    [20, 22].each do |length|
+      dummy_instance = DummyModel.new(public_id: "a" * length)
 
-    assert_not dummy_instance.valid?
-    assert dummy_instance.errors.key?(:public_id)
+      assert_not dummy_instance.valid?, "#{length} characters"
+      assert dummy_instance.errors.of_kind?(:public_id, :wrong_length), "#{length} characters"
+    end
   end
 
   test "persisted public_id cannot be changed through the record update boundary" do
     dummy_instance = DummyModel.create!
-    dummy_instance.public_id = "replacementid123456"
+    dummy_instance.public_id = "replacementid12345678"
 
     error = assert_raises(ActiveRecord::RecordInvalid) { dummy_instance.save! }
 

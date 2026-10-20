@@ -10,4 +10,6 @@ class OrgIdentityAuthenticationEvent < OrgZenithRecord
             presence: true
   validates :realm, inclusion: { in: [REALM] }
   validates :cutoff_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validates :realm, length: { maximum: 3 }
+  validates :reason, :scope, length: { maximum: 64 }
 end

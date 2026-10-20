@@ -212,7 +212,7 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rejects an owner identifier that collides across principal surfaces" do
-    shared_public_id = "cross-surface-owner"
+    shared_public_id = "cross-surface-ownerxx"
     Client.create!(
       public_id: shared_public_id,
       status_id: ClientStatus::ACTIVE,

@@ -148,6 +148,10 @@ class VisitorEmailTest < ActiveSupport::TestCase
     assert_equal 1, VisitorEmail.effective_binding.where(visitor_id: owner.id).count
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::VisitorEmail)
+  end
+
   private
 end
 

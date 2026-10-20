@@ -36,6 +36,11 @@ class AvatarTransferReservation < AvatarRecord
             format: { with: /\A[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/ }
   validates :request_fingerprint, presence: true
   validate :expiry_follows_request
+  validates :state, length: { maximum: 20 }
+  validates :idempotency_key, length: { maximum: 36 }
+  validates :operation_kind, length: { maximum: 40 }
+  validates :request_fingerprint, length: { maximum: 64 }
+  validates :idempotency_key, exclusion: { in: [nil] }
 
   scope :pending, -> { where(state: "pending") }
 

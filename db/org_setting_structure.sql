@@ -858,7 +858,7 @@ CREATE TABLE public.org_preferences (
     dbsc_session_id character varying,
     dbsc_status_id bigint DEFAULT 0 NOT NULL,
     jti character varying,
-    public_id character varying NOT NULL,
+    public_id character varying(21) NOT NULL,
     replaced_by_id bigint,
     status_id bigint DEFAULT 2 NOT NULL,
     token_digest bytea,
@@ -867,7 +867,7 @@ CREATE TABLE public.org_preferences (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT org_preferences_purged_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT org_preferences_discarded_at_not_null NOT NULL,
     explicit_fields jsonb DEFAULT '[]'::jsonb NOT NULL,
-    CONSTRAINT org_preferences_public_id_max_length CHECK ((char_length((public_id)::text) <= 25))
+    CONSTRAINT chk_org_preferences_pid CHECK ((char_length((public_id)::text) = 21))
 );
 
 
@@ -1781,6 +1781,8 @@ ALTER TABLE ONLY public.org_preference_themes
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261020130001'),
+('20261020130000'),
 ('20261013035720'),
 ('20261012090001'),
 ('20261012090000'),

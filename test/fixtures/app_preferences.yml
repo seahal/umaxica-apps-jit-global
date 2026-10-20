@@ -44,7 +44,7 @@
 #
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 one:
-  public_id: 922 # was app_pref_001
+  public_id: "922xxxxxxxxxxxxxxxxxx" # was app_pref_001
   binding_method_id: <%= AppPreferenceBindingMethod::NOTHING %>
   dbsc_status_id: <%= AppPreferenceDbscStatus::NOTHING %>
   status_id: 2
@@ -52,7 +52,7 @@ one:
   discard_at: <%= 20.years.from_now %>
   token_digest: <%= Digest::SHA256.hexdigest("test_token_001") %>
 two:
-  public_id: 820 # was app_pref_002
+  public_id: "820xxxxxxxxxxxxxxxxxx" # was app_pref_002
   binding_method_id: <%= AppPreferenceBindingMethod::NOTHING %>
   dbsc_status_id: <%= AppPreferenceDbscStatus::NOTHING %>
   status_id: 2

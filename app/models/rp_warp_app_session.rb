@@ -15,10 +15,16 @@ class RpWarpAppSession < RpWarpAppRecord
                               inverse_of: :session,
                               dependent: :restrict_with_error
 
+  # The partial index counts every unrevoked row, including an expired one.
+  validates :op_session_binding_id,
+            uniqueness: { conditions: -> { where(revoked_at: nil) } },
+            on: :create, if: -> { revoked_at.nil? }
+
   validates :absolute_expires_at, :contract_epoch, presence: true
   validates :installed_generation, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }
   validate :identity_binding_must_be_resolved
+  validates :current_access_jti_digest, length: { maximum: 64 }
 
   public
 

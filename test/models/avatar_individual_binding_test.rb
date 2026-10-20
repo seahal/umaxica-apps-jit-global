@@ -220,4 +220,8 @@ class AvatarIndividualBindingTest < ActiveSupport::TestCase
     assert_predicate original.reload, :revoked?
     assert_predicate replacement, :active?
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::AvatarIndividualBinding)
+  end
 end

@@ -56,6 +56,8 @@ module Persona
   class_methods do
     def persona_interface_validations
       validates :status_id, numericality: { only_integer: true }, if: -> { has_attribute?(:status_id) }
+      # FIXME: Removing this attribute guard rejects existing projected-record saves; remediation
+      # C7 retains the contract while the ColumnPresence requirement remains unresolved.
       validates :title, presence: true, length: { in: 1..10 },
                         format: { with: /\A[A-Za-z0-9]{1,10}\z/ }, if: -> { has_attribute?(:title) }
     end

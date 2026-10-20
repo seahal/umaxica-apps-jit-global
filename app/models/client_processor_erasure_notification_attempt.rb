@@ -10,9 +10,12 @@ class ClientProcessorErasureNotificationAttempt < AppPrincipalRecord
              inverse_of: :attempts
 
   validates :delivery_generation, numericality: { only_integer: true, greater_than: 0 }
+  validates :attempt_number,
+            uniqueness: { scope: %i(client_processor_erasure_notification_id delivery_generation) }, on: :create
   validates :attempt_number, numericality: { only_integer: true, greater_than: 0 }
   validates :processor_key, presence: true
   validates :idempotency_key_digest, presence: true
   validates :outcome, inclusion: { in: OUTCOMES }
   validates :started_at, presence: true
+  validates :idempotency_key_digest, :receipt_reference_digest, length: { maximum: 64 }
 end

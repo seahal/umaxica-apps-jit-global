@@ -32,4 +32,8 @@ class AgentAssignment < OrgRpRecord
 
   belongs_to :agent, inverse_of: :agent_assignments
   belongs_to :operator_identity, inverse_of: :agent_assignments
+
+  validates :agent_id,
+            uniqueness: { scope: :operator_identity_id, conditions: -> { where(revoked_at: nil) } },
+            on: :create, if: -> { revoked_at.nil? }
 end

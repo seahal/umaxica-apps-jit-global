@@ -246,6 +246,37 @@ The previous role OIDs are not ownership metadata for replacement objects. Only 
 resources are eligible; shared/production resources remain excluded. This reconstruction does not
 prove Avatar ownership COMMIT or concurrency behavior; those require their own dynamic checks.
 
+## Troubleshooting a broken test database
+
+Symptoms seen on 2026-10-20, and what fixed them. Prefer the rebuild script above. These notes are
+for diagnosing why it is needed.
+
+| Symptom in `bin/rails test`                                                                                                                    | Cause                                                                                                                                                                                                                                                    | Fix                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Thousands of `ActiveRecord::InvalidForeignKey` errors while loading fixtures, for example `client_passkeys` referencing a missing `clients` id | A non-transactional test failed before cleanup and left committed rows. PostgreSQL 18 revalidates foreign keys when fixture loading re-enables them                                                                                                      | Rebuild the fleet. `db:test:prepare` alone keeps the leftover rows when no migration is pending |
+| Hundreds of `Couldn't find OpAppProtocolEpoch with 'id'=1` (also Com/Org) or `identifier rotation function owner is invalid`                   | The databases were built by loading `db/*_structure.sql` (`db:test:load_schema`, or `db:migrate` on an empty database without `skip_initialize`). Reference rows that migrations insert are not in the dumps, and loaded functions carry the wrong owner | Rebuild from migrations only. Do not use schema load for the test fleet                         |
+| `undefined method 'internal_string_options_for_primary_key'` at boot                                                                           | Rails revision change; see `evidence/2026-10-20-rails-182206b-compatibility-R3K9.md`                                                                                                                                                                     | Already fixed in `config/initializers/schema_migration_if_not_exists.rb`                        |
+
+When the rebuild script cannot be used, for example without an isolated-fleet manifest, this manual
+sequence rebuilt the test databases from migrations on 2026-10-20:
+
+```bash
+# POSTGRESQL_TEST_PREPARE_DATABASES must list every current writable test database (32 on
+# 2026-10-20). If .env.container.devcontainer is stale, export the current list explicitly.
+RAILS_ENV=test bin/rails db:drop db:create
+RAILS_ENV=test bin/rails runner '
+  ActiveRecord::Tasks::DatabaseTasks.with_temporary_pool_for_each(env: "test") do |pool|
+    next if pool.db_config.replica?
+    ActiveRecord::Tasks::DatabaseTasks.migrate(skip_initialize: true)
+  end'
+bin/rails test
+```
+
+Run a database-heavy experiment (for example adding validations to many models at once) only against
+a fleet you will rebuild afterwards. The failing tests leave committed rows behind.
+
+The long-term fix is tracked in `plans/backlog/2026-10-20-reference-data-outside-migrations.md`.
+
 ## Stop the Server Before Resetting Databases
 
 The `app_setting` database initializes preference reference rows through `insert_missing_fixed_ids!`

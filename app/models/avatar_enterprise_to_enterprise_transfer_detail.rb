@@ -9,6 +9,10 @@ class AvatarEnterpriseToEnterpriseTransferDetail < AvatarRecord
              class_name: "AvatarEnterpriseOwnershipPeriod",
              inverse_of: false
 
+  validates :transfer_reservation_id, uniqueness: true, on: :create
+
   validates :source_enterprise_public_id, :destination_enterprise_public_id, :request_actor_public_id,
             presence: true
+  validates :accept_actor_public_id, :destination_enterprise_public_id, :request_actor_public_id,
+            :source_enterprise_public_id, length: { maximum: 255 }
 end

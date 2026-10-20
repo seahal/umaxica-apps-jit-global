@@ -27,15 +27,15 @@
   # this lookup. The current local completion scope provisions the twelve JP/WW cells below.
   rp_cells = [
     { connection: "rp_base_app", env_prefix: "RP_BASE_APP", database: "development_rp_base_app_db", client_id: "base-app-ww" },
-    { connection: "rp_core_app", env_prefix: "RP_CORE_APP", database: "development_rp_core_app_jp_db", client_id: "core-app-jp" },
-    { connection: "rp_warp_app", env_prefix: "RP_WARP_APP", database: "development_rp_warp_app_jp_db", client_id: "warp-app-jp" },
-    { connection: "rp_palm_app", env_prefix: "RP_PALM_APP", database: "development_rp_palm_app_jp_db", client_id: "palm-app-jp" },
+    { connection: "rp_core_app", env_prefix: "RP_CORE_APP", database: "development_rp_core_app_db", client_id: "core-app-jp" },
+    { connection: "rp_warp_app", env_prefix: "RP_WARP_APP", database: "development_rp_warp_app_db", client_id: "warp-app-jp" },
+    { connection: "rp_palm_app", env_prefix: "RP_PALM_APP", database: "development_rp_palm_app_db", client_id: "palm-app-jp" },
     { connection: "rp_base_com", env_prefix: "RP_BASE_COM", database: "development_rp_base_com_db", client_id: "base-com-ww" },
-    { connection: "rp_core_com", env_prefix: "RP_CORE_COM", database: "development_rp_core_com_jp_db", client_id: "core-com-jp" },
-    { connection: "rp_warp_com", env_prefix: "RP_WARP_COM", database: "development_rp_warp_com_jp_db", client_id: "warp-com-jp" },
+    { connection: "rp_core_com", env_prefix: "RP_CORE_COM", database: "development_rp_core_com_db", client_id: "core-com-jp" },
+    { connection: "rp_warp_com", env_prefix: "RP_WARP_COM", database: "development_rp_warp_com_db", client_id: "warp-com-jp" },
     { connection: "rp_base_org", env_prefix: "RP_BASE_ORG", database: "development_rp_base_org_db", client_id: "base-org-ww" },
-    { connection: "rp_core_org", env_prefix: "RP_CORE_ORG", database: "development_rp_core_org_jp_db", client_id: "core-org-jp" },
-    { connection: "rp_warp_org", env_prefix: "RP_WARP_ORG", database: "development_rp_warp_org_jp_db", client_id: "warp-org-jp" },
+    { connection: "rp_core_org", env_prefix: "RP_CORE_ORG", database: "development_rp_core_org_db", client_id: "core-org-jp" },
+    { connection: "rp_warp_org", env_prefix: "RP_WARP_ORG", database: "development_rp_warp_org_db", client_id: "warp-org-jp" },
     { connection: "rp_edit_org", env_prefix: "RP_EDIT_ORG", database: "development_rp_edit_org_db", client_id: "edit-org-ww" },
     { connection: "rp_tech_org", env_prefix: "RP_TECH_ORG", database: "development_rp_tech_org_db", client_id: "tech-org-ww" },
   ].map do |cell|

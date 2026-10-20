@@ -171,7 +171,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     ClientMfaStatus.ensure_defaults!
 
     Client.create!(
-      public_id: "client_#{SecureRandom.hex(7)}",
+      public_id: PublicId.generate,
       status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::USER,
       mfa_level_id: ClientMfaLevel::NOTHING,
@@ -186,7 +186,7 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
     VisitorMfaStatus.ensure_defaults!
 
     Visitor.create!(
-      public_id: "visitor_#{SecureRandom.hex(6)}",
+      public_id: PublicId.generate,
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
       mfa_level_id: VisitorMfaLevel::NOTHING,

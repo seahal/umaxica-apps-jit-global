@@ -28,7 +28,7 @@ class ClientAppleNotificationEventTest < ActiveSupport::TestCase
   end
 
   test "retains the minimal event while nullifying a removed legacy identity" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "n#{SecureRandom.hex(8)}")
+    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
     identity = ClientAppleIdentity.create!(
       user: client,
       provider: "apple",

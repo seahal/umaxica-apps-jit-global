@@ -8,6 +8,8 @@ class OpOrgGrant < OpBaseOrgRecord
 
   belongs_to :operator_device_session, class_name: "OperatorDeviceSession", foreign_key: :device_session_id,
                                        inverse_of: :op_org_grants
+  # FIXME: The checker requests a token FK deliberately removed for stable device-session
+  # ownership; D3 preserves historical grants and requires a new decision before adding an FK.
   belongs_to :operator_token, inverse_of: :op_org_grants
 
   validates :public_id, presence: true, uniqueness: true, length: { maximum: 21 }

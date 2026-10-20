@@ -31,4 +31,8 @@ class VisitorNotificationRecordTest < ActiveSupport::TestCase
     assert_equal visitor, notification.visitor
     assert_includes visitor.notification_records, notification
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::VisitorNotificationRecord)
+  end
 end

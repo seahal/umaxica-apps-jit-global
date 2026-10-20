@@ -76,4 +76,8 @@ class OperatorWorkspaceAccountTest < ActiveSupport::TestCase
       sql.match?(/JOIN/i) && sql.include?("operator_workspace_account_memberships") && sql.include?("operators")
     }
   end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorWorkspaceAccount)
+  end
 end

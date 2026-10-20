@@ -97,5 +97,74 @@ module Publishing
       assert_not previous_storage.exists?(previous_id)
       assert_nil Publishing::MediaFile.find_by(id: media.id)
     end
+
+    test "missing and empty public identities still mint 21 characters" do
+      [nil, ""].each do |value|
+        media = Publishing::MediaFile.new(public_id: value)
+        media.file = StringIO.new(PNG)
+        media.save!
+
+        assert_equal 21, media.reload.public_id.length
+        assert_match(/\A[A-Za-z0-9_-]{21}\z/, media.public_id)
+      end
+    end
+
+    test "database currently requires exactly 21 public identity characters" do
+      media = Publishing::MediaFile.new
+      media.file = StringIO.new(PNG)
+      media.save!
+      original = media.public_id
+      connection = PublishingRecord.lease_connection
+
+      [[20, PG::CheckViolation], [22, PG::StringDataRightTruncation],
+       [24, PG::StringDataRightTruncation], [25, PG::StringDataRightTruncation],
+       [26, PG::StringDataRightTruncation],].each do |length, cause|
+        error =
+          assert_raises(ActiveRecord::StatementInvalid) do
+            connection.transaction(requires_new: true) do
+              # SQL is an internal persistence command, not localized copy.
+              # rubocop:disable I18n/RailsI18n/DecorateString
+              connection.execute(
+                Publishing::MediaFile.sanitize_sql_array(
+                  ["UPDATE publishing_media_files SET public_id = ? WHERE id = ?", "d" * length,
+                   media.id,],
+                ),
+              )
+              # rubocop:enable I18n/RailsI18n/DecorateString
+            end
+          end
+        assert_instance_of cause, error.cause
+        assert_equal original, media.reload.public_id
+      end
+    end
+
+    test "database keeps public identity uniqueness and null refusal" do
+      first = Publishing::MediaFile.new
+      first.file = StringIO.new(PNG)
+      first.save!
+      second = Publishing::MediaFile.new
+      second.file = StringIO.new(PNG)
+      second.save!
+      original = second.public_id
+      connection = PublishingRecord.lease_connection
+
+      [[first.public_id, PG::UniqueViolation], [nil, PG::NotNullViolation]].each do |value, cause|
+        error =
+          assert_raises(ActiveRecord::StatementInvalid) do
+            connection.transaction(requires_new: true) do
+              # SQL is an internal persistence command, not localized copy.
+              # rubocop:disable I18n/RailsI18n/DecorateString
+              connection.execute(
+                Publishing::MediaFile.sanitize_sql_array(
+                  ["UPDATE publishing_media_files SET public_id = ? WHERE id = ?", value, second.id],
+                ),
+              )
+              # rubocop:enable I18n/RailsI18n/DecorateString
+            end
+          end
+        assert_instance_of cause, error.cause
+        assert_equal original, second.reload.public_id
+      end
+    end
   end
 end

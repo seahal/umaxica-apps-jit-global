@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class CompanyOwnership < ComRpRecord
+  validates :company_id, uniqueness: true
+
   belongs_to :company, inverse_of: :ownership
   belongs_to :visitor, inverse_of: :company_ownerships
 

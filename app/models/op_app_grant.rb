@@ -8,6 +8,8 @@ class OpAppGrant < OpBaseAppRecord
 
   belongs_to :client_device_session, class_name: "ClientDeviceSession", foreign_key: :device_session_id,
                                      inverse_of: :op_app_grants
+  # FIXME: The checker requests a token FK deliberately removed for stable device-session
+  # ownership; D3 preserves historical grants and requires a new decision before adding an FK.
   belongs_to :client_token, inverse_of: :op_app_grants
 
   validates :public_id, presence: true, uniqueness: true, length: { maximum: 21 }

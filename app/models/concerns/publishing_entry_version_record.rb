@@ -8,6 +8,11 @@ module PublishingEntryVersionRecord
     include PublicId
     include PublishingEncryptedContent
 
+    # Keep immutable updates on their existing ReadOnlyRecord boundary.
+    validates :sequence,
+              numericality: { only_integer: true, greater_than: 0, less_than_or_equal_to: 2_147_483_647 },
+              on: :create
+
     before_update { raise(ActiveRecord::ReadOnlyRecord, "#{self.class.name} is immutable") }
     before_destroy { raise(ActiveRecord::ReadOnlyRecord, "#{self.class.name} is immutable") }
 

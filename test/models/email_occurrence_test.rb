@@ -114,6 +114,10 @@ class EmailOccurrenceTest < ActiveSupport::TestCase
   #   record.destroy
   #   assert_raise(ActiveRecord::RecordNotFound) { join.reload }
   # end
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::EmailOccurrence)
+  end
+
   private
 
   def build_occurrence(klass, attrs = {})

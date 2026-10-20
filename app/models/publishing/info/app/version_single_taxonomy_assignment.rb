@@ -11,6 +11,8 @@ module Publishing
         belongs_to :entry_version, class_name: "Publishing::Info::App::EntryVersion",
                                    inverse_of: :single_taxonomy_assignments
 
+        validates :term_path_snapshot, exclusion: { in: [nil] }
+
         def self.expected_kind = Publishing::TaxonomyKind::SINGLE_HIERARCHICAL
       end
     end

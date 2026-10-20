@@ -7,4 +7,5 @@ class OpOrgLogoutReceipt < OpBaseOrgRecord
   belongs_to :logout_flow, class_name: "OpOrgLogoutFlow", inverse_of: :receipts
 
   validates :public_id, :nonce_digest, :browser_binding_digest, :expires_at, presence: true
+  validates :public_id, length: { maximum: 21 }
 end

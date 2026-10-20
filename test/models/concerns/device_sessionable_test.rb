@@ -7,7 +7,7 @@ class DeviceSessionableTest < ActiveSupport::TestCase
   setup do
     ClientStatus.ensure_defaults!
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
-    @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::ACTIVE)
+    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
     @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 

@@ -119,7 +119,7 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
   end
 
   test "uses active common social identities after the repository cutover" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "n#{SecureRandom.hex(8)}")
+    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
     ClientExternalIdentity.create!(
       client: client,
       provider: "apple",

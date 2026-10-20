@@ -15,7 +15,7 @@ class VerificationI18nTest < ActionDispatch::IntegrationTest
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
-      public_id: "verify_i18n_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
       discard_at: 1.day.from_now,
     )
     @headers = begin

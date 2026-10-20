@@ -61,6 +61,7 @@ class ComPreferenceChronicle < ChronicleRecord
 
   validates :event_id, length: { maximum: 255 }
   validates :level_id, length: { maximum: 255 }
+  validates :subject_id, exclusion: { in: [nil] }
   before_validation :default_actor_to_preference
   # Helper methods for compatibility
   def com_preference

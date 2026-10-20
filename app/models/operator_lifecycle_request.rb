@@ -83,6 +83,7 @@ class OperatorLifecycleRequest < OrgPrincipalRecord
   validates :target_operator, presence: true, unless: :join?
   validates :reason, length: { maximum: 2000 }, allow_blank: true
   validates :rejection_reason, length: { maximum: 2000 }, allow_blank: true
+  validates :requested_by_operator_id, exclusion: { in: [nil] }
 
   scope :pending, -> { where(status: STATUS_PENDING) }
   scope :approved, -> { where(status: STATUS_APPROVED) }

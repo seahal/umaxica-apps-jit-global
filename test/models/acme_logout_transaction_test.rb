@@ -166,6 +166,10 @@ class AcmeLogoutTransactionTest < ActiveSupport::TestCase
     assert_equal first_finalized_at.to_i, transaction.reload.finalized_at.to_i
   end
 
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::AcmeLogoutTransaction)
+  end
+
   private
 
   def build_transaction(**overrides)

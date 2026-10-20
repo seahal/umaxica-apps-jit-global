@@ -32,4 +32,8 @@ class IndividualAssignment < ComRpRecord
 
   belongs_to :individual, inverse_of: :individual_assignments
   belongs_to :visitor_identity, inverse_of: :individual_assignments
+
+  validates :individual_id,
+            uniqueness: { scope: :visitor_identity_id, conditions: -> { where(revoked_at: nil) } },
+            on: :create, if: -> { revoked_at.nil? }
 end

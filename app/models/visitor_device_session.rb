@@ -46,4 +46,7 @@ class VisitorDeviceSession < OpBaseComRecord
   has_many :op_com_grants, foreign_key: :device_session_id,
                            dependent: :restrict_with_exception,
                            inverse_of: :visitor_device_session
+
+  # Unique indexes that include the primary key back composite references; checked only for an explicit id.
+  validates :id, uniqueness: { scope: %i(visitor_id) }, allow_nil: true, if: :will_save_change_to_id?
 end

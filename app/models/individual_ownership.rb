@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class IndividualOwnership < ComRpRecord
+  validates :individual_id, uniqueness: true
+
   belongs_to :individual, inverse_of: :ownership
   belongs_to :visitor, inverse_of: :individual_ownerships
 

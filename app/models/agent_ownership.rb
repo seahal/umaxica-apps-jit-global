@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class AgentOwnership < OrgRpRecord
+  validates :agent_id, uniqueness: true
+
   belongs_to :agent, inverse_of: :ownership
   belongs_to :operator, inverse_of: :agent_ownerships
 

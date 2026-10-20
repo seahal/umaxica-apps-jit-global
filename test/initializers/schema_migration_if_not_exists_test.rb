@@ -21,10 +21,6 @@ class SchemaMigrationIfNotExistsTest < ActiveSupport::TestCase
       @table = Table.new
     end
 
-    def internal_string_options_for_primary_key
-      { primary_key: true, collation: "C" }
-    end
-
     def create_table(name, **options)
       @calls << [name, options]
       raise failure if failure
@@ -60,7 +56,8 @@ class SchemaMigrationIfNotExistsTest < ActiveSupport::TestCase
       assert_equal :created_or_already_present, migration.create_table
     end
     assert_equal [[migration.table_name, { id: false, if_not_exists: true }]] * 2, connection.calls
-    assert_equal [:version, { primary_key: true, collation: "C" }], connection.table.columns
+    # Matches Rails' own SchemaMigration#create_table, which no longer asks the adapter for options.
+    assert_equal [:version, { primary_key: true }], connection.table.columns
     assert pool.released
     assert_raises(ArgumentError) { migration.create_table(:unexpected) }
   end

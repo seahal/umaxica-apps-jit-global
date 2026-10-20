@@ -272,6 +272,9 @@ Current database naming decisions:
   live in lifecycle-rich authority tables written through use-case services, not controllers.
 - `adr/actor-db-naming-policy.md`
 - `adr/surface-database-connection-naming.md`
+- `adr/database-names-without-region.md` — accepted (2026-10-19); database and connection names
+  carry no region marker in any environment. Future regional deployments would be separate regional
+  Rails repositories parameterized by environment variables; not in current scope.
 - `adr/principal-zenith-physical-consolidation.md` — accepted decision to apply each surface's
   principal migration history through the matching zenith database and keep semantic principal base
   classes. Its reserved-empty `*_principal` "future regional-ready application data" role is

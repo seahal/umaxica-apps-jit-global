@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class EnterpriseOwnership < AppRpRecord
+  validates :enterprise_id, uniqueness: true
+
   belongs_to :enterprise, inverse_of: :ownership
   belongs_to :client, inverse_of: :enterprise_ownerships
 

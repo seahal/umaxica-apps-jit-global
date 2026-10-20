@@ -677,7 +677,7 @@ class SignFlowTest < ActiveSupport::TestCase
   end
 
   test "client sign-in cycle can belong to a client token" do
-    user = Client.create!(public_id: "seq_#{SecureRandom.hex(8)}", status_id: ClientStatus::ACTIVE)
+    user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(user: user)
 
     cycle = ClientSignInFlow.create!(

@@ -78,4 +78,5 @@ class IndividualMembership < ComRpRecord
               conditions: -> { where(primary: true, revoked_at: nil, ends_at: nil) },
             },
             if: :primary?
+  validates :company_id, :company_unit_id, :individual_id, exclusion: { in: [nil] }
 end

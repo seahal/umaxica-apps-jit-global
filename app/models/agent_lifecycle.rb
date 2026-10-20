@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class AgentLifecycle < OrgRpRecord
+  validates :agent_id, uniqueness: true
+
   STATES = AuthorityResourceLifecycleStateValue::VALUES
 
   belongs_to :agent, inverse_of: :lifecycle

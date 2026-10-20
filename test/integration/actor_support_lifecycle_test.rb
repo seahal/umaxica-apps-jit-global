@@ -159,7 +159,7 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PRIVATE_BASE_SERVICE_URL")
     user = Client.create!(
       status_id: ClientStatus::ACTIVE,
-      public_id: SecureRandom.hex(10),
+      public_id: PublicId.generate,
       created_at: Time.current,
       updated_at: Time.current,
     )
@@ -552,7 +552,7 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PRIVATE_BASE_SERVICE_URL")
     user = Client.create!(
       status_id: ClientStatus::ACTIVE,
-      public_id: SecureRandom.hex(10),
+      public_id: PublicId.generate,
       created_at: Time.current,
       updated_at: Time.current,
     )
@@ -640,7 +640,7 @@ class ActorSupportLifecycleTest < ActionDispatch::IntegrationTest
     org_host = ENV.fetch("PRIVATE_BASE_STAFF_URL")
     user = Client.create!(
       status_id: ClientStatus::ACTIVE,
-      public_id: SecureRandom.hex(10),
+      public_id: PublicId.generate,
       created_at: Time.current,
       updated_at: Time.current,
     )

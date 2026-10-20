@@ -87,7 +87,7 @@ class ClientPasskeyTest < ActiveSupport::TestCase
 
   def setup
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
-    @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
     ClientEmail.create!(
       user: @user,
       address: "passkey-model-#{SecureRandom.hex(4)}@example.com",
@@ -249,7 +249,7 @@ class ClientPasskeyTest < ActiveSupport::TestCase
   end
 
   test "is valid on create when user has no verified recovery identity" do
-    user_without_identity = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    user_without_identity = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
     passkey = ClientPasskey.new(
       user: user_without_identity,
       webauthn_id: SecureRandom.uuid,
@@ -260,5 +260,9 @@ class ClientPasskeyTest < ActiveSupport::TestCase
     )
 
     assert_predicate passkey, :valid?
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::ClientPasskey)
   end
 end

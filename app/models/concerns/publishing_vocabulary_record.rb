@@ -12,6 +12,8 @@ module PublishingVocabularyRecord
                      dependent: :restrict_with_exception
 
     validates :kind, inclusion: { in: Publishing::TaxonomyKind::KEYS }
+    # Keys remain reserved after archival; existing keys are immutable in PostgreSQL.
+    validates :key, uniqueness: true, on: :create
     validates :key, format: { with: /\A[a-z][a-z0-9_]*\z/ }
     validates :internal_name, presence: true
 

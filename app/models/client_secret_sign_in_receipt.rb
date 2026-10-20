@@ -12,6 +12,9 @@ class ClientSecretSignInReceipt < OpBaseAppRecord
 
   before_create :verify_successful_commit!
 
+  validates :client_ref, :credential_ref, :root_token_ref, length: { maximum: 21 }
+  validates :client_ref, :committed_at, :credential_ref, :operation_id, :root_token_ref, exclusion: { in: [nil] }
+
   private
 
   def verify_successful_commit!

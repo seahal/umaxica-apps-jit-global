@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class BureauOwnership < OrgRpRecord
+  validates :bureau_id, uniqueness: true
+
   belongs_to :bureau, inverse_of: :ownership
   belongs_to :operator, inverse_of: :bureau_ownerships
 

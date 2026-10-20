@@ -1,0 +1,3 @@
+# PDF output requires Graphviz's dot executable on PATH.
+generator: graphviz
+filetype: pdf

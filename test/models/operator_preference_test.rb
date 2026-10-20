@@ -97,9 +97,9 @@ class OperatorPreferenceTest < ActiveSupport::TestCase
 
   test "does not overwrite existing public_id" do
     staff = operators(:sample_staff)
-    pref = OperatorPreference.create!(staff: staff, public_id: "staff_pref_custom")
+    pref = OperatorPreference.create!(staff: staff, public_id: "staff_pref_customxxxx")
 
-    assert_equal "staff_pref_custom", pref.public_id
+    assert_equal "staff_pref_customxxxx", pref.public_id
   end
 
   test "loading an existing preference preserves stored defaults" do
@@ -137,5 +137,9 @@ class OperatorPreferenceTest < ActiveSupport::TestCase
     )
 
     assert_equal "approved", preference.adult_content_gate
+  end
+
+  test "public_id is a fixed 21-character NanoID" do
+    assert_public_id_fixed_length(::OperatorPreference)
   end
 end

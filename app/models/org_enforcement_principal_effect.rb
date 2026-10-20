@@ -3,6 +3,8 @@
 
 # adr/unified-enforcement.md, Principal effects (org realm).
 class OrgEnforcementPrincipalEffect < OrgPrincipalRecord
+  validates :org_enforcement_case_id, uniqueness: true
+
   self.table_name = "org_enforcement_principal_effects"
 
   belongs_to :enforcement_case, class_name: "OrgEnforcementCase", foreign_key: :org_enforcement_case_id,

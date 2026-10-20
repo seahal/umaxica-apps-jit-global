@@ -9,6 +9,9 @@ module PublishingEntrySlugRecord
   included do
     include PublicId
 
+    # SQL requires a value but permits blank locale strings; preserve that distinction.
+    validates :locale, exclusion: { in: [nil], message: :blank }, on: :create
+
     family = name.deconstantize
     belongs_to :entry, class_name: "#{family}::Entry", inverse_of: :slugs
     validates :state, inclusion: { in: STATES }

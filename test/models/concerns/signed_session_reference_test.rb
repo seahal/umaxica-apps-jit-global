@@ -10,7 +10,7 @@ class SignedSessionReferenceTest < ActiveSupport::TestCase
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     OperatorTokenKind.find_or_create_by!(id: OperatorTokenKind::BROWSER_WEB)
 
-    @user = Client.create!(public_id: "u_#{SecureRandom.hex(8)}", status_id: ClientStatus::NOTHING)
+    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
     @staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
 
     @user_token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)

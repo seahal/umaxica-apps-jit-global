@@ -23,7 +23,7 @@ module AdministrativeAccessLockable
   included do
     attribute :access_state, :string, default: ACCESS_STATE_ENABLED
 
-    validates :access_state, presence: true, inclusion: { in: ACCESS_STATES }, if: :access_state_column?
+    validates :access_state, presence: true, inclusion: { in: ACCESS_STATES }
     validates :admin_locked_reason_code, inclusion: { in: ADMIN_LOCK_REASON_CODES }, allow_nil: true,
                                          if: :admin_locked_reason_code_column?
     validate :administrative_lock_columns_are_consistent

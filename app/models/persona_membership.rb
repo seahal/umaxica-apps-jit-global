@@ -78,4 +78,5 @@ class PersonaMembership < AppRpRecord
               conditions: -> { where(primary: true, revoked_at: nil, ends_at: nil) },
             },
             if: :primary?
+  validates :enterprise_id, :enterprise_unit_id, :persona_id, exclusion: { in: [nil] }
 end

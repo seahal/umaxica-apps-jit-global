@@ -11,6 +11,12 @@ module PublishingEncryptedContent
     serialize :body, coder: JSON
     encrypts :title, :summary, :body
 
+    # SQL requires a value but permits blank locale strings; preserve that distinction.
+    validates :locale, exclusion: { in: [nil], message: :blank }, on: :create
+
+    # Creation checks preserve immutable version and promoted-revision update guards.
+    validates :content_digest, length: { is: 64 }, format: { with: /\A[0-9a-f]+\z/ }, on: :create
+
     validates :title, presence: true
     validates :schema_version, numericality: { greater_than: 0, only_integer: true }
     validate :body_must_be_json_object

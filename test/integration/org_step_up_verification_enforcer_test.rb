@@ -22,7 +22,7 @@ class OrgStepUpVerificationEnforcerTest < ActionDispatch::IntegrationTest
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       discard_at: 1.day.from_now,
-      public_id: "stepup_org_#{SecureRandom.hex(4)}",
+      public_id: PublicId.generate,
     )
     @base_headers =
       begin

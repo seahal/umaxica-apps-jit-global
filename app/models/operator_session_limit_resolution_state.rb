@@ -13,4 +13,6 @@ class OperatorSessionLimitResolutionState < OpBaseOrgRecord
 
   has_many :operator_session_limit_resolution_transactions, foreign_key: :state_id,
                                                             dependent: :restrict_with_error, inverse_of: :state
+
+  validates :created_at, :updated_at, exclusion: { in: [nil] }
 end

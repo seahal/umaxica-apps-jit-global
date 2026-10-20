@@ -610,6 +610,8 @@ en:
       client_secret_credential:
         client: Client
         issuance: Secret issuance
+      agent:
+        title: Title
       agent_assignment:
         assigned_at: Assigned at
       app_enforcement_appeal:
@@ -626,6 +628,8 @@ en:
         muter_avatar_id: Muter avatar
       avatar_persona_binding:
         persona_id: Bound persona
+      bureau:
+        title: Title
       client:
         mfa_level: MFA level
         mfa_status: MFA status
@@ -652,6 +656,7 @@ en:
         source_record_id: Source record ID
       client_persona:
         client_identity_id: Client identity
+        title: Title
       client_secret_audit_outbox:
         actor_public_ref: Actor reference
         client_ref: Client reference
@@ -672,6 +677,12 @@ en:
       com_enforcement_appeal:
         reason_code: Appeal reason
         statement: Appeal statement
+      company:
+        title: Title
+      enterprise:
+        title: Title
+      individual:
+        title: Title
       individual_assignment:
         assigned_at: Assigned at
       operator_identity:
@@ -818,6 +829,9 @@ en:
     ack_schedule_purge: Purge schedule confirmation
     active_avatars: Active avatars
     address: Email address
+    agent_id: Agent ID
+    agent_public_id: Agent reference
+    app_enforcement_case_id: APP enforcement case ID
     app_preference_languages: Language preferences
     app_preference_regions: Region preferences
     app_preference_themes: Theme preferences
@@ -830,10 +844,13 @@ en:
     base: Base
     birthdate: Birthdate
     body: Body
+    bureau_id: Bureau ID
+    can_create_content: Can create content
     canceled_at: Canceled at
     capability_id: Capability
     client_emails: Email addresses
     client_id: Client ID
+    client_persona_id: Persona ID
     client_preference_themes: Theme preferences
     client_preference_timezones: Timezone preferences
     client_telephones: Telephone numbers
@@ -841,6 +858,36 @@ en:
     code: Code
     code_challenge: Code challenge
     code_challenge_method: Code challenge method
+    com_enforcement_case_id: COM enforcement case ID
+    company_id: Company ID
+    content_digest: Content digest
+    discoverable: Discoverable
+    editable_by_owner: Editable by owner
+    effective_from: Publication start
+    enterprise_id: Enterprise ID
+    followable: Followable
+    group_attachable: Group attachable
+    individual_id: Individual ID
+    key: Key
+    locale: Locale
+    moderation_visible: Visible to moderation
+    op_session_binding_id: OP session binding ID
+    org_enforcement_case_id: ORG enforcement case ID
+    persona_id: Persona ID
+    sid: Session reference
+    jti_digest: Event digest
+    subject: Subject reference
+    transfer_reservation_id: Transfer reservation
+    avatar_id: Avatar
+    attempt_number: Attempt number
+    actor_ref: Actor reference
+    sign_in_flow_id: Sign-in flow
+    step_up_ceremony_transaction_ref: Step-up transaction reference
+    token_id: Root session reference
+    storage_key: Storage reference
+    persona_public_id: Persona reference
+    restorable_by_owner: Restorable by owner
+    terminal: Terminal state
     transaction_id: Transaction ID
     com_preference_languages: Language preferences
     com_preference_regions: Region preferences
@@ -899,6 +946,7 @@ en:
     pass_code: Verification code
     password_digest: Password digest
     performant: Performance
+    position: Position
     preference: Preference
     preference_id: Preference
     presented_at: Presented at
@@ -916,6 +964,7 @@ en:
     result_jti: Result JTI
     role: Role
     secret_credential_value: Secret
+    sequence: Sequence number
     sign_count: Sign count
     social_provider: Social provider
     source_record_id: Source record ID
@@ -938,6 +987,7 @@ en:
     target_operator: Target operator
     targetable: Targeting
     telephone_occurrence_id: Telephone occurrence
+    term_public_id_snapshot: Term public ID snapshot
     token: Token
     token_expires_at: Token expiration
     uid: UID
@@ -946,8 +996,10 @@ en:
     user_occurrence_id: User occurrence
     user_secret_credential_kind: Secret credential kind
     user_token_id: User token ID
+    visible_by_default: Visible by default
     visitor: Visitor
     visitor_token_id: Visitor token ID
+    vocabulary_public_id_snapshot: Vocabulary public ID snapshot
     webauthn_id: WebAuthn ID
   auth:
     app:

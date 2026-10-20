@@ -28,7 +28,7 @@ class BaseSelfServiceRoutesTest < ActionDispatch::IntegrationTest
   end
 
   test "app identity settings permanently guide an Apple-only client to alternative credentials" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: "n#{SecureRandom.hex(8)}")
+    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
     create_active_external_identity(client: client, provider: "apple")
     token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     select_token!(surface: :app, principal: client, token: token)
