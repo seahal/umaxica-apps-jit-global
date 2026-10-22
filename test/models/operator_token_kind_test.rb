@@ -12,12 +12,6 @@
 require "test_helper"
 
 class OperatorTokenKindTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    kind = OperatorTokenKind.new(id: 99)
-
-    assert_predicate kind, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, OperatorTokenKind::BROWSER_WEB
     assert_equal 2, OperatorTokenKind::CLIENT_IOS

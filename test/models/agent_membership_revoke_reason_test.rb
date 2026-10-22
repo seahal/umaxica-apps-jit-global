@@ -12,12 +12,6 @@
 require "test_helper"
 
 class AgentMembershipRevokeReasonTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    reason = AgentMembershipRevokeReason.new(id: 9)
-
-    assert_predicate reason, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, AgentMembershipRevokeReason::NOTHING
     assert_equal 1, AgentMembershipRevokeReason::MANUAL

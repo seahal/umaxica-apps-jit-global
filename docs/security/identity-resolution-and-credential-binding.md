@@ -11,6 +11,13 @@ receipt, an external provider callback, a passkey assertion, and an app Secret a
 explicit operation; none is a universal actor lookup key. An effective binding is verified,
 finalized, owned by one actor, and not released.
 
+APP/COM email sign-in and security-lock recovery resolve only effective email bindings. A
+candidate whose binding is not finalized cannot select an actor or receive authentication or
+recovery OTP delivery, including when its mutable email status already says `VERIFIED`.
+Ordinary unverified and pending-sign-up candidates remain outside these authority paths.
+An account registered through another supported proof, such as a verified telephone or external
+provider, follows that proof's own authentication contract rather than borrowing a pending email.
+
 Email and telephone bindings enforce both directions of uniqueness: one effective destination has
 one Identity, and one Identity has one effective binding of that kind. Social bindings use the
 verified issuer and subject, retain release history, and enforce one active social binding per

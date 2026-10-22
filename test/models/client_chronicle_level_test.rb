@@ -16,12 +16,6 @@ class ClientChronicleLevelTest < ActiveSupport::TestCase
   #   assert true
   # end
 
-  test "accepts integer ids" do
-    record = ClientChronicleLevel.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, ClientChronicleLevel::DEBUG
     assert_equal 2, ClientChronicleLevel::ERROR

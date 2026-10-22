@@ -313,6 +313,37 @@ module Auth::App::In
       assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     end
 
+    test "missing credential and invalid signature have identical public refusals" do
+      refusals = []
+      token_count = ClientToken.count
+      original_sign_count = @passkey.sign_count
+      [:missing, :invalid_signature].each do |failure|
+        post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
+             params: { "cf-turnstile-response" => "test_token" }
+
+        assert_response :ok
+        options = response.parsed_body
+        assertion = @fake_client.get(
+          challenge: options.fetch("options").fetch("challenge"), user_verified: true, sign_count: 1,
+        )
+        if failure == :missing
+          assertion["id"] = Base64.urlsafe_encode64("unregistered-credential", padding: false)
+        else
+          assertion.fetch("response")["signature"] = Base64.urlsafe_encode64("invalid-signature", padding: false)
+        end
+        post auth_app_sign_in_passkey_verification_path(ri: "jp", fb: @primary_sign_in_binding),
+             params: { challenge_id: options.fetch("challenge_id"), credential: assertion }
+
+        assert_response :unauthorized
+        refusals << [response.status, response.body, response.headers["Content-Type"],
+                     response.headers["Location"], response.headers["Cache-Control"],]
+      end
+
+      assert_equal refusals.first, refusals.last
+      assert_equal token_count, ClientToken.count
+      assert_equal original_sign_count, @passkey.reload.sign_count
+    end
+
     test "verification returns same response for credential mismatch and missing verified pii" do
       # Baseline: credential mismatch
       post auth_app_sign_in_passkey_options_path(ri: "jp", fb: @primary_sign_in_binding),
@@ -399,7 +430,7 @@ module Auth::App::In
            )
 
       assert_response :unauthorized
-      assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+      assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
       assert_empty ClientToken.where(user_id: @user.id)
     end
 
@@ -415,7 +446,7 @@ module Auth::App::In
            )
 
       assert_response :unauthorized
-      assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+      assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
       assert_empty ClientToken.where(user_id: @user.id)
     end
 

@@ -41,27 +41,6 @@ class BranchCoverageBatch39EasyMissesTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { RedirectsJumpGatewayUrl.call(gateway_origin: "http://example.com") }
   end
 
-  test "Health DependencyResult public_status failed arm" do
-    # Construct via real class if possible; otherwise exercise equivalent branch.
-    result =
-      begin
-        Health::DependencyResult.new(name: :db, ok: false)
-      rescue StandardError
-        nil
-      end
-    if result&.respond_to?(:public_status)
-      assert_equal "failed", result.public_status
-    else
-      obj = Class.new do
-        def ok? = false
-
-        def public_status = ok? ? "ok" : "failed"
-      end.new
-
-      assert_equal "failed", obj.public_status
-    end
-  end
-
   test "ExternalAuthenticationAppleNotificationProcessor terminal short-circuit" do
     event = Object.new
     event.define_singleton_method(:terminal?) { true }
@@ -83,23 +62,6 @@ class BranchCoverageBatch39EasyMissesTest < ActiveSupport::TestCase
 
     OidcLogoutRequest.stub(:verifier, verifier) do
       assert_nil OidcLogoutRequest.verify("tok")
-    end
-  end
-
-  test "Edit Publishing entries controllers respond to CRUD verbs for method coverage" do
-    controllers = [
-      Edit::Org::Publishing::Docs::App::EntriesController,
-      Edit::Org::Publishing::News::App::EntriesController,
-      Edit::Org::Publishing::Info::App::EntriesController,
-    ]
-    controllers.each do |klass|
-      %i(index show new create edit update).each do |action|
-        next unless klass.method_defined?(action)
-
-        unbound = klass.instance_method(action)
-
-        assert_kind_of UnboundMethod, unbound
-      end
     end
   end
 end

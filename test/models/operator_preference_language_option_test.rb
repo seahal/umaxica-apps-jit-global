@@ -80,12 +80,6 @@ class OperatorPreferenceLanguageOptionTest < ActiveSupport::TestCase
     end
   end
 
-  test "ensure_defaults! does nothing when all exist" do
-    assert_no_difference("OperatorPreferenceLanguageOption.count") do
-      OperatorPreferenceLanguageOption.ensure_defaults!
-    end
-  end
-
   test "primary_key is id" do
     assert_equal "id", OperatorPreferenceLanguageOption.primary_key
   end

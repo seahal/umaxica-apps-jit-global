@@ -1,0 +1,37 @@
+# rails-models-z: per-definition ledger
+
+16 source definitions. [Audit scope and status legend](../README.md). Generated loops/each tables are represented once per source definition, not once per runtime case. Production links are static candidates, not verified call traces. Oracle excerpts are truncated; use the linked source for complete setup and assertions.
+
+## `test/models/zip_occurrence_status_test.rb`
+
+[test/models/zip_occurrence_status_test.rb](../../../test/models/zip_occurrence_status_test.rb); SHA-256: `9df7644ae27c5ecfc9016c34d7bb6aadffc4834efd9165e284d427a8a7a8ed40`.
+
+File-level implementation candidates (including setup/import context): [app/models/zip_occurrence_status.rb:12](../../../app/models/zip_occurrence_status.rb#L12).
+
+| ID / source | Declared protection | Oracle excerpts | Production candidates / request seam | Review disposition | Signals / duplicate |
+| --- | --- | --- | --- | --- | --- |
+| <a id="t-09260"></a>T-09260 / [15](../../../test/models/zip_occurrence_status_test.rb#L15) | "can load nothing status from db"<br>Owner: `ZipOccurrenceStatusTest` | `assert_not_nil nothing`; `assert_equal 0, nothing.id` | [ZipOccurrenceStatus](../../../app/models/zip_occurrence_status.rb#L12) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09261"></a>T-09261 / [22](../../../test/models/zip_occurrence_status_test.rb#L22) | "accepts integer ids"<br>Owner: `ZipOccurrenceStatusTest` | `assert_predicate record, :valid?` | [ZipOccurrenceStatus](../../../app/models/zip_occurrence_status.rb#L12) | [LV-027](../findings.md#lv-027) candidate | none detected (not a quality approval) |
+| <a id="t-09262"></a>T-09262 / [28](../../../test/models/zip_occurrence_status_test.rb#L28) | "has occurrences association"<br>Owner: `ZipOccurrenceStatusTest` | `assert_status_association(ZipOccurrenceStatus, :zip_occurrences)` | [ZipOccurrenceStatus](../../../app/models/zip_occurrence_status.rb#L12) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09263"></a>T-09263 / [32](../../../test/models/zip_occurrence_status_test.rb#L32) | "ensure_defaults! creates default records"<br>Owner: `ZipOccurrenceStatusTest` | `assert ZipOccurrenceStatus.exists?(id), "missing default zip occurrence status #{id}"` | [ZipOccurrenceStatus](../../../app/models/zip_occurrence_status.rb#L12) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+
+## `test/models/zip_occurrence_test.rb`
+
+[test/models/zip_occurrence_test.rb](../../../test/models/zip_occurrence_test.rb); SHA-256: `23d334a8b9a80942f7259aca9ac624c7098d5ca82de10c1fcc1a30ac2561eeb2`.
+
+File-level implementation candidates (including setup/import context): [app/models/zip_occurrence.rb:31](../../../app/models/zip_occurrence.rb#L31); [app/models/zip_occurrence_status.rb:12](../../../app/models/zip_occurrence_status.rb#L12).
+
+| ID / source | Declared protection | Oracle excerpts | Production candidates / request seam | Review disposition | Signals / duplicate |
+| --- | --- | --- | --- | --- | --- |
+| <a id="t-09264"></a>T-09264 / [36](../../../test/models/zip_occurrence_test.rb#L36) | "defaults status_id to nothing"<br>Owner: `ZipOccurrenceTest` | `assert_equal ZipOccurrenceStatus::NOTHING, record.status_id` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31); [ZipOccurrenceStatus](../../../app/models/zip_occurrence_status.rb#L12) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09265"></a>T-09265 / [42](../../../test/models/zip_occurrence_test.rb#L42) | "public_id length"<br>Owner: `ZipOccurrenceTest` | `assert_invalid_attribute(record, :public_id)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09266"></a>T-09266 / [48](../../../test/models/zip_occurrence_test.rb#L48) | "public_id format"<br>Owner: `ZipOccurrenceTest` | `assert_invalid_attribute(record, :public_id)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09267"></a>T-09267 / [54](../../../test/models/zip_occurrence_test.rb#L54) | "public_id uniqueness"<br>Owner: `ZipOccurrenceTest` | `assert_invalid_attribute(record, :public_id)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09268"></a>T-09268 / [61](../../../test/models/zip_occurrence_test.rb#L61) | "body presence"<br>Owner: `ZipOccurrenceTest` | `assert_invalid_attribute(record, :body)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09269"></a>T-09269 / [67](../../../test/models/zip_occurrence_test.rb#L67) | "body uniqueness"<br>Owner: `ZipOccurrenceTest` | `assert_invalid_attribute(record, :body)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09270"></a>T-09270 / [74](../../../test/models/zip_occurrence_test.rb#L74) | "status_id presence"<br>Owner: `ZipOccurrenceTest` | `assert_invalid_attribute(record, :status_id)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09271"></a>T-09271 / [80](../../../test/models/zip_occurrence_test.rb#L80) | "memo length"<br>Owner: `ZipOccurrenceTest` | `assert_invalid_attribute(record, :memo)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09272"></a>T-09272 / [86](../../../test/models/zip_occurrence_test.rb#L86) | "public_id auto generated on create"<br>Owner: `ZipOccurrenceTest` | `assert_public_id_generated(record)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09273"></a>T-09273 / [92](../../../test/models/zip_occurrence_test.rb#L92) | "public_id preserved when provided"<br>Owner: `ZipOccurrenceTest` | `assert_public_id_preserved(record, custom_public_id)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09274"></a>T-09274 / [99](../../../test/models/zip_occurrence_test.rb#L99) | "lifecycle timestamps default"<br>Owner: `ZipOccurrenceTest` | `assert_occurrence_lifecycle_defaults(record)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-09275"></a>T-09275 / [104](../../../test/models/zip_occurrence_test.rb#L104) | "public_id is a fixed 21-character NanoID"<br>Owner: `ZipOccurrenceTest` | `assert_public_id_fixed_length(::ZipOccurrence)` | [ZipOccurrence](../../../app/models/zip_occurrence.rb#L31) | S: static inventory; individual semantic review open | none detected (not a quality approval) |

@@ -62,7 +62,7 @@ class OrgNormalSignInBindingCodec
         generation: payload["g"],
         expires_at: payload["e"].to_i,
       )
-    rescue ActiveSupport::MessageVerifier::InvalidSignature
+    rescue ActiveSupport::MessageVerifier::InvalidSignature, JSON::ParserError
       nil
     end
 

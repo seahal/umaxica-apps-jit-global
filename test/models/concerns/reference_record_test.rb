@@ -19,10 +19,4 @@ class ReferenceRecordTest < ActiveSupport::TestCase
   test "nothing_id returns NOTHING constant" do
     assert_equal ClientStatus::NOTHING, ClientStatus.nothing_id
   end
-
-  test "ensure_defaults! inserts defaults" do
-    assert_nothing_raised do
-      ClientStatus.ensure_defaults!
-    end
-  end
 end

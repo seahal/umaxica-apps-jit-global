@@ -2,7 +2,11 @@
 
 Date: 2026-10-01
 
-Status: Proposal. Not accepted, not implemented. Kept for a later decision.
+Status: Closed as complete by owner instruction on 2026-10-22. Retained for reference.
+
+This is an administrative closure, not implementation or verification evidence. No HMR fix or
+runtime check was performed as part of this closure. The proposal and limitations below remain
+historical context; Tunnel HMR support is not established by closing this item.
 
 Related:
 

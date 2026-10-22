@@ -7,6 +7,7 @@ import SecretSignIn from "@/pages/auth/app/sign/in/secrets/new";
 vi.mock("@/features/turnstile/TurnstileWidget", () => ({ default: () => null }));
 
 const turnstile = { site_key: "test", action: "sign_in", mode: "render" as const, cdata: null };
+const backLink = { label: "Choose another method?", href: "/sign/in?ri=jp" };
 
 describe("Secret sign-in presentation", () => {
   it.each([
@@ -33,6 +34,7 @@ describe("Secret sign-in presentation", () => {
         action="/sign/in/secret"
         authenticity_token="synthetic"
         turnstile={turnstile}
+        back_link={backLink}
       />,
     );
     const control = screen.getByLabelText<HTMLInputElement>("Secret");
@@ -54,6 +56,7 @@ describe("Secret sign-in presentation", () => {
         action="/sign/in/secret"
         authenticity_token="synthetic"
         turnstile={turnstile}
+        back_link={backLink}
       />,
     );
     expect(screen.getByRole("form", { name: "Sign in", description: "Try again." })).toBeTruthy();
@@ -77,6 +80,7 @@ describe("Secret sign-in presentation", () => {
         action="/sign/in/secret"
         authenticity_token="synthetic"
         turnstile={turnstile}
+        back_link={backLink}
       />,
     );
     const form = screen.getByRole("form", { name: "Sign in" });
@@ -85,5 +89,23 @@ describe("Secret sign-in presentation", () => {
     expect(form.getAttribute("aria-describedby")).toBeNull();
     expect(screen.getByLabelText<HTMLInputElement>("Secret").value).toBe("");
     expect(screen.getByRole("button", { name: "Continue" }).getAttribute("type")).toBe("submit");
+  });
+
+  it("offers a document link back to the sign-in method selection", () => {
+    render(
+      <SecretSignIn
+        title="Sign in"
+        identifier_label="Identifier"
+        label="Secret"
+        submit="Continue"
+        error={null}
+        action="/sign/in/secret"
+        authenticity_token="synthetic"
+        turnstile={turnstile}
+        back_link={backLink}
+      />,
+    );
+    const link = screen.getByRole("link", { name: "Choose another method?" });
+    expect(link.getAttribute("href")).toBe("/sign/in?ri=jp");
   });
 });

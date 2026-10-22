@@ -224,3 +224,24 @@ claim that existing data has an owner, that all six families have been backfille
 tables are the current authorization source, or that production cutover is safe. Those claims
 require the lifecycle, consumer, migration, and deployment gates recorded in `conflict.md` and the
 integrated plan.
+
+## Legacy org invitation admission hold
+
+Legacy `OrganizationInvitation.organization_id` does not identify a Bureau or BureauUnit.
+The old acceptance path ignored this target and invoked default bootstrap, creating an unrelated
+Bureau. Organization IDs and Bureau IDs are independent; numeric equality establishes no mapping.
+
+`OrgOperatorLifecycleRequestCreate` refuses new JOIN requests, `OrgInvitationService.create`
+refuses issuance (including approved legacy lifecycle requests), and
+`OrgOperatorLifecycleInvitationAcceptance` validates the existing code and then returns an explicit
+migration refusal before any Principal, RP Account, Identity or Persona graph write. The Auth org
+invitation GET/POST routes remain available; POST renders the refusal inline. Missing, invalid,
+consumed and expired codes retain their validation failures. Stored invitations remain unchanged.
+The low-level invitation validation/consumption primitives remain available for retained records;
+they do not grant membership or authorize admission.
+
+Admission remains unavailable until an accepted contract identifies the target Bureau and Unit,
+authorizes issuance through current authority, defines role/grant mapping, separates new registration
+from authenticated existing-user participation, and specifies idempotent recovery across
+`op_base_org` and `org_zenith`. Do not restore default bootstrap as a substitute for that contract.
+See [the open consolidation spec](../../specs/org-organization-consolidation/spec.md).

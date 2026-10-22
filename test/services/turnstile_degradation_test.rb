@@ -15,6 +15,20 @@ class TurnstileDegradationTest < ActiveSupport::TestCase
     end
   end
 
+  { missing: nil, empty: "", whitespace: " " }.each do |label, token|
+    test "degraded mode rejects a #{label} token through the real verifier" do
+      verification = JitSecurityTurnstileVerifier.verify(
+        token: token, remote_ip: "127.0.0.1", secret_key: "test-only-secret", mode: :visible,
+      )
+      result = TurnstileDegradation.apply(verification, flipper: StubFlipper.new(true))
+
+      assert_not result.fetch("success")
+      assert_not result.fetch("unavailable")
+      assert_equal "missing cf-turnstile-response", result.fetch("error")
+      assert_nil result["degraded"]
+    end
+  end
+
   test "an upstream outage passes while degraded mode is on" do
     result = apply({ "success" => false, "error" => "timeout", "unavailable" => true }, degraded: true)
 

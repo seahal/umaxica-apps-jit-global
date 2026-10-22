@@ -15,6 +15,11 @@ module Base
         skip_before_action :set_region, raise: false
         before_action :enforce_oauth_authorize_request_size!, only: :show
 
+        # FIXME: GET /oauth/authorize serves three jobs chosen only by query parameters: the OIDC
+        # authorization request, and the Auth-to-Base result and Cancel continuation pages. Only
+        # the authorization request belongs on this endpoint (OIDC Core 1.0 section 3.1.2). Move
+        # the continuations to dedicated Base resources so each has its own CSRF, Origin, header
+        # and rate-limit policy, and an added parameter can never select another job.
         def show
           return render_oidc_result_continuation! if params[:result_ref].present? || params[:transaction_ref].present?
 

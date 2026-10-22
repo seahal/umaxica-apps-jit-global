@@ -106,6 +106,12 @@ module Core
       def oidc_acme_host
         oidc_base_authority_host
       end
+
+      private
+
+      def preference_dbsc_path
+        dbsc_canonical_url(core_com_api_v0_preferences_dbsc_path)
+      end
     end
   end
 end

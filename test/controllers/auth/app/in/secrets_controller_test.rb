@@ -4,6 +4,7 @@
 require "test_helper"
 
 class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTest
+  rate_limit_counters!
   setup do
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
@@ -39,47 +40,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
         "Origin" => "https://#{host}",
         "Sec-Fetch-Site" => "same-origin",
       }
-      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface: "app",
-        intent: "sign_in",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: nil,
-      )
-      binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
-      _auth_session, raw_auth_sid =
-        begin
-          admission_binding = binding
-          admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-          admission_binding.attach_auth_session!(
-            auth_session: admission_session,
-            confirmation_ref: SecureRandom.uuid,
-          )
-          admission_binding.confirm_base!(
-            base_token: nil,
-            browser_digest: AuthAdmissionBinding.browser_digest(
-              surface: admission_binding.class.auth_admission_surface_name,
-              entry_ref: admission_binding.entry_ref,
-              nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-            ),
-          )
-          [admission_session, admission_raw_sid]
-        end
-      cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-      cookies[cookie_name] = raw_auth_sid
-      get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post auth_app_sign_in_path(ri: "jp"), params: {
-        entry_ref: admission.reference, authenticity_token: csrf,
-      }, headers: headers
-
-      assert_response :see_other
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: ClientSignInFlow.find_by!(
-          public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-        ),
-        surface: "app", phase: "PRIMARY_PENDING",
-      )
-      get new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers
+      admission, phase_binding = open_admitted_secret_page(headers)
       page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
       payload = { "identifier" => @identifier, "cf-turnstile-response" => "synthetic", "fb" => phase_binding }
       payload[:secret] = value unless value == :missing
@@ -105,6 +66,95 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     end
   end
 
+  test "admitted Secret page links back to the sign-in method selection" do
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! host
+    https!
+    headers = { "REMOTE_ADDR" => "192.0.2.40", "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
+    open_admitted_secret_page(headers)
+
+    assert_response :ok
+    back_link = inertia_props.fetch("back_link")
+
+    assert_equal I18n.t("sign.app.authentication.new.back"), back_link.fetch("label")
+    back_uri = URI.parse(back_link.fetch("href"))
+
+    assert_equal URI.parse(auth_app_sign_in_path(ri: "jp")).path, back_uri.path
+    query = Rack::Utils.parse_nested_query(back_uri.query)
+
+    assert_equal "jp", query.fetch("ri")
+    assert_equal "app", SignInFlowBindingCodec.decode(query.fetch("fb")).surface
+  end
+
+  test "known and unknown identifiers reach the same limit across request addresses" do
+    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    host! host
+    https!
+    headers = { "REMOTE_ADDR" => "192.0.2.80",
+                "Origin" => "https://#{host}",
+                "Sec-Fetch-Site" => "same-origin", }
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "n" * 43, base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    ceremony, raw_sid = binding.class.auth_admission_session_class.issue!
+    binding.attach_auth_session!(auth_session: ceremony, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil, browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: binding.entry_ref, nonce: "n" * 43,
+      ),
+    )
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    cookies[cookie_name] = raw_sid
+    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post auth_app_sign_in_path(ri: "jp"),
+         params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: headers
+
+    assert_response :see_other
+    flow = ClientSignInFlow.find_by!(
+      public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
+    )
+    phase_binding = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "PRIMARY_PENDING")
+    get new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers
+    csrf = inertia_props.fetch("authenticity_token")
+
+    # Failed challenges cannot spend a chosen identifier's shared attempt budget.
+    TurnstileVerifierStub.challenge_response = { "success" => false }
+    6.times do |index|
+      post auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding),
+           params: { identifier: @identifier, secret: "z" * 32 },
+           headers: headers.merge("REMOTE_ADDR" => "192.0.2.#{200 + index}", "X-CSRF-Token" => csrf)
+
+      assert_response :unprocessable_content
+    end
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    results = []
+    [@identifier, "secret-unknown@example.test"].each_with_index do |identifier, partition|
+      statuses = []
+      7.times do |index|
+        submitted_identifier = (index >= 5) ? " #{identifier.upcase} " : identifier
+        post auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding),
+             params: { :identifier => submitted_identifier,
+                       :secret => "z" * 32,
+                       "cf-turnstile-response" => "synthetic", },
+             headers: headers.merge(
+               "REMOTE_ADDR" => "192.0.2.#{100 + (partition * 10) + index}",
+               "X-CSRF-Token" => csrf,
+             )
+        statuses << response.status
+
+        assert_nil response.headers["Location"]
+      end
+      results << statuses
+    end
+
+    assert_equal [422, 422, 422, 422, 422, 429, 429], results.first
+    assert_equal results.first, results.last
+    assert_nil flow.reload.principal_id
+    assert_nil flow.token_id
+  end
+
   test "legacy Secret GET remains absent while canonical actions require browser admission" do
     host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     host! host
@@ -125,5 +175,48 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
         assert_response :bad_request
       end
     end
+  end
+
+  private
+
+  # Admits a Base local sign-in entry into this browser and opens the Secret page through the
+  # canonical continuation, returning the admission and the PRIMARY_PENDING phase binding.
+  def open_admitted_secret_page(headers)
+    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      surface: "app",
+      intent: "sign_in",
+      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    admission_session, raw_auth_sid = binding.class.auth_admission_session_class.issue!
+    binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: binding.class.auth_admission_surface_name,
+        entry_ref: binding.entry_ref,
+        nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      ),
+    )
+    cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
+    cookies[cookie_name] = raw_auth_sid
+    get(auth_app_sign_in_path(ri: "jp"), params: { entry_ref: admission.reference }, headers: headers)
+    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    post(
+      auth_app_sign_in_path(ri: "jp"), params: {
+        entry_ref: admission.reference, authenticity_token: csrf,
+      }, headers: headers,
+    )
+
+    assert_response :see_other
+    phase_binding = SignInFlowBindingCodec.encode(
+      flow: ClientSignInFlow.find_by!(
+        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
+      ),
+      surface: "app", phase: "PRIMARY_PENDING",
+    )
+    get(new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers)
+    [admission, phase_binding]
   end
 end

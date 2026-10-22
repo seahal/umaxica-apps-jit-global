@@ -26,7 +26,7 @@ module Webauthn
       assert_equal "auth.umaxica.app", options.rp.id
     end
 
-    test "registration discoverability is required for app and com but unchanged for org" do
+    test "registration discoverability is required independently on app com and org" do
       app_options = RegistrationVerifier.options_for(
         config: APP_CONFIG, user_id: "app-user", user_name: "app@example.com", surface: :app,
       )
@@ -39,7 +39,7 @@ module Webauthn
 
       assert_equal "required", app_options.authenticator_selection[:resident_key]
       assert_equal "required", com_options.authenticator_selection[:resident_key]
-      assert_equal "discouraged", org_options.authenticator_selection[:resident_key]
+      assert_equal "required", org_options.authenticator_selection[:resident_key]
       [app_options, com_options, org_options].each do |options|
         assert_equal "required", options.authenticator_selection[:user_verification]
       end

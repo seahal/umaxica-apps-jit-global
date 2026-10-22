@@ -112,16 +112,22 @@ class CspViolationReportsControllerTest < ActionDispatch::IntegrationTest
     assert_not called
   end
 
-  test "rate limit overflow still returns no content" do
+  test "rate limit overflow still returns no content without recording the over-limit report" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    events = []
 
-    Rails.event.stub(:notify, ->(_name, _payload) { }) do
-      121.times do
+    Rails.event.stub(:notify, ->(name, _payload) { events << name }) do
+      120.times do
         post base_app_csp_violation_report_path, params: csp_report_payload, as: :json
       end
+
+      assert_equal 120, events.count(CspViolationReportIntake::EVENT_NAME)
+
+      post base_app_csp_violation_report_path, params: csp_report_payload, as: :json
     end
 
     assert_response :no_content
+    assert_equal 120, events.count(CspViolationReportIntake::EVENT_NAME)
   end
 
   test "controller calls intake but does not call subscriber directly" do

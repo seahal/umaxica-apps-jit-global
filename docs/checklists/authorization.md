@@ -22,3 +22,9 @@ Sources: [Action Policy conventions](../security/action-policy-conventions.md),
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc).
 Owner query mechanics are described in [owner record lookups](../security/owner-record-lookups.md).
 These are required behaviors; their presence is not evidence of execution.
+
+- AUTHZ-7: Org legacy organization invitations never infer a Bureau, Unit, Membership or Ownership
+  from a legacy organization reference. Until an accepted target and authority migration exists,
+  issuance and acceptance refuse without creating principals, memberships or consuming invitations.
+  Existing-user participation requires its own authenticated contract. See
+  [legacy org invitation admission hold](../architecture/persona-organization-authority.md#legacy-org-invitation-admission-hold).

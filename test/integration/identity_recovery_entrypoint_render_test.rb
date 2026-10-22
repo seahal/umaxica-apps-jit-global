@@ -13,6 +13,98 @@ require "test_helper"
 class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
+  { unverified: ClientEmailStatus::UNVERIFIED,
+    pending_signup: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    verified_without_binding: ClientEmailStatus::VERIFIED, }.each do |label, status|
+    test "app recovery refuses an unbound #{label} email without issuing authority" do
+      host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      owner = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+      ClientEmailStatus.find_or_create_by!(id: status)
+      email = ClientEmail.create!(
+        user: owner, address: "recovery-unbound-#{label}-app@example.test", confirm_policy: "1",
+        user_email_status_id: status,
+      )
+      enforcement_case = AppEnforcementCase.create!(
+        kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
+        release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+        principal_public_id: owner.public_id, applied_by_operator_public_id: "recovery-negative-operator",
+      )
+      EnforcementCaseApplyOperation.call(
+        enforcement_case: enforcement_case,
+        actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+      )
+      original_contact = email.attributes
+
+      assert_no_difference(
+        ["ClientEnforcementRecoveryCeremony.count", "ClientEmailCeremonyTransaction.count",
+         "ClientToken.count", "ClientSecretCredential.count",],
+      ) do
+        assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+          post base_app_identity_recovery_session_path(ri: "jp"),
+               params: { recovery_reentry: { address: email.address } }
+        end
+
+        assert_response :success
+        post base_app_identity_recovery_session_path(ri: "jp"), params: { pass_code: "000000" }
+
+        assert_response :unprocessable_content
+      end
+
+      contact_unchanged = email.reload.attributes == original_contact
+
+      assert contact_unchanged, "Recovery must preserve the unbound candidate"
+      assert_equal "active", enforcement_case.reload.state
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
+  end
+
+  { unverified: VisitorEmailStatus::UNVERIFIED,
+    pending_signup: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    verified_without_binding: VisitorEmailStatus::VERIFIED, }.each do |label, status|
+    test "com recovery refuses an unbound #{label} email without issuing authority" do
+      host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+      owner = Visitor.create!(status_id: VisitorStatus::ACTIVE, birthdate: "2000-01-01")
+      VisitorEmailStatus.find_or_create_by!(id: status)
+      email = VisitorEmail.create!(
+        visitor: owner, address: "recovery-unbound-#{label}-com@example.test", confirm_policy: "1",
+        visitor_email_status_id: status,
+      )
+      enforcement_case = ComEnforcementCase.create!(
+        kind: "security_lock", state: "draft", duration_mode: "indefinite", visibility: "visible",
+        release_mode: "verification_required", effective_at: Time.current, reason_code: "security_incident",
+        principal_public_id: owner.public_id, applied_by_operator_public_id: "recovery-negative-operator",
+      )
+      EnforcementCaseApplyOperation.call(
+        enforcement_case: enforcement_case,
+        actor_operator_public_id: enforcement_case.applied_by_operator_public_id,
+      )
+      original_contact = email.attributes
+
+      assert_no_difference(
+        ["VisitorEnforcementRecoveryCeremony.count", "VisitorEmailCeremonyTransaction.count",
+         "VisitorToken.count", "VisitorSecretCredential.count",],
+      ) do
+        assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+          post base_com_identity_recovery_session_path(ri: "jp"),
+               params: { recovery_reentry: { address: email.address } }
+        end
+
+        assert_response :success
+        post base_com_identity_recovery_session_path(ri: "jp"), params: { pass_code: "000000" }
+
+        assert_response :unprocessable_content
+      end
+
+      contact_unchanged = email.reload.attributes == original_contact
+
+      assert contact_unchanged, "Recovery must preserve the unbound candidate"
+      assert_equal "active", enforcement_case.reload.state
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
+  end
+
   test "com recovery session entry point renders" do
     get "http://base.com.localhost/identity/recovery/session/new?ri=jp"
 
@@ -88,6 +180,19 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal registered_session.response.status, unknown_session.response.status
+    assert_equal 200, registered_session.response.status
+    assert_nil registered_session.response.headers["Location"]
+    assert_nil unknown_session.response.headers["Location"]
+    real_state = registered_session.request.session.fetch(:enforcement_recovery_reentry)
+    dummy_state = unknown_session.request.session.fetch(:enforcement_recovery_reentry)
+
+    assert_equal [false, true], [real_state.fetch("dummy"), dummy_state.fetch("dummy")]
+    assert_equal JSON.generate(real_state).bytesize, JSON.generate(dummy_state).bytesize
+    session_key = Rails.application.config.session_options.fetch(:key)
+
+    assert_equal Rack::Utils.unescape(registered_session.cookies[session_key]).bytesize,
+                 Rack::Utils.unescape(unknown_session.cookies[session_key]).bytesize
+    assert_operator Rack::Utils.unescape(registered_session.cookies[session_key]).bytesize, :<, 4096
     assert_equal registered_session.response.headers["Content-Type"],
                  unknown_session.response.headers["Content-Type"]
     assert_equal registered_session.response.headers["Cache-Control"],
@@ -117,6 +222,19 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal registered_session.response.status, unknown_session.response.status
+    assert_equal 200, registered_session.response.status
+    assert_nil registered_session.response.headers["Location"]
+    assert_nil unknown_session.response.headers["Location"]
+    real_state = registered_session.request.session.fetch(:enforcement_recovery_reentry)
+    dummy_state = unknown_session.request.session.fetch(:enforcement_recovery_reentry)
+
+    assert_equal [false, true], [real_state.fetch("dummy"), dummy_state.fetch("dummy")]
+    assert_equal JSON.generate(real_state).bytesize, JSON.generate(dummy_state).bytesize
+    session_key = Rails.application.config.session_options.fetch(:key)
+
+    assert_equal Rack::Utils.unescape(registered_session.cookies[session_key]).bytesize,
+                 Rack::Utils.unescape(unknown_session.cookies[session_key]).bytesize
+    assert_operator Rack::Utils.unescape(registered_session.cookies[session_key]).bytesize, :<, 4096
     assert_equal registered_session.response.headers["Content-Type"],
                  unknown_session.response.headers["Content-Type"]
     assert_equal registered_session.response.headers["Cache-Control"],

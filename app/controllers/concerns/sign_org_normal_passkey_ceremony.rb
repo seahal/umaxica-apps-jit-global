@@ -101,7 +101,7 @@ module SignOrgNormalPasskeyCeremony
     return true if operator.present? && passkey.staff_id == operator.id
 
     emit_passkey_auth_failed(reason: "sign_in_transaction_actor_mismatch")
-    render_error("errors.webauthn.credential_not_found", :unauthorized)
+    render_error("errors.webauthn.verification_failed", :unauthorized)
     false
   end
 

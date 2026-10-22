@@ -66,8 +66,6 @@ module Auth
           end
 
           def create
-            supersede_active_sign_up_flow!
-
             log_sign_signup_event(
               "sign.signup.email.create.received",
               sign_signup_request_flags.merge(step: "email_otp"),
@@ -86,7 +84,7 @@ module Auth
 
             result = initiate_email_verification!(
               email_address,
-              confirm_policy: email_params[:confirm_policy],
+              confirm_policy: ["1", true].include?(email_params[:confirm_policy]),
               email_preferences: email_params.slice(:promotional, :notifiable),
             )
 
@@ -119,11 +117,18 @@ module Auth
 
           def email_otp_purpose = :sign_up
 
+          def create_and_send_verified_email!
+            return false if @user_email.errors.details.except(:user, :user_id).any?
+
+            supersede_active_sign_up_flow!
+            super
+          end
+
           def process_email_registration_under_lock
             has_errors = @user_email.errors.details.except(:user, :user_id).any?
-            cleanup_pending_signup!
             return { status: false } if has_errors
 
+            cleanup_pending_signup!
             @pending_user = EmailSignUpCandidateCreator.call(email: @user_email)
             { status: :ok, otp_number: nil }
           end

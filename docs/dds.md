@@ -351,7 +351,17 @@ the runtime architecture. Adding a third Valkey use case requires an ADR.
 - **Redirect safety**: `Redirect::ALLOWED_HOSTS` enumerates acceptable targets;
   `generate_redirect_url` rejects unknown hosts.
 - **Browser allowlist**: `allow_browser versions: :modern` prevents outdated user agents from
-  hitting sensitive surfaces.
+  hitting sensitive surfaces. Reference (read this for the exact contract):
+  <https://api.rubyonrails.org/v8.0/classes/ActionController/AllowBrowser/ClassMethods.html>.
+  `:modern` admits Safari 17.2+, Chrome 120+, Firefox 121+ and Opera 106+ and answers others with
+  `public/406-unsupported-browser.html` (406). It decides from the `User-Agent` header only:
+  browsers not listed and clients sending no `User-Agent` (bots, scripts) pass, so it is not a
+  security boundary against a client that forges or omits the header. Server-to-server endpoints
+  must not inherit it. Decided for the sign-in / sign-up relays (the Sign-in path) (2026-10-21, not yet
+  implemented): `allow_browser :modern` guarantees that every admitted real browser sends Fetch
+  Metadata, so each relay continuation GET additionally refuses, before any binding check or
+  consumption, a request lacking `Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`; the
+  Back-Channel Logout receiver (`POST /oidc/closures`) is excluded from `allow_browser`.
 - **Secrets management**: Rails credentials provide JWT keys, Turnstile secrets, SMTP and AWS keys;
   Compose expects sanitized `.env`.
 

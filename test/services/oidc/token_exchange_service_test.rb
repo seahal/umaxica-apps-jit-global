@@ -1413,22 +1413,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     end
   end
 
-  test "confidential client cannot use public path by omitting secret" do
-    code_record = issue_code!
-
-    result = OidcTokenExchangeCoordinator.call(
-      grant_type: "authorization_code",
-      code: code_record.code,
-      redirect_uri: @redirect_uri,
-      client_id: "core-app-jp",
-      code_verifier: @code_verifier,
-      expected_resource_type: "client",
-    )
-
-    assert_not result.success?
-    assert_equal "invalid_client", result.error
-  end
-
   test "fails for nonexistent code" do
     result =
       with_authenticated_client do

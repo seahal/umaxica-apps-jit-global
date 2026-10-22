@@ -64,7 +64,7 @@ class SignFlowBindingCodec
       generation: generation,
       expires_at: expires_at,
     )
-  rescue ArgumentError, TypeError
+  rescue ArgumentError, TypeError, JSON::ParserError
     nil
   end
   public_class_method :decode

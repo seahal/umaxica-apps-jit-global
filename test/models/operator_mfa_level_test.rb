@@ -12,12 +12,6 @@
 require "test_helper"
 
 class OperatorMfaLevelTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    level = OperatorMfaLevel.new(id: 9)
-
-    assert_predicate level, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, OperatorMfaLevel::NOTHING
     assert_equal 1, OperatorMfaLevel::WEAK

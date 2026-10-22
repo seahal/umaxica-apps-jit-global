@@ -19,12 +19,6 @@ class DomainOccurrenceStatusTest < ActiveSupport::TestCase
     assert_equal 0, nothing.id
   end
 
-  test "accepts integer ids" do
-    record = DomainOccurrenceStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, DomainOccurrenceStatus::ACTIVE
     assert_equal 2, DomainOccurrenceStatus::DELETED

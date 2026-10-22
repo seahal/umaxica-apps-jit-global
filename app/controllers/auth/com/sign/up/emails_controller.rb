@@ -67,8 +67,6 @@ module Auth
           end
 
           def create
-            supersede_active_sign_up_flow!
-
             unless cloudflare_turnstile_validation["success"]
               @user_email = VisitorEmail.new
               @user_email.errors.add(
@@ -113,11 +111,11 @@ module Auth
 
             result = initiate_visitor_email_verification!(
               email_address,
-              confirm_policy: email_params[:confirm_policy],
+              confirm_policy: ["1", true].include?(email_params[:confirm_policy]),
               email_preferences: email_params.slice(:notifiable),
             )
             if result == :cooldown
-              render plain: t("sign.app.registration.email.create.otp_resend_too_soon"), status: :too_many_requests
+              render plain: t("sign.com.registration.email.create.otp_resend_too_soon"), status: :too_many_requests
               return
             end
 
@@ -183,12 +181,12 @@ module Auth
               links: [
                 {
                   key: "other_methods",
-                  label: t("sign.app.registration.new.page_title"),
+                  label: t("sign.com.registration.new.page_title"),
                   href: auth_com_sign_up_path(ri: params[:ri]),
                 },
                 {
                   key: "sign_in",
-                  label: t("sign.app.registration.email.new.link_to_sign_in"),
+                  label: t("sign.com.registration.email.new.link_to_sign_in"),
                   href: auth_com_sign_in_path(ri: params[:ri]),
                 },
               ],
@@ -205,17 +203,17 @@ module Auth
 
           def sign_up_email_edit_props
             {
-              title: t("sign.app.authentication.email.edit.page_title"),
-              description: t("sign.app.registration.email.create.verification_code_sent"),
+              title: t("sign.com.authentication.email.edit.page_title"),
+              description: t("sign.com.registration.email.create.verification_code_sent"),
               action: auth_com_sign_up_check_email_otp_path(
                 **sign_up_flow_binding_params, ri: params[:ri],
                                                pt: signed_pt_param,
               ),
               scope: "visitor_email",
-              code_label: t("sign.app.authentication.email.edit.code_label"),
-              code_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
-              submit_label: t("sign.app.authentication.email.edit.submit"),
-              delivery_help: t("sign.app.authentication.email.edit.delivery_help"),
+              code_label: t("sign.com.authentication.email.edit.code_label"),
+              code_placeholder: t("sign.com.authentication.email.edit.code_placeholder"),
+              submit_label: t("sign.com.authentication.email.edit.submit"),
+              delivery_help: t("sign.com.authentication.email.edit.delivery_help"),
               turnstile: turnstile_visible_props(challenge_id: SecureRandom.uuid),
               error_heading: nil,
               errors: sign_up_email_errors,
@@ -307,14 +305,17 @@ module Auth
             @user_email.validate
 
             return false if @user_email.address_digest.blank?
+            return false if @user_email.errors.details.except(:visitor, :visitor_id).any?
+
+            supersede_active_sign_up_flow!
 
             SignUpEmailPendingGuard.with_lock(
               address_digest: @user_email.address_digest,
               model_class: VisitorEmail,
             ) do
-              cleanup_pending_visitor_signup!
               next false if @user_email.errors.details.except(:visitor, :visitor_id).any?
 
+              cleanup_pending_visitor_signup!
               EmailSignUpCandidateCreator.call(email: @user_email)
               bind_sign_up_flow_to_email!(@user_email)
               EmailSignUpOtpDeliveryIssuer.call(

@@ -10,10 +10,13 @@ module Auth
           include SignUpSuspensionGuard
           include ::TurnstilePageProps
           include ::SurfaceInertiaPage
+          include ::MinimumResponseBudget
 
           AUTHENTICATION_MODE = :guest
 
           before_action :reject_suspended_sign_up!
+          before_action :start_minimum_response_budget, only: :create
+          after_action :enforce_minimum_response_budget, only: :create
 
           def new
             @invitation_code = params[:invitation_code].to_s
@@ -31,16 +34,12 @@ module Auth
               return
             end
 
-            result = ::OrgOperatorLifecycleInvitationAcceptance.call(invitation_code: @invitation_code)
-
-            if result.success?
-              redirect_to(auth_org_sign_in_path)
-            else
-              @form_error = result.error
-              render inertia: "auth/org/sign/up/invitations/new",
-                     props: invitation_props,
-                     status: :unprocessable_content
-            end
+            # Provisioning is closed for every code during Bureau migration. Refuse
+            # before lookup so neither response contents nor lookup work classify codes.
+            @form_error = ::OrgInvitationService::MIGRATION_REQUIRED_MESSAGE
+            render inertia: "auth/org/sign/up/invitations/new",
+                   props: invitation_props,
+                   status: :unprocessable_content
           end
 
           private

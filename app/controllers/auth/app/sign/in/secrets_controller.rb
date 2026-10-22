@@ -23,10 +23,21 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
   rate_limit to: 20, within: 15.minutes, by: -> { request.remote_ip },
              scope: "auth_app_sign_in", name: "secret_ip_sustained", store: rate_limit_store,
              only: :create, with: -> { render_rate_limited(retry_after: 900) }
-  before_action :resolve_secret_client, only: :create
-  rate_limit to: 5, within: 1.minute, by: -> { @resolved_client&.id || "unknown:#{request.remote_ip}" },
-             scope: "auth_app_sign_in", name: "secret_client_burst", store: rate_limit_store,
+  before_action :cache_secret_turnstile_validation, only: :create
+  rate_limit to: 5, within: 1.minute, by: -> { secret_identifier_rate_limit_key },
+             scope: "auth_app_sign_in", name: "secret_identifier_burst", store: rate_limit_store,
              only: :create, with: -> { render_rate_limited(retry_after: 60) }
+  before_action :resolve_secret_client, only: :create
+  # Keep the account budget across its different contact identifiers, but its
+  # exhaustion is the ordinary credential refusal, never an existence signal.
+  rate_limit to: 5, within: 1.minute, by: -> { @resolved_client.id },
+             if: -> { @resolved_client.present? },
+             scope: "auth_app_sign_in", name: "secret_client_burst", store: rate_limit_store,
+             only: :create, with: -> {
+               render_form(status: :unprocessable_content, error: t("sign.app.authentication.secret.invalid"))
+               # Rendering in a before_action halts Rails' after_action callbacks.
+               enforce_minimum_response_budget
+             }
 
   public
 
@@ -73,9 +84,24 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
 
   private
 
+  def cache_secret_turnstile_validation
+    @secret_turnstile_valid = cloudflare_turnstile_validation["success"] == true
+  end
+
+  def secret_identifier_rate_limit_key
+    return "invalid:#{request.remote_ip}" unless @secret_turnstile_valid
+
+    identifier = params[:identifier]
+    return "invalid:#{request.remote_ip}" unless identifier.is_a?(String)
+
+    digest = IdentifierBlindIndex.bidx_for_email(identifier, realm: :app) ||
+      IdentifierBlindIndex.bidx_for_telephone(identifier, realm: :app)
+    digest ? "identifier:#{digest}" : "invalid:#{request.remote_ip}"
+  end
+
   def resolve_secret_client
     @resolved_client =
-      if cloudflare_turnstile_validation["success"] == true
+      if @secret_turnstile_valid
         ClientSecretIdentityResolverQuery.call(identifier: secret_params[:identifier])
       end
   end
@@ -106,6 +132,10 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
       action: auth_app_sign_in_secret_path(ri: current_region_identifier, pt: signed_pt_param, **binding),
       authenticity_token: form_authenticity_token,
       turnstile: turnstile_visible_props,
+      back_link: {
+        label: t("sign.app.authentication.new.back"),
+        href: auth_app_sign_in_path(pt: signed_pt_param, ri: current_region_identifier, **binding),
+      },
     }
   end
 end

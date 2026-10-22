@@ -19,12 +19,6 @@ class OperatorOccurrenceStatusTest < ActiveSupport::TestCase
   #     assert_expires_at_default(record)
   #   end
 
-  test "accepts integer ids" do
-    record = OperatorOccurrenceStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, OperatorOccurrenceStatus::NOTHING
     assert_equal 2, OperatorOccurrenceStatus::ACTIVE

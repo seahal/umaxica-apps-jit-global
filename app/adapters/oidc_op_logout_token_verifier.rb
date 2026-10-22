@@ -43,7 +43,8 @@ class OidcOpLogoutTokenVerifier
     payload, = JWT.decode(
       logout_token, key, true,
       algorithms: [ALGORITHM], required_claims: REQUIRED_CLAIMS, leeway: CLOCK_SKEW_LEEWAY_SECONDS,
-      verify_iat: true, verify_iss: true, iss: issuer, verify_aud: true, aud: client_id, verify_expiration: true,
+      verify_iat: { leeway: CLOCK_SKEW_LEEWAY_SECONDS },
+      verify_iss: true, iss: issuer, verify_aud: true, aud: client_id, verify_expiration: true,
     )
     valid_claims?(payload) ? Result.new(success: true, payload:) : failure
   rescue JWT::DecodeError, OpenSSL::PKey::PKeyError, ArgumentError, KeyError, TypeError

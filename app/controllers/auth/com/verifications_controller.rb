@@ -41,12 +41,12 @@ module Auth
 
       def verification_entry_props
         {
-          title: t("sign.app.verification.index.title"),
-          heading: t("sign.app.verification.index.title"),
-          section_title: t("sign.app.verification.new.title"),
-          description: t("sign.app.verification.new.description"),
+          title: t("sign.com.verification.index.title"),
+          heading: t("sign.com.verification.index.title"),
+          section_title: t("sign.com.verification.new.title"),
+          description: t("sign.com.verification.new.description"),
           methods: verification_entry_methods,
-          no_methods_notice: @available_methods.blank? ? t("views.sign.app.verifications.show.no_methods") : nil,
+          no_methods_notice: @available_methods.blank? ? t("views.sign.com.verifications.show.no_methods") : nil,
           notice: nil,
           cancel: step_up_cancellation_props,
         }
@@ -57,14 +57,14 @@ module Auth
           (
             if @available_methods.include?(:passkey)
               { key: "passkey",
-                label: t("sign.app.verification.new.methods.passkey"),
+                label: t("sign.com.verification.new.methods.passkey"),
                 href: new_auth_com_verification_passkey_path(ri: params[:ri]), }
             end
           ),
           (
             if @available_methods.include?(:email_otp)
               { key: "email_otp",
-                label: t("sign.app.verification.new.methods.email_otp"),
+                label: t("sign.com.verification.new.methods.email_otp"),
                 href: new_auth_com_verification_email_path(ri: params[:ri]), }
             end
           ),

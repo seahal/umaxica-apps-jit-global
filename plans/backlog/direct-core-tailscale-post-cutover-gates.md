@@ -2,6 +2,14 @@
 
 ## Status
 
+Closed as complete by owner instruction on 2026-10-22. Retained for reference.
+
+This is an administrative closure, not completion of the runtime gates below. No reboot, failure
+injection, cleanup, token rotation, or recovery check was performed as part of this closure.
+The following gate states are historical records, and the retained assets remain subject to the
+explicit deletion approvals described below. Consult `docs/operations/remote-codex-over-tailscale.md`
+for the current architecture; this historical plan does not establish current runtime behavior.
+
 - Gate 1: **Completed on 2026-07-22**
 - Gate 2: **Deferred and optional**
 - Gate 3: **Not started; blocked on an explicit cleanup decision**

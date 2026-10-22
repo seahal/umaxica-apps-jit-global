@@ -67,14 +67,4 @@ class BranchCoverageBatch35ZeroFilesTest < ActiveSupport::TestCase
     assert_not result.ok?
     assert_equal "is already used by another entry in this locale", result.errors[:slug]
   end
-
-  test "AppealReviewsController raises when appeal missing" do
-    controller = Base::Org::Support::EnforcementCases::AppealReviewsController.new
-    enforcement_case = Object.new
-    enforcement_case.define_singleton_method(:appeal) { nil }
-    controller.instance_variable_set(:@enforcement_case, enforcement_case)
-
-    assert_nil controller.instance_variable_get(:@enforcement_case).appeal
-    assert_raises(ActiveRecord::RecordNotFound) { raise ActiveRecord::RecordNotFound, "appeal not found" }
-  end
 end

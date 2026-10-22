@@ -3963,7 +3963,16 @@ en:
           complete: Verification completed.
     com:
       authentication:
+        email:
+          create:
+            cooldown: Please wait and try again.
+          edit:
+            submit: Register with Email
+          new:
+            page_title: Sign in with email
+            you_have_already_logged_in: You are already signed in.
         new:
+          back: Prefer a different method?
           description: Select the method that fits your current session.
           links:
             email: Email
@@ -3971,6 +3980,11 @@ en:
             registration: Need an account?
             secret_credential: Secret
           page_title: Choose how to sign in
+        passkey:
+          new:
+            description: Use your device's security features for a faster and safer login.
+            page_title: Sign in with a passkey
+            submit: Sign in using passkey
       in:
         bulletins:
           forbidden: You are not authorized to access this page.
@@ -3987,6 +4001,9 @@ en:
         checkpoints:
           show:
             title: Sign-in check
+        mfa:
+          methods:
+            passkey: Authenticate with passkey
       preference:
         cookie:
           edit:
@@ -4087,22 +4104,43 @@ en:
         email:
           create:
             address_required: Please enter an email address.
+            otp_resend_too_soon: Please wait before requesting another code.
             turnstile_validation_failed: Security verification failed. Please try again.
             verification_code_sent: Verification code has been sent to your email address.
+          edit:
+            session_expired: Your session has expired. Please start over.
           new:
             error_summary: Please check your input.
             page_title: Sign up with email
+          update:
+            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
+            code_required: Verification code is required.
+            invalid_code: Invalid verification code.
         new:
           links:
             registration: Need an account?
+            sign_in: Sign in
+          methods:
+            email:
+              cta: Sign up with email
+            telephone:
+              cta: Sign up with telephone
           page_description: Select how you would like to begin using %{product}.
           page_title: Registration
+          social:
+            disclaimer: We will never post or share anything without your permission.
         session_missing: Your registration session has expired. Please start again.
         telephone:
+          create:
+            turnstile_validation_failed: Security verification failed. Please try again.
+            verification_code_sent: Verification code has been sent via SMS.
           edit:
             session_expired: Your session has expired. Please start over.
           success: Telephone number verified.
           update:
+            attempts_exceeded: Maximum verification attempts exceeded. Please start over.
+            code_required: Verification code is required.
+            invalid_code: Invalid verification code.
             passkey_required: Phone verified. Please register a passkey to continue.
             success: Telephone number verified.
       settings:
@@ -4129,6 +4167,11 @@ en:
           update:
             failure: Email settings could not be updated.
             success: Email settings updated.
+        passkeys:
+          new:
+            description_label: Passkey name
+            description_placeholder: e.g., MacBook Pro
+            submit: Register Passkey
         show:
           account_settings: Account Settings
           logout: Logout
@@ -4141,10 +4184,19 @@ en:
         edit:
           authenticate_with_passkey: Authenticate with Passkey
           back: Back
+          code_label: Verification Code
+          code_placeholder: 6 digits
           description: Use your passkey to verify your identity.
+          email_description: Please enter the code for identity verification.
+          submit: Confirm
           title: Verification
+        index:
+          title: Verification Sessions
         new:
           description: Verify your identity before continuing.
+          methods:
+            email_otp: Email (One-time code)
+            passkey: Passkey
           title: Verification
         setup:
           description: Please register a passkey or an email address before continuing.
@@ -4959,6 +5011,9 @@ en:
             new:
               confirm_policy_label: I agree to the terms of service
               confirm_using_mfa_label: I confirm MFA usage
+        verifications:
+          show:
+            no_methods: Please register an email, passkey, or TOTP.
       org:
         settings:
           emails:

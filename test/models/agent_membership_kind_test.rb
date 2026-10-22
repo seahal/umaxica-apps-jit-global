@@ -12,12 +12,6 @@
 require "test_helper"
 
 class AgentMembershipKindTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    kind = AgentMembershipKind.new(id: 9)
-
-    assert_predicate kind, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, AgentMembershipKind::NOTHING
     assert_equal 1, AgentMembershipKind::OWNER

@@ -63,12 +63,6 @@ class AppPreferenceBindingMethodTest < ActiveSupport::TestCase
     end
   end
 
-  test "ensure_defaults! does nothing when all exist" do
-    assert_no_difference("AppPreferenceBindingMethod.count") do
-      AppPreferenceBindingMethod.ensure_defaults!
-    end
-  end
-
   test "app_preferences association works with dependent restrict" do
     method = AppPreferenceBindingMethod.find(AppPreferenceBindingMethod::NOTHING)
     preference = AppPreference.create!(

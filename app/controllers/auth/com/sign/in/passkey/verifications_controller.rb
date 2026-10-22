@@ -61,7 +61,7 @@ module Auth
                   ri: current_region_identifier,
                 ),
               )
-              render_error("errors.webauthn.credential_not_found", :unauthorized)
+              render_error("errors.webauthn.verification_failed", :unauthorized)
               false
             end
 

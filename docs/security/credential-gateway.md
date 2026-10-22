@@ -54,6 +54,20 @@ Emails, telephones, birthdate, secrets, secret credentials, sessions, revocation
 withdrawal belong to Base identity. Retired Auth settings URLs must not redirect to Base identity;
 they must be unroutable after migration.
 
+## Current security-lock recovery scope
+
+The APP/COM Base `/identity/recovery/session` entry is email OTP re-entry for an in-force,
+visible `security_lock` whose release mode is `verification_required`. It requires an effective
+email binding and the permitted verified email status. Unknown destinations and unbound
+candidates take the existing dummy-response path and cannot receive a recovery ceremony.
+
+Successful OTP verification issues a narrowly scoped recovery ceremony, not a Root Session or
+RP session. The recovery completion consumes that ceremony to release the selected account's
+eligible security lock. These routes do not implement a forgotten-password reset. The current
+Auth route inventory has no general email-link password-reset flow; adding one requires its
+own credential, expiry, one-time consumption and session-revocation contract rather than
+reusing lock recovery or interpreting email submission as proof.
+
 ## Historical Sign/Acme Ceremony Contract
 
 When acme delegates a ceremony, `sign/id` receives a ceremony grant and returns a signed ceremony

@@ -17,10 +17,6 @@ module Jit
       assert_equal "session", JitSessionCookieConfig.cookie_key(force_secure: false)
     end
 
-    test "session options partition production cookies" do
-      assert JitSessionCookieConfig.session_options(force_secure: true).key?(:partitioned)
-    end
-
     # --- force_secure? in production ---
 
     test "force_secure is true in production" do

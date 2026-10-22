@@ -1,13 +1,13 @@
-import { useForm } from "@inertiajs/react";
-
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
 import TextLink from "@/components/ui/TextLink";
+import { csrfToken } from "@/lib/csrf";
 
 import type { SignOutLink } from "./SignOutConfirmation";
 
 // Shown when the RP logout transaction could not be issued. The retry keeps the POST verb the
-// sign-out route expects rather than degrading to a link.
+// sign-out route expects rather than degrading to a link, and is a full document submission for the
+// same cross-origin redirect reason as the confirmation.
 export type SignOutUnavailableProps = {
   title: string;
   heading: string;
@@ -25,13 +25,6 @@ export default function SignOutUnavailable({
   retry,
   home_link: homeLink,
 }: SignOutUnavailableProps) {
-  const form = useForm({});
-
-  const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    form.post(retry.action);
-  };
-
   return (
     <Page
       title={heading}
@@ -42,14 +35,14 @@ export default function SignOutUnavailable({
       <form
         action={retry.action}
         method="post"
-        onSubmit={submit}
+        data-turbo="false"
       >
-        <Button
-          type="submit"
-          isDisabled={form.processing}
-        >
-          {retry.label}
-        </Button>
+        <input
+          type="hidden"
+          name="authenticity_token"
+          value={csrfToken()}
+        />
+        <Button type="submit">{retry.label}</Button>
       </form>
 
       <p className="text-base">

@@ -12,12 +12,6 @@
 require "test_helper"
 
 class VisitorTokenKindTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    kind = VisitorTokenKind.new(id: 99)
-
-    assert_predicate kind, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, VisitorTokenKind::BROWSER_WEB
     assert_equal 2, VisitorTokenKind::CLIENT_IOS

@@ -43,8 +43,6 @@ module Auth
           end
 
           def create
-            supersede_active_sign_up_flow!
-
             log_sign_signup_event(
               "sign.signup.telephone.create.received",
               sign_signup_request_flags.merge(step: "telephone_otp"),
@@ -80,7 +78,12 @@ module Auth
               return
             end
 
-            @user_telephone = ClientTelephone.new(telephone_params || {})
+            @user_telephone = ClientTelephone.new(
+              telephone_params.merge(
+                confirm_policy: ["1", true].include?(telephone_params[:confirm_policy]),
+                confirm_using_mfa: ["1", true].include?(telephone_params[:confirm_using_mfa]),
+              ),
+            )
 
             res = cloudflare_turnstile_validation
 
@@ -110,6 +113,8 @@ module Auth
               render_sign_up_telephone_new(status: :unprocessable_content)
               return
             end
+
+            supersede_active_sign_up_flow!
 
             begin
               result = TelephoneSignUpCandidateCreator.call(

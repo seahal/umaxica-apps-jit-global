@@ -51,7 +51,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     )
 
     post sign_app_edge_v0_token_dbsc_path,
-         headers: { AuthIoKeys::Headers::SECURE_DBSC_RESPONSE => proof }
+         headers: { AuthIoKeys::Headers::SECURE_DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :created
     response_body = response.parsed_body
@@ -117,7 +117,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     )
 
     post sign_app_edge_v0_token_dbsc_path,
-         headers: { AuthIoKeys::Headers::DBSC_RESPONSE => proof }
+         headers: { AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :unprocessable_content
     assert_equal "missing_challenge", response.parsed_body["error_code"]
@@ -214,7 +214,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     post sign_app_edge_v0_token_dbsc_path,
          headers: {
            AuthIoKeys::Headers::SECURE_DBSC_SESSION_ID => %("session-abc"),
-           AuthIoKeys::Headers::SECURE_DBSC_RESPONSE => proof,
+           AuthIoKeys::Headers::SECURE_DBSC_RESPONSE => DbscHeaderSerializer.string(proof),
          }
 
     assert_response :no_content
@@ -242,7 +242,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
     # Execute with session ID but record not bound to DBSC (no dbsc_session_id)
-    # This triggers 403 Forbidden because proof is blank (challenge issuance)
+    # An unregistered session is refused without issuing a challenge.
     post sign_app_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::SECURE_DBSC_SESSION_ID => %("session-abc") }
 
@@ -283,7 +283,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     )
 
     post sign_org_edge_v0_token_dbsc_path,
-         headers: { AuthIoKeys::Headers::DBSC_RESPONSE => proof }
+         headers: { AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :created
     response_body = response.parsed_body
@@ -349,7 +349,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     )
 
     post sign_org_edge_v0_token_dbsc_path,
-         headers: { AuthIoKeys::Headers::DBSC_RESPONSE => proof }
+         headers: { AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof) }
 
     assert_response :unprocessable_content
     assert_equal "missing_challenge", response.parsed_body["error_code"]
@@ -445,7 +445,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     post sign_org_edge_v0_token_dbsc_path,
          headers: {
            AuthIoKeys::Headers::DBSC_SESSION_ID => %("session-abc"),
-           AuthIoKeys::Headers::DBSC_RESPONSE => proof,
+           AuthIoKeys::Headers::DBSC_RESPONSE => DbscHeaderSerializer.string(proof),
          }
 
     assert_response :no_content
@@ -473,7 +473,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
     # Execute with session ID but record not bound to DBSC (no dbsc_session_id)
-    # This triggers 403 Forbidden because proof is blank (challenge issuance)
+    # An unregistered session is refused without issuing a challenge.
     post sign_org_edge_v0_token_dbsc_path,
          headers: { AuthIoKeys::Headers::DBSC_SESSION_ID => %("session-abc") }
 

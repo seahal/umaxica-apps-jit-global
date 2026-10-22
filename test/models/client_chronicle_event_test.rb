@@ -18,12 +18,6 @@ class ClientChronicleEventTest < ActiveSupport::TestCase
     @subject = @model_class.new(id: @valid_id)
   end
 
-  test "accepts integer ids" do
-    record = ClientChronicleEvent.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are grouped and defined" do
     assert_equal [
       ClientChronicleEvent::ACCOUNT_RECOVERED,

@@ -255,12 +255,6 @@ class OperatorTest < ActiveSupport::TestCase
   # D. Equivalence Partitioning
   # ==========================================================================
 
-  test "equivalence: valid set - allowed base32 characters only (16 chars) is valid" do
-    staff = Operator.new(public_id: VALID_PUBLIC_ID)
-
-    assert_predicate staff, :valid?
-  end
-
   test "equivalence: secure random base32 alphabet input is valid" do
     staff = Operator.new(public_id: "01ABCDGHJKMNPQRS")
 

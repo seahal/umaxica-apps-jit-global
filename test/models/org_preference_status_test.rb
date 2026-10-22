@@ -29,12 +29,6 @@ class OrgPreferenceStatusTest < ActiveSupport::TestCase
     assert_equal [1, 2], ids.sort
   end
 
-  test "accepts integer ids" do
-    status = OrgPreferenceStatus.new(id: 3)
-
-    assert_predicate status, :valid?
-  end
-
   test "ensure_defaults! does nothing when defaults exist" do
     assert_no_difference "OrgPreferenceStatus.count" do
       OrgPreferenceStatus.ensure_defaults!

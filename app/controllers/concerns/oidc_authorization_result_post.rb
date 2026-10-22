@@ -35,6 +35,10 @@ module OidcAuthorizationResultPost
                                                         ri: params[:ri], }
   end
 
+  # FIXME: POST /oauth/authorize dispatches four unrelated operations on parameter presence:
+  # ceremony start, Cancel, Switch and Auth-to-Base result completion. None of them is part of the
+  # OIDC authorization endpoint. Give each its own resource, and remove the intermediate
+  # "Continue" POST so the browser no longer needs a click or JavaScript to proceed.
   def create
     if params[:ceremony_action].present?
       return start_authorization_from_post!
@@ -104,6 +108,13 @@ module OidcAuthorizationResultPost
 
   # D09/D06: Auth's first-page Cancel or Switch arrives as a cross-site GET; Base commits it only
   # through this same-origin POST from the browser that started the parent authorization.
+  #
+  # FIXME: Cancel and Switch fail here. This page is served with `Referrer-Policy: no-referrer`
+  # (apply_base_browser_continuation_headers!) after a cross-site Jump redirect, and its form POST
+  # arrives with `Origin: null`, which the Rails origin check refuses with 422 (observed on APP and
+  # COM in development on 2026-10-21). The ceremony binding confirmation page uses the same headers
+  # and its POST succeeds; the difference is not yet explained. Fix by removing this intermediate
+  # POST, not by relaxing `forgery_protection_origin_check` or accepting a null Origin.
   def render_oidc_exit_continuation!
     fields =
       if params[:switch_handoff].present?

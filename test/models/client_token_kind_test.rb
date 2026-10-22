@@ -12,12 +12,6 @@
 require "test_helper"
 
 class ClientTokenKindTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    kind = ClientTokenKind.new(id: 99)
-
-    assert_predicate kind, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 11, ClientTokenKind::BROWSER_WEB
     assert_equal 12, ClientTokenKind::CLIENT_IOS
@@ -26,10 +20,6 @@ class ClientTokenKindTest < ActiveSupport::TestCase
 
   test "defaults are defined" do
     assert_equal [11, 12, 13], ClientTokenKind::DEFAULTS
-  end
-
-  test "has many client_tokens" do
-    assert_equal :has_many, ClientTokenKind.reflect_on_association(:client_tokens).macro
   end
 
   test "token kind finds its existing client tokens through the retained user foreign key" do

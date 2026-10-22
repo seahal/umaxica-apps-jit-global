@@ -15,12 +15,6 @@ class OrganizationStatusTest < ActiveSupport::TestCase
   #   assert true
   # end
 
-  test "accepts integer ids" do
-    record = OrganizationStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, OrganizationStatus::NOTHING
   end

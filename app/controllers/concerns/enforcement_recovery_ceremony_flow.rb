@@ -29,6 +29,7 @@ module EnforcementRecoveryCeremonyFlow
   private
 
   def start_recovery_otp
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     normalized_address = validate_and_normalize_email(recovery_reentry_address)
     email = normalized_address.present? ? find_email_with_timing_protection(normalized_address) : nil
     subject = recovery_subject_from_email(email)
@@ -45,15 +46,23 @@ module EnforcementRecoveryCeremonyFlow
                                        "otp_transaction_ref" => transaction.transaction_id,
                                        "session_ref" => browser_ref,
                                        "dummy" => false,
-                                       "expires_at" => transaction.otp_expires_at.to_i, }
+                                       "expires_at" => transaction.otp_expires_at.to_i,
+                                       "padding" => "", }
     else
       perform_dummy_otp_generation
-      session[REENTRY_SESSION_KEY] = { "dummy" => true, "expires_at" => EmailCeremonyOtp::OTP_TTL.from_now.to_i }
+      session[REENTRY_SESSION_KEY] = { "email_public_id" => PublicId.generate,
+                                       "otp_transaction_ref" => PublicId.generate,
+                                       "session_ref" => SecureRandom.uuid,
+                                       "dummy" => true,
+                                       "expires_at" => EmailCeremonyOtp::OTP_TTL.from_now.to_i,
+                                       "padding" => " ", }
     end
 
     @email_record = identity_email_model.new(address: recovery_reentry_address)
     @reentry_state = recovery_reentry_state
     render_recovery_reentry_new(status: :ok)
+  ensure
+    ensure_min_elapsed(started_at, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
   end
 
   # The re-entry screen, as its surface renders it. `render :new` resolves the including
@@ -82,7 +91,7 @@ module EnforcementRecoveryCeremonyFlow
     end
 
     session.delete(REENTRY_SESSION_KEY)
-    ensure_min_elapsed(started_at)
+    ensure_min_elapsed(started_at, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
     ceremony = recovery_ceremony_class.issue!(subject: subject, request: request)
     write_recovery_ceremony_cookie!(ceremony)
     safe_redirect_to(recovery_status_path, fallback: recovery_entry_path, status: :see_other)
@@ -90,7 +99,7 @@ module EnforcementRecoveryCeremonyFlow
 
   def render_invalid_recovery_otp(started_at)
     verify_dummy_otp(params[:pass_code].to_s)
-    ensure_min_elapsed(started_at)
+    ensure_min_elapsed(started_at, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
     @email_record = identity_email_model.new(address: recovery_reentry_address)
     @reentry_state = recovery_reentry_state
     render_recovery_reentry_new(status: :unprocessable_content)

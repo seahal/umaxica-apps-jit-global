@@ -181,8 +181,8 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
     post "/edge/v0/token/refresh",
          headers: {
            "Accept" => "application/json",
-           AuthIoKeys::Headers::DBSC_SESSION_ID => "another-session-id",
-           AuthIoKeys::Headers::DBSC_RESPONSE => "proof",
+           AuthIoKeys::Headers::DBSC_SESSION_ID => %q("another-session-id"),
+           AuthIoKeys::Headers::DBSC_RESPONSE => %q("proof"),
            "Cookie" => "#{AuthenticationBase::REFRESH_COOKIE_KEY}=#{Rack::Utils.escape(refresh_plain)}",
          },
          as: :json
@@ -202,8 +202,8 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
     post "/edge/v0/token/refresh",
          headers: {
            "Accept" => "application/json",
-           AuthIoKeys::Headers::DBSC_SESSION_ID => "dbsc-session-id",
-           AuthIoKeys::Headers::DBSC_RESPONSE => "not-a-valid-proof",
+           AuthIoKeys::Headers::DBSC_SESSION_ID => %q("dbsc-session-id"),
+           AuthIoKeys::Headers::DBSC_RESPONSE => %q("not-a-valid-proof"),
            "Cookie" => "#{AuthenticationBase::REFRESH_COOKIE_KEY}=#{Rack::Utils.escape(refresh_plain)}",
          },
          as: :json

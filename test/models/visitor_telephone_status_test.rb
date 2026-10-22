@@ -12,12 +12,6 @@
 require "test_helper"
 
 class VisitorTelephoneStatusTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    status = VisitorTelephoneStatus.new(id: 9)
-
-    assert_predicate status, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, VisitorTelephoneStatus::UNVERIFIED
     assert_equal 2, VisitorTelephoneStatus::VERIFIED

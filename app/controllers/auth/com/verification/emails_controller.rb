@@ -54,7 +54,7 @@ class Auth::Com::Verification::EmailsController < ::Auth::Com::ApplicationContro
     )
       redirect_to(auth_com_verification_handoff_path(ri: params[:ri]))
     else
-      @verification_errors = [t("sign.app.verification.errors.incorrect_code")]
+      @verification_errors = [t("sign.com.verification.errors.incorrect_code")]
       render inertia: EDIT_COMPONENT, props: edit_page_props, status: :unprocessable_content
     end
   end
@@ -69,20 +69,20 @@ class Auth::Com::Verification::EmailsController < ::Auth::Com::ApplicationContro
     pt = nil
 
     {
-      title: t("sign.app.verification.new.title"),
-      heading: t("sign.app.verification.new.title"),
-      description: t("sign.app.verification.new.description"),
+      title: t("sign.com.verification.new.title"),
+      heading: t("sign.com.verification.new.title"),
+      description: t("sign.com.verification.new.description"),
       errors: Array(@verification_errors),
       form: {
         action: auth_com_verification_emails_path(ri: params[:ri]),
         csrf_token: form_authenticity_token,
         scope: scope,
         pt: pt,
-        submit_label: t("sign.app.verification.new.methods.email_otp"),
+        submit_label: t("sign.com.verification.new.methods.email_otp"),
       },
       cancel: step_up_cancellation_props,
       back: {
-        label: t("sign.app.verification.edit.back"),
+        label: t("sign.com.verification.edit.back"),
         href: auth_com_verification_path(ri: params[:ri], scope: scope, pt: pt),
       },
     }
@@ -90,19 +90,19 @@ class Auth::Com::Verification::EmailsController < ::Auth::Com::ApplicationContro
 
   def edit_page_props
     {
-      title: t("sign.app.verification.edit.title"),
-      heading: t("sign.app.verification.edit.title"),
-      description: t("sign.app.verification.edit.email_description"),
-      delivery_help: t("sign.app.verification.edit.email_delivery_help"),
+      title: t("sign.com.verification.edit.title"),
+      heading: t("sign.com.verification.edit.title"),
+      description: t("sign.com.verification.edit.email_description"),
+      delivery_help: t("sign.com.verification.edit.email_delivery_help"),
       errors: Array(@verification_errors),
       form: {
         action: auth_com_verification_email_path(@step_up_ceremony_transaction.transaction_id, ri: params[:ri]),
         csrf_token: form_authenticity_token,
         scope: @step_up_ceremony_transaction.required_scope,
         pt: nil,
-        code_label: t("sign.app.verification.edit.code_label"),
-        code_placeholder: t("sign.app.verification.edit.code_placeholder"),
-        submit_label: t("sign.app.verification.edit.submit"),
+        code_label: t("sign.com.verification.edit.code_label"),
+        code_placeholder: t("sign.com.verification.edit.code_placeholder"),
+        submit_label: t("sign.com.verification.edit.submit"),
       },
       resend: {
         action: auth_com_verification_email_redelivery_path(
@@ -116,7 +116,7 @@ class Auth::Com::Verification::EmailsController < ::Auth::Com::ApplicationContro
       },
       cancel: step_up_cancellation_props,
       back: {
-        label: t("sign.app.verification.edit.back"),
+        label: t("sign.com.verification.edit.back"),
         href: auth_com_verification_path(
           ri: params[:ri],
           scope: @step_up_ceremony_transaction.required_scope,

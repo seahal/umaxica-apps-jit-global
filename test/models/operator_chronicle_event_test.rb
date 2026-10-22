@@ -18,12 +18,6 @@ class OperatorChronicleEventTest < ActiveSupport::TestCase
     @subject = @model_class.new(id: @valid_id)
   end
 
-  test "accepts integer ids" do
-    record = OperatorChronicleEvent.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "all constants are defined with correct values" do
     assert_equal 1, OperatorChronicleEvent::LOGIN_SUCCESS
     assert_equal 2, OperatorChronicleEvent::AUTHORIZATION_FAILED

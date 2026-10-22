@@ -154,7 +154,7 @@ module Security
         assert session_options[:httponly]
         assert session_options[:secure]
         assert_equal :lax, session_options[:same_site]
-        assert session_options.key?(:partitioned)
+        assert_not session_options.key?(:partitioned), "a top-level first-party session is not Partitioned"
         assert_not session_options.key?(:domain), "__Host-session must not carry a Domain attribute"
         assert JitSessionCookieConfig.force_secure?(
           id_service_host: "id.app.example",
@@ -162,11 +162,11 @@ module Security
         )
       end
 
-      test "insecure session cookie domain shares the apex across sibling subdomains" do
-        domain_option = JitSessionCookieConfig.session_options(force_secure: false)[:domain]
-        request = Struct.new(:host).new("www-jp.umaxica.app")
+      test "insecure session cookie is host-only and never shared across sibling subdomains" do
+        session_options = JitSessionCookieConfig.session_options(force_secure: false)
 
-        assert_equal ".umaxica.app", domain_option.call(request)
+        assert_not session_options.key?(:domain), "each FQDN owns its own Rails session in every environment"
+        assert_not session_options.key?(:partitioned)
       end
 
       private

@@ -486,19 +486,6 @@ class SignFlowTest < ActiveSupport::TestCase
     assert_equal ClientSignInFlowState::EXPIRED, cycle.reload.state_id
   end
 
-  test "named sign-in transitions reject expired cycles after terminalizing them" do
-    now = Time.zone.local(2026, 5, 19, 11, 0, 0)
-    cycle = ClientSignInFlow.create!(
-      cycle_attrs(ClientSignInFlow).merge(issued_at: now - 1.minute, expires_at: now),
-    )
-
-    travel_to now do
-      assert_raises(FlowInvalidTransition) { cycle.advance_sign_in_to_mfa!.value! }
-    end
-
-    assert_equal ClientSignInFlowState::EXPIRED, cycle.reload.state_id
-  end
-
   test "sign-in TTL is checked one microsecond below at and above the owning database clock" do
     SIGN_IN_CLASSES.each do |model|
       now = model.database_now

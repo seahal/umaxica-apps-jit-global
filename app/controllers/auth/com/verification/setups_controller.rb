@@ -53,8 +53,8 @@ module Auth
 
         def verification_setup_props
           {
-            title: t("sign.app.verification.setup.title"),
-            description: t("sign.app.verification.setup.description"),
+            title: t("sign.com.verification.setup.title"),
+            description: t("sign.com.verification.setup.description"),
             # Setup is shown only when no Step-Up method exists, so no earlier Step-Up state exists to go
             # back to, and the success continuation (`pt`) is not a Back. The only exit is cancellation.
             cancel: { label: t("actions.cancel"),
@@ -70,7 +70,7 @@ module Auth
           if @missing_methods.include?(:passkey)
             methods << {
               key: "passkey",
-              label: t("sign.app.verification.setup.methods.passkey"),
+              label: t("sign.com.verification.setup.methods.passkey"),
               href: new_auth_com_verification_registration_passkey_path(ri: params[:ri]),
             }
           end

@@ -68,6 +68,31 @@ module Sign
         end
       end
 
+      %i(app com).each do |surface|
+        { before_expiry: -1.second, at_expiry: 0.seconds, after_expiry: 1.second }.each do |label, offset|
+          test "#{surface} resend state #{label} honors its absolute deadline" do
+            freeze_time do
+              binding = @ceremonies.fetch(surface).sid_digest
+              state = SignInOtpResendState.issue(
+                kind: :email, target: "resend-expiry@example.test", surface: surface,
+                browser_binding: binding, contact: nil,
+              )
+              issued_at = Time.current
+              travel_to issued_at + SignInOtpResendState::TTL + offset
+              parsed = SignInOtpResendState.parse(state, browser_binding: binding)
+
+              if label == :before_expiry
+                assert_not_nil parsed
+                assert_equal surface.to_s, parsed.fetch(:surface)
+                assert_equal "fake", parsed.fetch(:contact_mode)
+              else
+                assert_nil parsed
+              end
+            end
+          end
+        end
+      end
+
       # SMS OTP is not an accepted sign-in proof. Neither a telephone resend
       # state nor a telephone resender may exist, so no SMS can be sent here.
       test "telephone resend state cannot be minted" do

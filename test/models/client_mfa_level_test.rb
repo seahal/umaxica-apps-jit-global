@@ -12,12 +12,6 @@
 require "test_helper"
 
 class ClientMfaLevelTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    level = ClientMfaLevel.new(id: 9)
-
-    assert_predicate level, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, ClientMfaLevel::NOTHING
     assert_equal 1, ClientMfaLevel::WEAK

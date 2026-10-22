@@ -68,6 +68,9 @@ stateDiagram-v2
     CANCELLED --> [*]
     HALTED --> [*]
     note right of STARTED
+        Contact-entry replacement validates Turnstile, identifier and explicit consent first.
+        A rejected replacement preserves the current flow and pending artifacts.
+        Accepted replacement halts and cleans up the predecessor before new artifacts.
         OTP issuance and consumption lock this parent first.
         Existing terminal and discarded parents reject without OTP mutation.
         Overdue nonterminal parents use the named expiry and terminal cleanup before refusal.

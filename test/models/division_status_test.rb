@@ -16,12 +16,6 @@ class DivisionStatusTest < ActiveSupport::TestCase
   #   assert true
   # end
 
-  test "accepts integer ids" do
-    record = DivisionStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, DivisionStatus::NOTHING
     assert_equal 2, DivisionStatus::ACTIVE

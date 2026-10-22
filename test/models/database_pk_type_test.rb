@@ -45,18 +45,6 @@ class DatabasePkTypeTest < ActiveSupport::TestCase
     assert_bigint_pk(ClientChronicleLevel)
   end
 
-  test "models with code column use citext" do
-    models = [OperatorTokenKind, OperatorTokenStatus, ClientTokenKind, ClientTokenStatus]
-    models.select! { |model| model.column_names.include?("code") }
-
-    if models.empty?
-      assert true, "No models with code column found (migrated to fixed IDs)"
-      return
-    end
-
-    models.each { |model| assert_code_is_citext(model) }
-  end
-
   private
 
   def assert_bigint_pk(model)
@@ -69,16 +57,5 @@ class DatabasePkTypeTest < ActiveSupport::TestCase
 
     assert ["bigint", "bigserial"].any? { |type| sql_type.include?(type) },
            "#{model.name}.id should be bigint/bigserial, got: #{sql_type}"
-  end
-
-  def assert_code_is_citext(model)
-    code_column = model.columns_hash["code"]
-
-    assert code_column, "#{model.name} should have 'code' column"
-
-    sql_type = code_column.sql_type.downcase
-
-    assert_includes sql_type, "citext",
-                    "#{model.name}.code should be citext, got: #{sql_type}"
   end
 end

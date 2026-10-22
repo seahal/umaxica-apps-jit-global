@@ -38,12 +38,6 @@ class OperatorChronicleLevelTest < ActiveSupport::TestCase
     end
   end
 
-  test "accepts integer ids" do
-    record = OperatorChronicleLevel.new(id: 3)
-
-    assert_predicate record, :valid?
-  end
-
   test "NOTHING constant is defined" do
     assert_equal 1, OperatorChronicleLevel::NOTHING
   end

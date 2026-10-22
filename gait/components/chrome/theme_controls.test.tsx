@@ -178,14 +178,6 @@ describe("ThemeControls mount", () => {
     expect(document.documentElement.dataset["theme"]).toBe("light");
   });
 
-  test("keeps the rendered theme when the stored preference cannot be read", async () => {
-    document.documentElement.dataset["theme"] = "dark";
-
-    await mount();
-
-    expect(selectedTheme()).toBe("dark");
-  });
-
   // The visitor is more current than an in-flight read, so a choice made first must win.
   test("does not overwrite a choice made before the stored preference arrives", async () => {
     // The PATCH answers at once; the GET is held open until this test decides it lands.

@@ -186,6 +186,24 @@ class RpSessionTest < ActiveSupport::TestCase
       assert_not session.authenticate_refresh_token("wrong-verifier")
     end
 
+    test "#{rp_session_case[:name]} rp session refuses blank verifiers and sessions without an issued refresh token" do
+      root = rp_session_case[:root_builder].call
+      session = rp_session_case[:model].create!(
+        rp_session_case[:parent_label] => root,
+        :oidc_client_id => "core-app-jp",
+        :oidc_scope => "openid profile",
+        :refresh_token_expires_at => 1.hour.from_now,
+      )
+
+      assert_predicate session.refresh_token_digest, :blank?
+      assert_not session.authenticate_refresh_token("anything")
+
+      session.issue_refresh_token!
+
+      assert_not session.authenticate_refresh_token(nil)
+      assert_not session.authenticate_refresh_token("")
+    end
+
     test "#{rp_session_case[:name]} rp session refresh expiry cannot exceed its root session" do
       root = rp_session_case[:root_builder].call
       absolute_expiry = 1.hour.from_now

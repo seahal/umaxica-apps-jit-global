@@ -541,17 +541,22 @@ module PreferenceBase
     return unless preference
     return if preference.binding_method_dbsc?
 
+    # A host without a Preference DBSC endpoint must not advertise a registration
+    # path. Host-only Preference credentials cannot register against another host.
+    path = preference_dbsc_path
+    return if path.nil?
+
     challenge = issue_preference_dbsc_challenge_for!(preference)
     return if challenge.blank?
 
-    value = %((ES256 RS256);path="#{preference_dbsc_path}";challenge="#{challenge}")
+    value = DbscHeaderSerializer.registration(path: path, challenge: challenge)
     response.set_header(
       PreferenceIoKeys::Headers::DBSC_REGISTRATION,
       value,
     )
     response.set_header(PreferenceIoKeys::Headers::DBSC_SECURE_REGISTRATION, value)
     Rails.logger.info(
-      "[dbsc] registration header issued path=#{preference_dbsc_path} challenge=#{challenge[0, 24]}",
+      JitLogEvent.format("dbsc.registration.advertised", request_path: path),
     )
   end
 
@@ -564,18 +569,9 @@ module PreferenceBase
   end
 
   def preference_dbsc_path
-    raw =
-      case preference_class.name
-      when "AppPreference"
-        acme_app_edge_v0_dbsc_path if respond_to?(:acme_app_edge_v0_dbsc_path)
-      when "OrgPreference"
-        acme_org_edge_v0_dbsc_path if respond_to?(:acme_org_edge_v0_dbsc_path)
-      when "ComPreference"
-        acme_com_edge_v0_dbsc_path if respond_to?(:acme_com_edge_v0_dbsc_path)
-      end
-    # Canonicalize: the advertised DBSC path must not carry per-request context params,
-    # so the browser-registered refresh path stays stable across requests.
-    dbsc_canonical_url(raw)
+    # Unsupported by default. Each host that serves the endpoint names its own
+    # canonical route explicitly in its surface-local controller base.
+    nil
   end
 
   def dbsc_binding_method_name(record)

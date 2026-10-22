@@ -101,6 +101,11 @@ Rails.event.record(...)
 Those methods were custom application logging shims and are not part of the current logging
 contract.
 
+DBSC registration advertisements, registration success and challenge issuance use fixed structured
+application log events. Neither session identifiers nor challenges are included, even as truncated
+prefixes; HTTP-header presence logs retain field names only. See
+[the DBSC header boundary](../architecture/dbsc.md#http-header-boundary).
+
 ActionMailer raw message content is not application logging data. The shared Rails configuration
 sets `config.action_mailer.logger = nil`, which leaves delivery, delivery jobs, interceptors and
 Noticed orchestration intact while preventing ActionMailer DEBUG logging from writing raw MIME

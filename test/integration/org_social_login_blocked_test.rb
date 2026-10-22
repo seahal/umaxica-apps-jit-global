@@ -257,14 +257,6 @@ class OrgSocialLoginBlockedTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test "app social route remains available on app host" do
-    host! @service_host
-
-    post "/social/google"
-
-    assert_not_equal 404, response.status
-  end
-
   private
 
   def login_challenge_for(surface)

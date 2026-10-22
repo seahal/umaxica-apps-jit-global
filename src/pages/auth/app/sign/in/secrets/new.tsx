@@ -2,7 +2,7 @@ import { useRef } from "react";
 
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
-import type { SignInTurnstile } from "@/features/auth/signin/types";
+import type { SignInLink, SignInTurnstile } from "@/features/auth/signin/types";
 import TurnstileWidget from "@/features/turnstile/TurnstileWidget";
 
 type Props = {
@@ -14,6 +14,7 @@ type Props = {
   action: string;
   authenticity_token: string;
   turnstile: SignInTurnstile;
+  back_link: SignInLink;
 };
 
 export default function SecretSignIn({
@@ -25,6 +26,7 @@ export default function SecretSignIn({
   action,
   authenticity_token: csrf,
   turnstile,
+  back_link: backLink,
 }: Props) {
   const challenge = useRef<HTMLInputElement>(null);
   return (
@@ -89,6 +91,16 @@ export default function SecretSignIn({
         />
         <Button type="submit">{submit}</Button>
       </form>
+
+      <p className="text-base">
+        {/* Document visit: leaving the ceremony returns to the method selection page. */}
+        <a
+          href={backLink.href}
+          className="ui-text-link text-fg-muted underline underline-offset-4 hover:text-fg hover:underline"
+        >
+          {backLink.label}
+        </a>
+      </p>
     </Page>
   );
 }

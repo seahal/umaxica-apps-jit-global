@@ -23,12 +23,6 @@ class ComPreferenceChronicleEventTest < ActiveSupport::TestCase
     assert_equal 0, status.id
   end
 
-  test "accepts integer ids" do
-    record = ComPreferenceChronicleEvent.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "includes all default ids" do
     ids = ComPreferenceChronicleEvent.pluck(:id)
 

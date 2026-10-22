@@ -160,7 +160,7 @@ module OutboundSensitivePayload
       secret_credential = Rails.application.secret_key_base
       key_len = ActiveSupport::MessageEncryptor.key_len
       key = ActiveSupport::KeyGenerator.new(secret_credential).generate_key(purpose, key_len)
-      ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm")
+      ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm", serializer: JSON)
     end
   end
 end

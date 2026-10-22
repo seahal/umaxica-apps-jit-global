@@ -1,0 +1,54 @@
+# rails-services-outbound: per-definition ledger
+
+15 source definitions. [Audit scope and status legend](../README.md). Generated loops/each tables are represented once per source definition, not once per runtime case. Production links are static candidates, not verified call traces. Oracle excerpts are truncated; use the linked source for complete setup and assertions.
+
+## `test/services/outbound/sensitive_payload_test.rb`
+
+[test/services/outbound/sensitive_payload_test.rb](../../../test/services/outbound/sensitive_payload_test.rb); SHA-256: `7f31da7fd08a4f75e43155760233dee3e8bcff44014afb0878949db1cc675ffa`.
+
+File-level implementation candidates (including setup/import context): [app/jobs/outbound/sms_delivery_job.rb:6](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [app/services/outbound_sensitive_payload.rb:4](../../../app/services/outbound_sensitive_payload.rb#L4).
+
+| ID / source | Declared protection | Oracle excerpts | Production candidates / request seam | Review disposition | Signals / duplicate |
+| --- | --- | --- | --- | --- | --- |
+| <a id="t-12172"></a>T-12172 / [9](../../../test/services/outbound/sensitive_payload_test.rb#L9) | "encrypts and decrypts complete sms envelopes without embedding plaintext"<br>Owner: `Outbound::SensitivePayloadTest` | `assert_not_includes token, "123456"`; `assert_equal "Your code is 123456", OutboundSensitivePayload.decrypt_sms_delivery(token).fetch(:body)` | [OutboundSensitivePayload](../../../app/services/outbound_sensitive_payload.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12173"></a>T-12173 / [18](../../../test/services/outbound/sensitive_payload_test.rb#L18) | "email otp tokens cannot be decrypted with sms purpose"<br>Owner: `Outbound::SensitivePayloadTest` | `assert_raises(ActiveSupport::MessageEncryptor::InvalidMessage) do` | [OutboundSensitivePayload](../../../app/services/outbound_sensitive_payload.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12174"></a>T-12174 / [26](../../../test/services/outbound/sensitive_payload_test.rb#L26) | "blank payloads are rejected"<br>Owner: `Outbound::SensitivePayloadTest` | `assert_raises(ArgumentError) { OutboundSensitivePayload.encrypt_email_otp("") }`; `assert_raises(ArgumentError) { OutboundSensitivePayload.decrypt_email_otp("") }` | [OutboundSensitivePayload](../../../app/services/outbound_sensitive_payload.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+
+## `test/services/outbound/sms_providers/aws_sns_test.rb`
+
+[test/services/outbound/sms_providers/aws_sns_test.rb](../../../test/services/outbound/sms_providers/aws_sns_test.rb); SHA-256: `89c570894d4562b25dd660709e4abc15b42709cc70ed7dbcbe163f7f4dd44d2c`.
+
+File-level implementation candidates (including setup/import context): [app/jobs/outbound/sms_delivery_job.rb:6](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [app/services/outbound_sms_providers_aws_sns.rb:6](../../../app/services/outbound_sms_providers_aws_sns.rb#L6).
+
+| ID / source | Declared protection | Oracle excerpts | Production candidates / request seam | Review disposition | Signals / duplicate |
+| --- | --- | --- | --- | --- | --- |
+| <a id="t-12175"></a>T-12175 / [11](../../../test/services/outbound/sms_providers/aws_sns_test.rb#L11) | "raises ArgumentError when phone number is blank"<br>Owner: `Outbound::SmsProviders::AwsSnsTest` | `assert_raises(ArgumentError) do`; `assert_raises(ArgumentError) do` | [Outbound](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [OutboundSmsProvidersAwsSns](../../../app/services/outbound_sms_providers_aws_sns.rb#L6) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12176"></a>T-12176 / [23](../../../test/services/outbound/sms_providers/aws_sns_test.rb#L23) | "raises ArgumentError when body is blank"<br>Owner: `Outbound::SmsProviders::AwsSnsTest` | `assert_raises(ArgumentError) do`; `assert_raises(ArgumentError) do` | [Outbound](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [OutboundSmsProvidersAwsSns](../../../app/services/outbound_sms_providers_aws_sns.rb#L6) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12177"></a>T-12177 / [35](../../../test/services/outbound/sms_providers/aws_sns_test.rb#L35) | "sends message with default subject"<br>Owner: `Outbound::SmsProviders::AwsSnsTest` | `assert_equal "aws_sns", result.provider`; `assert_equal "test-id", result.provider_reference`; `assert_kind_of ActiveSupport::TimeWithZone, result.accepted_at`; +1 further assertion lines | [Outbound](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [OutboundSmsProvidersAwsSns](../../../app/services/outbound_sms_providers_aws_sns.rb#L6) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12178"></a>T-12178 / [49](../../../test/services/outbound/sms_providers/aws_sns_test.rb#L49) | "sends message with custom subject"<br>Owner: `Outbound::SmsProviders::AwsSnsTest` | `assert_equal "aws_sns", result.provider`; `assert_equal "test-id", result.provider_reference`; `assert_equal(` | [Outbound](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [OutboundSmsProvidersAwsSns](../../../app/services/outbound_sms_providers_aws_sns.rb#L6) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12179"></a>T-12179 / [62](../../../test/services/outbound/sms_providers/aws_sns_test.rb#L62) | "passes session token when configured"<br>Owner: `Outbound::SmsProviders::AwsSnsTest` | `assert_equal "session-token", captured_options[:session_token]` | [OutboundSmsProvidersAwsSns](../../../app/services/outbound_sms_providers_aws_sns.rb#L6) | S: static inventory; individual semantic review open | stubbed-boundary |
+
+## `test/services/outbound/sms_providers/test_test.rb`
+
+[test/services/outbound/sms_providers/test_test.rb](../../../test/services/outbound/sms_providers/test_test.rb); SHA-256: `c036f841f0294f9fa7dd30e080bc54e7f0e8d369d8a6ae0e1ef14c9b5c2ee083`.
+
+File-level implementation candidates (including setup/import context): [app/jobs/outbound/sms_delivery_job.rb:6](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [app/services/outbound_sms_providers_test.rb:4](../../../app/services/outbound_sms_providers_test.rb#L4).
+
+| ID / source | Declared protection | Oracle excerpts | Production candidates / request seam | Review disposition | Signals / duplicate |
+| --- | --- | --- | --- | --- | --- |
+| <a id="t-12180"></a>T-12180 / [10](../../../test/services/outbound/sms_providers/test_test.rb#L10) | "raises ArgumentError when phone number is blank"<br>Owner: `Outbound::SmsProviders::TestTest` | `assert_raises(ArgumentError) do`; `assert_raises(ArgumentError) do` | [OutboundSmsProvidersTest](../../../app/services/outbound_sms_providers_test.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12181"></a>T-12181 / [22](../../../test/services/outbound/sms_providers/test_test.rb#L22) | "raises ArgumentError when message body is blank"<br>Owner: `Outbound::SmsProviders::TestTest` | `assert_raises(ArgumentError) do`; `assert_raises(ArgumentError) do` | [OutboundSmsProvidersTest](../../../app/services/outbound_sms_providers_test.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12182"></a>T-12182 / [34](../../../test/services/outbound/sms_providers/test_test.rb#L34) | "returns accepted provider response"<br>Owner: `Outbound::SmsProviders::TestTest` | `assert_equal "test", result.provider`; `assert_equal "test-provider-reference", result.provider_reference`; `assert_kind_of ActiveSupport::TimeWithZone, result.accepted_at` | [OutboundSmsProvidersTest](../../../app/services/outbound_sms_providers_test.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+
+## `test/services/outbound/sms_test.rb`
+
+[test/services/outbound/sms_test.rb](../../../test/services/outbound/sms_test.rb); SHA-256: `6749eadf9e412cb8bda26ab53170d76d5dcd2163d2b7ac10fa6f709de24b45f7`.
+
+File-level implementation candidates (including setup/import context): [app/jobs/outbound/sms_delivery_job.rb:6](../../../app/jobs/outbound/sms_delivery_job.rb#L6); [app/services/outbound_sms.rb:4](../../../app/services/outbound_sms.rb#L4); [app/services/outbound_sensitive_payload.rb:4](../../../app/services/outbound_sensitive_payload.rb#L4).
+
+| ID / source | Declared protection | Oracle excerpts | Production candidates / request seam | Review disposition | Signals / duplicate |
+| --- | --- | --- | --- | --- | --- |
+| <a id="t-12183"></a>T-12183 / [11](../../../test/services/outbound/sms_test.rb#L11) | "accepts a common outbound message payload"<br>Owner: `Outbound::SmsTest` | `assert_enqueued_jobs 1, only: Outbound::SmsDeliveryJob do`; `assert_predicate result, :accepted?`; `assert_equal :sms, result.channel`; +8 further assertion lines | [Outbound::SmsDeliveryJob](../../../app/jobs/outbound/sms_delivery_job.rb#L7); [OutboundSms](../../../app/services/outbound_sms.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12184"></a>T-12184 / [33](../../../test/services/outbound/sms_test.rb#L33) | "service call delegates to delayed delivery"<br>Owner: `Outbound::SmsTest` | `assert_enqueued_jobs 1, only: Outbound::SmsDeliveryJob do`; `assert_predicate result, :accepted?`; `assert_equal :sms, result.channel`; +5 further assertion lines | [Outbound::SmsDeliveryJob](../../../app/jobs/outbound/sms_delivery_job.rb#L7); [OutboundSms](../../../app/services/outbound_sms.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12185"></a>T-12185 / [52](../../../test/services/outbound/sms_test.rb#L52) | "rejects unknown provider configuration before enqueue"<br>Owner: `Outbound::SmsTest` | `assert_no_enqueued_jobs only: Outbound::SmsDeliveryJob do`; `assert_raises(ArgumentError) do` | [Outbound::SmsDeliveryJob](../../../app/jobs/outbound/sms_delivery_job.rb#L7); [OutboundSms](../../../app/services/outbound_sms.rb#L4) | S: static inventory; individual semantic review open | none detected (not a quality approval) |
+| <a id="t-12186"></a>T-12186 / [65](../../../test/services/outbound/sms_test.rb#L65) | "deliver_now sends message immediately using provider"<br>Owner: `Outbound::SmsTest` | `assert result`; `assert_equal({ to: "+819012345678", title: "Immediate", body: "Now" }, provider_double.called_with)` | [OutboundSms](../../../app/services/outbound_sms.rb#L4) | S: static inventory; individual semantic review open | stubbed-boundary |

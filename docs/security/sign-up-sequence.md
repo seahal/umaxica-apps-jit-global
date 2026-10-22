@@ -1,5 +1,18 @@
 # Sign-Up Sequence
 
+## Contact entry validation and replacement
+
+APP and COM email and telephone entry POSTs accept consent only as the checkbox value `"1"`
+or the JSON boolean `true`. Missing, null, empty, unchecked and unsupported values are rejected
+with the existing validation response. Telephone entry requires both policy and MFA-use consent.
+This request-boundary normalization preserves the shared contact models' other creation workflows.
+
+An admitted browser's replacement contact submission passes Turnstile, identifier validation and
+required consent before ending its previous sign-up flow. A rejected CAPTCHA or invalid input
+preserves the previous flow, browser locator, pending contact and principal and queues no OTP.
+An accepted replacement uses the existing HALTED lifecycle and cleanup boundary before allocating
+new artifacts; it does not silently overwrite the previous flow or reuse its proof.
+
 The reason completed App/Com registration enters the canonical Sign In admission before session
 issuance is recorded in [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md)
 and [ADR D13](../../adr/sign-in-first-and-sign-up-handoff.md). That system handoff is distinct from

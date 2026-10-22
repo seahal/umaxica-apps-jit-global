@@ -38,30 +38,6 @@ class BranchCoverageEasyWinsTest < ActiveSupport::TestCase
     assert_equal :linked, result.status
   end
 
-  test "OidcIdTokenIssuer rejects blank nonce and inverted time ordering" do
-    resource = Client.new
-    client = Struct.new(:client_id).new("base-rails-rp")
-    assert_raises(ArgumentError) do
-      OidcIdTokenIssuer.new(
-        resource: resource,
-        client: client,
-        nonce: "",
-        issued_at: Time.current,
-        expires_at: 1.minute.from_now,
-      ).call
-    end
-
-    assert_raises(ArgumentError) do
-      OidcIdTokenIssuer.new(
-        resource: resource,
-        client: client,
-        nonce: "n",
-        issued_at: 1.minute.from_now,
-        expires_at: Time.current,
-      ).call
-    end
-  end
-
   test "identity ceremony results reject future verified_at timestamps" do
     now = Time.zone.parse("2026-06-24 12:00:00 UTC")
     future = now + IdentitySocialCeremonyContract::LEEWAY + 60

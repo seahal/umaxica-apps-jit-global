@@ -8,6 +8,15 @@ direction; deployment and production queue operation still require the evidence 
 
 ## Decision
 
+### Partial supersession (2026-10-21)
+
+[Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) replaces the ten-per-owner
+capacity below with a four-slot target on APP, COM and ORG. The original ten-credential decision
+and rationale remain historical. Four-slot enforcement and safe handling of existing counts above
+four require later investigation; no deletion, migration or new database mechanism is approved
+here. Owner serialization, credential uniqueness, lifecycle deletion and Chronicle/outbox contracts
+remain accepted. The successor records a design target, not delivery.
+
 Passkey tables represent credentials that are currently retained and usable or are retained for an
 explicit lifecycle reason. Chronicle is the historical audit authority. A terminal Passkey row is
 not retained indefinitely merely to preserve history.

@@ -3621,7 +3621,25 @@ ja:
           complete: 検証が完了しました
     com:
       authentication:
+        email:
+          create:
+            cooldown: しばらくしてから再度お試しください。
+            invalid_format: 無効なメールアドレス形式です。
+          edit:
+            code_label: 認証コード
+            code_placeholder: 6桁の数字を入力
+            delivery_help: ※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。
+            description: 入力いただいたメールアドレスに、認証コードという6桁の数字が届きますので、入力してボタンを押してください。
+            page_title: 認証コード入力
+            return_page: 戻る
+            submit: 送信する
+          new:
+            page_title: メールでページ登録
+            you_have_already_logged_in: あなたはログインしています
+          update:
+            invalid_code: 確認コードが正しくありません
         new:
+          back: 他の方法を選びますか？
           description: 今回のサインインで利用する認証方法を選択してください。
           links:
             email: メールアドレス
@@ -3629,6 +3647,11 @@ ja:
             registration: アカウント登録はこちら
             secret_credential: シークレット
           page_title: サインイン方法を選ぶ
+        passkey:
+          new:
+            description: 信頼できる端末を使ってパスキーを追加し、パスワードなしでサインインします。
+            page_title: パスキーを登録する
+            submit: パスキーでログイン
       in:
         bulletins:
           forbidden: アクセス権限がありません
@@ -3645,6 +3668,17 @@ ja:
         checkpoints:
           show:
             title: サインインの確認
+        mfa:
+          description: 認証方法を選択してください。
+          methods:
+            passkey: パスキーで認証
+          no_methods_available: 利用可能な認証方法がありません。サポートにお問い合わせください。
+          passkey:
+            authenticate: パスキーで認証
+            back: 認証方法の選択に戻る
+            description: 登録済みのパスキーで認証してください。
+            title: パスキーによる確認
+          title: 追加の認証が必要です
       preferences:
         footer:
           dashboard: ダッシュボード
@@ -3676,22 +3710,53 @@ ja:
         email:
           create:
             address_required: メールアドレスを入力してください。
+            otp_resend_too_soon: しばらく時間をおいてから再度お試しください。
             turnstile_validation_failed: セキュリティ検証に失敗しました。もう一度お試しください。
             verification_code_sent: 入力いただいたメールアドレスに、認証コードという6桁の数字が届きますので、入力してボタンを押してください。
+          edit:
+            session_expired: セッションの有効期限が切れました。最初からやり直してください。
           new:
             error_summary: 入力内容を確認してください。
+            link_to_sign_in: ログインしますか？
             page_title: メールアドレスで登録
+          update:
+            attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
+            code_required: 確認コードを入力してください。
+            invalid_code: パスコードが正しくありません
         new:
           links:
             registration: アカウント登録はこちら
+            sign_in: ログイン
+          methods:
+            email:
+              cta: メールで登録する
+            telephone:
+              cta: 電話番号で登録する
           page_description: "%{product} の利用をはじめるための登録方法を選択してください。"
           page_title: アカウント登録
+          social:
+            disclaimer: 許可なく投稿や共有を行うことはありません。
         session_missing: 登録セッションの有効期限が切れました。最初からやり直してください。
         telephone:
+          create:
+            turnstile_validation_failed: セキュリティ検証に失敗しました。もう一度お試しください。
+            verification_code_sent: 入力いただいた電話番号に、認証コードという6桁の数字がSMSで届きますので、入力してボタンを押してください。
           edit:
+            code_label: 認証コード
+            code_placeholder: 6桁の数字を入力
+            delivery_help: ※1分以上待っても届かない場合は、入力内容やSMSの受信設定をご確認の上、再度お試しください。
+            page_title: 認証コード入力
             session_expired: セッションの有効期限が切れました。最初からやり直してください。
+            submit: 送信する
+          new:
+            link_to_other_methods: 他の方法で登録しますか？
+            link_to_sign_in: ログインしますか？
+            page_title: 電話番号で登録
           success: 電話番号が確認されました。
           update:
+            attempts_exceeded: 試行回数の上限を超えました。最初からやり直してください。
+            code_required: 確認コードを入力してください。
+            invalid_code: パスコードが正しくありません。
             passkey_required: 電話番号が確認されました。パスキーを登録してください。
             success: 電話番号が確認されました。
       settings:
@@ -3718,6 +3783,11 @@ ja:
           update:
             failure: メール設定を更新できませんでした。
             success: メール設定を更新しました。
+        passkeys:
+          new:
+            description_label: パスキーの名前
+            description_placeholder: "例: MacBook Pro"
+            submit: パスキーを登録
         show:
           account_settings: アカウント設定
           logout: ログアウト
@@ -3730,10 +3800,22 @@ ja:
         edit:
           authenticate_with_passkey: パスキーで認証
           back: 戻る
+          code_label: 認証コード
+          code_placeholder: 6桁の数字を入力
           description: 本人確認のため、パスキーで認証してください。
+          email_delivery_help: ※1分以上待っても届かない場合は、入力内容や受信設定をご確認の上、再度お試しください。
+          email_description: 入力いただいたメールアドレスに、認証コードという6桁の数字が届きますので、入力してボタンを押してください。
+          submit: 送信する
           title: 本人確認
+        errors:
+          incorrect_code: 確認コードが正しくありません
+        index:
+          title: 検証セッション
         new:
           description: 続行する前に本人確認を行ってください。
+          methods:
+            email_otp: メール（ワンタイムコード）
+            passkey: パスキー
           title: 本人確認
         setup:
           description: 続行する前に、パスキーまたはメールアドレスを登録してください。
@@ -4504,6 +4586,9 @@ ja:
         shared:
           sign_out:
             confirm_description: 一度ログアウトすると、再度ログインが必要になります。
+        verifications:
+          show:
+            no_methods: email/passkey/totp を登録してください
       org:
         settings:
           emails:

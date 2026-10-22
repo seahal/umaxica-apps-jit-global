@@ -27,6 +27,15 @@ Current Inertia decision:
 
 Current authentication Security Mode decision (accepted; not implemented):
 
+- [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) — **Accepted
+  (2026-10-21), design only; implementation and verification unverified.** APP/COM select an
+  Identity by effective Email or Telephone before Passkey authentication while keeping
+  `allowCredentials` empty or omitted; verified credential ownership must match the server-fixed
+  Identity. ORG Normal retains Entra binding; Standby selects by authoritative Employee Number,
+  subject to authority and non-discoverable credential privacy prerequisites. Partially supersedes
+  usernameless direct sign-in and the ten-credential capacity below with a four-slot target;
+  preserves the `ADVANCED` two-active-Passkey holding minimum.
+
 - `adr/authentication-security-mode.md` — `mfa_level_id` becomes `security_mode_id` with `NORMAL=3`
   and `ADVANCED=7`; owner-held mode with no Operator downgrade, per-mode step-up methods and
   windows, passkey lifecycle without session revocation, Recovery Key/no-key recovery cases, and the
@@ -45,16 +54,38 @@ Current org federated sign-in decision:
   requested or stored, records placed in `org_zenith`, and OmniAuth left untouched on the org
   surface.
 
+Current JWT validation and accepted key risks:
+
+- [JWT Temporal Validation and Upstream Risk Decisions](jwt-validation-and-key-risk-decisions.md)
+  — accepted fixed 30-second first-party JWT clock skew, expiration-only decoding exemption for
+  logout/revocation, Apple upstream RS256/RS512 behavior with drift contracts, and session-key
+  compromise response through retirement and rotation.
+
 Current identity authority decision:
 
 - `adr/sign-in-first-and-sign-up-handoff.md` — **Accepted (2026-10-18)**; Sign In is the canonical
   session-admission boundary and completed App/Com Sign Up enters it through a trusted handoff. D11,
   D12, and D14 remain unresolved.
 
+- [Sign Entry Sentry](sign-entry-sentry.md) — **Accepted (2026-10-22), Owner decisions only; not
+  implemented.** Per-surface Flipper flags `sign_in_available_*` and `sign_up_available_*`
+  (availability polarity, fail closed), two states `ALLOWED`/`BLOCKED`, an Auth-hosted
+  `GET /sign/in/sentry` → `/sign/in` and `GET /sign/up/sentry` → `/sign/up` with 503 when blocked,
+  and no change to Admission, Guardrail, Checkpoint or Sign In First. Enforcement at every point
+  through `SignEntrySentryResolver`, callbacks refused, ORG Emergency outside, and a one-change
+  replacement of `sign_up_suspended_*`; only user-facing details and observability remain open.
+
+- `adr/sign-up-flow-admission-binding-and-cardinality.md` — **Accepted (2026-10-21)**;
+  E1 APP/COM Flow-to-Admission authority, parent-scoped concurrency, status-scoped Flow cardinality,
+  restart invariants, and explicit Pending evidence/migration/deletion decisions. New association
+  and constraints are not implemented. The Base/Auth ADR's 2026-10-21 amendment separately accepts
+  Auth OIDC Result GET/POST `/sign/result`; routes remain unchanged in this ADR-only update.
+
 - `adr/passkey-current-state-limit-and-chronicle-outbox.md` — **Accepted (2026-10-19)**; APP, COM,
-  and ORG Passkeys are limited to ten per owner by an owner-locked registration operation (not by a
-  database constraint), use physical lifecycle deletion, and deliver common Chronicle facts through
-  principal transactional outboxes. Chronicle retention is still TBC.
+  and ORG owner-serialized registration, physical lifecycle deletion and common Chronicle facts
+  through principal transactional outboxes. Its ten-per-owner capacity is **partially superseded**
+  by [the 2026-10-21 four-slot target](passkey-identifier-first-sign-in.md); enforcement and
+  existing-data transition are unverified. Chronicle retention is still TBC.
 
 - `adr/app-com-withdrawal-deadline-snapshot.md` — **Accepted (2026-10-19)**; Client and Visitor
   withdrawal deadlines use an immutable policy, persisted confirmation timestamps, and strict
@@ -67,6 +98,12 @@ Current identity authority decision:
 
 - `adr/jump-directed-rails-handoff-contract.md` — current same-TLD Jump graph, Auth issuer naming,
   Palm browser/native handoff, development trust prerequisites, and rollout boundaries.
+
+- [OIDC RP Scope: The Three UMAXICA TLDs Only](oidc-rp-scope-umaxica-tlds-only.md) — **Accepted
+  (2026-10-21), decision only.** The RP ↔ OP system serves only `umaxica.app`, `umaxica.com` and
+  `umaxica.org`; every other domain (including `umaxica.dev` and `umaxica.net`) is an external RP;
+  no external RP is connected now; other systems integrate through `tech.umaxica.org`; UMAXICA
+  surfaces keep Jump, external RPs would use direct protocol redirects.
 
 - `adr/base-auth-ceremony-and-seven-rp-boundary.md` — **current** physical boundary: Base is the
   sole IdP/AS and Auth is ceremony-only. It records the original seven-RP baseline and later Base

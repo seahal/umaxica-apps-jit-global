@@ -1,13 +1,14 @@
 # typed: false
 # frozen_string_literal: true
 
-# Verifies an existing DBSC session proof against the stored public key.
+# Verifies a decoded session identifier and JWT string against the stored public
+# key. The HTTP boundary owns Structured Field parsing.
 class DbscVerificationService < ApplicationService
   def initialize(record:, session_id:, proof:, now: Time.current, expected_audience: nil)
     super
     @record = record
-    @session_id = DbscHeaderParser.string_value(session_id)
-    @proof = DbscHeaderParser.string_value(proof)
+    @session_id = session_id
+    @proof = proof
     @now = now
     @expected_audience = expected_audience
   end

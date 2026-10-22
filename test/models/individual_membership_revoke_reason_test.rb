@@ -12,12 +12,6 @@
 require "test_helper"
 
 class IndividualMembershipRevokeReasonTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    reason = IndividualMembershipRevokeReason.new(id: 9)
-
-    assert_predicate reason, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, IndividualMembershipRevokeReason::NOTHING
     assert_equal 1, IndividualMembershipRevokeReason::MANUAL

@@ -12,12 +12,6 @@
 require "test_helper"
 
 class ClientProfileStatusTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    status = ClientProfileStatus.new(id: 9)
-
-    assert_predicate status, :valid?
-  end
-
   test "has many clients" do
     assert_equal :has_many, ClientProfileStatus.reflect_on_association(:clients).macro
   end

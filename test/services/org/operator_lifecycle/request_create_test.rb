@@ -37,7 +37,7 @@ class OrgOperatorLifecycleRequestCreateTest < ActiveSupport::TestCase
     assert_predicate result.request.errors[:target_operator], :present?
   end
 
-  test "creates join request when actor owns the organization" do
+  test "legacy organization ownership cannot authorize a new Bureau invitation" do
     org = OperatorOrganization.create!(
       name: "Owned Corp",
       domain: "owned-corp-#{SecureRandom.hex(4)}",
@@ -55,10 +55,9 @@ class OrgOperatorLifecycleRequestCreateTest < ActiveSupport::TestCase
       },
     )
 
-    assert_predicate result, :success?
-    assert_equal "invitee@example.com", result.request.target_email
-    assert_equal org.id, result.request.organization_id
-    assert_equal 4, result.request.role_id
+    assert_not result.success?
+    assert_not_predicate result.request, :persisted?
+    assert_includes result.error, "Organization invitations are unavailable pending Bureau migration"
   end
 
   test "join request is rejected when actor does not own the organization" do

@@ -32,6 +32,7 @@ module WithdrawalCeremonyReentry
   private
 
   def start_withdrawal_reentry_otp
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     normalized_address = validate_and_normalize_email(withdrawal_reentry_address)
     email = normalized_address.present? ? find_email_with_timing_protection(normalized_address) : nil
     subject = withdrawal_subject_from_email(email)
@@ -49,12 +50,17 @@ module WithdrawalCeremonyReentry
         "session_ref" => browser_ref,
         "dummy" => false,
         "expires_at" => transaction.otp_expires_at.to_i,
+        "padding" => "",
       }
     else
       perform_dummy_otp_generation
       session[REENTRY_SESSION_KEY] = {
+        "email_public_id" => PublicId.generate,
+        "otp_transaction_ref" => PublicId.generate,
+        "session_ref" => SecureRandom.uuid,
         "dummy" => true,
         "expires_at" => EmailCeremonyOtp::OTP_TTL.from_now.to_i,
+        "padding" => " ",
       }
     end
 
@@ -62,6 +68,8 @@ module WithdrawalCeremonyReentry
     @reentry_state = withdrawal_reentry_state
     @email_record = identity_email_model.new(address: withdrawal_reentry_address)
     render_withdrawal_reentry_new(status: :ok)
+  ensure
+    ensure_min_elapsed(started_at, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
   end
 
   # The re-entry screen, as its surface renders it. `render :new` resolves the including
@@ -94,14 +102,14 @@ module WithdrawalCeremonyReentry
     end
 
     session.delete(REENTRY_SESSION_KEY)
-    ensure_min_elapsed(start_time)
+    ensure_min_elapsed(start_time, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
     issue_withdrawal_ceremony!(subject: subject, purpose: "status")
     safe_redirect_to(withdrawal_edit_path, fallback: withdrawal_new_path, status: :see_other)
   end
 
   def render_withdrawal_reentry_invalid_code(start_time)
     verify_dummy_otp(params[:pass_code].to_s)
-    ensure_min_elapsed(start_time)
+    ensure_min_elapsed(start_time, EmailOtpPolicy::EMAIL_AUTH_RESPONSE_MINIMUM_SECONDS)
     @generic_message = withdrawal_reentry_generic_message
     @reentry_state = withdrawal_reentry_state
     @email_record = identity_email_model.new(address: withdrawal_reentry_address)

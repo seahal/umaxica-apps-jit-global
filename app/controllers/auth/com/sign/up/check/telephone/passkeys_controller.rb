@@ -78,9 +78,9 @@ module Auth
                          checkpoint_version: (
                            params[:checkpoint_version].presence || @sign_up_ticket.checkpoint_version
                          ).to_i,
-                         description_label: t("sign.app.settings.passkeys.new.description_label"),
-                         description_placeholder: t("sign.app.settings.passkeys.new.description_placeholder"),
-                         submit_label: t("sign.app.settings.passkeys.new.submit"),
+                         description_label: t("sign.com.settings.passkeys.new.description_label"),
+                         description_placeholder: t("sign.com.settings.passkeys.new.description_placeholder"),
+                         submit_label: t("sign.com.settings.passkeys.new.submit"),
                        }
               end
 

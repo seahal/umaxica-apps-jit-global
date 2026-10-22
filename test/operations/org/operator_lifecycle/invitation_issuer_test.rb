@@ -7,7 +7,7 @@ require "test_helper"
 class OrgOperatorLifecycleInvitationIssuerTest < ActiveSupport::TestCase
   fixtures :operators
 
-  test "issues organization invitation from lifecycle request" do
+  test "refuses legacy invitation even for an approved lifecycle request" do
     request = OperatorLifecycleRequest.create!(
       action: OperatorLifecycleRequest::ACTION_JOIN,
       status: OperatorLifecycleRequest::STATUS_APPROVED,
@@ -19,12 +19,12 @@ class OrgOperatorLifecycleInvitationIssuerTest < ActiveSupport::TestCase
       approved_at: Time.current,
     )
 
-    result = OrgOperatorLifecycleInvitationIssuer.call(request: request, actor: operators(:two))
+    assert_no_difference -> { OrganizationInvitation.count } do
+      result = OrgOperatorLifecycleInvitationIssuer.call(request: request, actor: operators(:two))
 
-    assert_predicate result, :success?
-    assert_equal "invitee@example.com", result.invitation.email
-    assert_equal 123, result.invitation.organization_id
-    assert_equal 7, result.invitation.role_id
-    assert_equal operators(:two).id, result.invitation.invited_by_id
+      assert_not result.success?
+      assert_nil result.invitation
+      assert_equal "Organization invitations are unavailable pending Bureau migration", result.error
+    end
   end
 end

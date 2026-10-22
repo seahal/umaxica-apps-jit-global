@@ -14,10 +14,6 @@ class AuthenticationClientIncludedDoTest < ActiveSupport::TestCase
     assert_includes Harness.included_modules, AuthenticationBase
   end
 
-  test "included do includes AuthorizationAudit module" do
-    assert_includes Harness.included_modules, AuthorizationAudit
-  end
-
   test "active_client? method exists" do
     assert_includes AuthenticationClient.instance_methods(false), :active_client?
   end

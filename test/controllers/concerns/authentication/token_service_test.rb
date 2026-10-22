@@ -75,9 +75,10 @@ class AuthenticationTokenServiceTest < ActiveSupport::TestCase
   end
 
   test "resource_type_scope_matches? returns true for matching visitor" do
-    payload = { "scope" => "authenticated domain:client" }
+    payload = { "scope" => "authenticated domain:visitor" }
 
-    assert AuthenticationTokenService.resource_type_scope_matches?(payload, "client")
+    assert AuthenticationTokenService.resource_type_scope_matches?(payload, "visitor")
+    assert_not AuthenticationTokenService.resource_type_scope_matches?(payload, "client")
   end
 
   test "encode creates valid token that can be decoded" do

@@ -11,12 +11,6 @@
 require "test_helper"
 
 class OperatorWorkspaceAccountStatusTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    record = OperatorWorkspaceAccountStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, OperatorWorkspaceAccountStatus::ACTIVE
     assert_equal 2, OperatorWorkspaceAccountStatus::NOTHING

@@ -37,10 +37,10 @@ module Auth
 
           def mfa_challenge_props
             {
-              title: t("sign.app.in.mfa.title"),
-              description: t("sign.app.in.mfa.description"),
+              title: t("sign.com.in.mfa.title"),
+              description: t("sign.com.in.mfa.description"),
               methods: mfa_challenge_methods,
-              no_methods_notice: @can_use_passkey ? nil : t("sign.app.in.mfa.no_methods_available"),
+              no_methods_notice: @can_use_passkey ? nil : t("sign.com.in.mfa.no_methods_available"),
               cancel: { label: t("actions.cancel"),
                         action: auth_com_sign_in_challenge_path(
                           ri: params[:ri], **sign_in_mfa_binding_params,
@@ -55,7 +55,7 @@ module Auth
             [
               {
                 key: "passkey",
-                label: t("sign.app.in.mfa.methods.passkey"),
+                label: t("sign.com.in.mfa.methods.passkey"),
                 href: new_auth_com_sign_in_challenge_passkey_path(**sign_in_mfa_binding_params),
               },
             ]

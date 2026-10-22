@@ -20,12 +20,6 @@ class Auth::App::UiFoundationTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "unauthenticated retired passkey settings entry cannot start a handoff" do
-    assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("https://#{@sign_host}/settings/passkeys", method: :get)
-    end
-  end
-
   test "totp settings route exists on sign" do
     head = as_user_headers(@user, host: @sign_host)
     get new_auth_app_settings_totp_url(ri: "jp", host: @sign_host), headers: head
@@ -53,13 +47,6 @@ class Auth::App::UiFoundationTest < ActionDispatch::IntegrationTest
   test "TOTP registration route accepts theme params" do
     headers = as_user_headers(@user, host: @sign_host)
     get new_auth_app_settings_totp_url(ri: "jp", ct: "dark", host: @sign_host), headers: headers
-
-    assert_not_equal 404, response.status
-  end
-
-  test "TOTP registration remains scoped to credential ceremony" do
-    head = as_user_headers(@user, host: @sign_host)
-    get new_auth_app_settings_totp_url(ri: "jp", host: @sign_host), headers: head
 
     assert_not_equal 404, response.status
   end

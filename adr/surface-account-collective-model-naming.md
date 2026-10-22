@@ -33,6 +33,28 @@ No compatibility constants such as `Persona = ClientPersona` or
 names, URLs, and unrelated RP-account names remain unchanged unless a later migration explicitly
 adopts a compatible wire transition.
 
+## Adjacent capability placement (2026-10-21)
+
+The app Accounting capability and Avatar have separate surface scopes; neither
+changes the surface-local Persona and Organization authority model above.
+
+| Surface | App Accounting capability | Avatar capability |
+| ------- | ------------------------- | ----------------- |
+| `app`   | Yes                       | Yes               |
+| `com`   | No                        | No                |
+| `org`   | No                        | Yes               |
+
+The app Accounting capability is conceptually associated with `app` Identity only.
+It is distinct from the **AAA Security Accounting** responsibility defined in
+[`identity-centric-aaa-architecture.md`](identity-centric-aaa-architecture.md),
+which remains applicable across `app`, `com`, and `org` and uses the existing
+Chronicle evidence domain. Avatar participates in `app` and `org`, but its
+binding, ownership, RBAC, and lifecycle contracts are not redesigned here.
+
+These are capability boundaries, not a mandate for shared tables, polymorphic
+authority records, cross-surface foreign keys, or direct foreign keys from
+`ClientIdentity`, `VisitorIdentity`, or `OperatorIdentity` to either capability.
+
 ## Authority boundary
 
 Ownership, administration, delegation, usage, view, and ownership-transfer state are stored in

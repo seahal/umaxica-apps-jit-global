@@ -69,7 +69,7 @@ class PasskeySignInFlowRefusalsTest < ActiveSupport::TestCase
     Webauthn::ChallengeStore::ChallengeBindingMismatchError =>
       ["challenge_binding_mismatch", "errors.webauthn.challenge_invalid", :bad_request],
     WebAuthn::SignCountVerificationError =>
-      ["sign_count_mismatch", "errors.webauthn.sign_count_mismatch", :unauthorized],
+      ["sign_count_mismatch", "errors.webauthn.verification_failed", :unauthorized],
     Webauthn::AssertionVerifier::VerificationError =>
       ["uv_rejected", "errors.webauthn.verification_failed", :unauthorized],
     WebAuthn::Error =>

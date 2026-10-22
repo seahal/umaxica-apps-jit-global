@@ -4,6 +4,12 @@
 
 Accepted (2026-07-19)
 
+Amended (2026-10-21) by [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md):
+APP/COM select the Identity before challenge issuance, and verified credential ownership must match
+that fixed Identity. The usernameless wording below is historical. Handle opacity, immutability,
+decoded comparison and the prohibition on browser-handle authority remain accepted. This amendment
+does not claim implementation or verification.
+
 ## Context
 
 WebAuthn registration used an actor's internal bigint primary key (`resource.id.to_s.b`) as

@@ -22,6 +22,20 @@ class AppleSocialFlowsTest < ActionDispatch::IntegrationTest
     TurnstileVerifierStub.enabled = false
   end
 
+  test "confirmation refuses show and update without a sign-up flow and changes nothing" do
+    assert_no_difference(["Client.count", "ClientSignUpFlow.count"]) do
+      get sign_app_sign_up_check_apple_confirmation_url(ri: "jp"), headers: @callback_headers
+
+      assert_response :conflict
+
+      patch sign_app_sign_up_check_apple_confirmation_url(ri: "jp"),
+            params: { confirm_new_social_identity: "1" },
+            headers: @callback_headers
+
+      assert_response :conflict
+    end
+  end
+
   test "sign up waits for confirmation before creating user and identity" do
     state =
       begin

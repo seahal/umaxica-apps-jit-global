@@ -73,7 +73,7 @@ class PreferenceDbscRegistrationEndpointTest < ActionDispatch::IntegrationTest
     }
 
     DbscRegistrationService.stub(:call, result) do
-      post "/test/preference_dbsc", headers: { PreferenceIoKeys::Headers::DBSC_RESPONSE => "proof" }
+      post "/test/preference_dbsc", headers: { PreferenceIoKeys::Headers::DBSC_RESPONSE => %q("proof") }
     end
 
     assert_response :created
@@ -98,7 +98,7 @@ class PreferenceDbscRegistrationEndpointTest < ActionDispatch::IntegrationTest
     }
 
     DbscRegistrationService.stub(:call, result) do
-      post "/test/preference_dbsc", headers: { PreferenceIoKeys::Headers::DBSC_RESPONSE => "proof" }
+      post "/test/preference_dbsc", headers: { PreferenceIoKeys::Headers::DBSC_RESPONSE => %q("proof") }
     end
 
     assert_response :unprocessable_content
@@ -108,17 +108,18 @@ class PreferenceDbscRegistrationEndpointTest < ActionDispatch::IntegrationTest
 
   test "create rejects bound cookie refresh when preference record is missing" do
     post "/test/preference_dbsc",
-         headers: { PreferenceIoKeys::Headers::DBSC_SESSION_ID => "session-123" }
+         headers: { PreferenceIoKeys::Headers::DBSC_SESSION_ID => %q("session-123") }
 
     assert_response :unauthorized
   end
 
   test "create issues a challenge when bound cookie refresh has no proof" do
-    PreferenceDbscRegistrationEndpointTestController.dbsc_test_preference_record =
-      PreferenceDbscRegistrationEndpointTestController::PreferenceRecord.new
+    preference = PreferenceDbscRegistrationEndpointTestController::PreferenceRecord.new
+    preference.dbsc_session_id = "session-123"
+    PreferenceDbscRegistrationEndpointTestController.dbsc_test_preference_record = preference
 
     post "/test/preference_dbsc",
-         headers: { PreferenceIoKeys::Headers::DBSC_SESSION_ID => "session-123" }
+         headers: { PreferenceIoKeys::Headers::DBSC_SESSION_ID => %q("session-123") }
 
     assert_response :forbidden
     assert_equal "\"challenge-token\";id=\"session-123\"",
@@ -140,8 +141,8 @@ class PreferenceDbscRegistrationEndpointTest < ActionDispatch::IntegrationTest
     DbscVerificationService.stub(:call, result) do
       post "/test/preference_dbsc",
            headers: {
-             PreferenceIoKeys::Headers::DBSC_SESSION_ID => "session-123",
-             PreferenceIoKeys::Headers::DBSC_RESPONSE => "proof",
+             PreferenceIoKeys::Headers::DBSC_SESSION_ID => %q("session-123"),
+             PreferenceIoKeys::Headers::DBSC_RESPONSE => %q("proof"),
            }
     end
 
@@ -165,8 +166,8 @@ class PreferenceDbscRegistrationEndpointTest < ActionDispatch::IntegrationTest
     DbscVerificationService.stub(:call, result) do
       post "/test/preference_dbsc",
            headers: {
-             PreferenceIoKeys::Headers::DBSC_SESSION_ID => "session-123",
-             PreferenceIoKeys::Headers::DBSC_RESPONSE => "proof",
+             PreferenceIoKeys::Headers::DBSC_SESSION_ID => %q("session-123"),
+             PreferenceIoKeys::Headers::DBSC_RESPONSE => %q("proof"),
            }
     end
 

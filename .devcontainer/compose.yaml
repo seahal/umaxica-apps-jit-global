@@ -164,6 +164,9 @@ services:
           - base.org.localhost
           - base.net.localhost
           - base.dev.localhost
+          - visa.app.localhost
+          - visa.com.localhost
+          - visa.org.localhost
           - auth.app.localhost
           - auth.com.localhost
           - auth.org.localhost
@@ -204,6 +207,9 @@ services:
           - www.umaxica.app
           - www.umaxica.com
           - www.umaxica.org
+          - visa.umaxica.app
+          - visa.umaxica.com
+          - visa.umaxica.org
           - edit.umaxica.org
           - tech.umaxica.org
           - www.umaxica.dev

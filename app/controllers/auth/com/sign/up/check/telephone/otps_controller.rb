@@ -115,13 +115,13 @@ module Auth
               end
 
               def render_code_required
-                @visitor_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.code_required"))
+                @visitor_telephone.errors.add(:pass_code, t("sign.com.registration.telephone.update.code_required"))
                 render_sign_up_telephone_edit(status: :unprocessable_content)
               end
 
               def handle_locked_result
                 reset_telephone_flow!
-                @visitor_telephone.errors.add(:base, t("sign.app.registration.telephone.update.attempts_exceeded"))
+                @visitor_telephone.errors.add(:base, t("sign.com.registration.telephone.update.attempts_exceeded"))
                 render_sign_up_telephone_edit(status: :too_many_requests)
               end
 
@@ -140,11 +140,11 @@ module Auth
 
               def render_otp_ceremony_result(result)
                 if result.status == :rate_limited
-                  @visitor_telephone.errors.add(:base, t("sign.app.registration.email.create.otp_resend_too_soon"))
+                  @visitor_telephone.errors.add(:base, t("sign.com.registration.email.create.otp_resend_too_soon"))
                   return render_sign_up_telephone_edit(status: :too_many_requests)
                 end
 
-                @visitor_telephone.errors.add(:pass_code, t("sign.app.registration.telephone.update.invalid_code"))
+                @visitor_telephone.errors.add(:pass_code, t("sign.com.registration.telephone.update.invalid_code"))
                 render_sign_up_telephone_edit(status: :unprocessable_content)
               end
 

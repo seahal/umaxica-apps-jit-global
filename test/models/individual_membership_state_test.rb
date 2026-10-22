@@ -12,12 +12,6 @@
 require "test_helper"
 
 class IndividualMembershipStateTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    state = IndividualMembershipState.new(id: 9)
-
-    assert_predicate state, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, IndividualMembershipState::NOTHING
     assert_equal 1, IndividualMembershipState::ACTIVE

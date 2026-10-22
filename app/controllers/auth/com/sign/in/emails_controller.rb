@@ -58,14 +58,14 @@ module Auth
             store: rate_limit_store,
             only: :create,
             with: -> {
-              render plain: I18n.t("sign.app.authentication.email.create.cooldown"),
+              render plain: I18n.t("sign.com.authentication.email.create.cooldown"),
                      status: :too_many_requests
             },
           )
           declare_authentication_mode!(
             :guest,
             status: :bad_request,
-            message: I18n.t("sign.app.authentication.email.new.you_have_already_logged_in"),
+            message: I18n.t("sign.com.authentication.email.new.you_have_already_logged_in"),
             no_redirect: true,
           )
 
@@ -98,7 +98,7 @@ module Auth
             normalized_address = validate_and_normalize_email(address)
             unless normalized_address
               @user_email = VisitorEmail.new(address: address)
-              @user_email.errors.add(:address, t("sign.app.authentication.email.create.invalid_format"))
+              @user_email.errors.add(:address, t("sign.com.authentication.email.create.invalid_format"))
               return render_sign_in_email_new_with_errors
             end
 
@@ -106,14 +106,14 @@ module Auth
               # One message for every address. Branching on whether the account exists
               # would turn the cooldown response into an account-existence oracle,
               # which is exactly what the dummy OTP work below exists to prevent.
-              render plain: t("sign.app.authentication.email.create.cooldown"), status: :too_many_requests
+              render plain: t("sign.com.authentication.email.create.cooldown"), status: :too_many_requests
               return
             end
 
             result = process_email_authentication(normalized_address)
 
             if result == :cooldown
-              render plain: t("sign.app.authentication.email.create.cooldown"), status: :too_many_requests
+              render plain: t("sign.com.authentication.email.create.cooldown"), status: :too_many_requests
               return
             end
 
@@ -234,13 +234,13 @@ module Auth
             binding = sign_in_flow_binding_params(sign_in_phase_binding_current_flow, phase: "PRIMARY_PENDING")
 
             {
-              title: t("sign.app.authentication.email.new.page_title"),
-              description: t("sign.app.registration.new.social.disclaimer", product: "UMAXICA"),
+              title: t("sign.com.authentication.email.new.page_title"),
+              description: t("sign.com.registration.new.social.disclaimer", product: "UMAXICA"),
               action: auth_com_sign_in_email_path(**binding),
               pt: pt,
               field_label: VisitorEmail.human_attribute_name(:address),
               submit_label: t("actions.submit"),
-              back_link: { label: t("sign.app.authentication.new.back"), href: auth_com_sign_in_path(pt: pt) },
+              back_link: { label: t("sign.com.authentication.new.back"), href: auth_com_sign_in_path(pt: pt) },
               turnstile: turnstile_visible_props,
             }
           end
@@ -249,15 +249,15 @@ module Auth
             pt = signed_pt_param
 
             {
-              title: t("sign.app.authentication.email.edit.page_title"),
-              description: t("sign.app.authentication.email.edit.description"),
+              title: t("sign.com.authentication.email.edit.page_title"),
+              description: t("sign.com.authentication.email.edit.description"),
               action: auth_com_sign_in_email_path(**sign_in_primary_binding_params),
               pt: pt,
-              field_label: t("sign.app.authentication.email.edit.code_label"),
-              field_placeholder: t("sign.app.authentication.email.edit.code_placeholder"),
-              submit_label: t("sign.app.authentication.email.edit.submit"),
-              delivery_help: t("sign.app.authentication.email.edit.delivery_help"),
-              return_link: { label: t("sign.app.authentication.email.edit.return_page") },
+              field_label: t("sign.com.authentication.email.edit.code_label"),
+              field_placeholder: t("sign.com.authentication.email.edit.code_placeholder"),
+              submit_label: t("sign.com.authentication.email.edit.submit"),
+              delivery_help: t("sign.com.authentication.email.edit.delivery_help"),
+              return_link: { label: t("sign.com.authentication.email.edit.return_page") },
               resend: {
                 endpoint: auth_com_web_v0_in_email_otp_path,
                 state: @otp_resend_state.to_s,
@@ -334,7 +334,7 @@ module Auth
           end
 
           def reject_invalid_email_otp
-            @user_email.errors.add(:pass_code, t("sign.app.authentication.email.update.invalid_code"))
+            @user_email.errors.add(:pass_code, t("sign.com.authentication.email.update.invalid_code"))
             render inertia: "auth/com/sign/in/emails/edit", props: sign_in_email_edit_props,
                    status: :unprocessable_content
           end

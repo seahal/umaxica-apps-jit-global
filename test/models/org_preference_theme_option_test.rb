@@ -40,12 +40,6 @@ class OrgPreferenceThemeOptionTest < ActiveSupport::TestCase
     end
   end
 
-  test "accepts integer ids" do
-    option = OrgPreferenceThemeOption.new(id: 123)
-
-    assert_predicate option, :valid?
-  end
-
   test "name returns nil for unknown id" do
     option = OrgPreferenceThemeOption.new(id: 99)
 

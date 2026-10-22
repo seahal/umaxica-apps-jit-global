@@ -1814,15 +1814,20 @@ module AuthenticationBase
     return true if @refresh_dbsc_verified && device_session.dbsc_bound?
     return true unless device_session.dbsc_bound?
 
-    session_id = request.headers[AuthIoKeys::Headers::DBSC_SESSION_ID]
-    proof = request.headers[AuthIoKeys::Headers::DBSC_RESPONSE]
+    session_id = DbscHeaderParser.string_value(
+      request.headers["Sec-Secure-Session-Id"].presence || request.headers[AuthIoKeys::Headers::DBSC_SESSION_ID],
+    )
+    proof = DbscHeaderParser.string_value(
+      request.headers[AuthIoKeys::Headers::SECURE_DBSC_RESPONSE].presence ||
+        request.headers[AuthIoKeys::Headers::DBSC_RESPONSE],
+    )
     if session_id.blank? || proof.blank?
       @refresh_dbsc_reason = "missing_proof"
       return false
     end
 
     if device_session.dbsc_session_id_digest.present?
-      presented_digest = device_session.class.digest_session_identifier(DbscHeaderParser.string_value(session_id))
+      presented_digest = device_session.class.digest_session_identifier(session_id)
       unless secure_compare?(device_session.dbsc_session_id_digest, presented_digest)
         @refresh_dbsc_reason = "session_id_mismatch"
         return false
@@ -3227,14 +3232,14 @@ module AuthenticationBase
     challenge = issue_dbsc_challenge_for!(token_record)
     return if challenge.blank?
 
-    value = %((ES256 RS256);path="#{token_dbsc_path}";challenge="#{challenge}")
+    value = DbscHeaderSerializer.registration(path: token_dbsc_path, challenge: challenge)
     response.set_header(
       AuthIoKeys::Headers::DBSC_REGISTRATION,
       value,
     )
     response.set_header(AuthIoKeys::Headers::SECURE_DBSC_REGISTRATION, value)
     Rails.logger.info(
-      "[dbsc] registration header issued path=#{token_dbsc_path} challenge=#{challenge[0, 24]}",
+      JitLogEvent.format("dbsc.registration.advertised", request_path: token_dbsc_path),
     )
   end
 

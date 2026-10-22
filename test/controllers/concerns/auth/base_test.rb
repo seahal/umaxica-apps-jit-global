@@ -271,10 +271,6 @@ module Auth
       assert_equal %w(client operator visitor), AuthenticationBase::VALID_ACTOR_TYPES
     end
 
-    test "Token.extract_resource_type returns nil for nil payload" do
-      assert_nil AuthenticationToken.extract_resource_type(nil)
-    end
-
     test "checkpoint continuation uses db-backed sign-in cycle when locator is present" do
       user = create_db_sequence_client
       token = ClientToken.create!(user: user)

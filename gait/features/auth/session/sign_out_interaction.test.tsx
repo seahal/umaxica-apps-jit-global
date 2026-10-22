@@ -1,28 +1,19 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-// Sign-out is destructive, so these tests mount the components and submit them for real to prove
-// the verbs never degrade to a GET.
-const post = vi.fn();
-const deleteRequest = vi.fn();
-const transform = vi.fn();
+import { present } from "../../../support/present";
 
-vi.mock("@inertiajs/react", () => ({
-  useForm: () => ({
-    processing: false,
-    post,
-    delete: deleteRequest,
-    transform: () => ({ post, delete: deleteRequest, patch: post, processing: false }),
-  }),
-}));
-
+// Sign-out is destructive, so these tests mount the components and inspect the forms the browser
+// would submit. They are document submissions, not Inertia visits: the confirmation answers with a
+// cross-origin 303, so the form itself must carry the verb, the CSRF token and the ceremony proofs.
 const { default: SignOutConfirmation } =
   await import("@/features/auth/session/SignOutConfirmation");
 const { default: SignOutUnavailable } = await import("@/features/auth/session/SignOutUnavailable");
 
 let container: HTMLDivElement;
 let root: Root;
+let csrfMeta: HTMLMetaElement;
 
 const mount = (element: React.ReactElement) => {
   container = document.createElement("div");
@@ -33,20 +24,22 @@ const mount = (element: React.ReactElement) => {
   });
 };
 
-const submit = (form: HTMLFormElement) => {
-  act(() => {
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-  });
-};
+// Every field here is a hidden text input, so each entry is a string rather than a File.
+const fields = (form: HTMLFormElement) => Object.fromEntries(new FormData(form).entries());
+
+beforeEach(() => {
+  csrfMeta = document.createElement("meta");
+  csrfMeta.name = "csrf-token";
+  csrfMeta.content = "csrf-value";
+  document.head.append(csrfMeta);
+});
 
 afterEach(() => {
   act(() => {
     root.unmount();
   });
   container.remove();
-  post.mockClear();
-  deleteRequest.mockClear();
-  transform.mockClear();
+  csrfMeta.remove();
 });
 
 const confirmationProps = {
@@ -66,24 +59,35 @@ const confirmationProps = {
 };
 
 describe("SignOutConfirmation interaction", () => {
-  it("confirms with a POST and cancels with a DELETE", () => {
+  it("confirms with a document POST carrying the token and both ceremony proofs", () => {
     mount(<SignOutConfirmation {...confirmationProps} />);
 
     const forms = [...container.querySelectorAll("form")];
 
     expect(forms).toHaveLength(2);
 
-    submit(present(forms[0], "the sign-out form"));
+    const confirmation = present(forms[0], "the sign-out form");
 
-    expect(post).toHaveBeenCalledWith("/sign/out?ri=jp");
-    expect(deleteRequest).not.toHaveBeenCalled();
-
-    submit(present(forms[1], "the cancel form"));
-
-    expect(deleteRequest).toHaveBeenCalledWith("/sign/out?ri=jp");
+    expect(confirmation.getAttribute("action")).toBe("/sign/out?ri=jp");
+    expect(confirmation.getAttribute("method")).toBe("post");
+    expect(fields(confirmation)).toEqual({
+      authenticity_token: "csrf-value",
+      logout_challenge: "challenge-value",
+      logout_intent_proof: "proof-value",
+    });
   });
 
-  it("carries no challenge when the ceremony did not start with one", () => {
+  it("cancels with a document POST overridden to DELETE", () => {
+    mount(<SignOutConfirmation {...confirmationProps} />);
+
+    const cancellation = present(container.querySelectorAll("form")[1], "the cancel form");
+
+    expect(cancellation.getAttribute("action")).toBe("/sign/out?ri=jp");
+    expect(cancellation.getAttribute("method")).toBe("post");
+    expect(fields(cancellation)).toEqual({ authenticity_token: "csrf-value", _method: "delete" });
+  });
+
+  it("carries no challenge or proof when the ceremony did not start with one", () => {
     mount(
       <SignOutConfirmation
         {...confirmationProps}
@@ -91,14 +95,27 @@ describe("SignOutConfirmation interaction", () => {
       />,
     );
 
-    submit(present(container.querySelectorAll("form")[0], "the sign-out form"));
+    const confirmation = present(container.querySelectorAll("form")[0], "the sign-out form");
 
-    expect(post).toHaveBeenCalledWith("/sign/out?ri=jp");
+    expect(fields(confirmation)).toEqual({ authenticity_token: "csrf-value" });
+  });
+
+  it("omits empty-string proofs rather than posting blank values", () => {
+    mount(
+      <SignOutConfirmation
+        {...confirmationProps}
+        form={{ action: "/sign/out?ri=jp", logout_challenge: "", logout_intent_proof: "" }}
+      />,
+    );
+
+    const confirmation = present(container.querySelectorAll("form")[0], "the sign-out form");
+
+    expect(fields(confirmation)).toEqual({ authenticity_token: "csrf-value" });
   });
 });
 
 describe("SignOutUnavailable interaction", () => {
-  it("retries the ceremony with a POST", () => {
+  it("retries the ceremony with a document POST carrying the token", () => {
     mount(
       <SignOutUnavailable
         title="ログアウトできません"
@@ -109,9 +126,10 @@ describe("SignOutUnavailable interaction", () => {
       />,
     );
 
-    submit(present(container.querySelectorAll("form")[0], "the sign-out form"));
+    const retry = present(container.querySelectorAll("form")[0], "the retry form");
 
-    expect(post).toHaveBeenCalledWith("/sign/out?ri=jp");
+    expect(retry.getAttribute("action")).toBe("/sign/out?ri=jp");
+    expect(retry.getAttribute("method")).toBe("post");
+    expect(fields(retry)).toEqual({ authenticity_token: "csrf-value" });
   });
 });
-import { present } from "../../../support/present";

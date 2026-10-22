@@ -19,12 +19,6 @@ class ZipOccurrenceStatusTest < ActiveSupport::TestCase
     assert_equal 0, nothing.id
   end
 
-  test "accepts integer ids" do
-    record = ZipOccurrenceStatus.new(id: 3)
-
-    assert_predicate record, :valid?
-  end
-
   test "has occurrences association" do
     assert_status_association(ZipOccurrenceStatus, :zip_occurrences)
   end

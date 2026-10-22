@@ -19,12 +19,6 @@ class EmailOccurrenceStatusTest < ActiveSupport::TestCase
     assert_equal 0, nothing.id
   end
 
-  test "accepts integer ids" do
-    record = EmailOccurrenceStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, EmailOccurrenceStatus::ACTIVE
     assert_equal 0, EmailOccurrenceStatus::NOTHING

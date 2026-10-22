@@ -117,13 +117,13 @@ module Auth
               end
 
               def render_code_required
-                @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.code_required"))
+                @user_email.errors.add(:pass_code, t("sign.com.registration.email.update.code_required"))
                 render_sign_up_email_edit(status: :unprocessable_content)
               end
 
               def handle_locked_result
                 reset_email_flow!
-                @user_email.errors.add(:base, t("sign.app.registration.email.update.attempts_exceeded"))
+                @user_email.errors.add(:base, t("sign.com.registration.email.update.attempts_exceeded"))
                 render_sign_up_email_edit(status: :too_many_requests)
               end
 
@@ -138,18 +138,18 @@ module Auth
 
               def render_otp_ceremony_result(result)
                 if result.status == :rate_limited
-                  @user_email.errors.add(:base, t("sign.app.registration.email.create.otp_resend_too_soon"))
+                  @user_email.errors.add(:base, t("sign.com.registration.email.create.otp_resend_too_soon"))
                   return render_sign_up_email_edit(status: :too_many_requests)
                 end
 
-                @user_email.errors.add(:pass_code, t("sign.app.registration.email.update.invalid_code"))
+                @user_email.errors.add(:pass_code, t("sign.com.registration.email.update.invalid_code"))
                 render_sign_up_email_edit(status: :unprocessable_content)
               end
 
               def redirect_invalid_session
                 reset_email_flow!
                 @user_email ||= VisitorEmail.new
-                @user_email.errors.add(:base, t("sign.app.registration.email.edit.session_expired"))
+                @user_email.errors.add(:base, t("sign.com.registration.email.edit.session_expired"))
                 render_sign_up_email_edit(status: :unprocessable_content)
               end
             end

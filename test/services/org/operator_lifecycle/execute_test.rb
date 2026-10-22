@@ -43,7 +43,7 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
     assert_predicate request.reload, :approved?
   end
 
-  test "executes approved join by creating organization invitation" do
+  test "refuses approved legacy join without issuing invitation or executing request" do
     request = OperatorLifecycleRequest.create!(
       action: OperatorLifecycleRequest::ACTION_JOIN,
       status: OperatorLifecycleRequest::STATUS_APPROVED,
@@ -55,14 +55,16 @@ class OrgOperatorLifecycleExecuteTest < ActiveSupport::TestCase
       approved_at: Time.current,
     )
 
-    result = OrgOperatorLifecycleExecute.call(request: request, actor: operators(:two))
+    assert_no_difference -> { OrganizationInvitation.count } do
+      result = OrgOperatorLifecycleExecute.call(request: request, actor: operators(:two))
 
-    assert_predicate result, :success?
-    assert_predicate request.reload, :executed?
-    assert_equal "invitee@example.com", result.invitation.email
-    assert_equal 123, result.invitation.organization_id
-    assert_equal 7, result.invitation.role_id
-    assert_equal result.invitation.id, request.invitation_id
+      assert_not result.success?
+      assert_nil result.invitation
+      assert_includes result.error, "Organization invitations are unavailable pending Bureau migration"
+    end
+    assert_predicate request.reload, :approved?
+    assert_nil request.executed_at
+    assert_nil request.invitation_id
   end
 
   test "rejects non-approved requests before execution" do

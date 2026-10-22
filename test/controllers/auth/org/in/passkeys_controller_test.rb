@@ -723,7 +723,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
          params: verification_params(challenge_id, credential_id: other_passkey.webauthn_id)
 
     assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     assert_equal tokens_before, OperatorToken.where(staff_id: other_staff.id).count
   end
 
@@ -784,7 +784,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
          )
 
     assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
   end
 
   test "verification returns 422 when login result status is unknown" do
@@ -1091,7 +1091,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     }
 
     assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
   end
 
   private

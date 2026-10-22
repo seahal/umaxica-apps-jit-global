@@ -39,7 +39,7 @@ module PasskeySignInFlow
     end
 
     challenge_id, request_options = issue_passkey_authentication_challenge(
-      allow_credentials: discoverable_direct_passkey_sign_in? ? [] : anonymized_passkey_allow_credentials(passkeys),
+      allow_credentials: disclose_passkey_descriptors? ? anonymized_passkey_allow_credentials(passkeys) : [],
       actor: actor,
       purpose: passkey_ceremony_purpose,
     )
@@ -83,7 +83,7 @@ module PasskeySignInFlow
   rescue WebAuthn::SignCountVerificationError => e
     Rails.logger.warn("WebAuthn sign count verification failed: #{e.message}")
     emit_passkey_auth_failed(reason: "sign_count_mismatch")
-    render_error("errors.webauthn.sign_count_mismatch", :unauthorized)
+    render_error("errors.webauthn.verification_failed", :unauthorized)
   rescue Webauthn::AssertionVerifier::VerificationError => e
     Rails.logger.warn("WebAuthn user verification rejected: #{e.message}")
     emit_passkey_auth_failed(reason: "uv_rejected")
@@ -105,7 +105,7 @@ module PasskeySignInFlow
       unless passkey && passkey_belongs_to_challenge_actor?(passkey, actor_id)
         Rails.logger.warn(passkey_owner_mismatch_log_message)
         emit_passkey_auth_failed(reason: "credential_not_found")
-        return render_error("errors.webauthn.credential_not_found", :unauthorized)
+        return render_error("errors.webauthn.verification_failed", :unauthorized)
       end
 
       actor = passkey_sign_in_actor(passkey)
@@ -257,7 +257,7 @@ module PasskeySignInFlow
   end
 
   def minimum_response_budget_enabled?
-    action_name == "options"
+    %w(options verification create).include?(action_name)
   end
 
   # -- sign-in hooks -------------------------------------------------------
@@ -276,6 +276,10 @@ module PasskeySignInFlow
     %i(app com).include?(webauthn_surface.key)
   end
 
+  def disclose_passkey_descriptors?
+    !discoverable_direct_passkey_sign_in?
+  end
+
   def passkey_eligible_for_sign_in?(passkey, actor)
     status_class = webauthn_surface.passkey_status_class
 
@@ -292,7 +296,7 @@ module PasskeySignInFlow
 
   def reject_passkey_sign_in
     emit_passkey_auth_failed(reason: "credential_not_found")
-    render_error("errors.webauthn.credential_not_found", :unauthorized)
+    render_error("errors.webauthn.verification_failed", :unauthorized)
     false
   end
 

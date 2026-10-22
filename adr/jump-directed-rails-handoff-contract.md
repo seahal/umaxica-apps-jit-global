@@ -15,6 +15,16 @@ authorization-launcher restriction in `adr/acme-sign-core-base-port-boundary.md`
 issuer/return-policy portion of the remaining steps in `adr/core-canonical-public-host.md`. Their
 persistence and API ownership boundaries remain.
 
+## Gateway selection amendment (2026-10-22)
+
+The [required Jump/Away selection amendment](secure-jump-link-redirector.md#amendment-required-jump-and-away-selection-2026-10-22)
+supersedes broad references below to all cross-origin navigation using Jump. Jump is required for
+approved subdomain changes within the same registered application domain; cross-TLD navigation,
+including first-party navigation, requires `https://away.umaxica.net`. Same-origin path navigation
+remains direct. This revision adds no Jump edges and changes no runtime behavior. Existing direct
+admission exceptions, including Edit, are implementation gaps against the revised navigation
+policy, not exemptions for new work. Method-preserving POST handoffs retain their separate contract.
+
 ## Decision
 
 Approved cross-surface browser GET navigation uses Jump. Registrable-domain equality does not merge

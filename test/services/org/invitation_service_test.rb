@@ -6,28 +6,23 @@ require "test_helper"
 
 class OrgInvitationServiceTest < ActiveSupport::TestCase
   setup do
-    operation = -> { [0, 1, 2, 3].each { |id| OrganizationStatus.find_or_create_by!(id: id) } }
-    defined?(Prosopite) ? Prosopite.pause(&operation) : operation.call
-
     @staff = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    @organization = OperatorOrganization.create!(name: "Test Org", domain: "test-org-#{SecureRandom.hex(4)}")
+    @organization_id = 123
   end
 
-  test "create generates a valid invitation" do
-    result = OrgInvitationService.create(
-      organization_id: @organization.id,
-      email: "invitee@example.com",
-      invited_by: @staff,
-    )
+  test "create refuses legacy issuance before writing an invitation" do
+    assert_no_difference -> { OrganizationInvitation.count } do
+      result = OrgInvitationService.create(
+        organization_id: @organization_id,
+        email: "invitee@example.com",
+        invited_by: @staff,
+      )
 
-    assert_predicate result, :success?
-    assert_not_nil result.invitation
-    assert_not_nil result.code
-    assert_nil result.error
-
-    assert_equal "invitee@example.com", result.invitation.email
-    assert_equal @organization.id, result.invitation.organization_id
-    assert_equal @staff.id, result.invitation.invited_by_id
+      assert_not result.success?
+      assert_nil result.invitation
+      assert_nil result.code
+      assert_equal "Organization invitations are unavailable pending Bureau migration", result.error
+    end
   end
 
   test "create fails with invalid parameters" do
@@ -45,7 +40,7 @@ class OrgInvitationServiceTest < ActiveSupport::TestCase
 
   test "validate returns success for valid code" do
     invitation = OrganizationInvitation.create!(
-      organization_id: @organization.id,
+      organization_id: @organization_id,
       email: "invitee@example.com",
       invited_by: @staff,
     )
@@ -67,7 +62,7 @@ class OrgInvitationServiceTest < ActiveSupport::TestCase
 
   test "validate returns failure for email mismatch" do
     invitation = OrganizationInvitation.create!(
-      organization_id: @organization.id,
+      organization_id: @organization_id,
       email: "invitee@example.com",
       invited_by: @staff,
     )
@@ -80,7 +75,7 @@ class OrgInvitationServiceTest < ActiveSupport::TestCase
 
   test "consume marks invitation as consumed" do
     invitation = OrganizationInvitation.create!(
-      organization_id: @organization.id,
+      organization_id: @organization_id,
       email: "invitee@example.com",
       invited_by: @staff,
     )
@@ -100,7 +95,7 @@ class OrgInvitationServiceTest < ActiveSupport::TestCase
 
   test "consume fails for already consumed invitation" do
     invitation = OrganizationInvitation.create!(
-      organization_id: @organization.id,
+      organization_id: @organization_id,
       email: "invitee@example.com",
       invited_by: @staff,
       consumed_at: Time.current,
@@ -113,7 +108,7 @@ class OrgInvitationServiceTest < ActiveSupport::TestCase
 
   test "consume fails when consume! returns false due to a race condition" do
     invitation = OrganizationInvitation.create!(
-      organization_id: @organization.id,
+      organization_id: @organization_id,
       email: "invitee@example.com",
       invited_by: @staff,
     )

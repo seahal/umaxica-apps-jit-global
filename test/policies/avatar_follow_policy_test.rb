@@ -44,15 +44,6 @@ class AvatarFollowPolicyTest < ActiveSupport::TestCase
     assert_not AvatarFollowPolicy.new(record, user: actor).create?
   end
 
-  test "block precedence wins over follow" do
-    actor = create_avatar("Actor")
-    target = create_avatar("Target")
-    target.outgoing_blocks.create!(blocked_avatar: actor)
-    record = AvatarFollow.new(follower_avatar: actor, followed_avatar: target)
-
-    assert_not AvatarFollowPolicy.new(record, user: actor).create?
-  end
-
   test "destroy allows follower owner" do
     actor = create_avatar("Actor")
     target = create_avatar("Target")

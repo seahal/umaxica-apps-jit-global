@@ -54,6 +54,8 @@ module OidcLogoutRequest
         ri: normalize_ri(payload["ri"]),
         jti: jti,
       }
+    rescue ActiveSupport::MessageVerifier::InvalidSignature, JSON::ParserError
+      nil
     end
 
     private

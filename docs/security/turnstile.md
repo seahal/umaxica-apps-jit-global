@@ -89,6 +89,11 @@ Controllers must run Turnstile validation before committing the protected mutati
 validation must not create records, update records, delete records, consume one-time codes, rotate
 credentials, or clear pending registration state.
 
+`TurnstileDegradation` permits only verifier results explicitly marked as an upstream outage,
+and only while the operator-controlled `turnstile_degraded_mode` flag is enabled. A missing,
+empty or whitespace-only token, a rejected challenge or a missing secret remains a failure.
+The flag is an incident control, not an ordinary way to disable verification.
+
 ## Development And Test Mode
 
 The codebase has a test-only override mechanism on `CloudflareTurnstile` and
@@ -116,6 +121,20 @@ Turnstile is not required for idempotent `GET` pages that only display existing 
 not a substitute for step-up on sensitive signed-in actions. Sensitive credential-management
 endpoints must require both recent step-up and successful Turnstile unless a documented exception
 exists.
+
+### Email sign-in resend exception
+
+APP and COM's `/web/v0/in/email/otp` POST continuation does not require a fresh Turnstile token.
+It requires confirmed sign-in admission, the admitted browser's ceremony and an encrypted,
+authenticated resend state bound to that browser and surface. A real destination also retains
+its original Contact, owner and finalized-binding facts; a released destination cannot be
+retargeted to a later owner. The state has an absolute deadline, and dispatch retains the
+destination cooldown and failure-budget controls. This endpoint creates neither a login session
+nor authentication evidence without OTP verification.
+
+Direct HTTP submission is expected when these authorities are valid. A missing, unreadable,
+cross-browser or expired state grants no resend authority. Additional CAPTCHA is not the
+current control for this continuation; preserve these bindings and limits when changing it.
 
 ### Visible Placement
 

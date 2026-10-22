@@ -56,8 +56,8 @@ module OidcClientAssertionJwt
       algorithms: [JitSecurityJwtRegistry::ALGORITHM],
       required_claims: %w(iss sub aud exp iat jti typ),
       leeway: AuthenticationJwtConfiguration.leeway_seconds,
-      verify_iat: true,
-      verify_exp: true,
+      verify_iat: { leeway: AuthenticationJwtConfiguration.leeway_seconds },
+      verify_expiration: true,
       verify_aud: true,
       aud: token_url.to_s,
     )

@@ -18,5 +18,7 @@ stateDiagram-v2
     note right of NOTHING
         Reference states FAILED and REVOKE lack located setters.
         Verification failure preserves current state.
+        HTTP refresh checks the stored session id before challenge issuance.
+        HTTP strings are parsed once and response values are escaped.
         No terminal source guard in registration or downgrade.
     end note

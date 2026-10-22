@@ -1,13 +1,16 @@
-import { useForm } from "@inertiajs/react";
-
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
 import TextLink from "@/components/ui/TextLink";
+import { csrfToken } from "@/lib/csrf";
 
 // The sign-out confirmation ceremony, shared by the auth surfaces.
 //
 // Sign-out is destructive, so both the confirmation and the cancellation keep the HTTP verbs the
 // Rails routes expect (POST and DELETE). Nothing here is a link.
+//
+// Both forms are full document submissions, not Inertia visits: the confirmation answers with a 303
+// to the jump gateway on another origin, which an Inertia `fetch` would follow transparently and
+// then reject as a non-Inertia response.
 export type SignOutLink = {
   label: string;
   href: string;
@@ -42,24 +45,6 @@ export default function SignOutConfirmation({
   cancel,
   home_link: homeLink,
 }: SignOutConfirmationProps) {
-  const confirmation = useForm({
-    logout_challenge: form.logout_challenge ?? "",
-    logout_intent_proof: form.logout_intent_proof ?? "",
-  });
-  const cancellation = useForm({});
-
-  const submitConfirmation = (event: React.SyntheticEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    confirmation.post(form.action);
-  };
-
-  const submitCancellation = (event: React.SyntheticEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (cancel) {
-      cancellation.delete(cancel.action);
-    }
-  };
-
   return (
     <Page
       title={heading}
@@ -72,12 +57,32 @@ export default function SignOutConfirmation({
             <form
               action={form.action}
               method="post"
-              onSubmit={submitConfirmation}
+              data-turbo="false"
             >
+              <input
+                type="hidden"
+                name="authenticity_token"
+                value={csrfToken()}
+              />
+              {form.logout_challenge ? (
+                <input
+                  type="hidden"
+                  name="logout_challenge"
+                  value={form.logout_challenge}
+                  readOnly
+                />
+              ) : null}
+              {form.logout_intent_proof ? (
+                <input
+                  type="hidden"
+                  name="logout_intent_proof"
+                  value={form.logout_intent_proof}
+                  readOnly
+                />
+              ) : null}
               <Button
                 type="submit"
                 variant="danger"
-                isDisabled={confirmation.processing}
               >
                 {submitLabel}
               </Button>
@@ -86,8 +91,13 @@ export default function SignOutConfirmation({
               <form
                 action={cancel.action}
                 method="post"
-                onSubmit={submitCancellation}
+                data-turbo="false"
               >
+                <input
+                  type="hidden"
+                  name="authenticity_token"
+                  value={csrfToken()}
+                />
                 <input
                   type="hidden"
                   name="_method"
@@ -96,7 +106,6 @@ export default function SignOutConfirmation({
                 <Button
                   type="submit"
                   variant="secondary"
-                  isDisabled={cancellation.processing}
                 >
                   {cancel.label}
                 </Button>

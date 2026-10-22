@@ -19,12 +19,6 @@ class TelephoneOccurrenceStatusTest < ActiveSupport::TestCase
     assert_equal 0, nothing.id
   end
 
-  test "accepts integer ids" do
-    record = TelephoneOccurrenceStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, TelephoneOccurrenceStatus::ACTIVE
     assert_equal 0, TelephoneOccurrenceStatus::NOTHING

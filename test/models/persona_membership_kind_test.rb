@@ -12,12 +12,6 @@
 require "test_helper"
 
 class PersonaMembershipKindTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    kind = PersonaMembershipKind.new(id: 9)
-
-    assert_predicate kind, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, PersonaMembershipKind::NOTHING
     assert_equal 1, PersonaMembershipKind::OWNER

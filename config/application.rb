@@ -95,6 +95,9 @@ module Jit
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults(8.2)
 
+    # Accept JSON messages only; authenticated legacy Marshal payloads are rejected too.
+    config.active_support.message_serializer = JSON
+
     # Raw email content is not application logging data. Keep the Rails delivery
     # mechanism and its notifications intact while disabling ActionMailer's
     # logger across every environment.

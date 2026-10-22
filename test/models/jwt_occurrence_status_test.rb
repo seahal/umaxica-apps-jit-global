@@ -20,12 +20,6 @@ class JwtOccurrenceStatusTest < ActiveSupport::TestCase
     assert_equal 0, nothing.id
   end
 
-  test "accepts integer ids" do
-    record = JwtOccurrenceStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, JwtOccurrenceStatus::NOTHING
     assert_equal 2, JwtOccurrenceStatus::ACTIVE

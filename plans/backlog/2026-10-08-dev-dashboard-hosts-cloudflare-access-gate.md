@@ -2,9 +2,13 @@
 
 Date: 2026-10-08
 
-Status: Partly contained. A probe at 2026-10-07T15:34Z measured five dashboard hostnames behind
-Access and `pghero.umaxica.dev` still reaching Rails without it. The steps in section 3 are
-proposed, not accepted, and not implemented.
+Status: Closed as complete by owner instruction on 2026-10-22. Retained for reference.
+
+This is an administrative closure, not remediation or verification evidence. No Cloudflare change,
+credential rotation, or live probe was performed as part of this closure. The historical findings
+and proposed steps below remain available; current Access coverage is unverified. The later record
+`evidence/2026-10-07-performance-dev-hostname-access-gate-B6K2.md` documents Access containment for
+`performance.umaxica.dev` after the initial probe, without establishing current coverage.
 
 Related:
 

@@ -19,7 +19,7 @@ class SessionLimitResolutionTokenRef
     OpBaseAppRecord.connected_to(role: :writing) do
       ClientToken.find_by(public_id: public_id)
     end
-  rescue ActiveSupport::MessageVerifier::InvalidSignature
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, JSON::ParserError
     nil
   end
 
@@ -31,7 +31,7 @@ class SessionLimitResolutionTokenRef
     OpBaseComRecord.connected_to(role: :writing) do
       VisitorToken.find_by(public_id: public_id)
     end
-  rescue ActiveSupport::MessageVerifier::InvalidSignature
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, JSON::ParserError
     nil
   end
 
@@ -43,7 +43,7 @@ class SessionLimitResolutionTokenRef
     OpBaseOrgRecord.connected_to(role: :writing) do
       OperatorToken.find_by(public_id: public_id)
     end
-  rescue ActiveSupport::MessageVerifier::InvalidSignature
+  rescue ActiveSupport::MessageVerifier::InvalidSignature, JSON::ParserError
     nil
   end
 

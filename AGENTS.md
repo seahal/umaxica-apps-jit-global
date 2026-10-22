@@ -134,6 +134,8 @@ documentation, longevity and observability are coequal. Category order is not pr
   persistence operations, including bulk updates/deletes and irreversible migrations.
 - **SHOULD:** make ownership, visibility, dependencies and failures explicit; implement the smallest
   coherent solution. Adjacent cleanup belongs only within the authorized change.
+- **SHOULD:** let the layout communicate meaning and keep secondary labels and explanations to
+  what is necessary.
 - **SHOULD:** preserve replaceability and proportional abstractions. **MAY:** use bounded
   transitional mechanisms when safe deployment or migration requires them; record their exit
   conditions.

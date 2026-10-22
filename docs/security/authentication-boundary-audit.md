@@ -133,9 +133,10 @@ the identity is now nullable and unread by sign-in.
 
 All verified as already correct; no change was made.
 
-Session cookies (`lib/jit_session_cookie_config.rb`) are `httponly`, `same_site: :lax`, with
-`secure`, `partitioned`, and the `__Host-session` name outside development and test, expiring after
-14 days. SameSite is **not** weakened to accommodate the OIDC callback: `Lax` already permits the
+Session cookies (`lib/jit_session_cookie_config.rb`) are `httponly`, `same_site: :lax` and
+host-only in every environment, with `secure` and the `__Host-session` name outside development and
+test, expiring after 14 days. (Updated 2026-10-21: the session cookie no longer carries
+`partitioned` in production or a shared `Domain` in development and test.) SameSite is **not** weakened to accommodate the OIDC callback: `Lax` already permits the
 top-level GET redirect back from Microsoft, which is the only cross-site entry the ceremony needs.
 
 Session fixation is handled at the point of privilege transition — `log_in` calls `reset_session`

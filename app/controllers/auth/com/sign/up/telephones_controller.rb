@@ -34,8 +34,6 @@ module Auth
           end
 
           def create
-            supersede_active_sign_up_flow!
-
             telephone_params = params.fetch(:visitor_telephone, {}).permit(
               :raw_number, :number, :confirm_policy, :confirm_using_mfa,
             )
@@ -60,14 +58,19 @@ module Auth
               return
             end
 
-            @visitor_telephone = VisitorTelephone.new(telephone_params || {})
+            @visitor_telephone = VisitorTelephone.new(
+              telephone_params.merge(
+                confirm_policy: ["1", true].include?(telephone_params[:confirm_policy]),
+                confirm_using_mfa: ["1", true].include?(telephone_params[:confirm_using_mfa]),
+              ),
+            )
 
             res = cloudflare_turnstile_validation
 
             unless res["success"]
               @visitor_telephone.errors.add(
                 :base,
-                t("sign.app.registration.telephone.create.turnstile_validation_failed"),
+                t("sign.com.registration.telephone.create.turnstile_validation_failed"),
               )
               render_sign_up_telephone_new(status: :unprocessable_content)
               return
@@ -81,6 +84,8 @@ module Auth
               render_sign_up_telephone_new(status: :unprocessable_content)
               return
             end
+
+            supersede_active_sign_up_flow!
 
             result = TelephoneSignUpCandidateCreator.call(
               telephone: @visitor_telephone,
@@ -127,7 +132,7 @@ module Auth
 
           def sign_up_telephone_new_props
             {
-              title: t("sign.app.registration.telephone.new.page_title"),
+              title: t("sign.com.registration.telephone.new.page_title"),
               action: auth_com_sign_up_telephone_path(ri: params[:ri]),
               scope: "visitor_telephone",
               field: {
@@ -156,12 +161,12 @@ module Auth
               links: [
                 {
                   key: "other_methods",
-                  label: t("sign.app.registration.telephone.new.link_to_other_methods"),
+                  label: t("sign.com.registration.telephone.new.link_to_other_methods"),
                   href: auth_com_sign_up_path(ri: params[:ri]),
                 },
                 {
                   key: "sign_in",
-                  label: t("sign.app.registration.telephone.new.link_to_sign_in"),
+                  label: t("sign.com.registration.telephone.new.link_to_sign_in"),
                   href: auth_com_sign_in_path(ri: params[:ri]),
                 },
               ],
@@ -178,14 +183,14 @@ module Auth
 
           def sign_up_telephone_edit_props
             {
-              title: t("sign.app.registration.telephone.edit.page_title"),
-              description: t("sign.app.registration.telephone.create.verification_code_sent"),
+              title: t("sign.com.registration.telephone.edit.page_title"),
+              description: t("sign.com.registration.telephone.create.verification_code_sent"),
               action: auth_com_sign_up_check_telephone_otp_path(**sign_up_flow_binding_params, ri: params[:ri]),
               scope: "visitor_telephone",
-              code_label: t("sign.app.registration.telephone.edit.code_label"),
-              code_placeholder: t("sign.app.registration.telephone.edit.code_placeholder"),
-              submit_label: t("sign.app.registration.telephone.edit.submit"),
-              delivery_help: t("sign.app.registration.telephone.edit.delivery_help"),
+              code_label: t("sign.com.registration.telephone.edit.code_label"),
+              code_placeholder: t("sign.com.registration.telephone.edit.code_placeholder"),
+              submit_label: t("sign.com.registration.telephone.edit.submit"),
+              delivery_help: t("sign.com.registration.telephone.edit.delivery_help"),
               error_heading: nil,
               errors: sign_up_telephone_errors,
               # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
@@ -228,7 +233,7 @@ module Auth
           end
 
           def render_otp_resend_too_soon
-            render plain: t("sign.app.registration.email.create.otp_resend_too_soon"), status: :too_many_requests
+            render plain: t("sign.com.registration.email.create.otp_resend_too_soon"), status: :too_many_requests
           end
 
           def current_registration_telephone

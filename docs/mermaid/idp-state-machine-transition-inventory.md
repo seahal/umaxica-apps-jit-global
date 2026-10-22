@@ -1,5 +1,15 @@
 # Current transition inventory
 
+## DBSC HTTP admission (2026-10-22)
+
+The client, visitor and operator DBSC axes, including their preference axes, retain their existing
+state transitions. The HTTP entry points now parse Structured Field strings once and serialize
+response strings with escaping. Refresh requires a matching stored session identifier before
+challenge issuance; malformed or mismatched identifiers leave the challenge and cookies unchanged.
+The six `idp-*-dbsc.mmd` diagrams note this transport guard without introducing a new state or
+transition. See [DBSC HTTP boundary](../architecture/dbsc.md#http-header-boundary),
+`test/controllers/dbsc_header_boundary_test.rb` and `test/services/dbsc/proof_input_validation_test.rb`.
+
 ## Root authentication epoch cutoff (2026-10-18)
 
 Axis: derived relation between a root's issuance epoch and its canonical actor's monotonic
@@ -545,6 +555,11 @@ their concrete authority until their own slice is completed.
 
 ## idp-client-sign-up
 
+APP and COM contact-entry replacement reaches the existing HALTED/cleanup operation only after
+Turnstile, identifier and explicit consent validation. Rejected submissions preserve the current
+flow, browser locator and pending artifacts without issuing OTP delivery. The lifecycle edges and
+terminal absorption remain unchanged; accepted replacements allocate a distinct flow after halt.
+
 Email finalization locks the Source owner before its candidate and commits the binding fact, app
 principal promotion and Source audit intent together. Credential after-commit MFA refresh reloads
 the owner under its lock. The independent-browser email journey verifies durable signup completion
@@ -663,7 +678,8 @@ cleanup owner reaches the purge boundary.
 ## idp-visitor-sign-up
 
 The email entry POST preserves its previous durable locator while resetting the session phase.
-`supersede_active_sign_up_flow!` then uses the existing halt/cleanup operation before allocating
+After Turnstile, identifier and explicit consent validation, `supersede_active_sign_up_flow!`
+uses the existing halt/cleanup operation before allocating
 replacement artifacts. The HTTP restart regression verifies distinct flow IDs, an absorbing HALTED
 predecessor, and refusal of its stale signed screen without changing the replacement flow.
 
@@ -3656,7 +3672,9 @@ Tests read: `test/models/organization_invitation_test.rb`,
 | idp-operator-organization-invitation:T002 | DOCUMENTED_TRANSITION | active | clock reaches deadline | expired  | expires_at <= now                     | No state write | app/models/organization_invitation.rb | CONFIRMED  |
 
 Default TTL7days. find_valid optionally checks case-insensitive email; consumption lock prevents
-duplicate wins. Invitation acceptance creates/activates Operator through lifecycle service; logical
+duplicate wins for low-level consumption. Legacy issuance and admission are held pending an explicit
+Bureau target and authority contract. Acceptance validates then refuses without consumption or
+Principal/Identity/Agent/Bureau writes; it no longer bootstraps an unrelated Bureau. Logical
 cross-DB IDs are not FKs merely because belongs_to exists. No stored cancel/failure state.
 Expired_at remains independent of consumed_at, so expired? can be true for already-consumed row.
 
@@ -3678,8 +3696,10 @@ Tests read: `test/models/operator_lifecycle_request_test.rb`,
 | ------------------------------------ | --------------------- | -------- | --------------- | -------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
 | idp-operator-operator-lifecycle:T001 | DOCUMENTED_TRANSITION | pending  | approve         | approved | Pending; actor differs requester                                  | Approver and timestamp                                                                       | app/services/org_operator_lifecycle_approve.rb | CONFIRMED  |
 | idp-operator-operator-lifecycle:T002 | DOCUMENTED_TRANSITION | pending  | reject          | rejected | Pending; actor differs requester                                  | Rejector/time/reason                                                                         | app/services/org_operator_lifecycle_reject.rb  | CONFIRMED  |
-| idp-operator-operator-lifecycle:T003 | DOCUMENTED_TRANSITION | approved | execute         | executed | Approved; actor differs requester; last active operator preserved | Join invitation or withdraw/suspend/terminate/restore actor; revoke sessions / Entra mapping | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
+| idp-operator-operator-lifecycle:T003 | DOCUMENTED_TRANSITION | approved | execute         | executed | Approved; actor differs requester; last active operator preserved | JOIN refused pending Bureau migration; otherwise withdraw/suspend/terminate/restore actor; revoke sessions / Entra mapping | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
 
+New JOIN requests and issuance from approved legacy JOIN requests are refused pending Bureau
+migration; an approved JOIN stays approved with no invitation or executed timestamp written.
 Cancelled is declared closed but no production entry writer identified; isolated state intentional.
 No expiry path. lock_version provides optimistic stale-save checks; pending/approved guards occur
 before update, not an explicit locked decision. Execution transaction is org_principal, while

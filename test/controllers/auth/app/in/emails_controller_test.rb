@@ -10,6 +10,43 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   # verification budget and admitted Auth state still use their real stores.
   rate_limit_counters!
 
+  { unverified: ClientEmailStatus::UNVERIFIED,
+    pending_signup: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    verified_without_binding: ClientEmailStatus::VERIFIED, }.each do |label, status|
+    test "unbound #{label} email cannot authenticate or dispatch login OTP" do
+      owner = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+      ClientEmailStatus.find_or_create_by!(id: status)
+      email = ClientEmail.create!(
+        user: owner, address: "unbound-#{label}-app@example.test", confirm_policy: "1",
+        user_email_status_id: status,
+      )
+      original_contact = email.attributes
+
+      assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+        post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+             params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test" },
+             headers: { "Host" => @host }
+      end
+
+      assert_response :redirect
+      assert_predicate SignAppInEmailAuthenticationState.load(session), :dummy?
+      assert_nil email.reload.binding_finalized_at
+
+      assert_no_difference("ClientToken.count") do
+        patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+              params: { :user_email => { pass_code: "000000" }, "cf-turnstile-response" => "test" },
+              headers: { "Host" => @host }
+      end
+
+      assert_response :unprocessable_content
+      contact_unchanged = email.reload.attributes == original_contact
+
+      assert contact_unchanged, "Unbound candidate must remain unchanged by login attempts"
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
+  end
+
   fixtures :clients, :operators, :client_statuses, :operator_statuses, :client_email_statuses
 
   include ActiveSupport::Testing::TimeHelpers

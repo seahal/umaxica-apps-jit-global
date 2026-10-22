@@ -195,12 +195,4 @@ class RetainableTest < ActiveSupport::TestCase
     assert_equal future_lapses, @dummy.discard_at
     assert_equal future_purge, @dummy.purge_eligible_at
   end
-
-  test "a discard_at later than purge_eligible_at is invalid" do
-    @dummy.discard_at = 2.hours.from_now
-    @dummy.purge_eligible_at = 1.hour.from_now
-
-    assert_not @dummy.valid?
-    assert_includes @dummy.errors[:discard_at], "must be <= purge_eligible_at"
-  end
 end

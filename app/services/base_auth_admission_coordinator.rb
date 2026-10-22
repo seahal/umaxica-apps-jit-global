@@ -870,7 +870,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       key = Rails.application.key_generator.generate_key(
         "base-auth-cancellation-handoff", ActiveSupport::MessageEncryptor.key_len,
       )
-      ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm")
+      ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm", serializer: JSON)
     end
 
     def decrypt_cancellation_handoff(handoff)
@@ -901,7 +901,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     def switch_handoff_encryptor
       key = Rails.application.key_generator.generate_key("base-auth-switch-handoff", ActiveSupport::MessageEncryptor.key_len)
-      ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm")
+      ActiveSupport::MessageEncryptor.new(key, cipher: "aes-256-gcm", serializer: JSON)
     end
 
     def decrypt_bound_cancellation_payload!(handoff:, surface:, transaction_ref:)

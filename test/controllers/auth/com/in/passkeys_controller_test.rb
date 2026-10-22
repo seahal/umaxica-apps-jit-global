@@ -263,7 +263,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          }, headers: @origin_headers
 
     assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
   end
 
   test "verification uses credential ownership and ignores a forged userHandle" do
@@ -321,7 +321,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          }, headers: @origin_headers
 
     assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     assert_empty VisitorToken.where(visitor_id: @visitor.id)
   end
 
@@ -343,7 +343,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          }, headers: @origin_headers
 
     assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     assert_empty VisitorToken.where(visitor_id: @visitor.id)
   end
 
@@ -371,7 +371,7 @@ class Auth::Com::Sign::In::PasskeysControllerTest
          }, headers: @origin_headers
 
     assert_response :unauthorized
-    assert_includes response.body, I18n.t("errors.webauthn.credential_not_found")
+    assert_includes response.body, I18n.t("errors.webauthn.verification_failed")
     assert_empty VisitorToken.where(visitor_id: @visitor.id)
   end
 

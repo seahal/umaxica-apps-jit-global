@@ -6,6 +6,8 @@ module PreferenceDbscRegistrationEndpoint
   include DbscRequestLogging
   include DbscCanonicalUrl
 
+  public
+
   def create
     log_dbsc_request_observability!
     response.set_header("Cache-Control", "no-store")
@@ -34,7 +36,7 @@ module PreferenceDbscRegistrationEndpoint
   def handle_registration
     result = DbscRegistrationService.call(
       record: current_preference_record,
-      proof: dbsc_response_header,
+      proof: DbscHeaderParser.string_value(dbsc_response_header),
       expected_audience: dbsc_endpoint_url,
     )
 
@@ -60,7 +62,7 @@ module PreferenceDbscRegistrationEndpoint
         ],
       }, status: :created
       Rails.logger.info(
-        "[dbsc] registration success path=#{dbsc_endpoint_url} session_id=#{result[:session_id].to_s[0, 24]}",
+        JitLogEvent.format("dbsc.registration.succeeded", request_path: request.path),
       )
     else
       render json: { error: "DBSC registration failed", error_code: result[:error_code] },
@@ -72,13 +74,16 @@ module PreferenceDbscRegistrationEndpoint
     preference = current_preference_record
     return head :unauthorized if preference.blank?
 
-    session_id = dbsc_session_id_header
+    session_id = DbscHeaderParser.string_value(dbsc_session_id_header)
+    return head :bad_request if session_id.blank?
+
     proof = dbsc_response_header
-    parsed_session_id = DbscHeaderParser.string_value(session_id)
+    return head :forbidden unless preference.dbsc_session_id.present? &&
+      session_id == preference.dbsc_session_id
 
     if proof.blank?
       challenge = issue_preference_dbsc_challenge_for!(preference)
-      challenge_value = %("#{challenge}";id="#{parsed_session_id}")
+      challenge_value = DbscHeaderSerializer.challenge(challenge: challenge, session_id: preference.dbsc_session_id)
       response.set_header(
         PreferenceIoKeys::Headers::DBSC_CHALLENGE,
         challenge_value,
@@ -88,13 +93,13 @@ module PreferenceDbscRegistrationEndpoint
         challenge_value,
       )
       Rails.logger.info(
-        "[dbsc] challenge issued path=#{dbsc_endpoint_url} session_id=#{parsed_session_id.to_s[0, 24]}",
+        JitLogEvent.format("dbsc.challenge.issued", request_path: request.path),
       )
       return head :forbidden
     end
 
     result = DbscVerificationService.call(
-      record: preference, session_id: session_id, proof: proof,
+      record: preference, session_id: session_id, proof: DbscHeaderParser.string_value(proof),
       expected_audience: dbsc_endpoint_url,
     )
     return render json: { error: "DBSC verification failed", error_code: result[:error_code] },
@@ -122,9 +127,9 @@ module PreferenceDbscRegistrationEndpoint
   end
 
   def dbsc_session_id_header
-    request.headers[PreferenceIoKeys::Headers::DBSC_SECURE_SESSION_ID].presence ||
-      request.headers[PreferenceIoKeys::Headers::DBSC_SESSION_ID].presence ||
-      request.headers["Sec-Secure-Session-Id"].presence
+    request.headers["Sec-Secure-Session-Id"].presence ||
+      request.headers[PreferenceIoKeys::Headers::DBSC_SECURE_SESSION_ID].presence ||
+      request.headers[PreferenceIoKeys::Headers::DBSC_SESSION_ID].presence
   end
 
   def dbsc_response_header

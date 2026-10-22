@@ -77,6 +77,16 @@ blank, or overlapping configuration fails closed. In production, issuers and aud
 development/test marker, a loopback host, or the `.test` TLD are rejected at boot. The clock-skew
 leeway is fixed at 30 seconds; there is no leeway environment variable.
 
+Auth/Preference access, OIDC ID and separated-RP OP token verification pass that same allowance
+explicitly to the `iat` verifier (`verify_iat: { leeway: 30 }`); the gem's general `leeway` covers
+`exp` and `nbf` only. OIDC client assertions also allow 30 seconds for `iat` while retaining their
+additional strict expiration check. `verify_expiration` and `verify_not_before` are the supported
+gem option names. The explicit expired-access decoder exempts only `exp` for logout/revocation
+identification and retains signature and other claim checks.
+
+Apple's upstream signature algorithm behavior and the separate Rails `secret_key_base` compromise
+response are recorded in [JWT validation and key risk decisions](../../adr/jwt-validation-and-key-risk-decisions.md).
+
 Preference:
 
 ```text

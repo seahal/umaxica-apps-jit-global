@@ -1,12 +1,13 @@
 # typed: false
 # frozen_string_literal: true
 
-# Completes DBSC registration by validating a proof and storing the binding key.
+# Completes DBSC registration from a decoded JWT string and stores the binding
+# key. The HTTP boundary owns Structured Field parsing.
 class DbscRegistrationService < ApplicationService
   def initialize(record:, proof:, now: Time.current, session_id: nil, expected_audience: nil)
     super
     @record = record
-    @proof = DbscHeaderParser.string_value(proof)
+    @proof = proof
     @now = now
     @session_id = session_id.presence || record&.dbsc_session_id.presence || SecureRandom.urlsafe_base64(24)
     @expected_audience = expected_audience

@@ -1,16 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-// The sign-out pages are rendered without mounting here, so `useForm` only has to answer with the
-// shape the components read. The interaction spec mounts them for the handler branches.
-vi.mock("@inertiajs/react", () => ({
-  useForm: () => ({
-    processing: false,
-    post: vi.fn(),
-    delete: vi.fn(),
-    transform: vi.fn(),
-  }),
-}));
+// The sign-out pages are rendered to static markup under the node environment, where there is no
+// document to read the CSRF meta tag from, so the token reader answers with a fixed value. The
+// interaction spec mounts them under jsdom with a real meta tag.
+vi.mock("@/lib/csrf", () => ({ csrfToken: () => "csrf-value" }));
 
 const { default: SignOutConfirmation } =
   await import("@/features/auth/session/SignOutConfirmation");
@@ -105,7 +99,8 @@ describe("SignOutUnavailable", () => {
   it("retries with a POST rather than a link", () => {
     const markup = renderToStaticMarkup(<SignOutUnavailable {...props} />);
 
-    expect(markup).toContain('<form action="/sign/out?ri=jp" method="post">');
+    expect(markup).toContain('action="/sign/out?ri=jp" method="post"');
+    expect(markup).toContain('<input type="hidden" name="authenticity_token" value="csrf-value"/>');
     expect(markup).toContain("再試行");
     expect(markup).toContain("もう一度お試しください。");
   });

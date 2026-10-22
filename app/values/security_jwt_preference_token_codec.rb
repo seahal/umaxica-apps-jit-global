@@ -151,8 +151,8 @@ class SecurityJwtPreferenceTokenCodec
         iss: jwt_configuration.issuer,
         verify_aud: true,
         aud: jwt_configuration.audience_for(host),
-        verify_iat: true,
-        verify_exp: true,
+        verify_iat: { leeway: jwt_configuration.leeway_seconds },
+        verify_expiration: true,
       }
     end
 

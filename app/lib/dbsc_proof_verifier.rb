@@ -1,7 +1,8 @@
 # typed: false
 # frozen_string_literal: true
 
-# Validates the common DBSC JWT proof envelope before a service mutates state.
+# Validates a decoded DBSC JWT string before a service mutates state. HTTP
+# Structured Field parsing belongs to the calling controller, exactly once.
 class DbscProofVerifier
   ALLOWED_ALGORITHMS = %w(ES256 RS256).freeze
   # W3C DBSC permits RSA, but a short RSA modulus is trivially factorable and
@@ -22,7 +23,7 @@ class DbscProofVerifier
   end
 
   def initialize(proof:, challenge:, challenge_issued_at:, now: Time.current, expected_audience: nil)
-    @proof = DbscHeaderParser.string_value(proof)
+    @proof = proof
     @challenge = challenge
     @challenge_issued_at = challenge_issued_at
     @now = now
@@ -67,15 +68,16 @@ class DbscProofVerifier
 
   def validate_claims(payload, header)
     audience = payload["aud"]
-    issued_at = issued_at_for(payload)
 
     return failure("invalid_type") unless header["typ"].to_s == "dbsc+jwt"
     return failure("invalid_algorithm") unless ALLOWED_ALGORITHMS.include?(header["alg"].to_s)
     return failure("missing_audience") if audience.to_s.blank?
     return failure("audience_mismatch") if expected_audience.present? && audience != expected_audience
     return failure("missing_issued_at") unless payload["iat"].is_a?(Numeric)
-    return failure("issued_at_future") if issued_at > now + IAT_LEEWAY
-    return failure("issued_at_expired") if issued_at < now - CHALLENGE_TTL
+
+    issued_at = payload["iat"]
+    return failure("issued_at_future") if issued_at > now.to_f + IAT_LEEWAY
+    return failure("issued_at_expired") if issued_at < now.to_f - CHALLENGE_TTL
     return failure("challenge_mismatch") unless payload["jti"].to_s == challenge.to_s
 
     nil
@@ -83,10 +85,6 @@ class DbscProofVerifier
 
   def challenge_expired?
     challenge_issued_at.blank? || challenge_issued_at < now - CHALLENGE_TTL
-  end
-
-  def issued_at_for(payload)
-    Time.zone.at(payload["iat"])
   end
 
   def success(payload, header)

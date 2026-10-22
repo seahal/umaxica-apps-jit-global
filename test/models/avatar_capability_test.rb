@@ -34,12 +34,6 @@ class AvatarCapabilityTest < ActiveSupport::TestCase
     assert_not_empty @capability.errors[:base]
   end
 
-  test "accepts integer ids" do
-    record = AvatarCapability.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, AvatarCapability::NORMAL
   end

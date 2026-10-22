@@ -37,8 +37,8 @@ module Auth
             binding = sign_in_flow_binding_params(sign_in_phase_binding_current_flow, phase: "PRIMARY_PENDING")
 
             {
-              title: t("sign.app.authentication.passkey.new.page_title"),
-              description: t("sign.app.authentication.passkey.new.description"),
+              title: t("sign.com.authentication.passkey.new.page_title"),
+              description: t("sign.com.authentication.passkey.new.description"),
               panel: {
                 options_url: auth_com_sign_in_passkey_options_path(pt: pt, ri: ri, **binding),
                 verification_url: auth_com_sign_in_passkey_verification_path(pt: pt, ri: ri, **binding),
@@ -47,10 +47,10 @@ module Auth
                 turnstile_site_key: turnstile_stealth_props.fetch(:site_key),
                 turnstile_error_message: t("turnstile_error"),
                 field: nil,
-                submit_label: t("sign.app.authentication.passkey.new.submit"),
+                submit_label: t("sign.com.authentication.passkey.new.submit"),
               },
               back_link: {
-                label: t("sign.app.authentication.new.back"),
+                label: t("sign.com.authentication.new.back"),
                 href: auth_com_sign_in_path(pt: pt, ri: ri, **binding),
               },
             }

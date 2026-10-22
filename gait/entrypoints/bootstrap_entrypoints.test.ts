@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // These entrypoints are thin bootstrap wrappers: each either imports the shared "../application"
 // module (which wires Turbo, Stimulus controllers, and React islands) and/or registers the offline
@@ -8,15 +8,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // gait/pwa/register.test.ts, gait/controllers/index.test.js, gait/entrypoints/react_islands.test.ts).
 
 const registerOfflineServiceWorker = vi.fn();
+const sharedApplicationLoaded = vi.fn();
 
 vi.mock("../../src/pwa/register", () => ({
   registerOfflineServiceWorker,
 }));
-vi.mock("../../src/entrypoints/application", () => ({}));
+
+// Registered per test: `vi.resetModules()` keeps a hoisted mock's evaluated module, so only a fresh
+// `doMock` re-runs the factory and lets each import report whether it loaded the shared bootstrap.
+beforeEach(() => {
+  vi.doMock("../../src/entrypoints/application", () => {
+    sharedApplicationLoaded();
+    return {};
+  });
+});
 
 afterEach(() => {
   vi.resetModules();
   registerOfflineServiceWorker.mockClear();
+  sharedApplicationLoaded.mockClear();
 });
 
 describe.each([
@@ -30,6 +40,7 @@ describe.each([
   it("imports the shared application bootstrap and registers the offline service worker", async () => {
     await import(modulePath);
 
+    expect(sharedApplicationLoaded).toHaveBeenCalledTimes(1);
     expect(registerOfflineServiceWorker).toHaveBeenCalledTimes(1);
   });
 });
@@ -43,6 +54,7 @@ describe.each([
   it("registers the offline service worker without pulling in the Turbo application bundle", async () => {
     await import(modulePath);
 
+    expect(sharedApplicationLoaded).not.toHaveBeenCalled();
     expect(registerOfflineServiceWorker).toHaveBeenCalledTimes(1);
   });
 });
@@ -51,6 +63,7 @@ describe("core/dev entrypoint", () => {
   it("imports the shared application bootstrap without registering an offline service worker", async () => {
     await import("../../src/entrypoints/core/dev.ts");
 
+    expect(sharedApplicationLoaded).toHaveBeenCalledTimes(1);
     expect(registerOfflineServiceWorker).not.toHaveBeenCalled();
   });
 });

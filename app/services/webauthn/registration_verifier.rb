@@ -17,7 +17,7 @@ module Webauthn
     RESIDENT_KEY_BY_SURFACE = {
       app: "required",
       com: "required",
-      org: "discouraged",
+      org: "required",
     }.freeze
     ATTESTATION = "none"
 

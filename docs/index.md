@@ -10,6 +10,11 @@ coding agents. Product-user prose belongs in [manuals](../manuals/README.md).
 - [Durable checklists](checklists/README.md): behavior that must keep working.
 - [Risk management](risk-management/README.md): actual risks, responses and ownership.
 - [Spec lifecycle](../specs/README.md): accepted changes, evidence and closure.
+- [Development environment setup](operations/development-environment-setup.md) (draft): ordered
+  steps from a fresh clone to a running local environment, including external sign-in providers.
+- [AWS production service inventory](operations/aws-production-service-inventory.md) (planning):
+  services beyond Rails, purchase/estimate inputs, EKS and CloudFront/WAF topology, and unresolved
+  compatibility decisions with Cloudflare-owned domains and DNS.
 
 Write repository prose in English, following
 [language policy](reference/repository-language-policy.md). Keep current descriptions aligned with

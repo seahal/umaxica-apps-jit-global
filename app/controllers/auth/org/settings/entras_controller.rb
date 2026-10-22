@@ -59,7 +59,7 @@ module Auth
           {
             title: "Microsoft Entra ID",
             heading: "Microsoft Entra ID",
-            back_link: { label: t("sign.app.settings.show.back"), href: auth_org_settings_path(ri: params[:ri]) },
+            back_link: { label: t("sign.org.settings.show.back"), href: auth_org_settings_path(ri: params[:ri]) },
             status: @entra_identity.present? ? "Connected" : "Not connected",
             edit_link: { label: t("actions.edit"), href: edit_auth_org_settings_entra_path(ri: params[:ri]) },
           }
@@ -75,7 +75,7 @@ module Auth
             title: "Microsoft Entra ID",
             heading: "Microsoft Entra ID",
             back_link: {
-              label: t("sign.app.settings.show.back"),
+              label: t("sign.org.settings.show.back"),
               href: auth_org_settings_entra_path(ri: params[:ri]),
             },
             connected: connected,

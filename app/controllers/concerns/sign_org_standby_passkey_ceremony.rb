@@ -88,9 +88,28 @@ module SignOrgStandbyPasskeyCeremony
     "errors.webauthn.identifier_invalid"
   end
 
-  # Ineligibility is indistinguishable from "no such Operator" on the wire: the
-  # flow issues the same padded, anonymised allowCredentials set either way, so
-  # this must not become an enumeration oracle for who holds Emergency Access.
+  # Empty descriptors prevent repeated options requests from identifying real keys.
+  # The challenge still binds the selected Operator; an unknown selection never
+  # becomes an unbound discoverable authentication ceremony.
+  def disclose_passkey_descriptors?
+    false
+  end
+
+  def passkey_actor_global_key(actor)
+    # Operator public references have a fixed length; database ids do not. The
+    # invalid alphabet sentinel cannot select any real Operator at verification.
+    "org:#{actor ? actor.public_id : "!" * 16}"
+  end
+
+  def passkey_actor_id_from(actor_global_key)
+    return unless actor_global_key.is_a?(String) && actor_global_key.start_with?("org:")
+
+    reference = actor_global_key.delete_prefix("org:")
+    return unless Operator::PUBLIC_ID_FORMAT.match?(reference)
+
+    Operator.find_by(public_id: reference)&.id
+  end
+
   def find_active_passkey_actor(identifier)
     normalized_identifier = Operator.normalize_public_id(identifier)
     return if normalized_identifier.blank?

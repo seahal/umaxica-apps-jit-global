@@ -27,13 +27,15 @@ invariants are in `docs/security/webauthn-security-invariants.md`; RP boundaries
 | Settings registration (all surfaces)  | registration      | registration (required)      | Exclude every passkey                    | New row, metadata, and app/org audit |
 | Direct sign-in (`app` / `com`)        | authentication    | direct_sign_in (required)    | None: discoverable credentials           | `sign_count`, `last_used_at`         |
 | Normal sign-in (`org`)                | authentication    | direct_sign_in (required)    | Entra-selected Operator's ACTIVE keys    | `sign_count`, `last_used_at`         |
-| Emergency Access sign-in (`org` only) | emergency_sign_in | emergency_sign_in (required) | ACTIVE only                              | `sign_count`, `last_used_at`         |
+| Emergency Access sign-in (`org` only) | emergency_sign_in | emergency_sign_in (required) | Empty; selected Operator stays bound                              | `sign_count`, `last_used_at`         |
 | MFA challenge (all surfaces)          | authentication    | mfa_challenge (required)     | ACTIVE only                              | `sign_count`, `last_used_at`         |
 | Step-up (all surfaces)                | step_up           | ordinary_step_up (required)  | ACTIVE only                              | `sign_count`                         |
 
-- App and com registration use `resident_key: "required"` so direct sign-in can be usernameless and
-  discoverable. Org registration retains `resident_key: "discouraged"`; org normal, Emergency, MFA,
-  and Step-Up ceremonies remain actor-known and may continue to send actor-scoped descriptors.
+- All three surfaces require discoverable credentials at registration. Org Emergency options
+  disclose no descriptors while retaining selected-Operator binding. Org normal sign-in, MFA
+  and Step-Up retain actor-scoped descriptors. Existing non-discoverable Org keys need
+  re-registration for Emergency Access. See
+  [response nondisclosure](../../adr/credential-response-nondisclosure.md).
 - App and com direct sign-in options are issued without an identifier lookup and contain no real
   credential IDs in `allowCredentials` (the serialized list is empty). Verification resolves the
   surface-local passkey by assertion credential ID and verifies it with the saved public key;

@@ -115,7 +115,35 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     challenge = session[:passkey_challenges].fetch(challenge_id)
 
     assert_equal "emergency_sign_in", challenge["purpose"]
-    assert_equal "org:#{@staff.id}", challenge["actor_global_key"]
+    assert_equal "org:#{@staff.public_id}", challenge["actor_global_key"]
+  end
+
+  test "repeated emergency options disclose no credential ids for eligible ineligible or unknown operators" do
+    selections = [@staff.public_id, @staff.public_id, "z" * 16]
+    @staff.reload.update!(withdrawn_at: Time.current)
+    selections << @staff.public_id
+    @staff.update!(withdrawn_at: nil)
+
+    binding_sizes = []
+    selections.each_with_index do |identifier, index|
+      @staff.update!(withdrawn_at: Time.current) if index == 3
+      post auth_org_sign_in_emergency_passkey_options_url(ri: "jp", **org_emergency_binding_params),
+           params: { identifier: identifier }
+
+      assert_response :ok
+      assert_empty response.parsed_body.fetch("options").fetch("allowCredentials")
+      assert_not_includes response.body, @staff_passkey.webauthn_id
+      assert_nil response.headers["Location"]
+      challenge = session[:passkey_challenges].fetch(response.parsed_body.fetch("challenge_id"))
+      actor_binding = challenge.fetch("actor_global_key")
+      binding_sizes << actor_binding.bytesize
+      expected = (index < 2) ? "org:#{@staff.public_id}" : "org:!!!!!!!!!!!!!!!!"
+
+      assert_equal expected, actor_binding
+    end
+
+    assert_equal [20], binding_sizes.uniq
+    assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
   end
 
   test "an emergency assertion records emergency evidence without issuing a root session on Auth" do
@@ -139,6 +167,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
   end
 
   test "Base finalizes emergency evidence as an emergency session with narrowed scopes using a stubbed assertion" do
+    OpOrgProtocolEpoch.create!(id: 1, realm: "org", contract_epoch: 1, changed_at: Time.current)
     challenge_id = issue_emergency_challenge!
     verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
 
@@ -325,7 +354,7 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
     assert_response :ok
     assert_equal(
-      4,
+      0,
       response.parsed_body.dig("options", "allowCredentials").size,
       "an ineligible operator must be indistinguishable from an unknown one",
     )

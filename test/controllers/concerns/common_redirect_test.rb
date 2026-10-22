@@ -5,7 +5,38 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class CommonRedirectTest < ActiveSupport::TestCase
-  # normalize_host is a pure class method -- no controller context required.
+  test "private helper methods are not public on including controller" do
+    # Define a test controller that includes the concern
+    test_controller =
+      Class.new(ApplicationController) do
+        include CommonRedirect
+      end
+
+    controller = test_controller.new
+
+    # These methods should be private, not public
+    assert_includes controller.private_methods, :safe_internal_path
+    assert_not controller.public_methods.include?(:safe_internal_path)
+
+    assert_includes controller.private_methods, :safe_redirect_to
+    assert_not controller.public_methods.include?(:safe_redirect_to)
+
+    assert_includes controller.private_methods, :safe_redirect_back_or_to
+    assert_not controller.public_methods.include?(:safe_redirect_back_or_to)
+  end
+
+  test "allowed_hosts is public on including controller" do
+    test_controller =
+      Class.new(ApplicationController) do
+        include CommonRedirect
+      end
+
+    controller = test_controller.new
+
+    # allowed_hosts should remain public (for diagnostics/auditing)
+    assert_respond_to controller, :allowed_hosts
+    assert_not controller.private_methods.include?(:allowed_hosts)
+  end
 
   test "normalize_host returns nil for blank input" do
     assert_nil CommonRedirect.normalize_host(nil)
@@ -42,5 +73,13 @@ class CommonRedirectTest < ActiveSupport::TestCase
     result = CommonRedirect.normalize_host("example.com/some/path")
 
     assert_equal "example.com", result
+  end
+
+  test "normalize_host keeps an unparseable plain string" do
+    assert_equal "not a url", CommonRedirect.normalize_host("not a url")
+  end
+
+  test "normalize_host downcases a full uppercase URL" do
+    assert_equal "example.com", CommonRedirect.normalize_host("HTTPS://EXAMPLE.COM")
   end
 end

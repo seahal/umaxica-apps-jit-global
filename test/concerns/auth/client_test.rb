@@ -134,10 +134,16 @@ class AuthClientTest < ActiveSupport::TestCase
   test "log_out revokes refresh token and removes cookies" do
     @obj.define_singleton_method(:request_ip_address) { "127.0.0.1" }
 
-    @obj.send(:log_in, @user, establishment: :root_login)
+    tokens = @obj.send(:log_in, @user, establishment: :root_login)
+    _public_id, verifier = ClientToken.parse_refresh_token(tokens[:refresh_token])
+    token = ClientToken.where(user: @user).order(:id).last
+
+    assert token.authenticate_refresh_token(verifier)
 
     assert_no_difference("ClientToken.count") { @obj.send(:log_out) }
 
+    assert_not token.reload.currently_usable?
+    assert_not token.authenticate_refresh_token(verifier)
     assert_nil @obj.cookies[::AuthenticationClient::ACCESS_COOKIE_KEY]
     assert_nil @obj.cookies.encrypted[::AuthenticationClient::REFRESH_COOKIE_KEY]
   end

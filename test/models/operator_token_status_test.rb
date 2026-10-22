@@ -12,12 +12,6 @@
 require "test_helper"
 
 class OperatorTokenStatusTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    status = OperatorTokenStatus.new(id: 9)
-
-    assert_predicate status, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, OperatorTokenStatus::ACTIVE
     assert_equal 0, OperatorTokenStatus::NOTHING

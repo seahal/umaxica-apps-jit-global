@@ -7,44 +7,6 @@ require "test_helper"
 class BranchCoverageBatch40LinePushTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
-  test "Edit::Org HelperMethods delegates execute when signed out" do
-    controller = Edit::Org::ApplicationController.new
-    controller.request = ActionDispatch::TestRequest.create
-    controller.response = ActionDispatch::TestResponse.new
-    controller.define_singleton_method(:current_resource) { nil }
-    proxy = Object.new
-    proxy.define_singleton_method(:controller) { controller }
-    proxy.extend(Edit::Org::ApplicationController::HelperMethods)
-
-    Edit::Org::ApplicationController::HelperMethods.instance_methods(false).each do |method_name|
-      assert_nothing_raised { proxy.public_send(method_name) }
-    end
-  ensure
-    Actor.reset
-  end
-
-  test "Warp application HelperMethods delegates execute" do
-    [
-      Warp::App::ApplicationController,
-      Warp::Com::ApplicationController,
-      Warp::Org::ApplicationController,
-    ].each do |klass|
-      controller = klass.new
-      controller.request = ActionDispatch::TestRequest.create
-      controller.response = ActionDispatch::TestResponse.new
-      controller.define_singleton_method(:current_resource) { nil }
-      proxy = Object.new
-      proxy.define_singleton_method(:controller) { controller }
-      proxy.extend(klass.const_get(:HelperMethods, false))
-
-      klass.const_get(:HelperMethods, false).instance_methods(false).each do |method_name|
-        assert_nothing_raised { proxy.public_send(method_name) }
-      end
-    end
-  ensure
-    Actor.reset
-  end
-
   test "DiagnosticSurfaceCredentials guard fails closed and compares securely" do
     blank_source = Object.new
     blank_source.define_singleton_method(:option) { |_| nil }

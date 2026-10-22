@@ -64,12 +64,13 @@ previously shipped as defects, so static tests reject their reintroduction.
 - Verification rechecks ACTIVE credential status, active actor state, verified-PII and existing
   session-limit rules (full-access limit, waiting slot, refusal) before establishing a session. A disabled, revoked,
   unknown, or cross-surface credential fails with the existing generic unauthorized contract.
-- App and com registration require a discoverable credential (`residentKey: "required"`) while org
-  registration keeps its existing policy. Existing non-discoverable app/com credentials are not
-  migrated or supported by a compatibility path; users must register again.
-- Org normal sign-in, Emergency Access, MFA, and Step-Up remain actor-known ceremonies. Their
-  actor-scoped descriptor behavior and security checks are not replaced by this direct-sign-in
-  change.
+- All three surfaces require discoverable credentials (`residentKey: "required"`) at registration.
+  Existing non-discoverable app/com credentials need re-registration. Existing non-discoverable
+  Org keys retain normal Entra-bound sign-in but require re-registration for Emergency Access.
+- Org Emergency options return no credential descriptors and retain fixed-length selected-Operator
+  binding, including a non-authenticating sentinel for unknown/ineligible selections. Org normal
+  sign-in, MFA and Step-Up retain their actor-scoped descriptor behavior and security checks.
+  See [response nondisclosure](../../adr/credential-response-nondisclosure.md).
 
 ## User Handle
 

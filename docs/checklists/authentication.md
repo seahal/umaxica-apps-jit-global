@@ -69,6 +69,58 @@ surface-specific. These are durable requirements, not current verification resul
   or actor reference. Delivery preserves nil system actors and business occurrence time after
   credential deletion; retry after Chronicle commit before acknowledgement creates no second event.
   See [Passkey lifecycle and audit](../security/passkey-lifecycle-and-audit.md).
+- AUTH-19: APP/COM/ORG sign-in and sign-up: a Base → Auth admission reference (`entry_ref`) or an
+  Auth → Base result reference presented from any browser other than the one that started the flow
+  never attaches a ceremony that Base confirms, never redeems the admission, never yields an
+  authentication result Base accepts and never establishes a Root Session. Its worst effect is
+  denying the legitimate attempt while the reference lives (an accepted residual risk; the user
+  restarts). Re-verify with foreign-browser refusal tests at attach, confirmation, redemption and
+  result receipt whenever the sign-in or sign-up relay components change. See
+  [Base/Auth authority](../../adr/base-auth-ceremony-and-seven-rp-boundary.md).
+
+- AUTH-20: APP/COM email and telephone sign-up entry requires explicit policy consent (`"1"` or
+  JSON `true`); telephone entry also requires explicit MFA-use consent. Missing, null, empty,
+  unchecked and unsupported consent values refuse before creating registration or OTP artifacts.
+- AUTH-21: APP/COM contact-entry replacement validates Turnstile and submitted inputs before
+  superseding the browser's active sign-up. A rejected replacement preserves the flow, locator,
+  pending contact and principal and queues no OTP. An accepted replacement retains the existing
+  HALTED and cleanup semantics. See [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement).
+
+- AUTH-22: Protected CAPTCHA entry points reject missing and failed tokens server-side. Enabling
+  outage degradation still refuses missing/empty tokens, failed challenges and missing secrets;
+  only explicitly upstream-unavailable results may pass under the incident flag. See
+  [Turnstile](../security/turnstile.md).
+- AUTH-23: APP/COM email sign-in resend requires confirmed admission, original browser/surface
+  binding and an unexpired authenticated state. Cross-browser, expired and retargeted states
+  cannot dispatch; destination cooldown and verification budgets remain effective. This bound
+  continuation needs no fresh CAPTCHA. See
+  [resend exception](../security/turnstile.md#email-sign-in-resend-exception).
+- AUTH-24: APP/COM unbound email candidates cannot select an actor or receive login/recovery OTP,
+  even if their email status says VERIFIED. Rejected attempts preserve the candidate and issue
+  no login credentials. See [binding contract](../security/identity-resolution-and-credential-binding.md).
+- AUTH-25: APP/COM security-lock recovery requires the existing verified effective email OTP
+  proof and an eligible account lock. Recovery authority is scoped to lock recovery and does not
+  itself issue a login session or reset a password. See
+  [recovery scope](../security/credential-gateway.md#current-security-lock-recovery-scope).
+
+- AUTH-26: First-party Auth/Preference access and OIDC token verification applies the fixed
+  30-second clock-skew allowance to `iat` as well as applicable `nbf`/`exp` checks. Expired-access
+  decoding for logout/revocation relaxes only expiration and never authorizes a request. Apple
+  RS256/RS512 verification behavior remains covered by the accepted upstream drift contracts. See
+  [JWT validation decisions](../../adr/jwt-validation-and-key-risk-decisions.md).
+
+- AUTH-27: Known and unknown Secret identifiers use the same normalized identifier attempt
+  partition. Distributing requests across IPs never reveals lookup success through the account
+  attempt limit. Independent IP limits remain enforced.
+- AUTH-28: Org Emergency options disclose no real credential descriptors, including across
+  repeated requests. Challenge cookies use fixed-length selected-Operator binding or a
+  non-authenticating sentinel. Missing, disabled, wrong-owner and invalid-signature Passkey
+  assertions share the generic credential refusal and verification response floor.
+- AUTH-29: APP/COM withdrawal and security-lock recovery keep real/dummy session payload lengths
+  equal, cover complete OTP issuance with the response floor, and never authenticate dummy state.
+- AUTH-30: Closed Org invitation provisioning refuses every invitation state before code lookup,
+  preserves existing records and retains the common surface rate limit. See
+  [nondisclosure decisions](../../adr/credential-response-nondisclosure.md).
 
 Sources:
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc),

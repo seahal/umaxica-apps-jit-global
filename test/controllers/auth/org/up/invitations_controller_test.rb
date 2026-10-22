@@ -8,7 +8,7 @@ class Auth::Org::Sign::Up::InvitationsControllerTest < ActionDispatch::Integrati
   fixtures :operators, :operator_statuses, :operator_email_statuses, :operator_visibilities
 
   setup do
-    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
+    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     @invitation = OrganizationInvitation.create!(
@@ -36,15 +36,16 @@ class Auth::Org::Sign::Up::InvitationsControllerTest < ActionDispatch::Integrati
     assert_equal "render", inertia_props.fetch("turnstile").fetch("mode")
   end
 
-  test "create accepts invitation and redirects to sign in" do
-    assert_difference -> { Operator.count }, 1 do
+  test "create preserves route and renders migration refusal without registration" do
+    assert_no_difference [-> { Operator.count }, -> { Bureau.count }, -> { AgentMembership.count }] do
       post auth_org_sign_up_invitations_url(ri: "jp"),
            params: { invitation_code: @invitation.code, "cf-turnstile-response": "test" }
     end
 
-    assert_redirected_to auth_org_sign_in_path(ri: "jp")
-    assert_predicate @invitation.reload, :consumed?
-    assert_nil flash[:notice]
+    assert_response :unprocessable_content
+    assert_equal "auth/org/sign/up/invitations/new", inertia_component
+    assert_equal "Organization invitations are unavailable pending Bureau migration", inertia_props.fetch("form_error")
+    assert_not_predicate @invitation.reload, :consumed?
   end
 
   test "create renders new for invalid invitation" do
@@ -70,5 +71,32 @@ class Auth::Org::Sign::Up::InvitationsControllerTest < ActionDispatch::Integrati
     assert_not_predicate @invitation.reload, :consumed?
     assert_not_nil inertia_props.fetch("form_error")
     assert_nil flash[:alert]
+  end
+
+  test "invitation existence expiry and consumption share one public refusal" do
+    expired = OrganizationInvitation.create!(
+      organization_id: 123, email: "expired-enumeration@example.test", invited_by: operators(:one),
+      expires_at: 1.second.ago,
+    )
+    consumed = OrganizationInvitation.create!(
+      organization_id: 123, email: "consumed-enumeration@example.test", invited_by: operators(:one),
+      consumed_at: Time.current,
+    )
+    counts = [Operator.count, Bureau.count, AgentMembership.count]
+    errors = []
+    [@invitation.code, expired.code, consumed.code, "z" * 32, "", nil].each do |code|
+      post auth_org_sign_up_invitations_url(ri: "jp"),
+           params: { invitation_code: code, "cf-turnstile-response": "test" }
+
+      assert_response :unprocessable_content
+      assert_nil response.headers["Location"]
+      errors << inertia_props.fetch("form_error")
+
+      assert_equal counts, [Operator.count, Bureau.count, AgentMembership.count]
+    end
+    assert_equal [OrgInvitationService::MIGRATION_REQUIRED_MESSAGE], errors.uniq
+    assert_not_predicate @invitation.reload, :consumed?
+    assert_not_predicate expired.reload, :consumed?
+    assert_predicate consumed.reload, :consumed?
   end
 end

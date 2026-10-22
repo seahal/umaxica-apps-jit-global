@@ -67,3 +67,10 @@ This ADR clarifies the rationale of
 and preserves the physical authority contract in
 [`base-auth-ceremony-and-seven-rp-boundary.md`](base-auth-ceremony-and-seven-rp-boundary.md). It
 does not authorize a route, schema, or session-issuer change by itself.
+
+## E1 reference (Accepted 2026-10-21)
+
+[Sign-up Flow Admission Binding and Cardinality](sign-up-flow-admission-binding-and-cardinality.md)
+adds the APP/COM single Flow-to-Admission authority, parent-scoped concurrency, restart invariants,
+and explicit Pending decisions. It preserves this ADR's Sign In First boundary and durable Identity
+protection. Its accepted schema target is not implemented by this documentation update.

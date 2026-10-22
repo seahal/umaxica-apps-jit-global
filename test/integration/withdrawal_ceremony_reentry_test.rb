@@ -164,6 +164,19 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal eligible_session.response.status, unknown_session.response.status
+    assert_equal 200, eligible_session.response.status
+    assert_nil eligible_session.response.headers["Location"]
+    assert_nil unknown_session.response.headers["Location"]
+    real_state = eligible_session.request.session.fetch(:withdrawal_ceremony_reentry)
+    dummy_state = unknown_session.request.session.fetch(:withdrawal_ceremony_reentry)
+
+    assert_equal [false, true], [real_state.fetch("dummy"), dummy_state.fetch("dummy")]
+    assert_equal JSON.generate(real_state).bytesize, JSON.generate(dummy_state).bytesize
+    session_key = Rails.application.config.session_options.fetch(:key)
+
+    assert_equal Rack::Utils.unescape(eligible_session.cookies[session_key]).bytesize,
+                 Rack::Utils.unescape(unknown_session.cookies[session_key]).bytesize
+    assert_operator Rack::Utils.unescape(eligible_session.cookies[session_key]).bytesize, :<, 4096
     assert_equal eligible_session.response.headers["Content-Type"],
                  unknown_session.response.headers["Content-Type"]
     assert_equal eligible_session.response.headers["Cache-Control"],
@@ -262,6 +275,19 @@ class WithdrawalCeremonyReentryTest < ActionDispatch::IntegrationTest
     end
 
     assert_equal eligible_session.response.status, unknown_session.response.status
+    assert_equal 200, eligible_session.response.status
+    assert_nil eligible_session.response.headers["Location"]
+    assert_nil unknown_session.response.headers["Location"]
+    real_state = eligible_session.request.session.fetch(:withdrawal_ceremony_reentry)
+    dummy_state = unknown_session.request.session.fetch(:withdrawal_ceremony_reentry)
+
+    assert_equal [false, true], [real_state.fetch("dummy"), dummy_state.fetch("dummy")]
+    assert_equal JSON.generate(real_state).bytesize, JSON.generate(dummy_state).bytesize
+    session_key = Rails.application.config.session_options.fetch(:key)
+
+    assert_equal Rack::Utils.unescape(eligible_session.cookies[session_key]).bytesize,
+                 Rack::Utils.unescape(unknown_session.cookies[session_key]).bytesize
+    assert_operator Rack::Utils.unescape(eligible_session.cookies[session_key]).bytesize, :<, 4096
     assert_equal eligible_session.response.headers["Content-Type"],
                  unknown_session.response.headers["Content-Type"]
     assert_equal eligible_session.response.headers["Cache-Control"],

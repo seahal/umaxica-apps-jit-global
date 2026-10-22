@@ -186,7 +186,7 @@ Current coverage is:
 | Credential path             | Mitigation                                                      |
 | --------------------------- | --------------------------------------------------------------- |
 | App email OTP sign-in       | Dummy OTP generation and minimum elapsed verification on update |
-| App/com/org passkey sign-in | `MinimumResponseBudget` on challenge/options endpoints          |
+| App/com/org passkey sign-in | `MinimumResponseBudget` on options and verification endpoints   |
 | Org Entra sign-in           | `MinimumResponseBudget` on authorization start                  |
 
 New credential endpoints must be added to the contract test. If an endpoint intentionally opts out

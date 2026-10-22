@@ -115,8 +115,8 @@ module Auth
               ri = current_region_identifier
 
               {
-                title: t("sign.app.in.mfa.passkey.title"),
-                description: t("sign.app.in.mfa.passkey.description"),
+                title: t("sign.com.in.mfa.passkey.title"),
+                description: t("sign.com.in.mfa.passkey.description"),
                 form: {
                   action: auth_com_sign_in_challenge_passkey_path(
                     ri: ri, **sign_in_mfa_binding_params,
@@ -128,10 +128,10 @@ module Auth
                   challenge_id: @passkey_challenge_id.to_s,
                   # The challenge options are the payload `navigator.credentials.get` needs.
                   request_options: @passkey_request_options,
-                  submit_label: t("sign.app.in.mfa.passkey.authenticate"),
+                  submit_label: t("sign.com.in.mfa.passkey.authenticate"),
                 },
                 back_link: {
-                  label: t("sign.app.in.mfa.passkey.back"),
+                  label: t("sign.com.in.mfa.passkey.back"),
                   href: auth_com_sign_in_challenge_path(
                     ri: ri, **sign_in_mfa_binding_params,
                   ),

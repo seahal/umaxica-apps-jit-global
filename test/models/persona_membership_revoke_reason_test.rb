@@ -12,12 +12,6 @@
 require "test_helper"
 
 class PersonaMembershipRevokeReasonTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    reason = PersonaMembershipRevokeReason.new(id: 9)
-
-    assert_predicate reason, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, PersonaMembershipRevokeReason::NOTHING
     assert_equal 1, PersonaMembershipRevokeReason::MANUAL

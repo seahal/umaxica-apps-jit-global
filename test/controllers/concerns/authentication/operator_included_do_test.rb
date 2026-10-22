@@ -14,10 +14,6 @@ class AuthenticationOperatorIncludedDoTest < ActiveSupport::TestCase
     assert_includes Harness.included_modules, AuthenticationBase
   end
 
-  test "included do includes AuthorizationAudit module" do
-    assert_includes Harness.included_modules, AuthorizationAudit
-  end
-
   test "included do does not register refresh callback" do
     refresh_callbacks =
       Harness._process_action_callbacks.select { |callback|

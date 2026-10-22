@@ -19,6 +19,56 @@ controller/service code should use them consistently.
 Do not use `it` as an abbreviation for internal target. The internal flow abstraction is `nt`
 because it is a navigation target.
 
+## Required Gateway Selection
+
+**Accepted policy revision: 2026-10-22; runtime implementation pending.** This section records the
+required Rails navigation policy, not a claim that all existing callers enforce it. See the
+[redirector ADR amendment](../../adr/secure-jump-link-redirector.md#amendment-required-jump-and-away-selection-2026-10-22).
+
+Rails MUST classify the final destination against the initiating surface before selecting a gateway:
+
+| Initiating surface and final destination | Required route |
+| --- | --- |
+| Same origin (scheme, host and effective port) | Validated local path; direct navigation is permitted. |
+| Different subdomains of the same registered application domain, such as `www.umaxica.app` to `auth.umaxica.app` | Jump through `https://jump.umaxica.net`; an approved directed edge is also required. |
+| Different TLDs, such as `www.umaxica.app` to `www.umaxica.com` | Away through `https://away.umaxica.net`, including when both sites are first-party. |
+| Any other external website | Away through `https://away.umaxica.net`, subject to explicit destination authorization. |
+
+Subdomain changes remain separate trust boundaries even when both hosts are owned by Umaxica.
+Sharing only a TLD is insufficient to qualify for Jump: `umaxica.app` and `example.app` are separate
+domains. Classification MUST use normalized, explicitly registered application domains and exact
+origin matching, rather than substring tests or a guessed last-two-label domain. Scheme or port
+changes outside the approved HTTPS origin registry MUST be rejected.
+
+The classifier uses the final destination, not the gateway's own `.net` domain. Sending a
+same-domain handoff to Jump therefore does not recursively classify the gateway hop as an Away
+navigation. Gateway selection MUST be server-owned; caller parameters cannot select or override it.
+
+The common `xt` facade MUST validate the chosen gateway against exactly the two HTTPS root origins
+above, including scheme and effective port. It MUST reject userinfo, alternate hosts or ports,
+suffix lookalikes, and caller-supplied gateway URLs. Destination paths, queries and authorization
+remain independently validated; an allowlisted gateway does not make its destination trusted.
+
+Rails `allow_other_host` controls `redirect_to`, not URL generation or `link_to`, and is a boolean
+bypass of the same-host check rather than a host allowlist. `allow_other_host: true` MUST be confined
+to the common facade after exact gateway-origin validation. Cross-origin navigation emitted by
+Rails through links, redirect responses or browser navigation targets MUST use the selected gateway;
+generating an absolute URL with a Rails helper does not exempt it from this policy. Protocol fields
+such as a registered OIDC `redirect_uri` continue to identify the final receiver; they MUST NOT be
+rewritten to name a gateway.
+
+The selected gateway MUST authorize its final destination independently. Same-domain Jump still
+requires the approved source/destination graph; cross-TLD Away does not grant cross-surface session,
+identity or state sharing. Existing signed-token, receiver verification, CSRF, state, nonce, PKCE,
+authentication and authorization requirements remain in force. This navigation policy does not
+convert cross-origin POSTs or server-to-server HTTP calls into redirect-based transport; their
+method, payload and security contracts require separate review.
+
+Until Away's authorization and wire contract is implemented, navigation requiring Away MUST fail
+closed. It MUST NOT fall back to a direct destination redirect or Jump. Existing direct cross-host
+callers and the single-gateway implementation require follow-up implementation; this documentation
+revision changes no Rails, Jump or Away runtime behavior.
+
 ## Path Targets
 
 `pt` is path-plus-query only. The path target resolver rejects:
@@ -86,8 +136,8 @@ the caller. The resolver strips dangerous keys including:
 - `continue`
 - `url`
 
-`allow_other_host: true` may appear only inside the `xt` facade in `Common::Redirect`. Direct use in
-controllers, concerns, or services is forbidden.
+`allow_other_host: true` MUST appear only inside the common `xt` facade after the gateway validation
+described above. Controllers and other callers MUST delegate cross-origin navigation to that facade.
 
 ## Priority
 
@@ -142,5 +192,7 @@ bin/audit_redirects
 ```
 
 The audit reports direct parameter redirects, direct `allow_other_host: true`, legacy `rt` /
-`return_to` reads, and old safe-return helper names. The security test suite also enforces that
-production `allow_other_host: true` is limited to the `xt` facade.
+`return_to` reads, and old safe-return helper names. These reports do not establish that the required
+gateway policy is implemented. Existing direct
+`allow_other_host: true` callers remain implementation gaps; enforcement tests for the revised
+Jump/Away policy are pending with the runtime work.

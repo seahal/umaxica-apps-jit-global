@@ -293,7 +293,9 @@ section summarizes the binding constraints.
 ## 6b. Session Cookie
 
 - Cookie name: `__Host-session`.
-- Attributes: `HttpOnly`, `Secure`, `SameSite=Lax`, partitioned (CHIPS) in production.
+- Attributes: `HttpOnly`, `Secure`, `SameSite=Lax`, host-only (no `Domain` attribute, in every
+  environment), not partitioned. Each FQDN owns its own session; no session is shared across
+  subdomains.
 - `SameSite=Lax` (not Strict) is required to allow OIDC redirect flows to set the session cookie
   after a cross-site redirect.
 - SIer MUST NOT change these attributes.

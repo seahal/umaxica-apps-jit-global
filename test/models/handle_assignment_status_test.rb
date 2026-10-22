@@ -12,12 +12,6 @@
 require "test_helper"
 
 class HandleAssignmentStatusTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    status = HandleAssignmentStatus.new(id: 9)
-
-    assert_predicate status, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, HandleAssignmentStatus::INACTIVE
     assert_equal 2, HandleAssignmentStatus::PENDING

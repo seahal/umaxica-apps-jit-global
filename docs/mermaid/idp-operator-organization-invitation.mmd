@@ -4,6 +4,11 @@ stateDiagram-v2
     state "consumed_at present" as consumed
     state "expired (derived)" as expired
     [*] --> active
+    note right of active
+        Legacy admission and issuance refuse pending Bureau migration.
+        Acceptance does not consume or provision an identity graph.
+        consume! remains a low-level stored-record primitive.
+    end note
     active --> consumed: consume!
     active --> expired: clock reaches deadline
     consumed --> [*]

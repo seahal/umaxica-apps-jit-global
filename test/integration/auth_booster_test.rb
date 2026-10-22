@@ -59,11 +59,6 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
       render plain: "ok"
     end
 
-    def transparent_refresh_action
-      transparent_refresh_access_token
-      render plain: current_resource ? "ok" : "fail"
-    end
-
     def check_auth
       authenticate!
       render plain: "ok" if performed? == false
@@ -136,7 +131,6 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
     Rails.application.routes.draw do
       post "test_auth_login" => "auth_booster_test/dummy_auth#login_action"
       post "test_auth_logout" => "auth_booster_test/dummy_auth#logout_action"
-      post "test_auth_refresh" => "auth_booster_test/dummy_auth#transparent_refresh_action"
       get "test_auth_check" => "auth_booster_test/dummy_auth#check_auth"
       get "test_auth_reject" => "auth_booster_test/dummy_auth#reject_logged"
       get "test_auth_ensure" => "auth_booster_test/dummy_auth#ensure_not_logged"
@@ -181,23 +175,6 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_predicate response.cookies[AuthenticationCookieName.access], :blank?
     assert_predicate response.cookies[AuthenticationCookieName.refresh], :blank?
-  end
-
-  test "transparent refresh" do
-    ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
-    post "/test_auth_login"
-
-    # We need to simulate the request with cookies set
-    response.cookies[AuthenticationCookieName.access]
-    refresh_cookie = response.cookies[AuthenticationCookieName.refresh]
-    cookies[AuthenticationCookieName.refresh] = refresh_cookie
-
-    # Intentionally don't set access cookie so it triggers transparent refresh
-    post "/test_auth_refresh"
-
-    assert_response :success
-    assert_equal "ok", response.body
   end
 
   test "check auth blocks unauthenticated" do

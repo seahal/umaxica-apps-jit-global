@@ -59,6 +59,10 @@ class Base::EdgeV0TokenRefreshesTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert response.parsed_body["refreshed"]
+      rotated_refresh = response.cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+
+      assert_predicate rotated_refresh, :present?
+      assert_not_equal refresh_plain, rotated_refresh
       access_claims = JWT.decode(response.cookies[AuthenticationBase::ACCESS_COOKIE_KEY], nil, false).first
 
       assert_operator Time.at(access_claims.fetch("exp")).utc, :<=, absolute_expiry

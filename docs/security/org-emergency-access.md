@@ -79,9 +79,16 @@ a change to one method, not a hunt through controllers, concerns, views, and tok
 consulted twice per ceremony -- when the options are issued and again at verification -- because
 eligibility can be withdrawn between the two requests.
 
-Ineligibility is not observable from the options response: every syntactically valid identifier
-receives the same padded, anonymised `allowCredentials` set, so Emergency eligibility is not an
-enumeration oracle.
+Every syntactically valid identifier receives an empty `allowCredentials` array. Real credential
+IDs are never mixed with random padding: repeated responses could otherwise identify the stable
+real IDs. Challenges retain the selected Operator's fixed-length public reference, or an invalid
+fixed-length sentinel for unknown/ineligible selections. A sentinel challenge cannot authenticate
+any Operator. See [response nondisclosure](../../adr/credential-response-nondisclosure.md).
+
+Org registration requires discoverable credentials. Existing non-discoverable keys remain usable
+in normal Entra-bound sign-in but require re-registration before Emergency Access can use them.
+No database update can convert a non-discoverable authenticator credential. Establish usable
+discoverable keys before depending on Emergency Access during an Entra outage.
 
 Nothing reachable from an Emergency session can write the inputs this policy reads. An Emergency
 session cannot grant or widen its own eligibility.

@@ -22,7 +22,7 @@ module SignedSessionReference
       find_logic = -> { find_by(id: token_id, public_id: public_id) }
 
       connection_owner.connected_to(role: signed_ref_lookup_role, &find_logic)
-    rescue ActiveSupport::MessageVerifier::InvalidSignature
+    rescue ActiveSupport::MessageVerifier::InvalidSignature, JSON::ParserError
       nil
     end
 
@@ -41,7 +41,7 @@ module SignedSessionReference
         end
 
       connection_owner.connected_to(role: signed_ref_lookup_role, &find_logic)
-    rescue ActiveSupport::MessageVerifier::InvalidSignature
+    rescue ActiveSupport::MessageVerifier::InvalidSignature, JSON::ParserError
       []
     end
 

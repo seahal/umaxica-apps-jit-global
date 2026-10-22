@@ -4,6 +4,13 @@
 
 Accepted (2026-10-06) as the target architecture for the `two.md` implementation cycle.
 
+Amended (2026-10-21) by [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md):
+APP/COM Passkey sign-in selects an Identity through its effective Email or Telephone binding before
+challenge issuance and verifies credential ownership against that server-fixed Identity. Contact
+lifecycle, immutable ownership and handle contracts remain accepted. The successor also expressly
+restores the four-slot target below over the ten-credential decision of 2026-10-19; enforcement and
+existing-data transition remain unverified. This amendment records design, not implementation.
+
 ## Context
 
 Credential lookup currently mixes pending candidates with effective bindings and, for app Secrets,

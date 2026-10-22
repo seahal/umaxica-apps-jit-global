@@ -45,6 +45,14 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
 
   # Prefixes that answer with JSON, XML or plain text. Listed rather than inferred
   # so that a new HTML route is never silently treated as out of scope.
+  # Warp answers an anonymous direct dashboard request with 404 rather than a redirect; see
+  # test/controllers/warp/*/dashboards_controller_test.rb.
+  ANONYMOUS_NOT_FOUND_PATHS = [
+    ENV.fetch("PUBLIC_WARP_SERVICE_URL"),
+    ENV.fetch("PUBLIC_WARP_CORPORATE_URL"),
+    ENV.fetch("PUBLIC_WARP_STAFF_URL"),
+  ].index_with { ["/dashboard"] }.freeze
+
   NON_HTML_PATH_PATTERNS = [
     %r{\A/health(/(liveness|readiness|startup))?\z},
     %r{\A/\.well-known/},
@@ -568,37 +576,41 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
   # "every routed GET HTML page carries a non-empty title" regardless of which host broke. Splitting
   # by host keeps the same per-request assertions and lets `parallelize` spread the 14 sweeps across
   # workers instead of serializing them behind a single slow test.
+  # One test per surface host, not one test sweeping all 14 hosts serially: that single-test form
+  # measured 135s alone, ran under one Minitest worker and named every failure the same regardless
+  # of which host broke. Splitting by host lets `parallelize` spread the sweeps across workers.
+  #
+  # Each host is swept only over the routes it declares in its own host constraint. Sending every
+  # route to every host made almost every request a 404 that the sweep then skipped, so a host
+  # could pass while checking nothing. Any other unexpected status or an exception now fails.
   ROOT_SURFACES.each do |surface|
     test "every routed GET HTML page carries a non-empty title on #{surface.fetch(:tld)} " \
          "(#{surface.fetch(:host)})" do
-      host! surface.fetch(:host)
+      host = surface.fetch(:host)
+      host! host
+      paths = host_html_get_paths(host)
+
+      assert_predicate paths, :any?, "#{host} declares no GET HTML route to sweep"
+
       checked = []
-      attempted = 0
-
-      html_get_paths.each do |path|
-        attempted += 1
+      unexpected = []
+      paths.each do |path|
         get(path)
-      rescue StandardError
-        next
-      else
-        next unless response.successful? && response.media_type.to_s.start_with?("text/html")
 
-        checked << path
+        if response.successful? && response.media_type.to_s.start_with?("text/html")
+          checked << path
 
-        assert_equal 1, css_select("title").size, "#{path} on #{surface.fetch(:host)} needs exactly one <title>"
-        assert_predicate rendered_title.strip, :present?,
-                         "#{path} on #{surface.fetch(:host)} renders an empty <title>"
-        assert_title_shape(rendered_title, surface.fetch(:tld))
+          assert_equal 1, css_select("title").size, "#{path} on #{host} needs exactly one <title>"
+          assert_predicate rendered_title.strip, :present?, "#{path} on #{host} renders an empty <title>"
+          assert_title_shape(rendered_title, surface.fetch(:tld))
+        elsif response.server_error? ||
+            (response.not_found? && ANONYMOUS_NOT_FOUND_PATHS.fetch(host, []).exclude?(path))
+          unexpected << "GET #{path}: #{response.status}"
+        end
       end
 
-      # Not every host in ROOT_SURFACES necessarily has a route that both resolves and renders
-      # successfully in every environment (routing/env-host mismatches are a separate, pre-existing
-      # concern from this sweep's own job). The original single-test form only asserted this in
-      # aggregate across all 14 hosts, which a host contributing zero checks here still satisfies
-      # as long as at least one other host does; assert that aggregate, not a per-host minimum.
-      assert_equal html_get_paths.length, attempted,
-                   "#{surface.fetch(:host)} title sweep must attempt every candidate path"
-      puts "HTML title sweep on #{surface.fetch(:host)}: #{checked.size} responses checked"
+      assert_empty unexpected, "#{host} answered its own routes unexpectedly:\n#{unexpected.join("\n")}"
+      puts "HTML title sweep on #{host}: #{checked.size} of #{paths.size} responses checked"
     end
   end
 
@@ -685,5 +697,13 @@ class HtmlTitleContractTest < ActionDispatch::IntegrationTest
 
   def html_get_paths
     static_get_paths - non_html_get_paths
+  end
+
+  def host_html_get_paths(host)
+    Rails.application.routes.routes
+      .select { |route| route.verb == "GET" && Array(route.constraints[:host]).include?(host) }
+      .map { |route| route.path.spec.to_s.sub(/\(\.:format\)\z/, "") }
+      .reject { |path| path.include?(":") || path.include?("*") || path.include?("(") }
+      .uniq - non_html_get_paths
   end
 end

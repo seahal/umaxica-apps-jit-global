@@ -1267,10 +1267,6 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
     assert_not_equal STORED_PNG.b, response.body.b
   end
 
-  test "com exposes no Avatar image route" do
-    assert_not Rails.application.routes.named_routes.key?(:base_com_dashboard_avatar_image)
-  end
-
   private
 
   def provision_avatar!

@@ -13,12 +13,6 @@ require "test_helper"
 class OrgPreferenceChronicleEventTest < ActiveSupport::TestCase
   fixtures :org_preference_chronicle_events
 
-  test "accepts integer ids" do
-    record = OrgPreferenceChronicleEvent.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "includes all default ids" do
     ids = OrgPreferenceChronicleEvent.pluck(:id)
 

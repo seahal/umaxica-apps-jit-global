@@ -465,3 +465,56 @@ exception. The Base finalization path owns passkey/Secret registration handoff, 
 handoff and continuation, and all three realm boundaries use the same explicit result contract.
 Earlier Side/Wide and unfinished-transition passages above are historical and superseded where they
 conflict with the current routes, Warp identifiers, or lifecycle diagrams.
+
+## OIDC Result URL and E1 amendment (2026-10-21)
+
+**Accepted (2026-10-21); URL change Not Implemented.** This amendment changes the Auth OIDC
+Result public path on the applicable APP, COM, and ORG Auth hosts only:
+
+| Boundary | Before | Accepted target |
+| --- | --- | --- |
+| Auth OIDC Result | GET/POST `/sign/oidc/handoff` | GET/POST `/sign/result` |
+| Auth Local Result | GET/POST `/sign/handoff` | Unchanged |
+| Base OIDC Authorization | GET/POST `/oauth/authorize` | Unchanged |
+| Base Local Completion | GET/POST `/sign/completion` | Unchanged |
+
+This partially supersedes only the old Auth OIDC Result path references in this ADR, including
+its OIDC result transport amendment. Existing Ruby Controller, Concern, Service, and Route Helper
+names are retained in principle. No old-path compatibility route or redirect is adopted. OIDC
+and Local internal authentication mechanisms remain separate.
+
+Because `/sign/result` does not name OIDC, the saved parent OIDC Authorization Transaction and
+expected Result Purpose MUST identify the permitted result. Local Results MUST be refused as OIDC
+Results, and OIDC Results MUST be refused as Local Results. Preserve existing surface, actor,
+Ceremony, Browser Binding, Result Reference, generation, expiry, CSRF, GET/POST, 303 continuation,
+and retry/finalization idempotency contracts. The URL name provides no authority.
+
+### Historical transport description versus current source
+
+The earlier OIDC result transport amendment describes an Auth-rendered cross-surface POST carrying
+the opaque result to Base. Read-only local inspection on 2026-10-20 at
+`febec3225cc9a0cfa53b9cbe817d20d366aba5a2` instead found:
+
+1. `AuthOidcResultHandoff#show` renders an Auth-local continuation form.
+2. Its POST records/issues the result and sends a 303 to Base `/oauth/authorize` with
+   `result_ref` and `transaction_ref` lookup references.
+3. `OidcAuthorizationResultPost` renders the Base-local continuation on GET after checking the
+   parent/browser binding. A receiver-local, Rails-CSRF-protected POST validates and accepts the
+   stored result; GET does not finalize it. References are not the opaque result code or a grant.
+
+The direct cross-surface POST description is historical and is partially superseded as a current
+transport description by this clarification. This is not a protocol change introduced by the URL
+rename, does not reinstate origin/null-origin as a substitute for Base CSRF, and does not authorize
+raw result capabilities in URLs. Routes still use `/sign/oidc/handoff` in local source. Tests were
+inspected where relevant but not run; no runtime, route, or schema is changed or certified here.
+
+### Admission and E1 relationship
+
+[Sign-up Flow Admission Binding and Cardinality](sign-up-flow-admission-binding-and-cardinality.md)
+defines Admission as Base-to-Auth permission, not the complete exchange; Redemption is not
+successful authentication or Session issuance. It adds APP/COM Flow ownership and distinguishes
+unused Admission uniqueness from admitted Ceremony uniqueness. The 2026-10-06 statement that
+redeemed OIDC cancel-and-start is unimplemented is historical for that cycle: current local source
+has the bounded D06 first-page Switch (old Ceremony cancellation and new Admission under the same
+neutral parent). That does not settle progressed Sign-up restart or D14 distributed coordination.
+All new E1 association constraints remain implementation work.

@@ -10,6 +10,43 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   # opts into a deterministic MemoryStore.
   rate_limit_counters!
 
+  { unverified: VisitorEmailStatus::UNVERIFIED,
+    pending_signup: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
+    verified_without_binding: VisitorEmailStatus::VERIFIED, }.each do |label, status|
+    test "unbound #{label} email cannot authenticate or dispatch login OTP" do
+      owner = Visitor.create!(status_id: VisitorStatus::ACTIVE, birthdate: "2000-01-01")
+      VisitorEmailStatus.find_or_create_by!(id: status)
+      email = VisitorEmail.create!(
+        visitor: owner, address: "unbound-#{label}-com@example.test", confirm_policy: "1",
+        visitor_email_status_id: status,
+      )
+      original_contact = email.attributes
+
+      assert_no_enqueued_jobs only: OtpNotifierEmailDeliveryJob do
+        post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+             params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test" },
+             headers: { "Host" => @host }
+      end
+
+      assert_response :redirect
+      assert_nil session[:user_email_authentication_id]
+      assert_nil email.reload.binding_finalized_at
+
+      assert_no_difference("VisitorToken.count") do
+        patch auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+              params: { :user_email => { pass_code: "000000" }, "cf-turnstile-response" => "test" },
+              headers: { "Host" => @host }
+      end
+
+      assert_response :unprocessable_content
+      contact_unchanged = email.reload.attributes == original_contact
+
+      assert contact_unchanged, "Unbound candidate must remain unchanged by login attempts"
+      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
+      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
+    end
+  end
+
   include ActiveSupport::Testing::TimeHelpers
   include ActiveJob::TestHelper
 

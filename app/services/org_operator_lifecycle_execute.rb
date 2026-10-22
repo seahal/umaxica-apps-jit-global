@@ -63,7 +63,10 @@ class OrgOperatorLifecycleExecute
 
   def create_invitation!
     result = OrgOperatorLifecycleInvitationIssuer.call(request: request, actor: actor)
-    raise ActiveRecord::RecordInvalid, request unless result.success?
+    unless result.success?
+      request.errors.add(:base, result.error)
+      raise ActiveRecord::RecordInvalid, request
+    end
 
     result.invitation
   end

@@ -12,12 +12,6 @@
 require "test_helper"
 
 class AvatarPermissionTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    permission = AvatarPermission.new(id: 9)
-
-    assert_predicate permission, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, AvatarPermission::NOTHING
     assert_equal 2, AvatarPermission::READ

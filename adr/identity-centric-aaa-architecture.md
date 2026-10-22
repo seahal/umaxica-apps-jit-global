@@ -86,6 +86,23 @@ The principle preserves the existing authority boundaries:
   (`adr/global-regional-database-ownership.md`, section 7.1).
 - Accounting is not a reason to create a central authorization authority.
 
+## Clarification: app Accounting capability and AAA Accounting (2026-10-21)
+
+The app-specific `Accounting` capability is related conceptually to `app` Identity and is
+available only on the `app` surface. It is not the `Accounting` responsibility in AAA.
+Neither `org` nor `com` gains an app Accounting capability through this ADR.
+
+AAA **Identity Security Accounting** remains a cross-cutting traceability responsibility
+for `app`, `org`, and `com`. Authentication and authorization decisions, security-relevant
+actions, and their outcomes remain subject to the existing Chronicle, Occurrence, and
+application-boundary contracts. An `org` operation may therefore require security audit
+evidence even though `org` has no app-specific Accounting capability.
+
+This clarification does not choose app Accounting tables, direct Identity-binding foreign
+keys, recorder APIs, event schemas, or retention periods. It does not turn an RP/IdP
+Identity binding into a resource owner or an authorization principal. The Pending
+Decisions in this ADR remain pending.
+
 ## Accounting and Chronicle
 
 Accounting and Chronicle are related but not the same:

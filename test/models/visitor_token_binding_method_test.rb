@@ -12,12 +12,6 @@
 require "test_helper"
 
 class VisitorTokenBindingMethodTest < ActiveSupport::TestCase
-  test "accepts integer ids" do
-    method = VisitorTokenBindingMethod.new(id: 9)
-
-    assert_predicate method, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 0, VisitorTokenBindingMethod::NOTHING
     assert_equal 1, VisitorTokenBindingMethod::DBSC

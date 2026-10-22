@@ -19,12 +19,6 @@ class IpOccurrenceStatusTest < ActiveSupport::TestCase
     assert_equal 0, nothing.id
   end
 
-  test "accepts integer ids" do
-    record = IpOccurrenceStatus.new(id: 9)
-
-    assert_predicate record, :valid?
-  end
-
   test "constants are defined" do
     assert_equal 1, IpOccurrenceStatus::ACTIVE
     assert_equal 0, IpOccurrenceStatus::NOTHING
@@ -34,7 +28,9 @@ class IpOccurrenceStatusTest < ActiveSupport::TestCase
     assert_status_association(IpOccurrenceStatus, :ip_occurrences)
   end
 
-  test "ensure_defaults! creates default records" do
+  test "ensure_defaults! restores a missing default record" do
+    IpOccurrenceStatus.find(IpOccurrenceStatus::ACTIVE).destroy!
+
     IpOccurrenceStatus.ensure_defaults!
 
     IpOccurrenceStatus::DEFAULTS.each do |id|

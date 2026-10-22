@@ -12,9 +12,9 @@ class OrgOperatorLifecycleRequestCreate
   end
 
   def call
-    unless org_owner_authorized?
+    if attributes[:action].to_s == OperatorLifecycleRequest::ACTION_JOIN
       request = OperatorLifecycleRequest.new(request_attributes)
-      request.errors.add(:organization_id, :not_authorized)
+      request.errors.add(:organization_id, OrgInvitationService::MIGRATION_REQUIRED_MESSAGE)
       return OrgOperatorLifecycleResult.new(
         success: false, request: request, error: request.errors.full_messages.to_sentence,
         invitation: nil,
@@ -61,17 +61,5 @@ class OrgOperatorLifecycleRequestCreate
 
   def normalized_target_email
     attributes[:target_email].to_s.downcase.strip.presence
-  end
-
-  # Only the organization owner may initiate a JOIN lifecycle request for that org.
-  # Non-JOIN actions carry no organization_id and are not org-scoped (the 4-eyes approval
-  # is the only control for those actions).
-  def org_owner_authorized?
-    return true unless attributes[:action].to_s == OperatorLifecycleRequest::ACTION_JOIN
-
-    org_id = attributes[:organization_id].to_i
-    return false if org_id.zero?
-
-    OperatorOrganization.find_by(id: org_id)&.operator_id == actor.id
   end
 end

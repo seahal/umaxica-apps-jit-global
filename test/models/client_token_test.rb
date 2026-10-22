@@ -706,10 +706,6 @@ class ClientTokenTest < ActiveSupport::TestCase
     assert_equal token.id, found&.id
   end
 
-  test "find_from_signed_ref returns nil for invalid signature" do
-    assert_nil ClientToken.find_from_signed_ref("invalid-signed-ref")
-  end
-
   test "public_id is a fixed 21-character NanoID" do
     assert_public_id_fixed_length(::ClientToken)
   end

@@ -54,6 +54,108 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :see_other
   end
 
+  ["confirm_policy"].each do |consent_field|
+    { missing: :omit,
+      null: nil,
+      empty: "",
+      unchecked: "0",
+      false_value: false,
+      zero: 0,
+      unsupported: "yes", }.each do |label, consent_value|
+      test "signup admission rejects #{consent_field} #{label} without creating artifacts" do
+        contact_params = { raw_address: "admission-first@example.com", confirm_policy: "1" }
+        if consent_value == :omit
+          contact_params.delete(consent_field.to_sym)
+        else
+          contact_params[consent_field.to_sym] = consent_value
+        end
+
+        assert_no_difference(
+          ["Client.count", "ClientEmail.count", "ClientSignUpFlow.count", "ClientToken.count",
+           "enqueued_jobs.size",],
+        ) do
+          post auth_app_sign_up_email_url(ri: "jp"),
+               params: { :client_email => contact_params, "cf-turnstile-response" => "test" },
+               as: :json,
+               headers: { "X-CSRF-Token" => "test-csrf-token", "Sec-Fetch-Site" => "same-origin" }
+        end
+
+        assert_response :unprocessable_content
+        assert_nil session[:app_sign_up_flow_locator]
+      end
+    end
+  end
+
+  { missing_captcha: [nil, { "success" => false }],
+    invalid_captcha: ["invalid-token", { "success" => false }],
+    unavailable_captcha: ["outage-token", { "success" => false, "unavailable" => true }],
+    missing_consent: ["test", { "success" => true }],
+    invalid_identifier: ["test", { "success" => true }], }.each do |reason, (token, verification)|
+    test "signup admission preserves the active flow after #{reason} on replacement" do
+      post auth_app_sign_up_email_url(ri: "jp"),
+           params: { :client_email => { raw_address: "admission-first@example.com", confirm_policy: "1" },
+                     "cf-turnstile-response" => "test", },
+           headers: { "X-CSRF-Token" => "test-csrf-token", "Sec-Fetch-Site" => "same-origin" }
+
+      assert_response :redirect
+      original_locator = session[:app_sign_up_flow_locator].dup
+      flow = ClientSignUpFlow.find_by!(public_id: original_locator.fetch("public_id"))
+      candidate = ClientEmail.find(flow.pending_contact_id)
+      owner = Client.find(flow.principal_id)
+      flow_facts = flow.attributes
+      candidate_facts = candidate.attributes
+      owner_facts = owner.attributes
+      contact_params = { raw_address: "admission-first@example.com", confirm_policy: "1" }
+      contact_params[:raw_address] = "admission-next@example.com"
+      contact_params.delete(:confirm_policy) if reason == :missing_consent
+      contact_params[:raw_address] = "invalid" if reason == :invalid_identifier
+      request_params = { client_email: contact_params }
+      request_params["cf-turnstile-response"] = token if token
+      TurnstileVerifierStub.challenge_response = verification
+
+      assert_no_difference(
+        ["Client.count", "ClientEmail.count", "ClientSignUpFlow.count", "ClientToken.count",
+         "enqueued_jobs.size",],
+      ) do
+        post auth_app_sign_up_email_url(ri: "jp"), params: request_params,
+                                                   headers: {
+                                                     "X-CSRF-Token" => "test-csrf-token",
+                                                     "Sec-Fetch-Site" => "same-origin",
+                                                   }
+      end
+
+      assert_response :unprocessable_content
+      locator_preserved = session[:app_sign_up_flow_locator] == original_locator
+
+      assert locator_preserved, "Rejected replacement must preserve the browser locator"
+      flow_preserved = flow.reload.attributes == flow_facts
+
+      assert flow_preserved, "Rejected replacement must preserve flow facts"
+      candidate_preserved = candidate.reload.attributes == candidate_facts
+
+      assert candidate_preserved, "Rejected replacement must preserve contact facts"
+      owner_preserved = owner.reload.attributes == owner_facts
+
+      assert owner_preserved, "Rejected replacement must preserve owner facts"
+    end
+  end
+
+  test "signup admission accepts explicit JSON boolean consent" do
+    assert_difference(["Client.count", "ClientEmail.count", "ClientSignUpFlow.count"], 1) do
+      post auth_app_sign_up_email_url(ri: "jp"),
+           params: { :client_email => { raw_address: "explicit-consent@example.com", confirm_policy: true },
+                     "cf-turnstile-response" => "test", },
+           as: :json,
+           headers: { "X-CSRF-Token" => "test-csrf-token", "Sec-Fetch-Site" => "same-origin" }
+    end
+
+    assert_response :redirect
+    flow = ClientSignUpFlow.find_by!(public_id: session.dig(:app_sign_up_flow_locator, "public_id"))
+
+    assert_equal "email", flow.pending_contact_type
+    assert_nil ClientEmail.find(flow.pending_contact_id).binding_finalized_at
+  end
+
   teardown do
     TurnstileVerifierStub.challenge_enabled = false
     TurnstileVerifierStub.challenge_response = nil

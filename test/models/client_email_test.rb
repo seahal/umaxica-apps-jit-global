@@ -75,10 +75,6 @@ class ClientEmailTest < ActiveSupport::TestCase
     assert_operator ClientEmail, :<, AppPrincipalRecord
   end
 
-  test "should include Email concern" do
-    assert_includes ClientEmail.included_modules, Email
-  end
-
   test "should be valid with valid email and policy confirmation" do
     user_email = ClientEmail.new(@valid_attributes)
 

@@ -29,12 +29,6 @@ class ComPreferenceStatusTest < ActiveSupport::TestCase
     assert_equal [ComPreferenceStatus::DELETED, ComPreferenceStatus::NOTHING], ids.sort
   end
 
-  test "accepts integer ids" do
-    status = ComPreferenceStatus.new(id: 3)
-
-    assert_predicate status, :valid?
-  end
-
   test "ensure_defaults! does nothing when defaults exist" do
     assert_no_difference "ComPreferenceStatus.count" do
       ComPreferenceStatus.ensure_defaults!

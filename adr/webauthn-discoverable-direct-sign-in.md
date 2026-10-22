@@ -1,8 +1,19 @@
 # Discoverable credentials for direct app and com Passkey sign-in
 
-- Status: Accepted
+- Status: Partially Superseded (2026-10-21); remaining decisions Accepted
 - Date: 2026-09-20
 - Scope: UMAXICA app and com direct Passkey sign-in
+
+## Partial supersession (2026-10-21)
+
+[Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) replaces the usernameless
+account-selection decision and actor-unbound challenge issuance below. Verification now requires
+equality between the server-selected Identity and the verified credential owner. Empty or omitted
+APP/COM `allowCredentials`, discoverable registration, UV, immutable handles, RP/Origin and replay
+protections remain accepted. The rejected identifier-first alternative below refers to the former
+real-descriptor design; it does not reject the new descriptor-free identifier-first contract.
+The original decision and rationale are retained as history. The successor is a design decision,
+not a claim of implemented or verified behavior.
 
 ## Context
 
@@ -26,7 +37,9 @@ App and com direct Passkey sign-in uses a discoverable, usernameless ceremony:
 5. Existing credential, actor, verified-PII, session-limit, historical status-103 refusal, UV,
    RP/origin, sign-count, risk, and audit checks remain in the verification path.
 6. App and com registration require `residentKey: "required"` and `userVerification: "required"`.
-   Org registration retains its current resident-key policy.
+   Org registration originally retained its resident-key policy. This exception is superseded by
+   [credential response nondisclosure](credential-response-nondisclosure.md): Org registration now
+   requires discoverable credentials, while normal Entra-bound assertions retain descriptors.
 7. Existing non-discoverable app/com credentials are intentionally not migrated or accepted through
    a compatibility path. Re-registration is required.
 
