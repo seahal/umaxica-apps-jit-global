@@ -148,7 +148,7 @@ class IdentityEmailCeremonyFinalCommitterTest < ActiveSupport::TestCase
   end
 
   test "commits through the locked record and writes the app Source audit" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     contact = ClientEmail.create!(user_id: actor.id, address: "locked-audit@example.test", confirm_policy: "1")
     now = ClientEmailCeremonyTransaction.database_now
     parent = ClientEmailCeremonyTransaction.create_transaction!(

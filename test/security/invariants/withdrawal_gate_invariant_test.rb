@@ -68,6 +68,7 @@ module Security
             fv5041 = :suspended
             fv5040 = create_visitor
             fv5056 = VisitorToken.create!(
+              authentication_epoch: 0,
               visitor: fv5040,
               visitor_token_status_id: VisitorTokenStatus::ACTIVE,
               visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
@@ -105,6 +106,7 @@ module Security
                     fv5049.rotate_refresh_token! unless fv5049.device_session_record.current_refresh_token_id
                     fv5050 = Time.current
                     fv5047 = OpComGrant.create!(
+                      authentication_epoch: 0,
                       visitor_token: fv5049, oidc_client_id: fv5048.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5050,
                       refresh_token_expires_at: fv5050 + 10.minutes,
@@ -155,6 +157,7 @@ module Security
             fv5022 = :suspended
             fv5021 = create_visitor
             fv5037 = VisitorToken.create!(
+              authentication_epoch: 0,
               visitor: fv5021,
               visitor_token_status_id: VisitorTokenStatus::ACTIVE,
               visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
@@ -192,6 +195,7 @@ module Security
                     fv5030.rotate_refresh_token! unless fv5030.device_session_record.current_refresh_token_id
                     fv5031 = Time.current
                     fv5028 = OpComGrant.create!(
+                      authentication_epoch: 0,
                       visitor_token: fv5030, oidc_client_id: fv5029.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5031,
                       refresh_token_expires_at: fv5031 + 10.minutes,
@@ -240,6 +244,7 @@ module Security
             fv5003 = :suspended
             fv5002 = create_visitor
             fv5018 = VisitorToken.create!(
+              authentication_epoch: 0,
               visitor: fv5002,
               visitor_token_status_id: VisitorTokenStatus::ACTIVE,
               visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
@@ -277,6 +282,7 @@ module Security
                     fv5011.rotate_refresh_token! unless fv5011.device_session_record.current_refresh_token_id
                     fv5012 = Time.current
                     fv5009 = OpComGrant.create!(
+                      authentication_epoch: 0,
                       visitor_token: fv5011, oidc_client_id: fv5010.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fv5012,
                       refresh_token_expires_at: fv5012 + 10.minutes,
@@ -338,9 +344,6 @@ module Security
 
       test "application controllers do not skip the withdrawal gate" do
         allowlist = {
-          # Base/Acme edge cookie endpoints are reviewed self-defending preference/auth cookie APIs.
-          "app/controllers/base/app/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
-          "app/controllers/base/com/edge/v0/cookies_controller.rb" => "edge cookie endpoint owns its own auth boundary",
           # DBSC endpoints must process device-session challenge state before the normal withdrawal gate.
           "app/controllers/acme/app/edge/v0/dbsc_controller.rb" =>
             "DBSC endpoint owns its device binding boundary",
@@ -384,6 +387,7 @@ module Security
       def withdrawal_client_and_headers(state)
         user = create_client
         token = ClientToken.create!(
+          authentication_epoch: 0,
           user: user, user_token_status_id: ClientTokenStatus::ACTIVE,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB, discard_at: 1.day.from_now,
         )
@@ -394,6 +398,7 @@ module Security
         client = OidcClientRegistry.find!("base-app-ww")
         now = OpAppGrant.database_now
         rp = OpAppGrant.create!(
+          authentication_epoch: 0,
           client_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
           refresh_token_expires_at: now + 10.minutes,
@@ -444,7 +449,7 @@ module Security
         Client.create!(
           status_id: ClientStatus::NOTHING,
           visibility_id: ClientVisibility::USER,
-          mfa_level_id: ClientMfaLevel::NOTHING,
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           mfa_status_id: ClientMfaStatus::UNCONFIGURED,
         )
       end
@@ -454,7 +459,7 @@ module Security
         Visitor.create!(
           status_id: VisitorStatus::NOTHING,
           visibility_id: VisitorVisibility::VISITOR,
-          mfa_level_id: VisitorMfaLevel::NOTHING,
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
         )
       end
@@ -536,7 +541,6 @@ class Security::Invariants::WithdrawalGateInvariantTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -568,7 +572,10 @@ class Security::Invariants::WithdrawalGateInvariantTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -815,7 +822,6 @@ class Security::Invariants::WithdrawalGateInvariantTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -824,7 +830,10 @@ class Security::Invariants::WithdrawalGateInvariantTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

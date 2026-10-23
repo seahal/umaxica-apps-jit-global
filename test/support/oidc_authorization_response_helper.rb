@@ -11,7 +11,8 @@ module OidcAuthorizationResponseHelper
 
     assert_equal redirect_uri, "#{target.scheme}://#{target.host}#{target.path}"
     assert_equal error, params["error"]
-    assert_equal state, params["state"]
+    state.nil? ? assert_nil(params["state"]) : assert_equal(state, params["state"])
+
     assert_predicate params["iss"], :present?
     assert_nil params["code"]
   end

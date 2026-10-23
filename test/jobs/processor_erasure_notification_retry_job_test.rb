@@ -51,12 +51,11 @@ class ProcessorErasureNotificationRetryJobTest < ActiveJob::TestCase
   def build_notification
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
     client = Client.create!(
       status_id: ClientStatus::NOTHING,
       visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     privacy_request = ClientPrivacyRequest.create!(client: client)

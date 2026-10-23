@@ -13,7 +13,7 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
       response_type: "code",
       client_id: "core-app-jp",
       redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: "state",
       nonce: "nonce",
@@ -169,7 +169,7 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "admission rechecks root expiry after Base confirmation without burning opaque entry state" do
-    token = ClientToken.create!(user: @client, created_at: ClientToken.database_now - 1.minute)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client, created_at: ClientToken.database_now - 1.minute)
     issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
       surface: "app", intent: "authentication", params: @params,
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,
@@ -210,7 +210,7 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "admission refuses a revoked root device before burning opaque entry state" do
-    token = ClientToken.create!(user: @client)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client)
     issuance = OidcAuthorizationTransactionCoordinator.issue_with_handoff!(
       surface: "app", intent: "authentication", params: @params,
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: token,

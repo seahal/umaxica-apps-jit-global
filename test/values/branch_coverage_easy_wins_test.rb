@@ -4,31 +4,6 @@
 require "test_helper"
 
 class BranchCoverageEasyWinsTest < ActiveSupport::TestCase
-  test "CoreCookieDomain covers configured match, host-only, and localhost edges" do
-    creds = Object.new
-    creds.define_singleton_method(:option) { |_key| ".umaxica.app" }
-
-    Rails.app.stub(:creds, creds) do
-      assert_equal ".umaxica.app", CoreCookieDomain.for(surface: :app, request_host: "www.umaxica.app")
-    end
-
-    host_only = Object.new
-    host_only.define_singleton_method(:option) { |_key| "HOST_ONLY" }
-
-    Rails.app.stub(:creds, host_only) do
-      assert_nil CoreCookieDomain.for(surface: :app, request_host: "www.umaxica.app")
-    end
-
-    mismatched = Object.new
-    mismatched.define_singleton_method(:option) { |_key| ".other.example" }
-
-    Rails.app.stub(:creds, mismatched) do
-      assert_equal ".umaxica.app", CoreCookieDomain.for(surface: :com, request_host: "www.umaxica.app")
-    end
-
-    assert_equal ".app.localhost", CoreCookieDomain.for(surface: :app, request_host: "www.app.localhost")
-  end
-
   test "ExternalAuthentication::LinkResult rejects unsupported status and missing peers" do
     assert_raises(ArgumentError) { ExternalAuthentication::LinkResult.new(status: :other, user: Object.new, identity: Object.new) }
     assert_raises(ArgumentError) { ExternalAuthentication::LinkResult.new(status: :linked, user: nil, identity: Object.new) }

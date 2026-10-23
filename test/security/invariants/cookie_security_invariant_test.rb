@@ -11,8 +11,8 @@ class PreferenceSecurityInvariantController < ApplicationController
     preference_auth_cookie_options(expires_at: expires_at)
   end
 
-  def test_preference_cookie_options(expires_at:, httponly:, domain: false)
-    preference_cookie_options(expires_at: expires_at, httponly: httponly, domain: domain)
+  def test_preference_cookie_options(expires_at:, httponly:)
+    preference_cookie_options(expires_at: expires_at, httponly: httponly)
   end
 
   def test_write_preference_cookie(key, value)
@@ -115,12 +115,9 @@ module Security
         end
       end
 
-      test "JS-readable mirror cookies are apex-scoped and credential cookies are host-only" do
-        [
-          ["www.umaxica.app", ".umaxica.app"],
-          ["www.umaxica.com", ".umaxica.com"],
-          ["www.umaxica.org", ".umaxica.org"],
-        ].each do |host, expected_domain|
+      # D-115: every cookie is host-only, the JS-readable mirror included (it was apex-scoped).
+      test "JS-readable mirror cookies and credential cookies are host-only" do
+        %w(www.umaxica.app www.umaxica.com www.umaxica.org).each do |host|
           controller = PreferenceSecurityInvariantController.new
           controller.request = ActionDispatch::TestRequest.create("HTTP_HOST" => host)
           controller.response = ActionDispatch::TestResponse.new
@@ -128,11 +125,9 @@ module Security
           mirror_options = controller.test_preference_cookie_options(
             expires_at: 400.days.from_now,
             httponly: false,
-            domain: true,
           )
 
-          assert_equal expected_domain, mirror_options[:domain],
-                       "mirror cookie at #{host} must be apex-scoped (#{expected_domain})"
+          assert_not mirror_options.key?(:domain), "mirror cookie at #{host} must be host-only"
           assert_not mirror_options[:httponly], "mirror cookies must not be httponly"
 
           cred_options = controller.test_preference_auth_cookie_options(expires_at: 15.minutes.from_now)

@@ -34,11 +34,16 @@ class OidcOpIdTokenVerifier
   def call
     return failure("missing_id_token") if id_token.blank?
 
-    _unverified_payload, header = JWT.decode(id_token, nil, false)
+    unverified_payload, header = JWT.decode(id_token, nil, false)
     return failure("invalid_header") unless valid_header?(header)
+    # D-144: no refetch for a token that names another issuer.
+    return failure("invalid_id_token") unless unverified_payload.is_a?(Hash) && unverified_payload["iss"] == issuer
 
-    public_key = jwks_client.public_key_for(header.fetch("kid"))
-    return failure("invalid_id_token") unless public_key
+    lookup = jwks_client.lookup(header.fetch("kid"))
+    return failure("key_unavailable") if lookup.unavailable?
+    return failure("invalid_id_token") unless lookup.found?
+
+    public_key = lookup.key
 
     payload, = JWT.decode(id_token, public_key, true, decode_options)
     return failure("invalid_id_token") unless valid_claims?(payload)

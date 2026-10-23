@@ -124,7 +124,17 @@ class OidcCallbackTestController < ApplicationController
   end
 end
 
+# The RP `state` is an ES384 JWS (D-149); a test labels a pending entry and mints a `state` whose
+# `jti` is that label, carrying the path-only target (D-151).
+module OidcCallbackSignedStateHelper
+  def signed_state(label, target: "/after")
+    OidcStateJwt.issue(client_id: "core-app-jp", target_link_uri: target, jti: label).first
+  end
+end
+
 class OidcCallbackTest < ActionDispatch::IntegrationTest
+  include OidcCallbackSignedStateHelper
+
   self.fixture_table_names = []
 
   setup do
@@ -181,7 +191,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     assert_response :redirect
@@ -198,10 +208,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
                              flunk("token exchange should not run for scalar-only state")
                            },
     ) do
-      get "/oidc/callback", params: { code: "abc", state: "state" }
+      get "/oidc/callback", params: { code: "abc", state: signed_state("state") }
     end
 
-    assert_response :unprocessable_content
+    assert_redirected_to "/sign/interruption"
   end
 
   test "RP callback stores Base-issued credentials without creating a root Browser Session" do
@@ -244,7 +254,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     assert_response :redirect
@@ -290,7 +300,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     assert_response :redirect
@@ -331,10 +341,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         OidcCallbackTestController.last_login_kwargs = nil
         OidcOpTokenClient.stub(:authorization_code, result) do
           get "/oidc/callback",
-              params: { code: "provider-code", state: state, iss: OidcIssuer.for_resource_type("client") }
+              params: { code: "provider-code", state: signed_state(state), iss: OidcIssuer.for_resource_type("client") }
         end
 
-        assert_equal offset.positive? ? [422, nil, nil] : [302, "/after", :rp_session],
+        assert_equal offset.positive? ? [303, "/sign/interruption", nil] : [302, "/after", :rp_session],
                      [response.status, response.headers["Location"] && URI.parse(response.headers["Location"]).path,
                       OidcCallbackTestController.last_login_kwargs&.fetch(:establishment),], offset
       end
@@ -374,15 +384,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     begin
-      fv5004 = :unprocessable_content
-
-      assert_response fv5004
-      assert_equal "text/plain", response.media_type
-      assert_nil response.headers["Location"]
+      assert_redirected_to "/sign/interruption"
       assert_equal "no-store", response.headers["Cache-Control"]
     end
 
@@ -425,15 +431,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     begin
-      fv5003 = :unprocessable_content
-
-      assert_response fv5003
-      assert_equal "text/plain", response.media_type
-      assert_nil response.headers["Location"]
+      assert_redirected_to "/sign/interruption"
       assert_equal "no-store", response.headers["Cache-Control"]
     end
 
@@ -488,11 +490,13 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "older-state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc",
+                    state: signed_state("older-state", target: "/settings"),
+                    iss: OidcIssuer.for_resource_type("client"), }
     end
 
     assert_response :redirect
-    assert_redirected_to "/settings?ri=jp"
+    assert_redirected_to "/settings"
     assert_equal "older-verifier", token_call.fetch(:code_verifier)
     assert_not token_call.fetch(:require_https)
   end
@@ -516,10 +520,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         }
 
     OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("token exchange should not run for expired state") }) do
-      get "/oidc/callback", params: { code: "abc", state: "expired-state" }
+      get "/oidc/callback", params: { code: "abc", state: signed_state("expired-state") }
     end
 
-    assert_response :unprocessable_content
+    assert_redirected_to "/sign/interruption"
 
     get "/oidc/callback/snapshot"
     snapshot = response.parsed_body
@@ -538,10 +542,12 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
 
     OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("access_denied must not exchange a code") }) do
       get "/oidc/callback",
-          params: { error: "access_denied", state: "canceled-state", iss: OidcIssuer.for_resource_type("client") }
+          params: { error: "access_denied",
+                    state: signed_state("canceled-state"),
+                    iss: OidcIssuer.for_resource_type("client"), }
     end
 
-    assert_response :unprocessable_content
+    assert_redirected_to "/sign/interruption"
     assert_nil OidcCallbackTestController.last_login_kwargs
     get "/oidc/callback/snapshot"
 
@@ -555,7 +561,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
      { state: "", iss: OidcIssuer.for_resource_type("client") },].each do |params|
       get "/oidc/callback", params: params.merge(error: "access_denied")
 
-      assert_response :unprocessable_content
+      assert_redirected_to "/sign/interruption"
     end
     get "/oidc/callback/snapshot"
 
@@ -563,18 +569,18 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
     assert_nil OidcCallbackTestController.last_login_kwargs
   end
 
-  test "pending state is accepted exactly at the ten-minute TTL and refused one second later" do
+  test "pending state is accepted exactly at the thirty-minute TTL and refused one second later" do
     exchanged_verifiers = []
     failed = Result.new(success?: false, token_response: nil, error: "invalid_grant", error_description: nil)
     freeze_time do
       get "/oidc/callback/session",
           params: { pending_state: "at-ttl",
                     pending_code_verifier: "at-ttl-verifier",
-                    pending_created_at: (10.minutes.ago).to_i, }
+                    pending_created_at: 30.minutes.ago.to_i, }
       get "/oidc/callback/session",
           params: { pending_state: "past-ttl",
                     pending_code_verifier: "past-ttl-verifier",
-                    pending_created_at: (10.minutes.ago - 1.second).to_i, }
+                    pending_created_at: (30.minutes.ago - 1.second).to_i, }
 
       exchange =
         ->(**kwargs) {
@@ -583,7 +589,8 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         }
       OidcOpTokenClient.stub(:authorization_code, exchange) do
         %w(at-ttl past-ttl).each do |state|
-          get "/oidc/callback", params: { code: "abc", state: state, iss: OidcIssuer.for_resource_type("client") }
+          get "/oidc/callback",
+              params: { code: "abc", state: signed_state(state), iss: OidcIssuer.for_resource_type("client") }
 
           assert_not response.successful?, state
         end
@@ -644,7 +651,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "consumed-state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("consumed-state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     assert_response :redirect
@@ -699,7 +706,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "consumed-state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("consumed-state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     assert_response :redirect
@@ -721,10 +728,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         }
 
     OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("token exchange should not run for expired state") }) do
-      get "/oidc/callback", params: { code: "abc", state: "expired-state" }
+      get "/oidc/callback", params: { code: "abc", state: signed_state("expired-state") }
     end
 
-    assert_response :unprocessable_content
+    assert_redirected_to "/sign/interruption"
 
     get "/oidc/callback/snapshot"
     snapshot = response.parsed_body
@@ -752,16 +759,12 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
                },
       ) do
         get "/oidc/callback",
-            params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+            params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
       end
     end
 
     begin
-      fv5002 = :unprocessable_content
-
-      assert_response fv5002
-      assert_equal "text/plain", response.media_type
-      assert_nil response.headers["Location"]
+      assert_redirected_to "/sign/interruption"
       assert_equal "no-store", response.headers["Cache-Control"]
     end
 
@@ -807,7 +810,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     assert_response :forbidden
@@ -852,7 +855,7 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     assert_response :service_unavailable
@@ -877,11 +880,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
                  logged << JSON.parse(message, symbolize_names: true) if message.to_s.start_with?("{")
                },
       ) do
-        get "/oidc/callback", params: { code: "abc", state: "wrong" }
+        get "/oidc/callback", params: { code: "abc", state: signed_state("wrong") }
       end
     end
 
-    assert_response :unprocessable_content
+    assert_redirected_to "/sign/interruption"
     event = logged.find { |entry| entry[:event] == "oidc.rp.callback.failed" }
 
     assert_equal "state_invalid", event.dig(:data, :reason)
@@ -907,10 +910,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
                            },
     ) do
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: "https://attacker.example.test" }
+          params: { code: "abc", state: signed_state("state"), iss: "https://attacker.example.test" }
     end
 
-    assert_response :unprocessable_content
+    assert_redirected_to "/sign/interruption"
     assert_nil OidcCallbackTestController.last_login_kwargs
   end
 
@@ -919,10 +922,10 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         params: { code_verifier: "verifier", state: "state", nonce: "nonce", pt: "/after" }
 
     OidcOpTokenClient.stub(:authorization_code, ->(**) { flunk("token exchange should not run without an issuer") }) do
-      get "/oidc/callback", params: { code: "abc", state: "state" }
+      get "/oidc/callback", params: { code: "abc", state: signed_state("state") }
     end
 
-    assert_response :unprocessable_content
+    assert_redirected_to "/sign/interruption"
     assert_nil OidcCallbackTestController.last_login_kwargs
   end
 
@@ -959,15 +962,11 @@ class OidcCallbackTest < ActionDispatch::IntegrationTest
         signed_claims, issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"),
       )
       get "/oidc/callback",
-          params: { code: "abc", state: "state", iss: OidcIssuer.for_resource_type("client") }
+          params: { code: "abc", state: signed_state("state"), iss: OidcIssuer.for_resource_type("client") }
     end
 
     begin
-      fv5001 = :unprocessable_content
-
-      assert_response fv5001
-      assert_equal "text/plain", response.media_type
-      assert_nil response.headers["Location"]
+      assert_redirected_to "/sign/interruption"
       assert_equal "no-store", response.headers["Cache-Control"]
     end
   end
@@ -1037,7 +1036,6 @@ class OidcCallbackTestController
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1049,7 +1047,6 @@ class OidcCallbackTestController
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1098,14 +1095,20 @@ class OidcCallbackTestController
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     insert_verified_visitor_email!(visitor_id: visitor.id, address: email_address)
     visitor.refresh_mfa_status! if visitor.respond_to?(:refresh_mfa_status!)
     visitor.reload
@@ -1458,7 +1461,6 @@ class OidcCallbackTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1470,7 +1472,6 @@ class OidcCallbackTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1500,7 +1501,10 @@ class OidcCallbackTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),
@@ -1616,23 +1620,24 @@ end
 
 class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
   setup do
-    @client = Client.create!
+    @client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
     @issuer = OidcIssuer.for_resource_type("client")
     @subject = OidcSubject.for(@client, resource_type: "client")
     @core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
     @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     @rp_client = OidcClientRegistry.find!("core-app-jp")
-    root = ClientToken.create!(user: @client)
+    root = ClientToken.create!(authentication_epoch: 0, user: @client)
     root.rotate_refresh_token!
     @rp = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: "core-app-jp", oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_auth_time: OpAppGrant.database_now,
       refresh_token_expires_at: 1.hour.from_now,
     )
     host!(@core_host)
     https!
-    get(core_app_sign_show_path, params: { ri: "jp", pt: "/after" })
+    get(core_app_sign_show_path, params: { ri: "jp", target_link_uri: "/after" })
     form = response.parsed_body.at_css("form")
     fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
     post(
@@ -1642,7 +1647,9 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
     )
 
     assert_response :see_other
-    @state, pending = session.fetch("oidc_pending_flows").first
+    jti, pending = session.fetch("oidc_pending_flows").first
+    # The pending entry is keyed by the state JWS's jti; the RP's own key mints a state for it.
+    @state = OidcStateJwt.issue(client_id: @rp_client.client_id, target_link_uri: "/after", jti:).first
     @verifier = pending.fetch("code_verifier")
     @access = AuthenticationTokenService.encode(
       @client, host: @base_host, resource_type: "client", session_public_id: root.public_id,
@@ -1716,13 +1723,13 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_equal [422, "text/plain", nil, "no-store"],
+    assert_equal [303, "text/html", "https://#{@core_host}/sign/interruption", "no-store"],
                  [response.status, response.media_type, response.headers["Location"], response.headers["Cache-Control"]]
     assert_nil cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
   end
 
   test "public callback rejects an exact binding that points to another authoritative actor" do
-    other = Client.create!
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)
     identity = ClientIdentity.find_by!(source_record_id: other.id)
     binding = ClientOidcIdentityBinding.create!(
@@ -1736,7 +1743,7 @@ class OidcProductionCallbackIdentityTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_equal [422, "text/plain", nil, "no-store", identity.id],
+    assert_equal [303, "text/html", "https://#{@core_host}/sign/interruption", "no-store", identity.id],
                  [response.status, response.media_type, response.headers["Location"],
                   response.headers["Cache-Control"], binding.reload.client_identity_id,]
     assert_nil cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]

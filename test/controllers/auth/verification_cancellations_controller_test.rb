@@ -9,7 +9,7 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
 
   test "app cancellation closes the admitted ceremony and returns to the Base dashboard" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -84,7 +84,7 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
 
   test "com cancellation closes the admitted ceremony and returns to the Base dashboard" do
     actor = create_verified_visitor_with_email(email_address: "cancel-com-#{SecureRandom.hex(4)}@example.com")
-    token = VisitorToken.create!(visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -248,8 +248,8 @@ class Auth::VerificationCancellationsControllerTest < ActionDispatch::Integratio
     [
       "https://evil.example/steal", "//evil.example/steal", "/identity/emails", "", "/identity\x00/emails",
     ].each do |posted_return_to|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       issuance =
         begin
           admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -397,7 +397,6 @@ class Auth::VerificationCancellationsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -429,7 +428,10 @@ class Auth::VerificationCancellationsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -676,7 +678,6 @@ class Auth::VerificationCancellationsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -685,7 +686,10 @@ class Auth::VerificationCancellationsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -34,7 +34,12 @@ module PreferenceLifecycleSurfaces
       status_class: -> { AppPreferenceStatus },
       binding_class: -> { AppPreferenceBindingMethod },
       dbsc_class: -> { AppPreferenceDbscStatus },
-      resource_fixture: -> { Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER) },
+      resource_fixture: -> {
+        Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+          visibility_id: ClientVisibility::USER,
+        )
+      },
       resource_pref_class: -> { ClientPreference },
       resource_fk: :user_id,
       resource_language_assoc: "user_preference_language",
@@ -45,7 +50,9 @@ module PreferenceLifecycleSurfaces
       status_class: -> { OrgPreferenceStatus },
       binding_class: -> { OrgPreferenceBindingMethod },
       dbsc_class: -> { OrgPreferenceDbscStatus },
-      resource_fixture: -> { Operator.create!(status_id: OperatorStatus::NOTHING) },
+      resource_fixture: -> {
+        Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::NOTHING)
+      },
       resource_pref_class: -> { OperatorPreference },
       resource_fk: :staff_id,
       resource_language_assoc: "staff_preference_language",
@@ -56,7 +63,9 @@ module PreferenceLifecycleSurfaces
       status_class: -> { ComPreferenceStatus },
       binding_class: -> { ComPreferenceBindingMethod },
       dbsc_class: -> { ComPreferenceDbscStatus },
-      resource_fixture: -> { Visitor.create!(status_id: VisitorStatus::NOTHING) },
+      resource_fixture: -> {
+        Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING)
+      },
       resource_pref_class: -> { VisitorPreference },
       resource_fk: :visitor_id,
       resource_language_assoc: "visitor_preference_language",

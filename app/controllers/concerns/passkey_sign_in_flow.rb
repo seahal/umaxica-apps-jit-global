@@ -11,8 +11,8 @@ module PasskeySignInFlow
   extend ActiveSupport::Concern
 
   # Actor-known ceremonies may still need a padded descriptor list to preserve
-  # their existing privacy contract. Direct app/com sign-in does not use this
-  # path: its request options are discoverable and identifier-free.
+  # their existing privacy contract. APP/COM identifier-first sign-in sends no
+  # descriptors (adr/passkey-identifier-first-sign-in.md).
   ACTOR_BOUND_ALLOW_CREDENTIALS_COUNT = 4
 
   include PasskeyCeremonyContext
@@ -22,21 +22,16 @@ module PasskeySignInFlow
   def options
     return unless before_passkey_options_request!
 
-    if discoverable_direct_passkey_sign_in?
-      actor = nil
-      passkeys = []
-    else
-      identifier = normalized_passkey_identifier
-      return render_error(passkey_identifier_required_error_key, :unprocessable_content) if identifier.blank?
+    identifier = normalized_passkey_identifier
+    return render_error(passkey_identifier_required_error_key, :unprocessable_content) if identifier.blank?
 
-      return render_error(
-        passkey_identifier_invalid_error_key,
-        :unprocessable_content,
-      ) unless valid_passkey_identifier?(identifier)
+    return render_error(
+      passkey_identifier_invalid_error_key,
+      :unprocessable_content,
+    ) unless valid_passkey_identifier?(identifier)
 
-      actor = find_active_passkey_actor(identifier)
-      passkeys = actor ? active_passkeys_for_actor(actor).to_a : []
-    end
+    actor = find_active_passkey_actor(identifier)
+    passkeys = actor ? active_passkeys_for_actor(actor).to_a : []
 
     challenge_id, request_options = issue_passkey_authentication_challenge(
       allow_credentials: disclose_passkey_descriptors? ? anonymized_passkey_allow_credentials(passkeys) : [],
@@ -235,8 +230,16 @@ module PasskeySignInFlow
     passkey_identifier_required_error_key
   end
 
-  def find_active_passkey_actor(_identifier)
-    raise NotImplementedError, "#{self.class} must define #find_active_passkey_actor"
+  # APP/COM: the Identity named by an effective Email or Telephone of this surface. ORG ceremonies
+  # override it with their Entra or Emergency selection.
+  def find_active_passkey_actor(identifier)
+    PasskeySignInIdentityResolverQuery.call(surface: webauthn_surface.key, identifier: identifier)
+  end
+
+  # An unknown identifier still binds the challenge to an Identity that no credential owns, so its
+  # verification fails exactly like a real Identity without that Passkey.
+  def passkey_actor_global_key(actor)
+    actor ? super : "#{webauthn_surface.key}:0"
   end
 
   def active_passkeys_for_actor(actor)
@@ -267,17 +270,11 @@ module PasskeySignInFlow
   end
 
   def passkey_belongs_to_challenge_actor?(passkey, actor_id)
-    return true if actor_id.blank? && discoverable_direct_passkey_sign_in?
-
     actor_id.present? && passkey.public_send(webauthn_surface.actor_foreign_key) == actor_id
   end
 
-  def discoverable_direct_passkey_sign_in?
-    %i(app com).include?(webauthn_surface.key)
-  end
-
   def disclose_passkey_descriptors?
-    !discoverable_direct_passkey_sign_in?
+    %i(app com).exclude?(webauthn_surface.key)
   end
 
   def passkey_eligible_for_sign_in?(passkey, actor)

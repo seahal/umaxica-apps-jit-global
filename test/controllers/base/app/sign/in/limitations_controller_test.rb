@@ -20,8 +20,11 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     ClientSignOutFlowKind.ensure_defaults!
     ClientSignOutFlowStatus.ensure_defaults!
     @request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @actor = Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01")
-    @existing = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @actor) }
+    @actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      birthdate: "2000-01-01",
+    )
+    @existing = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @actor) }
     now = ClientSignInFlow.database_now
     @flow = ClientSignInFlow.create!(
       principal_id: @actor.id,
@@ -165,7 +168,8 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     parent = ClientOidcAuthorizationTransaction.create_transaction!(
       surface: "app", intent: "authentication", client_id: "revocation-test",
       redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
-      state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+      state: SecureRandom.hex(16), nonce: SecureRandom.hex(16),
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256", login_challenge: SecureRandom.hex(32),
       login_challenge_expires_at: now + 5.minutes, expires_at: now + 5.minutes,
     )
@@ -229,82 +233,6 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
     assert_predicate issuance.transaction.reload, :pending?
-  end
-
-  test "local result waiting on capacity resumes on Base without renewing its authentication time" do
-    @resolution.cancel!(
-      actor: @actor,
-      challenge: @issuance.challenge,
-      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@binding),
-    )
-    @flow.cancel_sign_in!
-    now = ClientSignInFlow.database_now
-    local_nonce = SecureRandom.urlsafe_base64(32)
-    @flow = ClientSignInFlow.create!(
-      principal_id: @actor.id,
-      state_id: ClientSignInFlow.state_id_for("SESSION_ISSUANCE_PENDING"),
-      nonce_digest: ClientSignInFlow.digest_nonce(local_nonce),
-      issued_at: now,
-      expires_at: now + 5.minutes,
-      authentication_method: "email",
-      authentication_event_at: now,
-      authentication_context: AuthenticationContextValue::NORMAL_KEY,
-    )
-    event_at = @flow.authentication_event_at
-    @flow.prepare_local_result_delivery!(digest: "a" * 64, ttl: 1.minute)
-    @flow.update!(result_expires_at: 1.second.ago)
-    ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "local_sign_in",
-      local_sign_in_flow_ref: @flow.public_id,
-    )
-    ceremony.record_authentication_evidence!(method: "email")
-    @binding = SecureRandom.urlsafe_base64(32)
-    @issuance = ClientSessionLimitResolutionTransaction.issue!(
-      actor: @actor,
-      sign_in_flow: @flow,
-      browser_binding_digest: ClientSessionLimitResolutionTransaction.digest_challenge(@binding),
-    )
-    @resolution = @issuance.transaction
-    @gate =
-      begin
-        fv5003 = @issuance.challenge
-        fv5002 = @binding
-        fv5004 = @flow
-        {
-          "nonce" => SecureRandom.hex(16),
-          "issued_at" => Time.current.to_i,
-          "pt" => "/sign/in",
-          "flow" => fv5004.public_id,
-          "resolution_challenge" => fv5003,
-          "resolution_binding" => fv5002,
-          "actor_type" => "Client",
-        }
-      end
-    @local_locator = { "public_id" => @flow.public_id, "nonce" => local_nonce }
-    ref = SessionLimitResolutionTokenRef.issue(@existing.first)
-    begin
-      begin
-        { "Origin" => "http://#{@request.host}", "Sec-Fetch-Site" => "same-origin" }
-      end.each { |fv5001, fv5000|
-        @request.headers[fv5001] = fv5000
-      }
-    end
-
-    assert_difference(-> { ClientToken.where(user_id: @actor.id).count }, 1) do
-      patch :update, params: { ri: "jp", session_ref: ref },
-                     session: {
-                       SessionLimitGate::GATE_SESSION_KEY => @gate,
-                       SignInCycleLocator::SESSION_KEYS.fetch(:app) => @local_locator,
-                     }
-    end
-
-    assert_response :see_other
-    assert_not_nil @flow.reload.completed_at
-    token = ClientToken.find_by!(id: @flow.token_id, user_id: @actor.id)
-
-    assert_equal event_at, token.authentication_event_at
-    assert_equal "email", token.established_authentication_method
-    assert_not_nil ceremony.reload.completed_at
   end
 
   private

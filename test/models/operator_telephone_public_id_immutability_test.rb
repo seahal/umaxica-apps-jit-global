@@ -8,7 +8,7 @@ class OperatorTelephonePublicIdImmutabilityTest < ActiveSupport::TestCase
   end
 
   test "direct SQL cannot replace clear or blank an issued ORG Telephone identity" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550281", confirm_policy: true, confirm_using_mfa: true,
     )
@@ -31,7 +31,7 @@ class OperatorTelephonePublicIdImmutabilityTest < ActiveSupport::TestCase
   end
 
   test "single and bulk bypass updates reject replacing an issued identity without changing other facts" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550282", confirm_policy: true, confirm_using_mfa: true,
     )
@@ -55,7 +55,7 @@ class OperatorTelephonePublicIdImmutabilityTest < ActiveSupport::TestCase
   end
 
   test "upsert cannot overwrite the public identity of its existing primary-key row" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550283", confirm_policy: true, confirm_using_mfa: true,
     )
@@ -74,7 +74,7 @@ class OperatorTelephonePublicIdImmutabilityTest < ActiveSupport::TestCase
   end
 
   test "an unchanged identity and independent attempt-state update remain writable" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550284", confirm_policy: true, confirm_using_mfa: true,
     )

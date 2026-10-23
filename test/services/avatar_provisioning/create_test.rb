@@ -5,7 +5,10 @@ require "test_helper"
 
 class AvatarProvisioningCreateTest < ActiveSupport::TestCase
   test "creates Avatar and initial owner period in one transaction without an owner assignment" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
 
@@ -45,7 +48,10 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
   end
 
   test "post-cutover provisioning writes only the concrete ownership source" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
 
@@ -80,7 +86,10 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
   end
 
   test "handle conflict rolls back the avatar graph" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
     Handle.create!(handle: "conflict-aaaaaaaa", cooldown_until: Time.current, is_system: false)
@@ -105,7 +114,10 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
   end
 
   test "invalid avatar params leave no partial rows" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
 
@@ -127,7 +139,10 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
   end
 
   test "persona with an active binding gets a taken error and no partial rows" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
 
     assert_no_difference -> {
@@ -149,7 +164,10 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
   end
 
   test "new Avatar does not write transitional direct subject or owner columns" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
 
@@ -172,7 +190,10 @@ class AvatarProvisioningCreateTest < ActiveSupport::TestCase
   end
 
   test "member membership cannot create an Avatar even when caller supplies its owner ids" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
     bootstrap.avatar.current_avatar_persona_binding.revoke!(force: true)
     membership = bootstrap.account.persona_memberships.find_by!(enterprise: bootstrap.collective)

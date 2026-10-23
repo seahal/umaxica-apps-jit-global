@@ -14,7 +14,7 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "delivers a principal outbox event once and preserves its UUID" do
-    actor = Client.create!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     passkey = PasskeyRegistrationOperation.call!(
       actor: actor,
       passkey_class: ClientPasskey,
@@ -58,7 +58,7 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "continues after one event fails and leaves it retryable" do
-    actor = Client.create!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     first = register_passkey(actor, "first")
     second = register_passkey(actor, "second")
     first_event = ClientPasskeyAuditOutbox.find_by!(external_id: first.external_id)
@@ -89,7 +89,7 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "delivery after credential deletion preserves system actor and original occurrence time" do
-    actor = Visitor.create!
+    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     passkey = PasskeyRegistrationOperation.call!(
       actor: actor, passkey_class: VisitorPasskey,
       attributes: { webauthn_id: SecureRandom.uuid, public_key: "system-purge-key" },
@@ -118,7 +118,7 @@ class PasskeyAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "retry after Chronicle commit before acknowledgement converges to one event" do
-    actor = Operator.create!
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     passkey = PasskeyRegistrationOperation.call!(
       actor: actor, passkey_class: OperatorPasskey,
       attributes: { webauthn_id: SecureRandom.uuid, public_key: "retry-key" },

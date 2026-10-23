@@ -10,6 +10,13 @@ Accepted (2026-06-02)
 > native bearer-token API Resource Server. This ADR's older `acme/www` session/token authority
 > framing is superseded where it conflicts with that model.
 
+> **Partial supersession (2026-10-22, design only):**
+> [OP, Auth, and RP responsibility separation](op-auth-rp-authentication-responsibility-separation.md)
+> assigns OP sessions to the OP and application sessions and post-step-up authorization to each RP.
+> Auth remains the authentication component without application-session authority. The universal
+> authority-only grant/freshness wording below no longer requires an OP visit for authenticated
+> RP direct paths; their concrete trust and evidence protocol remains open.
+
 ## Context
 
 `adr/identity-authority-boundary.md` makes `acme/www` the identity authority for sessions, tokens,

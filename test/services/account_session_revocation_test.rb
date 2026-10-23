@@ -9,7 +9,7 @@ class AccountSessionRevocationTest < ActiveSupport::TestCase
     client = clients(:one)
     operator = operators(:one)
     AuthenticationSessionRevoker.tokens_for(client).find_each(&:revoke!)
-    token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     assert_difference -> { ClientSignOutFlow.count }, 1 do
       result = AccountSessionRevocation.purge!(
@@ -64,8 +64,8 @@ class AccountSessionRevocationTest < ActiveSupport::TestCase
     visitor = visitors(:reserved_visitor)
     operator = operators(:one)
     target_operator = operators(:two)
-    visitor_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
-    operator_token = OperatorToken.create!(staff: target_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    operator_token = OperatorToken.create!(authentication_epoch: 0, staff: target_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
 
     AccountSessionRevocation.purge!(
       account: visitor,

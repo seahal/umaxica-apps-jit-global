@@ -53,9 +53,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -114,9 +114,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -218,23 +218,34 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal token_count, OperatorToken.count
     assert_nil session[:passkey_challenges]
 
-    post auth_org_sign_in_passkey_options_path, params: { ri: "jp", fb: stale_binding }
+    halted_events = -> { OperatorChronicle.where(event_id: OperatorChronicleEvent::SIGN_FLOW_HALTED) }
 
-    assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    assert_difference -> { halted_events.call.count }, 1 do
+      post auth_org_sign_in_passkey_options_path, params: { ri: "jp", fb: stale_binding }
+    end
+
+    assert_equal [409, "戻るはだめです"], [response.status, response.body]
+    halt_record = halted_events.call.order(:id).last
+
+    assert_equal(
+      { "transaction_public_id" => transaction.fetch("public_id").to_s,
+        "halt_generation" => transaction.fetch("issued_at").to_s,
+        "reason_code" => "phase_violation",
+        "surface" => "org", },
+      halt_record.context.slice("transaction_public_id", "halt_generation", "reason_code", "surface"),
+    )
+    assert_not halt_record.context.to_json.include?(stale_binding), "the halt record must not carry the binding"
     halted_transaction = session.fetch(OrgNormalSignInTransaction::SESSION_KEY).deep_dup
 
-    assert_equal "halted", halted_transaction.fetch("status")
-    assert_equal "phase_violation", halted_transaction.fetch("halt_reason")
+    assert_equal %w(halted phase_violation), halted_transaction.values_at("status", "halt_reason")
     assert_equal token_count, OperatorToken.count
     assert_nil session[:passkey_challenges]
 
-    post auth_org_sign_in_passkey_options_path, params: { ri: "jp", fb: stale_binding }
+    assert_no_difference -> { halted_events.call.count } do
+      post auth_org_sign_in_passkey_options_path, params: { ri: "jp", fb: stale_binding }
+    end
 
-    assert_equal token_count, OperatorToken.count
-    assert_nil session[:passkey_challenges]
-    # The user deferred the missing durable audit for this delivery on 2026-10-13.
-    # Restore its positive assertion with plans/backlog/org-normal-sign-in-durable-halt-audit.md.
+    assert_equal [token_count, nil], [OperatorToken.count, session[:passkey_challenges]]
   end
 
   test "new sends the operator back to the entry when no entra transaction is pending" do
@@ -267,9 +278,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -331,9 +342,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -387,9 +398,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -443,9 +454,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -516,9 +527,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -598,9 +609,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -662,9 +673,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -732,9 +743,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -792,9 +803,9 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -856,14 +867,14 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   test "verification for staff with mfa enabled succeeds (MFA not enforced for staff)" do
-    @staff.reload.update!(mfa_level_enabled: true)
+    @staff.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     begin
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -913,136 +924,14 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
     assert_equal "ok", response.parsed_body["status"]
   end
 
-  test "verification hands an at-limit local result to Base for durable resolution" do
-    base_browser = open_session
-    base_browser.host!(ENV.fetch("PUBLIC_BASE_STAFF_URL"))
-    base_browser.https!
-    base_browser.post("/sign", params: { ri: "jp" })
-    # The authorize endpoint shares this origin, so the start moves by path without a Jump rt.
-    authorization = URI.parse(base_browser.response.location)
-
-    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), authorization.host
-    assert_nil Rack::Utils.parse_query(authorization.query)["rt"]
-    base_browser.get(authorization.request_uri)
-    authorization_form = base_browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    fields = authorization_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    base_browser.post(
-      authorization_form["action"], params: fields,
-                                    headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}" },
-    )
-
-    assert_equal 303, base_browser.response.status
-    original_base_nonce = base_browser.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY)
-    base_request = base_browser.request
-    base_session = base_browser.session.to_hash
-    host! ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    create_rotated_active_staff_session(@staff, rotations: 4)
-    begin
-      admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-      admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
-      admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
-        admission_nonce = original_base_nonce
-        flow_nonce = SecureRandom.urlsafe_base64(SignInCycleLocator::NONCE_BYTES)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
-          nonce_digest: OperatorSignInFlow.digest_nonce(flow_nonce),
-        )
-        SignInCycleLocator.new(base_session, surface: "org").issue!(admission.transaction, nonce: flow_nonce)
-        session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-        jar = ActionDispatch::Cookies::CookieJar.build(base_request, base_request.cookies)
-        jar.encrypted[session_key] = { value: base_session.stringify_keys }
-        base_browser.cookies.delete(session_key)
-        _merged_cookies = base_browser.cookies.merge(
-          "#{session_key}=#{Rack::Utils.escape(jar[session_key])}",
-          URI.parse("https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}/"),
-        )
-        admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-          surface: "org",
-          reference: admission.reference,
-        )
-        admission_session, admission_sid = OperatorAuthCeremonySession.issue!
-        admission_binding.attach_auth_session!(auth_session: admission_session, confirmation_ref: SecureRandom.uuid)
-        admission_binding.confirm_base!(
-          base_token: nil,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: "org",
-            entry_ref: admission.reference,
-            nonce: admission_nonce,
-          ),
-        )
-        host!(admission_host)
-        https!
-        admission_cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
-        cookies.delete("auth_sid")
-        cookies.delete("__Host-auth_sid")
-        store_raw_cookies(
-          cookies,
-          "#{admission_cookie_name}=#{Rack::Utils.escape(admission_sid)}", URI.parse("https://#{admission_host}/"),
-        )
-        get auth_org_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
-        admission_form = response.parsed_body.at_css("form")
-        raise RuntimeError, "Auth admission continuation is missing" unless admission_form
-
-        admission_fields = admission_form.css("input[type='hidden']").to_h { |field| [field["name"], field["value"]] }
-        post admission_form["action"], params: admission_fields,
-                                       headers: {
-                                         "Origin" => "https://#{admission_host}",
-                                         "Sec-Fetch-Site" => "same-origin",
-                                       }
-
-        assert_response :see_other
-      end
-      complete_org_entra_first_stage!(@staff)
-    end
-    challenge_id = issue_challenge!
-
-    post auth_org_sign_in_passkey_verification_url(ri: "jp", **org_normal_sign_in_binding_params),
-         params: verification_params(challenge_id)
-
-    assert_response :ok
-    json = response.parsed_body
-
-    assert_equal "ok", json["status"]
-    assert_nil json["access_token"]
-
-    get json.fetch("redirect_url")
-    follow_redirect! if response.redirect?
-    post auth_org_sign_handoff_path(ri: "jp"), params: { ri: "jp" }
-
-    assert_response :see_other
-    base_uri = URI.parse(response.location)
-    base_browser.get(base_uri.request_uri)
-
-    assert_equal 200, base_browser.response.status
-    result_form = base_browser.response.parsed_body.at_css("form")
-    result_fields = result_form.css("input[name]").to_h { |field| [field["name"], field["value"]] }
-    base_browser.post(
-      result_form["action"], params: result_fields,
-                             headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_BASE_STAFF_URL")}" },
-    )
-
-    assert_equal 303, base_browser.response.status
-    base_browser.get(base_browser.response.location)
-
-    assert_equal 200, base_browser.response.status
-    page = JSON.parse(base_browser.response.parsed_body.at_css("script[data-page='app']").text)
-
-    assert_equal "base/org/sign/in/limitations/show", page.fetch("component")
-    flow = OperatorSignInFlow.where(principal_id: @staff.id).order(created_at: :desc).first
-
-    assert_predicate flow, :sign_in_session_issuance_pending?
-    assert_predicate OperatorSessionLimitResolutionTransaction.where(sign_in_flow_id: flow.id).first, :open?
-  end
-
   test "verification returns unauthorized for malformed credential payload" do
     begin
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -1111,7 +1000,7 @@ class Auth::Org::Sign::In::PasskeysControllerTest < ActionDispatch::IntegrationT
   end
 
   def create_rotated_active_staff_session(staff, rotations:)
-    token = OperatorToken.create!(staff: staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
     refresh = token.rotate_refresh_token!
 
     rotations.times do

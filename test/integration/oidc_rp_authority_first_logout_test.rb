@@ -13,6 +13,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   test "authority-first logout revokes the parent before origin cleanup" do # rubocop:disable Minitest/MultipleAssertions -- Verifies the ordered authority and origin cleanup boundaries.
     user = clients(:one)
     root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -23,6 +24,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5041 = "core-app-jp"
         fv5039 = OidcClientRegistry.find!(fv5041)
         fv5038 = OpAppGrant.create!(
+          authentication_epoch: 0,
           client_token: fv5040,
           oidc_client_id: fv5039.client_id,
           oidc_scope: "openid profile",
@@ -39,6 +41,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5037 = "warp-app-jp"
         fv5035 = OidcClientRegistry.find!(fv5037)
         fv5034 = OpAppGrant.create!(
+          authentication_epoch: 0,
           client_token: fv5036,
           oidc_client_id: fv5035.client_id,
           oidc_scope: "openid profile",
@@ -153,12 +156,14 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     }
 
     same_actor_other_parent = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     other_user = clients(:two)
     other_actor_parent = ClientToken.create!(
+      authentication_epoch: 0,
       user: other_user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -365,11 +370,13 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   test "Base Com confirms only the current Visitor parent" do
     visitor = visitors(:reserved_visitor)
     root_token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
     )
     rp_session = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: root_token,
       oidc_client_id: "core-com-jp",
       oidc_scope: "openid profile",
@@ -456,6 +463,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   test "an untrusted origin cannot commit authority-first logout" do
     user = clients(:one)
     root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -466,6 +474,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5027 = "core-app-jp"
         fv5025 = OidcClientRegistry.find!(fv5027)
         fv5024 = OpAppGrant.create!(
+          authentication_epoch: 0,
           client_token: fv5026,
           oidc_client_id: fv5025.client_id,
           oidc_scope: "openid profile",
@@ -528,6 +537,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   test "Base self-RP logout returns to Base without an Auth hop" do
     user = clients(:one)
     root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -538,6 +548,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5017 = "base-app-ww"
         fv5015 = OidcClientRegistry.find!(fv5017)
         fv5014 = OpAppGrant.create!(
+          authentication_epoch: 0,
           client_token: fv5016,
           oidc_client_id: fv5015.client_id,
           oidc_scope: "openid profile",
@@ -652,6 +663,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   test "Edit RP logout returns through the staff Base authority" do
     operator = operators(:one)
     root_token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -661,6 +673,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         fv5007 = root_token
         fv5006 = OidcClientRegistry.find!("edit-org-ww")
         fv5005 = OpOrgGrant.create!(
+          authentication_epoch: 0,
           operator_token: fv5007,
           oidc_client_id: fv5006.client_id,
           oidc_scope: "openid profile",

@@ -4,7 +4,7 @@ require "test_helper"
 
 class ClientSecretLookupQueryTest < ActiveSupport::TestCase
   self.fixture_table_names = %w(
-    clients client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    clients client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_secret_credentials client_secret_issuances
   )
 
@@ -19,9 +19,9 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
 
   test "equal Secret values on different Clients resolve within the selected owner and choose its lowest ID" do
     raw = SecureRandom.base58(32)
-    first_owner = Client.create!(status_id: ClientStatus::ACTIVE)
-    second_owner = Client.create!(status_id: ClientStatus::ACTIVE)
-    unrelated_owner = Client.create!(status_id: ClientStatus::ACTIVE)
+    first_owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    second_owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    unrelated_owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = Client.database_now
 
     first_issuance = ClientSecretIssuance.create!(
@@ -76,7 +76,7 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
   end
 
   test "pending claimed revoked and discarded rows never resolve as usable credentials" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = Client.database_now
     %i(pending claimed revoked discarded).each do |state|
       raw = SecureRandom.base58(32)
@@ -93,7 +93,7 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
         discard_at: (state == :discarded) ? now : Float::INFINITY,
       )
       if state == :claimed
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "app",
           intent: "sign_in",
           base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -118,16 +118,17 @@ class ClientSecretLookupQueryTest < ActiveSupport::TestCase
             )
             [admission_session, admission_raw_sid]
           end
-        payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        BaseAuthAdmissionCoordinator.consume_entry_reference!(
           reference: admission.reference, surface: "app", expected_intent: "sign_in",
           binding:, raw_auth_sid: raw_sid,
         )
-        flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
         ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-          admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
+          admission_purpose: "authentication_handoff",
+          authorization_transaction_ref: admission.transaction.transaction_id,
         )
+        transaction = admission.transaction
 
-        assert ClientSecretClaimCommitter.call!(client: owner, secret: raw, flow: flow, ceremony: ceremony)
+        assert ClientSecretClaimCommitter.call_for_oidc!(client: owner, secret: raw, transaction:, ceremony:)
       end
 
       assert_nil ClientSecretLookupQuery.call(client: owner, secret: raw)

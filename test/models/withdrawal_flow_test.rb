@@ -167,14 +167,13 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
   def create_client
     ClientStatus.ensure_defaults!
     ClientVisibility.ensure_defaults!
-    ClientMfaLevel.ensure_defaults!
     ClientMfaStatus.ensure_defaults!
 
     Client.create!(
       public_id: PublicId.generate,
       status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
   end
@@ -182,14 +181,13 @@ class WithdrawalFlowTest < ActiveSupport::TestCase
   def create_visitor
     VisitorStatus.ensure_defaults!
     VisitorVisibility.ensure_defaults!
-    VisitorMfaLevel.ensure_defaults!
     VisitorMfaStatus.ensure_defaults!
 
     Visitor.create!(
       public_id: PublicId.generate,
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
-      mfa_level_id: VisitorMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
     )
   end

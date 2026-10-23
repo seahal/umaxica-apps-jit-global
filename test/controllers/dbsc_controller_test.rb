@@ -5,10 +5,10 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class DbscControllerTest < ActionDispatch::IntegrationTest
-  fixtures :clients, :client_statuses, :client_mfa_levels, :client_mfa_statuses,
+  fixtures :clients, :client_statuses, :client_security_modes, :client_mfa_statuses,
            :client_tokens, :client_token_kinds, :client_token_statuses, :client_token_binding_methods,
            :client_token_dbsc_statuses, :operators, :operator_statuses,
-           :operator_mfa_levels, :operator_mfa_statuses, :operator_tokens,
+           :operator_security_modes, :operator_mfa_statuses, :operator_tokens,
            :operator_token_kinds, :operator_token_statuses, :operator_token_binding_methods,
            :operator_token_dbsc_statuses
 
@@ -31,6 +31,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,
@@ -72,6 +73,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,
@@ -99,6 +101,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,
@@ -128,6 +131,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,
@@ -158,6 +162,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,
@@ -186,6 +191,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,
@@ -230,6 +236,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,
@@ -263,6 +270,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     staff = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -304,6 +312,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     staff = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -331,6 +340,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     staff = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -360,6 +370,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     staff = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -389,6 +400,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     staff = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -417,6 +429,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     staff = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -461,6 +474,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     staff = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
@@ -485,6 +499,7 @@ class DbscControllerTest < ActionDispatch::IntegrationTest
 
     user = clients(:one)
     ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::NOTHING,

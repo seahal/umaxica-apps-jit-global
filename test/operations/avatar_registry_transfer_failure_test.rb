@@ -7,14 +7,26 @@ class AvatarRegistryTransferFailureTest < ActiveSupport::TestCase
     test "#{source_surface} to #{target_surface} transfer rolls back a destination write failure and retries once" do
       source_actor =
         case source_surface
-        when "app" then Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-        when "org" then Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+        when "app" then Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+        )
+        when "org" then Operator.create!(
+          security_mode_id: SecurityModeConfigurable::ADVANCED,
+          status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+        )
         else raise ArgumentError, "unsupported source"
         end
       target_actor =
         case target_surface
-        when "app" then Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-        when "org" then Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+        when "app" then Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+        )
+        when "org" then Operator.create!(
+          security_mode_id: SecurityModeConfigurable::ADVANCED,
+          status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+        )
         else raise ArgumentError, "unsupported destination"
         end
       source = BaseSelectorBootstrapAuthority.call(surface: source_surface.to_sym, principal: source_actor)

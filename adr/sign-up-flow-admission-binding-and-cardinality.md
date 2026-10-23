@@ -7,6 +7,13 @@ constraints, and retirement of the duplicate Ceremony reference are **Not Implem
 Runtime, schema, migrations, data, and tests are unchanged by this ADR. Acceptance does not
 certify existing runtime conformity or completion of acceptance criteria.
 
+Implementation tracking (2026-10-23): WU-24b/c/d/e now implement effective intent, required immutable
+Binding curfew/intent storage and principal-atomic cleanup. The WU-01 migrations already removed
+the duplicate `local_sign_up_flow_ref` covered by WU-24g. The Flow-to-Binding association and
+cardinality in this ADR still require WU-24h; curfew consumers still require WU-06. See the open
+[cycle completion spec](../specs/authentication-cycle-completion/spec.md); partial storage does not
+certify E1 or a 30-minute end-to-end workflow.
+
 The acceptance date is the decision date explicitly supplied by the owner. Local source review
 was performed on 2026-10-20 at `febec3225cc9a0cfa53b9cbe817d20d366aba5a2` with unrelated
 uncommitted work present. This record does not claim observations of future runtime behavior.

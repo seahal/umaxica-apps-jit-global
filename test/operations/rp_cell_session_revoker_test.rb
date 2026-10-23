@@ -33,7 +33,7 @@ class RpCellSessionRevokerTest < ActiveSupport::TestCase
     assert_equal :revoked, revoke(payload("sid-unknown"))
     late = RpCallbackCommitter.call(
       cell: @cell, issuer: ISSUER, subject: "subject-a", sid: "sid-unknown",
-      absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      absolute_expires_at: 1.hour.from_now,
     )
 
     assert_equal :revoked, late.outcome
@@ -68,7 +68,7 @@ class RpCellSessionRevokerTest < ActiveSupport::TestCase
 
   def enroll(sid)
     RpCallbackCommitter.call(
-      cell: @cell, issuer: ISSUER, subject: "subject-a", sid:, absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      cell: @cell, issuer: ISSUER, subject: "subject-a", sid:, absolute_expires_at: 1.hour.from_now,
     ).session
   end
 

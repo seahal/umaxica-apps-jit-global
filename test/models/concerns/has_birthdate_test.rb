@@ -12,17 +12,14 @@ class HasBirthdateTest < ActiveSupport::TestCase
     Prosopite.pause do
       OperatorStatus.ensure_defaults!
       OperatorVisibility.ensure_defaults!
-      OperatorMfaLevel.ensure_defaults!
       OperatorMfaStatus.ensure_defaults!
 
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
-      VisitorMfaLevel.ensure_defaults!
       VisitorMfaStatus.ensure_defaults!
 
       ClientStatus.ensure_defaults!
       ClientVisibility.ensure_defaults!
-      ClientMfaLevel.ensure_defaults!
       ClientMfaStatus.ensure_defaults!
     end
   end
@@ -180,7 +177,7 @@ class HasBirthdateTest < ActiveSupport::TestCase
 
   test "birthdate is encrypted at rest and readable after reload" do
     MODEL_CLASSES.each do |model_class|
-      record = model_class.create!(birthdate: "2000-02-03")
+      record = model_class.create!(security_mode_id: SecurityModeConfigurable::NORMAL, birthdate: "2000-02-03")
       raw_value = raw_birthdate_for(record)
 
       assert_equal "2000-02-03", record.reload.birthdate, "#{model_class} should decrypt birthdate after reload"
@@ -206,7 +203,7 @@ class HasBirthdateTest < ActiveSupport::TestCase
 
   def each_birthdate_record(value)
     MODEL_CLASSES.each do |model_class|
-      yield model_class.new(birthdate: value)
+      yield model_class.new(birthdate: value, security_mode_id: SecurityModeTestDefault.id_for(model_class))
     end
   end
 

@@ -35,7 +35,6 @@ require "base64"
 class VisitorIdentityTest < ActiveSupport::TestCase
   setup do
     Prosopite.pause do
-      VisitorMfaLevel.ensure_defaults!
       VisitorMfaStatus.ensure_defaults!
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
@@ -49,7 +48,7 @@ class VisitorIdentityTest < ActiveSupport::TestCase
   end
 
   test "visitor tracks verified recovery identity through visitor email and telephone" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_not visitor.has_verified_recovery_identity?
 
@@ -72,7 +71,7 @@ class VisitorIdentityTest < ActiveSupport::TestCase
   end
 
   test "visitor secret_credential requires verified recovery identity" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     secret_credential = VisitorSecretCredential.new(visitor: visitor, name: "login", password: "a" * 32)
 
     assert_not secret_credential.valid?
@@ -82,7 +81,7 @@ class VisitorIdentityTest < ActiveSupport::TestCase
   # D-90: a usable Identity with a usable passkey may hold zero contacts, so a passkey no longer
   # requires a verified contact. The recovery secret above still does.
   test "visitor passkey does not require a verified contact" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     passkey = VisitorPasskey.new(
       visitor: visitor,
       webauthn_id: Base64.urlsafe_encode64("visitor_passkey", padding: false),

@@ -13,7 +13,10 @@ class OperatorCapabilityContinuityTest < ActiveSupport::TestCase
   setup do
     @operators =
       Array.new(2) do
-        Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+        Operator.create!(
+          security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+          visibility_id: OperatorVisibility::STAFF,
+        )
       end
     @grants =
       @operators.map do |operator|

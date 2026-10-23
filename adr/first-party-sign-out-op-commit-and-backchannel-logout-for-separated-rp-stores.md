@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-10-16). User decision in conversation on the same day. It takes effect only for a
+Accepted (2026-10-16); **amended 2026-10-23** (see the last section). User decision in conversation on the same day. It takes effect only for a
 first-party relying party that has been activated with its own session store under the OP/RP
 persistence separation (release R5). Until a client is so activated, and for every client during
 releases R1 to R4, `adr/first-party-sign-out-shared-database-without-backchannel-logout.md` remains
@@ -130,3 +130,21 @@ OpenID Connect Back-Channel Logout 1.0, OpenID Connect RP-Initiated Logout 1.0, 
 RFC 8725. This ADR claims no conformance and no implementation. Acceptance would establish the
 contract only; delivery, race, restore and role-isolation evidence belong to the release that
 implements it.
+
+## Amendment (2026-10-23)
+
+Owner decisions of the 2026-10 authentication cycle; not implemented yet.
+
+- **Scope.** With process separation withdrawn (D-19, D-20, D-35), every first-party RP is a standard
+  OIDC RP with Back-Channel Logout; there is no per-client activation. The "one path per client"
+  condition is satisfied by removing the pre-R5 OP-chain path per surface (D-108).
+- **Residual bound (item 5).** The Access JWT bound is `CoreBrowserCredentialContract::ACCESS_TTL`
+  (10 minutes) plus 30 seconds, not 300 seconds; the TTL is not shortened (D-111).
+- **Durable outbox kept, delivered through Solid Queue.** Every stop writes one outbox row per
+  participant in the stop transaction; after COMMIT `OpOutboxDispatchJob` is enqueued on Solid Queue,
+  and a recurring task re-enqueues rows left without a final state until each reaches 200, 400 or the
+  retry deadline (D-117, D-121). HTTPS only, no redirects, explicit timeouts and connection-time SSRF
+  protection apply.
+- **Receiver.** `POST /oidc/closures` keeps `ActionController::API` as its parent (no
+  `allow_browser`, forgery protection or session) as a scoped exception, with FQDN gating and rate
+  limiting added explicitly; only the Logout Token signature and claims are trusted (D-118).

@@ -33,7 +33,7 @@ class OidcRpBrowserCredentialContractTest < ActiveSupport::TestCase
       assert options.fetch(:httponly)
       assert_equal :lax, options.fetch(:same_site)
       assert_equal "/", options.fetch(:path)
-      assert_not options.fetch(:domain)
+      assert_not options.key?(:domain)
       assert_predicate options.fetch(:expires), :present?
     end
   end

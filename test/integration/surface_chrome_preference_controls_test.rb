@@ -39,7 +39,7 @@ class SurfaceChromePreferenceControlsTest < ActionDispatch::IntegrationTest
             "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
           }.fetch(admission_surface)
           admission_browser.host!(admission_host)
-          admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          admission_issuance = OidcTestEntry.issue!(
             surface: admission_surface, intent: admission_intent,
             base_browser_nonce: SecureRandom.hex(32), base_token: nil,
           )

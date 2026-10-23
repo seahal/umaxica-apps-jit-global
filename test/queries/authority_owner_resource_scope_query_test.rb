@@ -13,7 +13,10 @@ class AuthorityOwnerResourceScopeQueryTest < ActiveSupport::TestCase
   end
 
   test "returns only resources from the requested surface-local ownership relation" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "owner-scope-#{SecureRandom.hex(6)}",
@@ -25,7 +28,10 @@ class AuthorityOwnerResourceScopeQueryTest < ActiveSupport::TestCase
       I18n.with_locale(:en) do
         ClientPersona.create!(client_identity: identity, title: "Owned")
       end
-    unowned_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    unowned_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     unowned_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "owner-scope-unowned-#{SecureRandom.hex(6)}",
@@ -50,7 +56,10 @@ class AuthorityOwnerResourceScopeQueryTest < ActiveSupport::TestCase
   end
 
   test "rejects a principal from another surface" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
 
     assert_raises(ArgumentError) do
       AuthorityOwnerResourceScopeQuery.call(

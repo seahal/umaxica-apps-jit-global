@@ -12,10 +12,10 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
 
   self.use_transactional_tests = false
   self.fixture_table_names = %w(
-    client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_email_statuses client_telephone_statuses
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
-    visitor_statuses visitor_visibilities visitor_mfa_levels visitor_mfa_statuses
+    visitor_statuses visitor_visibilities visitor_security_modes visitor_mfa_statuses
     visitor_email_statuses visitor_telephone_statuses
     visitor_token_statuses visitor_token_kinds visitor_token_binding_methods visitor_token_dbsc_statuses
   )
@@ -26,8 +26,8 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
         actor, token, contact, source_base, ticket_base, flow_model =
           case surface
           when :app
-            owner = Client.create!(status_id: ClientStatus::ACTIVE)
-            root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+            owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+            root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
             candidate =
               if channel == :email
                 owner.client_emails.create!(
@@ -43,8 +43,8 @@ class ContactRegistrationOtpDeliveryLockTest < ActiveSupport::TestCase
             [owner, root, candidate, AppZenithRecord, OpBaseAppRecord,
              (channel == :email) ? ClientEmailCeremonyTransaction : ClientTelephoneCeremonyTransaction,]
           when :com
-            owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-            root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
             candidate =
               if channel == :email
                 owner.visitor_emails.create!(

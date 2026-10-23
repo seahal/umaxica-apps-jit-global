@@ -53,6 +53,7 @@ class BranchCoverageBatch18WebauthnAndAuditTest < ActiveSupport::TestCase
             credential_params: {},
             challenge: "c",
             config: config,
+            surface: :app,
           )
         end
       end
@@ -62,6 +63,7 @@ class BranchCoverageBatch18WebauthnAndAuditTest < ActiveSupport::TestCase
             credential_params: {},
             challenge: "c",
             config: config,
+            surface: :app,
           )
         end
       end

@@ -15,7 +15,7 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-client-step-up-ceremony.mmd](./idp-client-step-up-ceremony.mmd) — STATE_MACHINE / client.
 - [idp-client-oidc-authorization.mmd](./idp-client-oidc-authorization.mmd) — STATE_MACHINE / client.
 - [idp-client-oauth-callback.mmd](./idp-client-oauth-callback.mmd) — WORKFLOW_STATE / client.
-- [idp-client-local-result-delivery.mmd](./idp-client-local-result-delivery.mmd) — WORKFLOW_STATE / client.
+- [idp-client-sign-in-flow-evidence.mmd](./idp-client-sign-in-flow-evidence.mmd) — WORKFLOW_STATE / client.
 - [idp-client-token.mmd](./idp-client-token.mmd) — WORKFLOW_STATE / client.
 - [idp-client-dbsc.mmd](./idp-client-dbsc.mmd) — WORKFLOW_STATE / client.
 - [idp-client-device-session.mmd](./idp-client-device-session.mmd) — WORKFLOW_STATE / client.
@@ -31,7 +31,7 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-visitor-secret-credential-ceremony.mmd](./idp-visitor-secret-credential-ceremony.mmd) — STATE_MACHINE / visitor.
 - [idp-visitor-step-up-ceremony.mmd](./idp-visitor-step-up-ceremony.mmd) — STATE_MACHINE / visitor.
 - [idp-visitor-oidc-authorization.mmd](./idp-visitor-oidc-authorization.mmd) — STATE_MACHINE / visitor.
-- [idp-visitor-local-result-delivery.mmd](./idp-visitor-local-result-delivery.mmd) — WORKFLOW_STATE / visitor.
+- [idp-visitor-sign-in-flow-evidence.mmd](./idp-visitor-sign-in-flow-evidence.mmd) — WORKFLOW_STATE / visitor.
 - [idp-visitor-token.mmd](./idp-visitor-token.mmd) — WORKFLOW_STATE / visitor.
 - [idp-visitor-dbsc.mmd](./idp-visitor-dbsc.mmd) — WORKFLOW_STATE / visitor.
 - [idp-visitor-device-session.mmd](./idp-visitor-device-session.mmd) — WORKFLOW_STATE / visitor.
@@ -48,7 +48,7 @@ Existing twelve `sign-*.mmd` files predate this task and are preserved. Phase A 
 - [idp-operator-step-up-ceremony.mmd](./idp-operator-step-up-ceremony.mmd) — STATE_MACHINE / operator.
 - [idp-operator-oidc-authorization.mmd](./idp-operator-oidc-authorization.mmd) — STATE_MACHINE / operator.
 - [idp-operator-oauth-callback.mmd](./idp-operator-oauth-callback.mmd) — WORKFLOW_STATE / operator.
-- [idp-operator-local-result-delivery.mmd](./idp-operator-local-result-delivery.mmd) — WORKFLOW_STATE / operator.
+- [idp-operator-sign-in-flow-evidence.mmd](./idp-operator-sign-in-flow-evidence.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-token.mmd](./idp-operator-token.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-dbsc.mmd](./idp-operator-dbsc.mmd) — WORKFLOW_STATE / operator.
 - [idp-operator-device-session.mmd](./idp-operator-device-session.mmd) — WORKFLOW_STATE / operator.

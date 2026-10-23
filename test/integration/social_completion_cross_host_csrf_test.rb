@@ -84,7 +84,10 @@ class SocialCompletionCrossHostCsrfTest < ActionDispatch::IntegrationTest
     assert_not_equal I18n.t("sign.app.social.sessions.create.failure"), response.body
   end
   test "another Base browser cannot redeem a signed social result with its own valid CSRF token" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: Date.new(2000, 1, 1))
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: Date.new(2000, 1, 1),
+    )
     subject = "foreign-result-#{SecureRandom.hex(8)}"
     ClientGoogleIdentity.create!(
       user: actor,

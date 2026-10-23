@@ -26,7 +26,10 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
     AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)
     HandleStatus.ensure_defaults!
 
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @client_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "avatar-transfer-race-#{SecureRandom.hex(8)}",
@@ -234,7 +237,10 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   test "group creation waits for a concurrent org owner-membership revocation" do
     OperatorStatus.ensure_defaults!
     OperatorVisibility.ensure_defaults!
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     membership = bootstrap.account.agent_memberships.find_by!(bureau: bootstrap.collective)
 
@@ -266,7 +272,10 @@ class AvatarOwnershipTransfersConcurrencyTest < ActiveSupport::TestCase
   test "group creation waits for a concurrent org principal deactivation" do
     OperatorStatus.ensure_defaults!
     OperatorVisibility.ensure_defaults!
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
 
     assert_group_creation_waits_for_principal_deactivation(

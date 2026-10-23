@@ -512,6 +512,8 @@ ja:
   activerecord:
     actions: アクション
     attributes:
+      client_sign_up_flow:
+        auth_admission_binding: 受付バインディング
       company:
         title: タイトル
       enterprise:
@@ -520,7 +522,6 @@ ja:
         title: タイトル
       op_app_client_activation:
         client_id: クライアント ID
-        contract_epoch: 契約エポック
         enabled: 有効
         changed_at: 変更日時
         actor_ref: 変更者
@@ -528,7 +529,6 @@ ja:
         source_manifest_digest: マニフェストのダイジェスト
       op_com_client_activation:
         client_id: クライアント ID
-        contract_epoch: 契約エポック
         enabled: 有効
         changed_at: 変更日時
         actor_ref: 変更者
@@ -536,7 +536,6 @@ ja:
         source_manifest_digest: マニフェストのダイジェスト
       op_org_client_activation:
         client_id: クライアント ID
-        contract_epoch: 契約エポック
         enabled: 有効
         changed_at: 変更日時
         actor_ref: 変更者
@@ -561,7 +560,7 @@ ja:
       bureau:
         title: タイトル
       client:
-        mfa_level: MFAレベル
+        security_mode: セキュリティモード
         mfa_status: MFAステータス
         user_status: ステータス
         visibility: 公開範囲
@@ -607,6 +606,8 @@ ja:
         otp_private_key: OTP秘密鍵
       client_telephone_ceremony_transaction:
         result_jti: 結果JTI
+      operator:
+        security_mode: セキュリティモード
       operator_identity:
         source_record_id: ソースレコードID
       operator_step_up_session:
@@ -660,6 +661,8 @@ ja:
         created_at: 作成日時
         last_otp_at: 最終使用日
         title: 名前
+      visitor:
+        security_mode: セキュリティモード
       visitor_contact_audit_outbox:
         acknowledged_at: 確認日時
         actor_ref: 実行者参照
@@ -689,6 +692,8 @@ ja:
         last_used_at: 最終使用日
         name: 名前
         status: ステータス
+      visitor_sign_up_flow:
+        auth_admission_binding: 受付バインディング
       visitor_step_up_session:
         visitor_token_id: ビジタートークンID
       visitor_telephone:
@@ -2202,6 +2207,12 @@ ja:
           greeting: こんにちは、
           intro: 下のリンクからスタッフ向けの設定を変更してください。
           subject: スタッフ用メール設定を更新
+  oidc_rp:
+    interruption:
+      title: ログインできませんでした
+      body: ログインできませんでした。再度ログインしてください。
+      sign_in: ログイン
+      top: トップページ
   errors:
     format: "%{attribute}%{message}"
     invalid_authenticity_token: セッションが期限切れです。ページを再読み込みしてください。
@@ -2781,6 +2792,12 @@ ja:
         message: 快適な利用のため Cookie を使用しています。
   privacy_erasure:
     forbidden: プライバシー消去リクエストは、退下手順中にのみ利用可能です。
+  pwa:
+    offline:
+      description: サーバーに接続できませんでした。インターネット接続を確認して、もう一度お試しください。
+      reload: このページを再読み込みする
+      retry: 再試行
+      title: ネットワークに接続できません
   reproduce_issue:
     check_positions: |2-
 
@@ -3651,6 +3668,8 @@ ja:
           new:
             description: 信頼できる端末を使ってパスキーを追加し、パスワードなしでサインインします。
             page_title: パスキーを登録する
+            pii_label: "メールアドレスまたは電話番号"
+            pii_placeholder: "user@example.com または +81 90 1234 5678"
             submit: パスキーでログイン
       in:
         bulletins:

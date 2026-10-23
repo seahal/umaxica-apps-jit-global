@@ -47,13 +47,15 @@ scope module: :palm, as: :palm do
       namespace :oidc do
         resource :callback, only: :show
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resource :backchannel_logout, only: :create, path: "backchannel-logout"
+        resources :closures, only: :create
       end
 
       # Neutral Browser RP entry: GET renders the page, POST starts the server-owned flow.
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
+        # D-153: one generic landing for expected abnormal endings of the sign flow.
+        resource :interruption, only: :show, module: :sign
       end
 
       # Browser RP sign-out start and completion.

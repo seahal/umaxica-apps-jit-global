@@ -17,12 +17,13 @@ class OperatorTelephonePolicyTest < ActiveSupport::TestCase
 
   # index? gates the telephone listing to the owning actor type (Operator).
   def test_index_allows_operator
-    assert_predicate OperatorTelephonePolicy.new(nil, user: Operator.new), :index?
+    assert_predicate OperatorTelephonePolicy.new(nil, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)),
+                     :index?
   end
 
   def test_index_denies_other_actor_types
-    assert_not OperatorTelephonePolicy.new(nil, user: Client.new).index?
-    assert_not OperatorTelephonePolicy.new(nil, user: Visitor.new).index?
+    assert_not OperatorTelephonePolicy.new(nil, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
+    assert_not OperatorTelephonePolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
   end
 
   def test_show
@@ -51,18 +52,20 @@ class OperatorTelephonePolicyTest < ActiveSupport::TestCase
 
   # create? gates registration (fresh record) to the owning actor type.
   def test_create_allows_operator
-    assert_predicate OperatorTelephonePolicy.new(nil, user: Operator.new), :create?
-    assert_predicate OperatorTelephonePolicy.new(nil, user: Operator.new), :new?
+    assert_predicate OperatorTelephonePolicy.new(nil, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)),
+                     :create?
+    assert_predicate OperatorTelephonePolicy.new(nil, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)),
+                     :new?
   end
 
   def test_create_denies_other_actor_types
-    assert_not OperatorTelephonePolicy.new(nil, user: Client.new).create?
-    assert_not OperatorTelephonePolicy.new(nil, user: Visitor.new).create?
+    assert_not OperatorTelephonePolicy.new(nil, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).create?
+    assert_not OperatorTelephonePolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).create?
   end
 
   # update?/destroy? require ownership of the specific record (record.staff_id == operator.id).
   def test_update_and_destroy_allow_owner
-    owner = Operator.new(id: 1)
+    owner = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1)
     record = OperatorTelephone.new(staff_id: 1)
 
     assert_predicate OperatorTelephonePolicy.new(record, user: owner), :update?
@@ -71,7 +74,7 @@ class OperatorTelephonePolicyTest < ActiveSupport::TestCase
   end
 
   def test_update_and_destroy_deny_non_owner
-    owner = Operator.new(id: 1)
+    owner = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1)
     record = OperatorTelephone.new(staff_id: 2)
 
     assert_not OperatorTelephonePolicy.new(record, user: owner).update?

@@ -47,7 +47,10 @@ require "test_helper"
 
 class ClientPasskeyTest < ActiveSupport::TestCase
   test "physical deletion removes the Passkey from the owner count" do
-    actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
     passkeys =
       3.times.map do |index|
         PasskeyRegistrationOperation.call!(
@@ -67,7 +70,7 @@ class ClientPasskeyTest < ActiveSupport::TestCase
   end
 
   test "validation accepts the tenth Passkey and refuses the eleventh for one user" do
-    owner = Client.create!
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     9.times do |index|
       PasskeyRegistrationOperation.call!(
         actor: owner, passkey_class: ClientPasskey,
@@ -87,7 +90,10 @@ class ClientPasskeyTest < ActiveSupport::TestCase
 
   def setup
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
-    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::NOTHING,
+    )
     ClientEmail.create!(
       user: @user,
       address: "passkey-model-#{SecureRandom.hex(4)}@example.com",
@@ -249,7 +255,10 @@ class ClientPasskeyTest < ActiveSupport::TestCase
   end
 
   test "is valid on create when user has no verified recovery identity" do
-    user_without_identity = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
+    user_without_identity = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      public_id: PublicId.generate, status_id: ClientStatus::NOTHING,
+    )
     passkey = ClientPasskey.new(
       user: user_without_identity,
       webauthn_id: SecureRandom.uuid,

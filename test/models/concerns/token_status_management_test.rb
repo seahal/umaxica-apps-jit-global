@@ -10,14 +10,20 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
         actor, token, ceremony_model =
           case surface
           when :app
-            [@user, ClientToken.create!(user: @user), ClientAuthCeremonySession]
+            [@user, ClientToken.create!(authentication_epoch: 0, user: @user), ClientAuthCeremonySession]
           when :com
-            visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-            [visitor, VisitorToken.create!(visitor: visitor, skip_session_limit_check: true),
+            visitor = Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
+              status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+            )
+            [visitor, VisitorToken.create!(authentication_epoch: 0, visitor: visitor, skip_session_limit_check: true),
              VisitorAuthCeremonySession,]
           when :org
-            operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-            [operator, OperatorToken.create!(staff: operator), OperatorAuthCeremonySession]
+            operator = Operator.create!(
+              security_mode_id: SecurityModeConfigurable::ADVANCED,
+              status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+            )
+            [operator, OperatorToken.create!(authentication_epoch: 0, staff: operator), OperatorAuthCeremonySession]
           else
             raise ArgumentError, "unsupported test surface"
           end
@@ -56,12 +62,14 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
 
   def setup
     @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate,
       status_id: ClientStatus::NOTHING,
       created_at: 1.day.ago,
       updated_at: 1.day.ago,
     )
     @token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       discard_at: 1.day.from_now,
@@ -80,10 +88,16 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
   end
 
   test "strict issuance context maps absent columns and NULL to Normal and rejects corrupt values" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    visitor_token = VisitorToken.create!(visitor: visitor, skip_session_limit_check: true)
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    operator_token = OperatorToken.create!(staff: operator, authentication_context: nil)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, skip_session_limit_check: true)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    operator_token = OperatorToken.create!(authentication_epoch: 0, staff: operator, authentication_context: nil)
 
     assert_predicate @token.strict_authentication_context_value, :normal?
     assert_predicate visitor_token.strict_authentication_context_value, :normal?
@@ -109,15 +123,21 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
   test "active_status scope returns only active usable tokens" do
     @token.update!(user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now)
     restricted = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED, discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
     )
-    revoked = ClientToken.create!(user: @user, discard_at: Time.current, purge_eligible_at: 1.day.from_now)
+    revoked = ClientToken.create!(
+      authentication_epoch: 0, user: @user, discard_at: Time.current,
+      purge_eligible_at: 1.day.from_now,
+    )
     refresh_expired = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user, user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.minute.ago,
       purge_eligible_at: 1.day.from_now,
     )
     rotated_source = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user, user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
     )
@@ -135,15 +155,18 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
 
   test "restricted_status scope returns only restricted usable tokens" do
     active = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user, user_token_status_id: ClientTokenStatus::ACTIVE,
       discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now,
     )
     @token.update!(user_token_status_id: ClientTokenStatus::RESTRICTED, discard_at: 1.day.from_now)
     revoked = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED,
       discard_at: Time.current, purge_eligible_at: 1.day.from_now,
     )
     refresh_expired = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED, discard_at: 1.minute.ago,
       purge_eligible_at: 1.day.from_now,
     )
@@ -158,9 +181,18 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
 
   test "not_revoked scope returns only usable tokens" do
     @token.update!(discard_at: 1.day.from_now)
-    revoked = ClientToken.create!(user: @user, discard_at: Time.current, purge_eligible_at: 1.day.from_now)
-    refresh_expired = ClientToken.create!(user: @user, discard_at: 1.minute.ago, purge_eligible_at: 1.day.from_now)
-    rotated_source = ClientToken.create!(user: @user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    revoked = ClientToken.create!(
+      authentication_epoch: 0, user: @user, discard_at: Time.current,
+      purge_eligible_at: 1.day.from_now,
+    )
+    refresh_expired = ClientToken.create!(
+      authentication_epoch: 0, user: @user, discard_at: 1.minute.ago,
+      purge_eligible_at: 1.day.from_now,
+    )
+    rotated_source = ClientToken.create!(
+      authentication_epoch: 0, user: @user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     rotated_refresh = rotated_source.rotate_refresh_token!
     SignRefreshTokenIssuer.call(refresh_token: rotated_refresh)
 
@@ -173,8 +205,14 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
   end
 
   test "future discard_at stays valid until due and past discard_at is excluded" do
-    future_token = ClientToken.create!(user: @user, discard_at: 10.minutes.from_now, purge_eligible_at: 1.day.from_now)
-    past_token = ClientToken.create!(user: @user, discard_at: 10.minutes.ago, purge_eligible_at: 1.day.from_now)
+    future_token = ClientToken.create!(
+      authentication_epoch: 0, user: @user, discard_at: 10.minutes.from_now,
+      purge_eligible_at: 1.day.from_now,
+    )
+    past_token = ClientToken.create!(
+      authentication_epoch: 0, user: @user, discard_at: 10.minutes.ago,
+      purge_eligible_at: 1.day.from_now,
+    )
 
     results = ClientToken.not_revoked
 
@@ -195,6 +233,7 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
   test "instance expiry and the SQL scope use the same supplied evaluation time" do
     evaluation_time = Time.utc(2040, 1, 1, 12)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       discard_at: evaluation_time - 1.minute,
@@ -364,7 +403,7 @@ class TokenStatusManagementTest < ActiveSupport::TestCase
 
   test "works with OperatorToken as well" do
     staff = Operator.find_by!(public_id: "BCDE2345FGHJ67KM")
-    token = OperatorToken.create!(staff: staff)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: staff)
 
     assert_predicate token, :active_status?
 

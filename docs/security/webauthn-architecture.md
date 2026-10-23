@@ -1,5 +1,9 @@
 # WebAuthn Architecture
 
+> The current overview of where and how Passkeys are used is [Passkeys](passkeys.md) (2026-10-23).
+> Passages below that describe identifier-free APP/COM sign-in are superseded by identifier-first
+> sign-in (`adr/passkey-identifier-first-sign-in.md`).
+
 This document summarizes the passkey and WebAuthn ceremony architecture. The authoritative
 invariants are in `docs/security/webauthn-security-invariants.md`; RP boundaries are in
 `docs/security/webauthn-rp-id-origin-boundary.md`.

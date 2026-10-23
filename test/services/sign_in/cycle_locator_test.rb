@@ -70,8 +70,8 @@ module SignIn
     test "token-bound cycle requires matching current token" do
       session = {}
       actor = create_client
-      token = ClientToken.create!(user: actor)
-      other_token = ClientToken.create!(user: actor)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
+      other_token = ClientToken.create!(authentication_epoch: 0, user: actor)
       cycle = create_client_cycle(nonce: "nonce", principal_id: actor.id, token: token)
       SignInCycleLocator.new(session, surface: :app).issue!(cycle, nonce: "nonce")
 
@@ -132,7 +132,7 @@ module SignIn
     private
 
     def create_client(public_id: "c#{SecureRandom.hex(10)}")
-      Client.create!(public_id: public_id, status_id: ClientStatus::ACTIVE)
+      Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: public_id, status_id: ClientStatus::ACTIVE)
     end
 
     def create_client_cycle(nonce:, **overrides)

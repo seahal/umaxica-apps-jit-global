@@ -17,7 +17,10 @@ module Auth
           TurnstileVerifierStub.challenge_enabled = true
           TurnstileVerifierStub.challenge_response = { "success" => true }
 
-          visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+          visitor = Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+          )
           VisitorEmail.create!(
             visitor: visitor, address: REGISTERED_ADDRESS, confirm_policy: true,
             visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -48,7 +51,7 @@ module Auth
                         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
                       }.fetch(entry0_surface)
                       entry0_browser.host!(entry0_host)
-                      entry0_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+                      entry0_issuance = OidcTestEntry.issue!(
                         surface: entry0_surface, intent: entry0_intent,
                         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
                       )
@@ -88,14 +91,7 @@ module Auth
                       )
 
                       assert_equal 303, entry0_browser.response.status
-                      entry0_flow_binding = SignInFlowBindingCodec.encode(
-                        flow: VisitorSignInFlow.find_by!(
-                          public_id: admitted_auth_ceremony_session_for_test(
-                            entry0_binding.reload,
-                          ).local_sign_in_flow_ref,
-                        ),
-                        surface: "com", phase: "PRIMARY_PENDING",
-                      )
+                      entry0_flow_binding = nil
                     end
                     fx0_session.post(
                       auth_com_sign_in_email_url(ri: "jp", fb: entry0_flow_binding), params: {
@@ -131,7 +127,7 @@ module Auth
                         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
                       }.fetch(entry1_surface)
                       entry1_browser.host!(entry1_host)
-                      entry1_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+                      entry1_issuance = OidcTestEntry.issue!(
                         surface: entry1_surface, intent: entry1_intent,
                         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
                       )
@@ -171,14 +167,7 @@ module Auth
                       )
 
                       assert_equal 303, entry1_browser.response.status
-                      entry1_flow_binding = SignInFlowBindingCodec.encode(
-                        flow: VisitorSignInFlow.find_by!(
-                          public_id: admitted_auth_ceremony_session_for_test(
-                            entry1_binding.reload,
-                          ).local_sign_in_flow_ref,
-                        ),
-                        surface: "com", phase: "PRIMARY_PENDING",
-                      )
+                      entry1_flow_binding = nil
                     end
                     fx1_session.post(
                       auth_com_sign_in_email_url(ri: "jp", fb: entry1_flow_binding), params: {

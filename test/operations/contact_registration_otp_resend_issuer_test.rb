@@ -25,8 +25,11 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
             when [:com, :telephone]
               [Visitor, VisitorToken, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction]
             end
-          actor = owner_model.create!(status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE)
-          token = root_model.create!(owner_key => actor.id, :discard_at => 1.day.from_now)
+          actor = owner_model.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+          )
+          token = root_model.create!(:authentication_epoch => 0, owner_key => actor.id, :discard_at => 1.day.from_now)
           token.rotate_refresh_token!
           destination =
             (channel == :email) ? "resend-#{SecureRandom.hex(8)}@example.test" :
@@ -93,11 +96,18 @@ class ContactRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
           when :foreign_browser
             arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
           when :foreign_root
-            replacement = root_model.create!(owner_key => actor.id, :discard_at => 1.day.from_now)
+            replacement = root_model.create!(
+              :authentication_epoch => 0, owner_key => actor.id,
+              :discard_at => 1.day.from_now,
+            )
             replacement.rotate_refresh_token!
             arguments[:token] = replacement
           when :foreign_owner
-            arguments[:actor] = owner_model.create!(status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE)
+            arguments[:actor] =
+              owner_model.create!(
+                security_mode_id: SecurityModeConfigurable::NORMAL,
+                status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+              )
           when :foreign_candidate
             other_destination =
               (channel == :email) ? "foreign-resend-#{SecureRandom.hex(8)}@example.test" :

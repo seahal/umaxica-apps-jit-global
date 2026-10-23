@@ -13,12 +13,26 @@ require "test_helper"
 class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
+  # The recovery send branch verifies visible Turnstile first (D-156); these cases pass it.
+  setup do
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+  end
+
+  teardown do
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
   { unverified: ClientEmailStatus::UNVERIFIED,
     pending_signup: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
     verified_without_binding: ClientEmailStatus::VERIFIED, }.each do |label, status|
     test "app recovery refuses an unbound #{label} email without issuing authority" do
       host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      owner = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        birthdate: "2000-01-01",
+      )
       ClientEmailStatus.find_or_create_by!(id: status)
       email = ClientEmail.create!(
         user: owner, address: "recovery-unbound-#{label}-app@example.test", confirm_policy: "1",
@@ -64,7 +78,10 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     verified_without_binding: VisitorEmailStatus::VERIFIED, }.each do |label, status|
     test "com recovery refuses an unbound #{label} email without issuing authority" do
       host! ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-      owner = Visitor.create!(status_id: VisitorStatus::ACTIVE, birthdate: "2000-01-01")
+      owner = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+        birthdate: "2000-01-01",
+      )
       VisitorEmailStatus.find_or_create_by!(id: status)
       email = VisitorEmail.create!(
         visitor: owner, address: "recovery-unbound-#{label}-com@example.test", confirm_policy: "1",
@@ -300,11 +317,10 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
   def create_client
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
     Client.create!(
       status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
   end
 
@@ -319,7 +335,10 @@ class IdentityRecoveryEntrypointRenderTest < ActionDispatch::IntegrationTest
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
   end
 
   def create_verified_visitor_email(visitor, address:)

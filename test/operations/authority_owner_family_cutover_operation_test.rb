@@ -12,7 +12,10 @@ class AuthorityOwnerFamilyCutoverOperationTest < ActiveSupport::TestCase
   end
 
   test "establishes one family marker only after every resource is ready" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-operation-ready",
@@ -91,7 +94,10 @@ class AuthorityOwnerFamilyCutoverOperationTest < ActiveSupport::TestCase
   private
 
   def establish_ready_persona_family!
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-operation-#{SecureRandom.hex(6)}",

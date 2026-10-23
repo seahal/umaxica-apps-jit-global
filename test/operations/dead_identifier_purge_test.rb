@@ -93,7 +93,8 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
       model, history_model, owner, replacement_owner, owner_key =
         case realm
         when "app" then [ClientEmail, ClientEmailHistory, clients(:one), clients(:two), :user_id]
-        when "com" then [VisitorEmail, VisitorEmailHistory, visitors(:reserved_visitor), Visitor.create!, :visitor_id]
+        when "com" then [VisitorEmail, VisitorEmailHistory, visitors(:reserved_visitor),
+                         Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL), :visitor_id,]
         when "org" then [OperatorEmail, OperatorEmailHistory, operators(:one), operators(:two), :staff_id]
         end
       if realm == "org"
@@ -122,7 +123,8 @@ class DeadIdentifierPurgeTest < ActiveSupport::TestCase
         case realm
         when "app" then [ClientTelephone, ClientTelephoneHistory, clients(:one), clients(:two), :user_id]
         when "com"
-          [VisitorTelephone, VisitorTelephoneHistory, visitors(:reserved_visitor), Visitor.create!, :visitor_id]
+          [VisitorTelephone, VisitorTelephoneHistory, visitors(:reserved_visitor),
+           Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL), :visitor_id,]
         when "org" then [OperatorTelephone, OperatorTelephoneHistory, operators(:one), operators(:two), :staff_id]
         end
       if realm == "org"

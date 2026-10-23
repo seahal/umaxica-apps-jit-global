@@ -5,7 +5,7 @@ require "test_helper"
 class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
   test "OIDC Secret flow binding requires the admitted pending transaction and reuses its server-issued flow" do
     transaction, ceremony = oidc_admission
-    unrelated, = ClientAuthCeremonySession.rotate_and_admit!(admission_purpose: "local_sign_in")
+    unrelated, = ClientAuthCeremonySession.rotate_and_admit!(admission_purpose: "step_up_handoff")
     assert_no_difference("ClientSignInFlow.count") do
       assert_nil ClientSecretClaimCommitter.bind_oidc_flow!(
         client: clients(:one), secret: "z" * 32, transaction: transaction,
@@ -31,7 +31,6 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
         client: clients(:one), secret: "a" * 32, transaction: transaction, ceremony: ceremony,
       ).id
     end
-    assert_nil ceremony.reload.local_sign_in_flow_ref
     assert_equal transaction.transaction_id, ceremony.authorization_transaction_ref
     assert_nil ClientSecretClaimCommitter.bind_oidc_flow!(
       client: clients(:one), secret: "b" * 32, transaction: transaction, ceremony: ceremony,
@@ -88,10 +87,11 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
 
   test "a verified value binds one irreversible claim to its admitted browser flow" do
     actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 9_113_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: ClientStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -112,7 +112,7 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
       user_identity_telephone_status_id: ClientTelephoneStatus::VERIFIED,
       binding_finalized_at: ClientTelephone.database_now,
     )
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -137,30 +137,32 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
         )
         [admission_session, admission_raw_sid]
       end
-    payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
       reference: admission.reference, surface: "app", expected_intent: "sign_in",
       binding:, raw_auth_sid: raw_sid,
     )
-    flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "local_sign_in",
-      local_sign_in_flow_ref: flow.public_id,
+      admission_purpose: "authentication_handoff",
+      authorization_transaction_ref: admission.transaction.transaction_id,
     )
+    transaction = admission.transaction
 
-    assert_nil ClientSecretClaimCommitter.call!(client: actor, secret: "1" * 32, flow: flow, ceremony: ceremony)
+    assert_nil ClientSecretClaimCommitter.call_for_oidc!(client: actor, secret: "1" * 32, transaction:, ceremony:)
     credential = ClientSecretLookupQuery.call(client: actor, secret: raw)
 
     assert_equal [:telephone], AuthenticationCredentialInventory.call(actor).contact_identifiers
     assert_not AuthMethodGuard.can_remove_secret_credential?(actor, credential)
     assert_nil credential.reload.claimed_at
-    claim = ClientSecretClaimCommitter.call!(client: actor, secret: raw, flow: flow, ceremony: ceremony)
+    claim = ClientSecretClaimCommitter.call_for_oidc!(client: actor, secret: raw, transaction:, ceremony:)
 
     assert_equal credential.id, claim.id
+    flow = transaction.reload.secret_sign_in_flow
+
     assert_equal flow.public_id, claim.claim_sign_in_flow_ref
     assert_equal ceremony.id, claim.claim_ceremony_session_id
     assert_equal actor.id, flow.reload.principal_id
     assert_nil ClientSecretLookupQuery.call(client: actor, secret: raw)
-    assert_nil ClientSecretClaimCommitter.call!(client: actor, secret: raw, flow: flow, ceremony: ceremony)
+    assert_nil ClientSecretClaimCommitter.call_for_oidc!(client: actor, secret: raw, transaction:, ceremony:)
     assert_raises(ActiveRecord::ReadonlyAttributeError) { claim.update!(claimed_at: nil) }
     assert_raises(ActiveRecord::ReadonlyAttributeError) { claim.update!(claim_operation_id: SecureRandom.uuid) }
     assert_nil claim.reload.consumed_at
@@ -175,7 +177,8 @@ class ClientSecretClaimCommitterTest < ActiveSupport::TestCase
     transaction = ClientOidcAuthorizationTransaction.create_transaction!(
       surface: "app", intent: "authentication", client_id: "secret-binding-test",
       redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
-      state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+      state: SecureRandom.hex(16), nonce: SecureRandom.hex(16),
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256", login_challenge: SecureRandom.uuid,
       login_challenge_expires_at: now + 10.minutes, expires_at: now + 15.minutes, now: now,
     )

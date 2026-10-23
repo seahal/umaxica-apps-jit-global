@@ -135,11 +135,36 @@ module OrgNormalSignInTransaction
   end
 
   def halt_org_normal_sign_in_transaction!(transaction:, reason_code:)
+    record_org_normal_sign_in_halt!(transaction:, reason_code:)
     session[SESSION_KEY] = transaction.merge(
       "status" => "halted",
       "halted_at" => Time.current.to_i,
       "halt_reason" => reason_code,
     )
+  end
+
+  # FLOW-6 (D-90, D-134): exactly one durable SIGN_FLOW_HALTED row per transaction and generation.
+  # The partial unique index rejects a concurrent or replayed second insert, which means the halt is
+  # already recorded. Any other write failure propagates, so the request never reports success.
+  def record_org_normal_sign_in_halt!(transaction:, reason_code:)
+    operator = ::Operator.find(transaction[:operator_id])
+    OperatorChronicle.create!(
+      actor: operator,
+      subject_type: "OrgNormalSignInTransaction",
+      subject_id: operator.id,
+      event_id: OperatorChronicleEvent::SIGN_FLOW_HALTED,
+      occurred_at: Time.current,
+      ip_address: request.remote_ip,
+      context: {
+        transaction_public_id: transaction[:public_id].to_s,
+        halt_generation: transaction[:issued_at].to_s,
+        reason_code: reason_code,
+        surface: "org",
+        request_id: request.request_id,
+      },
+    )
+  rescue ActiveRecord::RecordNotUnique
+    nil
   end
 
   def log_org_normal_sign_in_binding_refusal(reason_code, transaction)

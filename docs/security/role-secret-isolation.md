@@ -4,8 +4,11 @@ Status: development and test use **one Rails-standard credentials set and one da
 every role** (user decision 2026-10-19, `adr/runtime-secret-isolation-deferred.md` amendment). This
 page describes what a runtime role still controls and what it does not.
 
-Per-role secret isolation for deployed environments remains deferred to the pod and secret-store
-design in `plans/backlog/2026-10-18-production-runtime-secret-isolation.md`.
+**Withdrawn for every environment (2026-10-23):** production also uses one credentials set; per-role
+secret isolation is not planned. One Puma serves every FQDN and an RP compromise equals an OP
+compromise (accepted). OP signing keys are to move to AWS KMS. See the 2026-10-23 amendment of
+`adr/runtime-secret-isolation-deferred.md`; the per-role parts of
+`plans/backlog/2026-10-18-production-runtime-secret-isolation.md` are withdrawn.
 
 ## What a runtime role does not control
 
@@ -45,9 +48,6 @@ needs an explicit owner. The `shared` role serves every controller.
   `sid`/`sub`/epoch (`RpCellLocalSession`, `RpRequestAuthenticator`). Callback and Refresh write the
   cell store (`RpCallbackCommitter`, `RpRefreshCommitter`). Base cells read the selected
   account/organization from the OP (`GET /api/v0/identity/selection`).
-- Required in every `rp-*` process: `UMAXICA_RP_CONTRACT_EPOCH`, the release epoch the cell was
-  deployed for (read with one-argument `ENV.fetch`). The `shared` and OP roles do not read it.
-
 Core session API (`GET /api/v0/session`) in a cell process: the actor is the local principal, so
 `actor.id` is the cell principal's public ID and `display_name` falls back to it. This external
 contract change was approved by the user on 2026-10-17.

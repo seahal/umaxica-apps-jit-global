@@ -7,14 +7,11 @@ class AuthenticationEpochValue
   class << self
     public
 
-    # True when a root may still mint or redeliver authority for this actor. A root issued under an
-    # older epoch is cut off by the stop that advanced it; a root without a recorded epoch predates
-    # epoch tracking and is only valid while no stop has occurred.
+    # True when a root may still mint or redeliver authority for this actor. A root records the
+    # epoch read under the principal lock (D-163) and the actor's epoch only grows, so only equality
+    # is current; a larger root epoch can only be corruption (D-165).
     def root_current?(root_token:, actor:)
-      actor_epoch = actor.authentication_epoch
-      return actor_epoch.zero? if root_token.authentication_epoch.nil?
-
-      root_token.authentication_epoch >= actor_epoch
+      root_token.authentication_epoch == actor.authentication_epoch
     end
   end
 end

@@ -57,6 +57,9 @@ class AppSecretSignupJourneyTest < ActionDispatch::IntegrationTest
         )
         target = URI.parse(payload.fetch("url"))
       end
+      # This registration journey asks the OP for prompt=create. A neutral RP sign-in request
+      # no longer authorizes entering signup merely by visiting its contact page (D-72).
+      target.query = URI.encode_www_form(URI.decode_www_form(target.query) + [["prompt", "create"]])
       host!(target.host)
       https!
       headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }

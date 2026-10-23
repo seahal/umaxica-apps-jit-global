@@ -47,7 +47,8 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
         ClientOidcAuthorizationTransaction.create_transaction!(
           surface: "app", intent: "authentication", client_id: "secret-reference-test",
           redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
-          state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+          state: SecureRandom.hex(16), nonce: SecureRandom.hex(16),
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256", login_challenge: "#{@transaction_prefix}-secret-#{index}",
           login_challenge_expires_at: now + 15.minutes, expires_at: now + 15.minutes, now: now,
         )
@@ -83,7 +84,8 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
         transaction = model.create_transaction!(
           surface: surface, intent: "authentication", client_id: "expiry-test",
           redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
-          state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+          state: SecureRandom.hex(16), nonce: SecureRandom.hex(16),
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256", login_challenge: "#{@transaction_prefix}-#{surface}-#{microseconds}",
           login_challenge_expires_at: deadline, expires_at: deadline, now: deadline - 1.minute,
         )
@@ -122,7 +124,8 @@ class OidcAuthorizationTransactionableTest < ActiveSupport::TestCase
       transaction = model.create_transaction!(
         surface: surface, intent: "authentication", client_id: "result-test",
         redirect_uri: "https://rp.example.test/callback", response_type: "code", scope: "openid",
-        state: SecureRandom.hex(16), nonce: SecureRandom.hex(16), code_challenge: "a" * 43,
+        state: SecureRandom.hex(16), nonce: SecureRandom.hex(16),
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256", login_challenge: "#{@transaction_prefix}-result-#{surface}",
         login_challenge_expires_at: now + 20.seconds, expires_at: now + 30.seconds, now: now,
       )

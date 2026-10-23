@@ -2,7 +2,10 @@
 
 ## Status
 
-**Accepted (2026-10-21).** This records the adopted design only. Implementation, application
+**Accepted (2026-10-21); amended 2026-10-23** by [Passkey authenticator account label](passkey-authenticator-account-label.md): ORG registration
+requires discoverable credentials (the ORG non-discoverable compatibility paragraph below is
+superseded), the capacity is ten Passkeys per Identity (the four-slot capacity below is
+superseded), and the authenticator stores no identifying `user.name`. This records the adopted design only. Implementation, application
 audit, migration planning and runtime verification are outside this ADR-only change and remain
 unverified. Acceptance does not certify that the current sign-in paths satisfy this contract.
 
@@ -60,7 +63,7 @@ implementation verification; padding alone does not establish non-disclosure.
 
 ## Passkey Credential Ownership
 
-An Identity may retain multiple Passkeys, with a maximum of **four slots per Identity** on APP,
+*(Capacity superseded 2026-10-23: ten per Identity, see the Status amendment.)* An Identity may retain multiple Passkeys, with a maximum of **four slots per Identity** on APP,
 COM and ORG. This expressly replaces the ten-credential capacity accepted on 2026-10-19; it does
 not imply that four-slot enforcement already exists. Slot persistence and safe handling of an
 existing owner above four require later investigation; this decision authorizes no deletion,
@@ -120,7 +123,7 @@ automatic promotion to Normal remain forbidden. Standby creates no separate Pass
 registration path. Historical Emergency names in routes and challenge purposes are not renamed
 by this ADR.
 
-ORG non-discoverable credentials MUST retain compatibility. Their existing `allowCredentials`
+*(Superseded 2026-10-23: ORG requires discoverable credentials; no existing credentials remain after the database reset.)* ORG non-discoverable credentials MUST retain compatibility. Their existing `allowCredentials`
 behavior requires investigation before any change. A response carrying real account-specific
 credential IDs may enable enumeration even when padded. Pre-authentication Identity and credential
 non-disclosure remains required; the implementation MUST demonstrate compatibility and

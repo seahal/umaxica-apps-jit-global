@@ -22,49 +22,40 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
   setup { Rails.configuration.x.rate_limit.fetch(:store).clear }
 
-  test "com authorize rejects a scope that omits openid" do
+  test "com authorize returns a scope that omits openid to the RP as invalid_request" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    params = authorize_params(realm: "visitor").merge(scope: "profile")
 
-    get base_com_oauth_authorization_url(
-      host: host, **authorize_params(realm: "visitor").merge(scope: "profile"),
-    ), headers: { "Host" => host }
+    get base_com_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
-    assert_response :bad_request
-    assert_equal "invalid_request", response.parsed_body.fetch("error")
-    assert_match(/openid/, response.parsed_body.fetch("error_description"))
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri])
   end
 
-  test "org authorize rejects a scope that omits openid" do
+  test "org authorize returns a scope that omits openid to the RP as invalid_request" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    params = authorize_params(realm: "operator").merge(scope: "profile")
 
-    get base_org_oauth_authorization_url(
-      host: host, **authorize_params(realm: "operator").merge(scope: "profile"),
-    ), headers: { "Host" => host }
+    get base_org_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
-    assert_response :bad_request
-    assert_equal "invalid_request", response.parsed_body.fetch("error")
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri])
   end
 
-  test "com authorize rejects a request with no state" do
+  test "com authorize returns a request with no state to the RP without a state" do
     host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    params = authorize_params(realm: "visitor").except(:state)
 
-    get base_com_oauth_authorization_url(
-      host: host, **authorize_params(realm: "visitor").except(:state),
-    ), headers: { "Host" => host }
+    get base_com_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
-    assert_response :bad_request
-    assert_equal "invalid_request", response.parsed_body.fetch("error")
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: nil)
   end
 
-  test "org authorize rejects a request with no state" do
+  test "org authorize returns a request with no state to the RP without a state" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    params = authorize_params(realm: "operator").except(:state)
 
-    get base_org_oauth_authorization_url(
-      host: host, **authorize_params(realm: "operator").except(:state),
-    ), headers: { "Host" => host }
+    get base_org_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
-    assert_response :bad_request
-    assert_equal "invalid_request", response.parsed_body.fetch("error")
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: nil)
   end
 
   test "com authorize rejects an unregistered client" do
@@ -227,6 +218,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -303,6 +295,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -379,6 +372,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -947,7 +941,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     operator = operators(:one)
     OperatorToken.where(staff_id: operator.id).delete_all
-    OperatorToken.create!(staff_id: operator.id, staff_token_status_id: OperatorTokenStatus::ACTIVE)
+    OperatorToken.create!(authentication_epoch: 0, staff_id: operator.id, staff_token_status_id: OperatorTokenStatus::ACTIVE)
     transaction =
       begin
         https!
@@ -3507,7 +3501,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: client_id,
       redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
-      code_challenge: "a" * 43,
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: "state",
       nonce: "nonce",

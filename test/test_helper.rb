@@ -64,6 +64,13 @@ require "test_prof/recipes/minitest/sample"
 require_relative "support/parallel_test_database_cloner"
 require_relative "support/external_identity_test_helper"
 require_relative "support/publishing_content_helper"
+require_relative "support/oidc_state_test_support"
+require_relative "support/oidc_test_entry"
+require_relative "support/sign_in_flow_test_factory"
+require_relative "support/security_mode_test_default"
+require_relative "support/operator_passkey_test_support"
+require_relative "support/sign_up_admission_test_factory"
+require_relative "support/sign_up_switch_test_support"
 require_relative "support/form_action_policy_helper"
 require_relative "support/fetch_metadata_defaults"
 require_relative "support/turnstile_verifier_stub"
@@ -224,15 +231,6 @@ module AuthenticationHarness
     end
   end
 
-  def sign_in_flow_for_test(binding)
-    case binding
-    when ClientAuthAdmissionBinding then ClientSignInFlow.find_by(id: binding.sign_in_flow_id)
-    when VisitorAuthAdmissionBinding then VisitorSignInFlow.find_by(id: binding.sign_in_flow_id)
-    when OperatorAuthAdmissionBinding then OperatorSignInFlow.find_by(id: binding.sign_in_flow_id)
-    else raise ArgumentError, "unsupported Auth admission binding class: #{binding.class.name}"
-    end
-  end
-
   def contact_owner_for_test(contact)
     case contact
     when ClientEmail, ClientTelephone then Client.find(contact.user_id)
@@ -312,6 +310,7 @@ module AuthenticationHarness
     case resource
     when Client
       ClientToken.create!(
+        authentication_epoch: 0,
         user_id: resource.id,
         user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -320,6 +319,7 @@ module AuthenticationHarness
       )
     when Operator
       OperatorToken.create!(
+        authentication_epoch: 0,
         staff_id: resource.id,
         staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -328,6 +328,7 @@ module AuthenticationHarness
       )
     when Visitor
       VisitorToken.create!(
+        authentication_epoch: 0,
         visitor_id: resource.id,
         visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         visitor_token_status_id: VisitorTokenStatus::ACTIVE,

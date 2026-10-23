@@ -188,7 +188,7 @@ class ClientPersonaCreatorTest < ActiveSupport::TestCase
   end
 
   def create_test_client
-    Client.create!(id: unique_client_id, status_id: ClientStatus::ACTIVE)
+    Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: unique_client_id, status_id: ClientStatus::ACTIVE)
   end
 
   def unique_client_id

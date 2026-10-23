@@ -36,8 +36,14 @@ class AppleNotificationProcessingAndInventoryTest < ActiveSupport::TestCase
   end
 
   test "each principal kind is counted through the contact table its own surface owns" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
 
     visitor_result = AuthenticationCredentialInventory.call(visitor)
     operator_result = AuthenticationCredentialInventory.call(operator)

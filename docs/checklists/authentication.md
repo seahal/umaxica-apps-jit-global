@@ -4,8 +4,12 @@ Applies to browser authentication on each supported surface; method availability
 surface-specific. These are durable requirements, not current verification results.
 
 - AUTH-1: State-changing browser requests retain Rails CSRF, Origin and Fetch Metadata protection;
-  ceremony binding adds protection rather than replacing it.
+  ceremony binding adds protection rather than replacing it. Scoped exceptions: the Sign-in path
+  continuation GETs of `adr/sign-in-path-continuation-protocol.md` (six conditions) and the
+  Back-Channel Logout receiver (`ActionController::API`, Logout Token signature only).
 - AUTH-2: A browser-bound ceremony refuses stale, mismatched, cross-browser and replayed admission.
+  A continuation GET consumes only after the host-only browser binding is verified, and a
+  same-browser repeat within issuance + 10 s returns the same next redirect without a second effect.
 - AUTH-3: Missing or contradictory authentication evidence produces an explicit refusal, without
   inferring another actor, credential, browser or assurance level.
 - AUTH-4: Auth supplies ceremony continuity, not an independent general login session or authority
@@ -121,6 +125,12 @@ surface-specific. These are durable requirements, not current verification resul
 - AUTH-30: Closed Org invitation provisioning refuses every invitation state before code lookup,
   preserves existing records and retains the common surface rate limit. See
   [nondisclosure decisions](../../adr/credential-response-nondisclosure.md).
+
+- AUTH-31: APP/COM/ORG authorization-code coordination preserves the request validator's protocol
+  error classification: an unsupported response type is `unsupported_response_type`, an inactive
+  resource is `access_denied`, and a disallowed scope is `invalid_scope`. Refused requests return
+  no success redirect; missing required parameters remain `invalid_request`. See
+  [authorization request profile](../../adr/oidc-authorization-request-profile.md).
 
 Sources:
 [authentication contract](../../.agents/harnesses/rules/generic/authentication-boundaries.mdc),

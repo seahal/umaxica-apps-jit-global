@@ -8,7 +8,7 @@ class ApplicationHelperTest < ActionView::TestCase
   include ActiveSupport::Testing::TimeHelpers
 
   fixtures :client_banners, :operator_banners, :visitor_banners, :clients, :client_statuses, :operators,
-           :operator_statuses, :visitors, :visitor_statuses, :visitor_visibilities, :visitor_mfa_levels,
+           :operator_statuses, :visitors, :visitor_statuses, :visitor_visibilities, :visitor_security_modes,
            :visitor_mfa_statuses
 
   setup do

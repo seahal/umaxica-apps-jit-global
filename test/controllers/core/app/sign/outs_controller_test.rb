@@ -14,7 +14,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "RP cookie sign out renders confirmation without mutation" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     get edit_core_app_sign_out_url(ri: "jp")
@@ -27,7 +27,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "sign-out launch does not clear site data before the authority phase" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
@@ -40,7 +40,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "the sign-out confirmation page does not clear site data" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     get edit_core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
@@ -50,7 +50,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out redirects to the registered base authority" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
@@ -68,7 +68,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "reuses an unfinished Browser RP intent for the same RP session" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     before_count = AcmeLogoutTransaction.count
@@ -96,9 +96,10 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out leaves parent and RP rows unchanged until authority confirmation" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     oidc_client = OidcClientRegistry.find!("core-app-jp")
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -136,9 +137,10 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out rejects a sibling RP credential without revoking either session" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     oidc_client = OidcClientRegistry.find!("warp-app-jp")
     sibling_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -173,7 +175,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out does not fall back to root Browser Session or Bearer credentials" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
@@ -184,7 +186,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out accepts us region" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
@@ -202,7 +204,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out canonicalizes unsupported region to default" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "xx"), headers: app_session_headers(user, token)
@@ -219,7 +221,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "transaction issuance failure does not render success completion" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
     rejected = AcmeLogoutTransactionCoordinator::Result.new(
       transaction: nil,
@@ -242,7 +244,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out without region uses the default completion region" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url, headers: app_session_headers(user, token)
@@ -259,7 +261,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out does not route through Auth" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post core_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
@@ -277,6 +279,7 @@ class Core::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   def authenticate_rp!(user, token)
     oidc_client = OidcClientRegistry.find!("core-app-jp")
     @rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

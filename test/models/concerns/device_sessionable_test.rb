@@ -7,8 +7,11 @@ class DeviceSessionableTest < ActiveSupport::TestCase
   setup do
     ClientStatus.ensure_defaults!
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
-    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
-    @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::ACTIVE,
+    )
+    @token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 
   test "active scope returns only active unreleased sessions" do

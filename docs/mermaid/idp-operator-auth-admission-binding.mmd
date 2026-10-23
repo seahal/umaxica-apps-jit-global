@@ -16,6 +16,11 @@ stateDiagram-v2
         Distinct pending parents may share an active sid,
         including continuity admitted for an earlier parent.
         Attachment grants no authority for the new purpose.
+        Sign-in path checks the server-fixed effective intent before redemption.
+        Issuance stores immutable curfew_at = OP clock + 30 minutes.
+        Switch copies that curfew; entry_intent is required and purpose-constrained.
+        Re-verification intent is the explicit not_applicable value.
+        Curfew storage does not yet replace acceptance/parent expiry consumers.
         GET checks nonce ownership without mutation.
         Transitions use the owning Ticket DB clock.
         Browser receivers lock root owner/device/token when present,

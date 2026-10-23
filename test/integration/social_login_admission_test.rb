@@ -23,7 +23,10 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "an admitted Google callback records Auth evidence and Base issues the original OIDC root" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     subject = "ordinary-social-#{SecureRandom.hex(8)}"
     ClientGoogleIdentity.create!(user: actor, uid: subject, provider: "google", status_id: ClientGoogleIdentityStatus::ACTIVE)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
@@ -159,7 +162,10 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal 0, OpAppGrant.where(client_token_id: token.id).count
   end
   test "an admitted Apple callback records Auth evidence and Base issues the original OIDC root" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     subject = "ordinary-social-#{SecureRandom.hex(8)}"
     ClientAppleIdentity.create!(user: actor, uid: subject, provider: "apple", status_id: ClientAppleIdentityStatus::ACTIVE)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
@@ -295,7 +301,10 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal 0, OpAppGrant.where(client_token_id: token.id).count
   end
   test "an existing Google subject started at signup records Auth evidence and Base issues the original OIDC root" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     subject = "ordinary-social-#{SecureRandom.hex(8)}"
     ClientGoogleIdentity.create!(user: actor, uid: subject, provider: "google", status_id: ClientGoogleIdentityStatus::ACTIVE)
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
@@ -605,7 +614,10 @@ class SocialLoginAdmissionTest < ActionDispatch::IntegrationTest
                   authorization_transaction_for_test(binding).consumed?,]
   end
   test "a reserved existing social actor receives a terminal refusal without Auth evidence or Root" do
-    actor = Client.create!(status_id: ClientStatus::RESERVED, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::RESERVED,
+      birthdate: "2000-01-01",
+    )
     subject = "ordinary-social-#{SecureRandom.hex(8)}"
     ClientGoogleIdentity.create!(user: actor, uid: subject, provider: "google", status_id: ClientGoogleIdentityStatus::ACTIVE)
     base = self

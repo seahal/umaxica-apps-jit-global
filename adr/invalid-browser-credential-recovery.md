@@ -137,7 +137,7 @@ no grace window or replacement adoption for writes.
 
 Deletions use the issuing options: the same name (`__Host-` prefix whenever
 `JitSessionCookieConfig.force_secure?`), `Path=/`, host-only (no `Domain`), `Secure` as issued,
-`SameSite=Strict`, and `Partitioned` in production. HttpOnly is not part of cookie identity, and a
+`SameSite=Strict`, and `Partitioned` in production. *(Superseded 2026-10-23, D-115: no cookie carries `Partitioned` or `Domain`; every cookie is host-only.)* HttpOnly is not part of cookie identity, and a
 server `Set-Cookie` may expire an HttpOnly cookie. Rails emits a deletion only for a cookie the
 request carried. Host-only deletions cannot reach another surface's cookies.
 

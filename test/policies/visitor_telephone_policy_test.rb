@@ -18,12 +18,13 @@ class VisitorTelephonePolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_allows_visitor
-    assert_predicate VisitorTelephonePolicy.new(nil, user: Visitor.new), :index?
+    assert_predicate VisitorTelephonePolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)),
+                     :index?
   end
 
   def test_index_denies_other_actor_types
-    assert_not VisitorTelephonePolicy.new(nil, user: Client.new).index?
-    assert_not VisitorTelephonePolicy.new(nil, user: Operator.new).index?
+    assert_not VisitorTelephonePolicy.new(nil, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
+    assert_not VisitorTelephonePolicy.new(nil, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)).index?
   end
 
   def test_show
@@ -44,18 +45,20 @@ class VisitorTelephonePolicyTest < ActiveSupport::TestCase
 
   # create? gates registration (fresh record) to the owning actor type.
   def test_create_allows_visitor
-    assert_predicate VisitorTelephonePolicy.new(nil, user: Visitor.new), :create?
-    assert_predicate VisitorTelephonePolicy.new(nil, user: Visitor.new), :new?
+    assert_predicate VisitorTelephonePolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)),
+                     :create?
+    assert_predicate VisitorTelephonePolicy.new(nil, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)),
+                     :new?
   end
 
   def test_create_denies_other_actor_types
-    assert_not VisitorTelephonePolicy.new(nil, user: Client.new).create?
-    assert_not VisitorTelephonePolicy.new(nil, user: Operator.new).create?
+    assert_not VisitorTelephonePolicy.new(nil, user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)).create?
+    assert_not VisitorTelephonePolicy.new(nil, user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)).create?
   end
 
   # update?/destroy? require ownership of the specific record (record.visitor_id == visitor.id).
   def test_update_and_destroy_allow_owner
-    owner = Visitor.new(id: 1)
+    owner = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     record = VisitorTelephone.new(visitor_id: 1)
 
     assert_predicate VisitorTelephonePolicy.new(record, user: owner), :update?
@@ -64,7 +67,7 @@ class VisitorTelephonePolicyTest < ActiveSupport::TestCase
   end
 
   def test_update_and_destroy_deny_non_owner
-    owner = Visitor.new(id: 1)
+    owner = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     record = VisitorTelephone.new(visitor_id: 2)
 
     assert_not VisitorTelephonePolicy.new(record, user: owner).update?

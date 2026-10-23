@@ -49,6 +49,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
     @client = clients(:one)
     @root_token = client_tokens(:one)
     @rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @root_token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -553,7 +554,7 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
 
   test "an access credential stops authenticating once the Browser Session points at another root token" do
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = @access_token
-    replacement = ClientToken.create!(user: @client)
+    replacement = ClientToken.create!(authentication_epoch: 0, user: @client)
     @root_token.device_session_record.update_columns(current_refresh_token_id: replacement.id)
 
     get :show, params: { required: "1" }
@@ -630,11 +631,15 @@ class BrowserRpAuthenticationTest < ActionController::TestCase
   end
 
   test "a visitor-realm credential does not authenticate a client-realm controller" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    visitor_token = VisitorToken.create!(visitor: visitor)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor)
     visitor_token.rotate_refresh_token!
     visitor_client = OidcClientRegistry.find!("core-com-jp")
     op_com_grant = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: visitor_token, oidc_client_id: visitor_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_auth_time: 1.minute.ago, refresh_token_expires_at: 10.minutes.from_now,
     )

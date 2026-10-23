@@ -36,7 +36,7 @@ class CredentialRelationScopeTest < ActiveSupport::TestCase
         case model.name
         when /\AClient/ then clients(:one)
         when /\AOperator/ then operators(:one)
-        when /\AVisitor/ then Visitor.create!(status_id: VisitorStatus::ACTIVE)
+        when /\AVisitor/ then Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
         end
 
       assert_includes scoped(policy_class, model.all, user: actor).to_sql, foreign_key.to_s

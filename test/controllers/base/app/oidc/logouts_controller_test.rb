@@ -13,6 +13,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     @client = OidcClientRegistry.find!("core-app-jp")
     @user = clients(:one)
     @token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -73,6 +74,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                   refresh_token_expires_at: f0_now + 10.minutes,
@@ -159,6 +161,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                   refresh_token_expires_at: f1_now + 10.minutes,
@@ -247,6 +250,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                 f2_now = Time.current
                 f2_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                   refresh_token_expires_at: f2_now + 10.minutes,
@@ -337,6 +341,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                 f3_now = Time.current
                 f3_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                   refresh_token_expires_at: f3_now + 10.minutes,
@@ -423,6 +428,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                 f4_now = Time.current
                 f4_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                   refresh_token_expires_at: f4_now + 10.minutes,
@@ -509,6 +515,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                 f5_now = Time.current
                 f5_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                   refresh_token_expires_at: f5_now + 10.minutes,
@@ -592,6 +599,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                 f6_now = Time.current
                 f6_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                   refresh_token_expires_at: f6_now + 10.minutes,
@@ -689,6 +697,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                 f7_now = Time.current
                 f7_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                   refresh_token_expires_at: f7_now + 10.minutes,
@@ -777,6 +786,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
                 f8_now = Time.current
                 f8_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
                   refresh_token_expires_at: f8_now + 10.minutes,
@@ -875,6 +885,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f9_token.rotate_refresh_token! unless f9_token.device_session_record.current_refresh_token_id
                 f9_now = Time.current
                 f9_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f9_now,
                   refresh_token_expires_at: f9_now + 10.minutes,
@@ -972,6 +983,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f10_token.rotate_refresh_token! unless f10_token.device_session_record.current_refresh_token_id
                 f10_now = Time.current
                 f10_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f10_token, oidc_client_id: f10_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f10_now,
                   refresh_token_expires_at: f10_now + 10.minutes,
@@ -1077,6 +1089,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f11_token.rotate_refresh_token! unless f11_token.device_session_record.current_refresh_token_id
                    f11_now = Time.current
                    f11_session = OpAppGrant.create!(
+                     authentication_epoch: 0,
                      client_token: f11_token, oidc_client_id: f11_client.client_id, oidc_scope: "openid profile",
                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f11_now,
                      refresh_token_expires_at: f11_now + 10.minutes,
@@ -1183,6 +1196,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f12_token.rotate_refresh_token! unless f12_token.device_session_record.current_refresh_token_id
                    f12_now = Time.current
                    f12_session = OpAppGrant.create!(
+                     authentication_epoch: 0,
                      client_token: f12_token, oidc_client_id: f12_client.client_id, oidc_scope: "openid profile",
                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f12_now,
                      refresh_token_expires_at: f12_now + 10.minutes,
@@ -1291,6 +1305,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                    f13_token.rotate_refresh_token! unless f13_token.device_session_record.current_refresh_token_id
                    f13_now = Time.current
                    f13_session = OpAppGrant.create!(
+                     authentication_epoch: 0,
                      client_token: f13_token, oidc_client_id: f13_client.client_id, oidc_scope: "openid profile",
                      oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f13_now,
                      refresh_token_expires_at: f13_now + 10.minutes,
@@ -1385,6 +1400,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f14_token.rotate_refresh_token! unless f14_token.device_session_record.current_refresh_token_id
                 f14_now = Time.current
                 f14_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f14_token, oidc_client_id: f14_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f14_now,
                   refresh_token_expires_at: f14_now + 10.minutes,
@@ -1483,6 +1499,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f15_token.rotate_refresh_token! unless f15_token.device_session_record.current_refresh_token_id
                 f15_now = Time.current
                 f15_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f15_token, oidc_client_id: f15_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f15_now,
                   refresh_token_expires_at: f15_now + 10.minutes,
@@ -1579,6 +1596,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f16_token.rotate_refresh_token! unless f16_token.device_session_record.current_refresh_token_id
                 f16_now = Time.current
                 f16_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f16_token, oidc_client_id: f16_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f16_now,
                   refresh_token_expires_at: f16_now + 10.minutes,
@@ -1662,6 +1680,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f17_token.rotate_refresh_token! unless f17_token.device_session_record.current_refresh_token_id
                 f17_now = Time.current
                 f17_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f17_token, oidc_client_id: f17_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f17_now,
                   refresh_token_expires_at: f17_now + 10.minutes,
@@ -1748,6 +1767,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f18_token.rotate_refresh_token! unless f18_token.device_session_record.current_refresh_token_id
                 f18_now = Time.current
                 f18_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f18_token, oidc_client_id: f18_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f18_now,
                   refresh_token_expires_at: f18_now + 10.minutes,
@@ -1832,6 +1852,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f19_token.rotate_refresh_token! unless f19_token.device_session_record.current_refresh_token_id
                   f19_now = Time.current
                   f19_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f19_token, oidc_client_id: f19_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f19_now,
                     refresh_token_expires_at: f19_now + 10.minutes,
@@ -1936,6 +1957,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   test "D1 unauthenticated browser presenting another subject's hint does not end that subject's session" do
     other_user = clients(:two)
     other_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: other_user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1963,6 +1985,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   test "D1 authenticated browser presenting another subject's hint ends neither session" do
     other_user = clients(:two)
     other_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: other_user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -2010,6 +2033,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f20_token.rotate_refresh_token! unless f20_token.device_session_record.current_refresh_token_id
                     f20_now = Time.current
                     f20_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f20_token, oidc_client_id: f20_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f20_now,
                       refresh_token_expires_at: f20_now + 10.minutes,
@@ -2100,6 +2124,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      f21_token.rotate_refresh_token! unless f21_token.device_session_record.current_refresh_token_id
                      f21_now = Time.current
                      f21_session = OpAppGrant.create!(
+                       authentication_epoch: 0,
                        client_token: f21_token, oidc_client_id: f21_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f21_now,
                        refresh_token_expires_at: f21_now + 10.minutes,
@@ -2155,6 +2180,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
   test "D1 authenticated browser presenting its own subject's hint for another sid ends neither session" do
     sibling_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -2201,6 +2227,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f22_token.rotate_refresh_token! unless f22_token.device_session_record.current_refresh_token_id
                     f22_now = Time.current
                     f22_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f22_token, oidc_client_id: f22_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f22_now,
                       refresh_token_expires_at: f22_now + 10.minutes,
@@ -2289,6 +2316,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f23_token.rotate_refresh_token! unless f23_token.device_session_record.current_refresh_token_id
                 f23_now = Time.current
                 f23_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f23_token, oidc_client_id: f23_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f23_now,
                   refresh_token_expires_at: f23_now + 10.minutes,
@@ -2337,6 +2365,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
   test "D1 access token without sid cannot use its own subject's hint to end a sibling session" do
     sibling_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -2366,6 +2395,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   test "D1 swapping in another subject's hint on the POST ends neither session" do
     other_user = clients(:two)
     other_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: other_user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -2413,6 +2443,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f24_token.rotate_refresh_token! unless f24_token.device_session_record.current_refresh_token_id
                     f24_now = Time.current
                     f24_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f24_token, oidc_client_id: f24_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f24_now,
                       refresh_token_expires_at: f24_now + 10.minutes,
@@ -2497,6 +2528,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      f25_token.rotate_refresh_token! unless f25_token.device_session_record.current_refresh_token_id
                      f25_now = Time.current
                      f25_session = OpAppGrant.create!(
+                       authentication_epoch: 0,
                        client_token: f25_token, oidc_client_id: f25_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f25_now,
                        refresh_token_expires_at: f25_now + 10.minutes,
@@ -2592,6 +2624,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f26_token.rotate_refresh_token! unless f26_token.device_session_record.current_refresh_token_id
                 f26_now = Time.current
                 f26_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f26_token, oidc_client_id: f26_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f26_now,
                   refresh_token_expires_at: f26_now + 10.minutes,
@@ -2674,6 +2707,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f27_token.rotate_refresh_token! unless f27_token.device_session_record.current_refresh_token_id
                 f27_now = Time.current
                 f27_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f27_token, oidc_client_id: f27_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f27_now,
                   refresh_token_expires_at: f27_now + 10.minutes,
@@ -2760,6 +2794,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f28_token.rotate_refresh_token! unless f28_token.device_session_record.current_refresh_token_id
                 f28_now = Time.current
                 f28_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f28_token, oidc_client_id: f28_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f28_now,
                   refresh_token_expires_at: f28_now + 10.minutes,
@@ -2842,6 +2877,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f29_token.rotate_refresh_token! unless f29_token.device_session_record.current_refresh_token_id
                 f29_now = Time.current
                 f29_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f29_token, oidc_client_id: f29_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f29_now,
                   refresh_token_expires_at: f29_now + 10.minutes,
@@ -2926,6 +2962,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f30_token.rotate_refresh_token! unless f30_token.device_session_record.current_refresh_token_id
                 f30_now = Time.current
                 f30_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f30_token, oidc_client_id: f30_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f30_now,
                   refresh_token_expires_at: f30_now + 10.minutes,
@@ -3006,6 +3043,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f31_token.rotate_refresh_token! unless f31_token.device_session_record.current_refresh_token_id
                 f31_now = Time.current
                 f31_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f31_token, oidc_client_id: f31_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f31_now,
                   refresh_token_expires_at: f31_now + 10.minutes,
@@ -3051,6 +3089,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate @token.reload, :revoked?
 
     new_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -3092,6 +3131,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f32_token.rotate_refresh_token! unless f32_token.device_session_record.current_refresh_token_id
                 f32_now = Time.current
                 f32_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f32_token, oidc_client_id: f32_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f32_now,
                   refresh_token_expires_at: f32_now + 10.minutes,
@@ -3186,6 +3226,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f33_token.rotate_refresh_token! unless f33_token.device_session_record.current_refresh_token_id
                   f33_now = Time.current
                   f33_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f33_token, oidc_client_id: f33_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f33_now,
                     refresh_token_expires_at: f33_now + 10.minutes,
@@ -3263,6 +3304,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                   f34_token.rotate_refresh_token! unless f34_token.device_session_record.current_refresh_token_id
                   f34_now = Time.current
                   f34_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f34_token, oidc_client_id: f34_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f34_now,
                     refresh_token_expires_at: f34_now + 10.minutes,
@@ -3347,6 +3389,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f35_token.rotate_refresh_token! unless f35_token.device_session_record.current_refresh_token_id
                 f35_now = Time.current
                 f35_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f35_token, oidc_client_id: f35_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f35_now,
                   refresh_token_expires_at: f35_now + 10.minutes,
@@ -3427,6 +3470,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f36_token.rotate_refresh_token! unless f36_token.device_session_record.current_refresh_token_id
                 f36_now = Time.current
                 f36_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f36_token, oidc_client_id: f36_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f36_now,
                   refresh_token_expires_at: f36_now + 10.minutes,
@@ -3510,6 +3554,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f37_token.rotate_refresh_token! unless f37_token.device_session_record.current_refresh_token_id
                 f37_now = Time.current
                 f37_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f37_token, oidc_client_id: f37_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f37_now,
                   refresh_token_expires_at: f37_now + 10.minutes,
@@ -3607,6 +3652,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f38_token.rotate_refresh_token! unless f38_token.device_session_record.current_refresh_token_id
                 f38_now = Time.current
                 f38_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f38_token, oidc_client_id: f38_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f38_now,
                   refresh_token_expires_at: f38_now + 10.minutes,
@@ -3689,6 +3735,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f39_token.rotate_refresh_token! unless f39_token.device_session_record.current_refresh_token_id
                 f39_now = Time.current
                 f39_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f39_token, oidc_client_id: f39_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f39_now,
                   refresh_token_expires_at: f39_now + 10.minutes,
@@ -3737,6 +3784,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   test "D1 control: own-session logout ends only that session and leaves another subject's session active" do
     other_user = clients(:two)
     other_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: other_user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -3781,6 +3829,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f40_token.rotate_refresh_token! unless f40_token.device_session_record.current_refresh_token_id
                     f40_now = Time.current
                     f40_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f40_token, oidc_client_id: f40_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f40_now,
                       refresh_token_expires_at: f40_now + 10.minutes,
@@ -3869,6 +3918,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f41_token.rotate_refresh_token! unless f41_token.device_session_record.current_refresh_token_id
                     f41_now = Time.current
                     f41_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f41_token, oidc_client_id: f41_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f41_now,
                       refresh_token_expires_at: f41_now + 10.minutes,
@@ -3954,6 +4004,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f42_token.rotate_refresh_token! unless f42_token.device_session_record.current_refresh_token_id
                 f42_now = Time.current
                 f42_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f42_token, oidc_client_id: f42_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f42_now,
                   refresh_token_expires_at: f42_now + 10.minutes,
@@ -4055,6 +4106,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f43_token.rotate_refresh_token! unless f43_token.device_session_record.current_refresh_token_id
                     f43_now = Time.current
                     f43_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f43_token, oidc_client_id: f43_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f43_now,
                       refresh_token_expires_at: f43_now + 10.minutes,
@@ -4144,6 +4196,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      f44_token.rotate_refresh_token! unless f44_token.device_session_record.current_refresh_token_id
                      f44_now = Time.current
                      f44_session = OpAppGrant.create!(
+                       authentication_epoch: 0,
                        client_token: f44_token, oidc_client_id: f44_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f44_now,
                        refresh_token_expires_at: f44_now + 10.minutes,
@@ -4250,6 +4303,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      f45_token.rotate_refresh_token! unless f45_token.device_session_record.current_refresh_token_id
                      f45_now = Time.current
                      f45_session = OpAppGrant.create!(
+                       authentication_epoch: 0,
                        client_token: f45_token, oidc_client_id: f45_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f45_now,
                        refresh_token_expires_at: f45_now + 10.minutes,
@@ -4346,6 +4400,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f46_token.rotate_refresh_token! unless f46_token.device_session_record.current_refresh_token_id
                     f46_now = Time.current
                     f46_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f46_token, oidc_client_id: f46_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f46_now,
                       refresh_token_expires_at: f46_now + 10.minutes,
@@ -4429,6 +4484,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                      f47_token.rotate_refresh_token! unless f47_token.device_session_record.current_refresh_token_id
                      f47_now = Time.current
                      f47_session = OpAppGrant.create!(
+                       authentication_epoch: 0,
                        client_token: f47_token, oidc_client_id: f47_client.client_id, oidc_scope: "openid profile",
                        oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f47_now,
                        refresh_token_expires_at: f47_now + 10.minutes,
@@ -4522,6 +4578,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                     f48_token.rotate_refresh_token! unless f48_token.device_session_record.current_refresh_token_id
                     f48_now = Time.current
                     f48_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: f48_token, oidc_client_id: f48_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f48_now,
                       refresh_token_expires_at: f48_now + 10.minutes,
@@ -4609,6 +4666,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
                 f49_token.rotate_refresh_token! unless f49_token.device_session_record.current_refresh_token_id
                 f49_now = Time.current
                 f49_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f49_token, oidc_client_id: f49_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f49_now,
                   refresh_token_expires_at: f49_now + 10.minutes,
@@ -4755,7 +4813,6 @@ class Base::App::Oidc::LogoutsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -4767,7 +4824,6 @@ class Base::App::Oidc::LogoutsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -4797,7 +4853,10 @@ class Base::App::Oidc::LogoutsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

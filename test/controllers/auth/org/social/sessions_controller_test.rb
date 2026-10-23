@@ -27,7 +27,7 @@ class Auth::Org::Social::SessionsControllerTest < ActionDispatch::IntegrationTes
         response_type: "code",
         client_id: "edit-org-ww",
         redirect_uri: OidcClientRegistry.find!("edit-org-ww").redirect_uris.first,
-        code_challenge: "challenge",
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256",
         state: "state",
         nonce: "nonce",

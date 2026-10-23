@@ -6,7 +6,7 @@ require "test_helper"
 
 class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
   test "purge removes cross-database children for a visitor" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorNotificationRecord.create!(visitor: visitor)
     VisitorAccount.create!(visitor: visitor)
 
@@ -18,7 +18,7 @@ class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
   end
 
   test "visitor purge retries the remaining database after a partial failure" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     notification = VisitorNotificationRecord.create!(visitor: visitor)
     account = VisitorAccount.create!(visitor: visitor)
 
@@ -39,7 +39,7 @@ class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
   end
 
   test "purge removes operator notification records for an operator" do
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     OperatorNotificationRecord.create!(operator: operator)
 
     assert_difference -> { OperatorNotificationRecord.count }, -1 do
@@ -53,7 +53,7 @@ class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
   # person can never be provisioned onto the same Entra object.
   test "purge removes the operator's Entra identity, whatever state it withdrew in" do
     OperatorEntraIdentityState.ensure_defaults!
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     OperatorEntraIdentity.create!(
       operator_id: operator.id,
       entra_tenant_id: "11111111-2222-3333-4444-555555555555",
@@ -68,7 +68,7 @@ class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
 
   test "operator purge retries the remaining database after a partial failure" do
     OperatorEntraIdentityState.ensure_defaults!
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     notification = OperatorNotificationRecord.create!(operator: operator)
     entra_identity = OperatorEntraIdentity.create!(
       operator_id: operator.id,
@@ -98,8 +98,8 @@ class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
 
   test "purge leaves another operator's Entra identity alone" do
     OperatorEntraIdentityState.ensure_defaults!
-    purged = Operator.create!
-    retained = Operator.create!
+    purged = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    retained = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     OperatorEntraIdentity.create!(
       operator_id: retained.id,
       entra_tenant_id: "11111111-2222-3333-4444-555555555555",
@@ -113,7 +113,7 @@ class RetentionCrossDatabaseChildPurgeTest < ActiveSupport::TestCase
   end
 
   test "purge returns the actor unchanged" do
-    client = Client.create!
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     result = RetentionCrossDatabaseChildPurge.call(actor: client)
 

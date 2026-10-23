@@ -9,6 +9,7 @@ class SocialAuthTypedCallbackBoundaryTest < ActiveSupport::TestCase
 
   test "login use case resolves an existing Google identity from a verified principal without provider payload" do
     client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::ACTIVE,
       public_id: "typed_google_#{SecureRandom.hex(4)}",
       birthdate: "2000-01-01",

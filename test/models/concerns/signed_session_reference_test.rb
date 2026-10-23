@@ -10,11 +10,14 @@ class SignedSessionReferenceTest < ActiveSupport::TestCase
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     OperatorTokenKind.find_or_create_by!(id: OperatorTokenKind::BROWSER_WEB)
 
-    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
-    @staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::NOTHING,
+    )
+    @staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
 
-    @user_token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
-    @staff_token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    @user_token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    @staff_token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
   end
 
   test "signed refs round-trip and blank refs return nil" do
@@ -36,7 +39,7 @@ class SignedSessionReferenceTest < ActiveSupport::TestCase
   end
 
   test "find_from_signed_refs returns matching tokens for valid refs" do
-    second_token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    second_token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     tokens = ClientToken.find_from_signed_refs([@user_token.signed_ref, second_token.signed_ref])
 

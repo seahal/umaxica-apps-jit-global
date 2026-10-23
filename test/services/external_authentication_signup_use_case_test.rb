@@ -58,7 +58,10 @@ class ExternalAuthenticationSignupUseCaseTest < ActiveSupport::TestCase
   end
 
   test "rejects a subject already bound to an account" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     identity = create_active_external_identity(client: client, provider: "google", subject: "signup-use-case-conflict")
     principal = ExternalAuthentication::VerifiedPrincipal.new(
       provider: "google",
@@ -80,7 +83,10 @@ class ExternalAuthenticationSignupUseCaseTest < ActiveSupport::TestCase
   end
 
   test "an app signup grant begun before account termination cannot recreate its social binding" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     subject = SecureRandom.uuid
     identity = create_active_external_identity(client: owner, provider: "google", subject: subject)
     principal = ExternalAuthentication::VerifiedPrincipal.new(

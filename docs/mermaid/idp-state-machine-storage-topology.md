@@ -23,7 +23,7 @@ DELETE means PostgreSQL NO ACTION. CHECKs constrain rows; they are not transitio
 | idp-client-step-up-ceremony               | client_step_up_ceremony_transactions             | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-client-oidc-authorization             | client_oidc_authorization_transactions           | status                                                                                                 | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-client-oauth-callback                 | client_oauth_callback_states                     | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
-| idp-client-local-result-delivery          | client_sign_in_flows                             | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-client-sign-in-flow-evidence          | client_sign_in_flows                             | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-client-token                          | client_tokens                                    | user_token_status_id                                                                                   | client_token_statuses                 | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_tokens ADD CONSTRAINT fk_rails_c11b41180d FOREIGN KEY (user_token_status_id) REFERENCES public.client_token_statuses(id) ON DELETE RESTRICT NOT VALID;                             |
 | idp-client-dbsc                           | client_tokens                                    | user_token_dbsc_status_id                                                                              | client_token_dbsc_statuses            | db/op_base_app_structure.sql       | ALTER TABLE ONLY public.client_tokens ADD CONSTRAINT fk_user_tokens_on_user_token_dbsc_status_id FOREIGN KEY (user_token_dbsc_status_id) REFERENCES public.client_token_dbsc_statuses(id) NOT VALID;              |
 | idp-client-device-session                 | client_device_sessions                           | status_id                                                                                              | None (state axis has no reference FK) | db/op_base_app_structure.sql       | None for this axis                                                                                                                                                                                                |
@@ -39,7 +39,7 @@ DELETE means PostgreSQL NO ACTION. CHECKs constrain rows; they are not transitio
 | idp-visitor-secret-credential-ceremony    | visitor_secret_credential_ceremony_transactions  | status                                                                                                 | visitor_secret_credential_statuses    | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-visitor-step-up-ceremony              | visitor_step_up_ceremony_transactions            | status                                                                                                 | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-visitor-oidc-authorization            | visitor_oidc_authorization_transactions          | status                                                                                                 | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
-| idp-visitor-local-result-delivery         | visitor_sign_in_flows                            | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-visitor-sign-in-flow-evidence         | visitor_sign_in_flows                            | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-visitor-token                         | visitor_tokens                                   | visitor_token_status_id                                                                                | visitor_token_statuses                | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_tokens ADD CONSTRAINT fk_customer_tokens_on_customer_token_status_id FOREIGN KEY (visitor_token_status_id) REFERENCES public.visitor_token_statuses(id) NOT VALID;                |
 | idp-visitor-dbsc                          | visitor_tokens                                   | visitor_token_dbsc_status_id                                                                           | visitor_token_dbsc_statuses           | db/op_base_com_structure.sql       | ALTER TABLE ONLY public.visitor_tokens ADD CONSTRAINT fk_customer_tokens_on_customer_token_dbsc_status_id FOREIGN KEY (visitor_token_dbsc_status_id) REFERENCES public.visitor_token_dbsc_statuses(id) NOT VALID; |
 | idp-visitor-device-session                | visitor_device_sessions                          | status_id                                                                                              | None (state axis has no reference FK) | db/op_base_com_structure.sql       | None for this axis                                                                                                                                                                                                |
@@ -56,7 +56,7 @@ DELETE means PostgreSQL NO ACTION. CHECKs constrain rows; they are not transitio
 | idp-operator-step-up-ceremony             | operator_step_up_ceremony_transactions           | status                                                                                                 | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-operator-oidc-authorization           | operator_oidc_authorization_transactions         | status                                                                                                 | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-operator-oauth-callback               | operator_oauth_callback_states                   | consumed_at / expires_at                                                                               | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
-| idp-operator-local-result-delivery        | operator_sign_in_flows                           | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
+| idp-operator-sign-in-flow-evidence        | operator_sign_in_flows                           | result_generation / result_digest / base_finalized_at                                                  | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
 | idp-operator-token                        | operator_tokens                                  | staff_token_status_id                                                                                  | operator_token_statuses               | db/op_base_org_structure.sql       | ALTER TABLE ONLY public.operator_tokens ADD CONSTRAINT fk_rails_1a807f181b FOREIGN KEY (staff_token_status_id) REFERENCES public.operator_token_statuses(id) ON DELETE RESTRICT NOT VALID;                        |
 | idp-operator-dbsc                         | operator_tokens                                  | staff_token_dbsc_status_id                                                                             | operator_token_dbsc_statuses          | db/op_base_org_structure.sql       | ALTER TABLE ONLY public.operator_tokens ADD CONSTRAINT fk_staff_tokens_on_staff_token_dbsc_status_id FOREIGN KEY (staff_token_dbsc_status_id) REFERENCES public.operator_token_dbsc_statuses(id) NOT VALID;       |
 | idp-operator-device-session               | operator_device_sessions                         | status_id                                                                                              | None (state axis has no reference FK) | db/op_base_org_structure.sql       | None for this axis                                                                                                                                                                                                |
@@ -536,26 +536,21 @@ CREATE TABLE client_auth_ceremony_sessions (
     cancelled_at timestamp(6) with time zone,
     authentication_method character varying,
     authentication_event_at timestamp(6) with time zone,
-    local_sign_in_flow_ref character varying,
-    local_sign_up_flow_ref character varying,
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
-    CONSTRAINT client_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
-    CONSTRAINT client_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
+    CONSTRAINT client_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
     CONSTRAINT client_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT client_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
     CONSTRAINT client_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT client_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
-    CONSTRAINT client_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
+    CONSTRAINT client_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, step_up_ceremony_transaction_ref) <= 1)),
 );
 ALTER TABLE ONLY public.client_auth_ceremony_sessions
     ADD CONSTRAINT client_auth_ceremony_sessions_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.client_auth_ceremony_sessions
     ADD CONSTRAINT fk_rails_268e296ad7 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.client_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ALTER TABLE ONLY public.client_auth_ceremony_sessions
-    ADD CONSTRAINT fk_rails_6413141ed8 FOREIGN KEY (local_sign_up_flow_ref) REFERENCES public.client_sign_up_flows(public_id) ON DELETE RESTRICT;
 ALTER TABLE ONLY public.client_auth_ceremony_sessions
-    ADD CONSTRAINT fk_rails_694b855234 FOREIGN KEY (local_sign_in_flow_ref) REFERENCES public.client_sign_in_flows(public_id) ON DELETE RESTRICT;
 ```
 
 Migration provenance:
@@ -1251,7 +1246,7 @@ Migration provenance: `db/op_base_app_migrate/20260530130100_rename_app_ticket_m
 ### client_sign_in_flows
 
 Source: `db/op_base_app_structure.sql:703`. Machines: `idp-client-sign-in`,
-`idp-client-local-result-delivery`.
+`idp-client-sign-in-flow-evidence`.
 
 ```sql
 CREATE TABLE client_sign_in_flows (
@@ -2603,26 +2598,21 @@ CREATE TABLE operator_auth_ceremony_sessions (
     cancelled_at timestamp(6) with time zone,
     authentication_method character varying,
     authentication_event_at timestamp(6) with time zone,
-    local_sign_in_flow_ref character varying,
-    local_sign_up_flow_ref character varying,
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
-    CONSTRAINT operator_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
-    CONSTRAINT operator_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
+    CONSTRAINT operator_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
     CONSTRAINT operator_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT operator_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
     CONSTRAINT operator_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT operator_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
-    CONSTRAINT operator_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
+    CONSTRAINT operator_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, step_up_ceremony_transaction_ref) <= 1))
 );
 ALTER TABLE ONLY public.operator_auth_ceremony_sessions
     ADD CONSTRAINT operator_auth_ceremony_sessions_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.operator_auth_ceremony_sessions
     ADD CONSTRAINT fk_rails_562d790641 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.operator_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ALTER TABLE ONLY public.operator_auth_ceremony_sessions
-    ADD CONSTRAINT fk_rails_5ea4994c1a FOREIGN KEY (local_sign_up_flow_ref) REFERENCES public.operator_sign_up_flows(public_id) ON DELETE RESTRICT;
 ALTER TABLE ONLY public.operator_auth_ceremony_sessions
-    ADD CONSTRAINT fk_rails_ed41a3bf04 FOREIGN KEY (local_sign_in_flow_ref) REFERENCES public.operator_sign_in_flows(public_id) ON DELETE RESTRICT;
 ```
 
 Migration provenance:
@@ -3240,7 +3230,7 @@ Migration provenance: `db/op_base_org_migrate/20260530130101_rename_org_ticket_m
 ### operator_sign_in_flows
 
 Source: `db/op_base_org_structure.sql:546`. Machines: `idp-operator-sign-in`,
-`idp-operator-local-result-delivery`.
+`idp-operator-sign-in-flow-evidence`.
 
 ```sql
 CREATE TABLE operator_sign_in_flows (
@@ -4249,26 +4239,21 @@ CREATE TABLE visitor_auth_ceremony_sessions (
     cancelled_at timestamp(6) with time zone,
     authentication_method character varying,
     authentication_event_at timestamp(6) with time zone,
-    local_sign_in_flow_ref character varying,
-    local_sign_up_flow_ref character varying,
     admission_purpose character varying,
     step_up_ceremony_transaction_ref character varying,
-    CONSTRAINT visitor_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['local_sign_in'::character varying, 'local_sign_up'::character varying, 'authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
-    CONSTRAINT visitor_auth_ceremony_purpose_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref) <= 1)),
+    CONSTRAINT visitor_auth_admission_purpose_valid CHECK (((admission_purpose IS NULL) OR ((admission_purpose)::text = ANY ((ARRAY['authentication_handoff'::character varying, 'invitation_handoff'::character varying, 'step_up_handoff'::character varying, 'reauthentication_handoff'::character varying, 'bootstrap_handoff'::character varying, 'credential_registration_handoff'::character varying, 'credential_change_handoff'::character varying])::text[])))),
     CONSTRAINT visitor_auth_ceremony_sessions_admission_binding CHECK (((authorization_transaction_ref IS NULL) OR (admitted_at IS NOT NULL))),
     CONSTRAINT visitor_auth_ceremony_sessions_authentication_evidence_pair CHECK (((authentication_method IS NULL) = (authentication_event_at IS NULL))),
     CONSTRAINT visitor_auth_ceremony_sessions_authentication_method CHECK (((authentication_method IS NULL) OR ((authentication_method)::text = ANY ((ARRAY['email'::character varying, 'telephone'::character varying, 'secret'::character varying, 'passkey'::character varying, 'totp'::character varying, 'google'::character varying, 'apple'::character varying, 'entra'::character varying])::text[])))),
     CONSTRAINT visitor_auth_ceremony_sessions_one_terminal_timestamp CHECK ((num_nonnulls(revoked_at, completed_at, cancelled_at) <= 1)),
-    CONSTRAINT visitor_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, local_sign_in_flow_ref, local_sign_up_flow_ref, step_up_ceremony_transaction_ref) <= 1))
+    CONSTRAINT visitor_auth_ceremony_transaction_exclusive CHECK ((num_nonnulls(authorization_transaction_ref, step_up_ceremony_transaction_ref) <= 1)),
 );
 ALTER TABLE ONLY public.visitor_auth_ceremony_sessions
     ADD CONSTRAINT visitor_auth_ceremony_sessions_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.visitor_auth_ceremony_sessions
-    ADD CONSTRAINT fk_rails_94c3c1f31a FOREIGN KEY (local_sign_in_flow_ref) REFERENCES public.visitor_sign_in_flows(public_id) ON DELETE RESTRICT;
 ALTER TABLE ONLY public.visitor_auth_ceremony_sessions
     ADD CONSTRAINT fk_rails_d273fa69d4 FOREIGN KEY (step_up_ceremony_transaction_ref) REFERENCES public.visitor_step_up_ceremony_transactions(transaction_id) ON DELETE RESTRICT;
 ALTER TABLE ONLY public.visitor_auth_ceremony_sessions
-    ADD CONSTRAINT fk_rails_d67de11b1e FOREIGN KEY (local_sign_up_flow_ref) REFERENCES public.visitor_sign_up_flows(public_id) ON DELETE RESTRICT;
 ```
 
 Migration provenance:
@@ -4826,7 +4811,7 @@ Migration provenance: `db/op_base_com_migrate/20260530031000_rename_com_ticket_m
 ### visitor_sign_in_flows
 
 Source: `db/op_base_com_structure.sql:555`. Machines: `idp-visitor-sign-in`,
-`idp-visitor-local-result-delivery`.
+`idp-visitor-sign-in-flow-evidence`.
 
 ```sql
 CREATE TABLE visitor_sign_in_flows (

@@ -19,6 +19,7 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
     cases.each do |event, (prior_events, expected_result, expected_status)|
       now = ClientSignUpFlow.database_now
       ticket = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
         entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
         issued_at: now - 16.minutes, expires_at: now + 15.minutes,
       )
@@ -40,6 +41,7 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
   test "sign-up state machine clears real requirements and completes once" do
     now = ClientSignUpFlow.database_now
     ticket = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
       issued_at: now, expires_at: now + 15.minutes,
     )
@@ -74,6 +76,7 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
   test "sign-up state machine durably expires a real overdue ticket and refuses discarded tickets" do
     now = ClientSignUpFlow.database_now
     expired = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
       issued_at: now - 16.minutes, expires_at: now + 1.minute,
     )
@@ -84,6 +87,7 @@ class CoverageThresholdServicesTest < ActiveSupport::TestCase
     assert_equal [:expired, ClientSignUpFlowStatus::EXPIRED], [result.status, expired.reload.status_id]
 
     discarded = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
       issued_at: now, expires_at: now + 15.minutes,
     )

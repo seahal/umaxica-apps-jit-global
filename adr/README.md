@@ -25,6 +25,28 @@ Current Inertia decision:
   `config/initializers/inertia_rails.rb` (gem-named); upstream's `inertia.rb` example is merged into
   it, never added as a second file.
 
+Current OP/Auth/RP responsibility decision:
+
+- [OP, Auth, and RP Authentication Responsibility Separation](op-auth-rp-authentication-responsibility-separation.md)
+  — **Accepted (2026-10-22), architecture only.** Sign In uses RP → OP → Auth → OP → RP;
+  authenticated method management uses Base → Auth → Base; step-up uses RP → Auth → RP.
+  Base becomes an application RP, OP authentication sessions remain, and direct paths cannot
+  replace Sign In. Direct-path token/trust protocols and remaining implementation details are open.
+
+Current Sign-in path and OIDC profile decisions (accepted 2026-10-23; not implemented):
+
+- [Sign-in path continuation protocol](sign-in-path-continuation-protocol.md) — Design D: user
+  actions are CSRF POSTs, system hops are GET continuations under six conditions (Fetch Metadata,
+  binding before consumption, CAS, same-browser repeat within issuance + 10 s, `no-store` /
+  `no-referrer`, clean URL); amends "GET never consumes" for these endpoints only.
+- [OIDC authorization request profile](oidc-authorization-request-profile.md) — eight required
+  parameters, exact `redirect_uri` match with no error to an invalid URI, post-validation errors
+  redirected, unsupported `prompt` a direct 400, per-realm `prompt_values_supported`,
+  `invalid_grant` for mismatches and PKCE failures, boot-time registration validation.
+- [RP OIDC state and return target](rp-oidc-state-and-return-target.md) — ES384 JWS `state`
+  (30 minutes), one pending entry per browser and RP, path-only `target_link_uri` replacing the RP
+  `pt`, Cancel and abnormal endings on `GET /sign/interruption`.
+
 Current authentication Security Mode decision (accepted; not implemented):
 
 - [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) — **Accepted
@@ -33,8 +55,15 @@ Current authentication Security Mode decision (accepted; not implemented):
   `allowCredentials` empty or omitted; verified credential ownership must match the server-fixed
   Identity. ORG Normal retains Entra binding; Standby selects by authoritative Employee Number,
   subject to authority and non-discoverable credential privacy prerequisites. Partially supersedes
-  usernameless direct sign-in and the ten-credential capacity below with a four-slot target;
-  preserves the `ADVANCED` two-active-Passkey holding minimum.
+  usernameless direct sign-in; its four-slot capacity and ORG non-discoverable compatibility are
+  superseded by the account-label ADR below (ten per Identity, ORG discoverable); preserves the
+  `ADVANCED` two-active-Passkey holding minimum.
+
+- [Passkey Authenticator Account Label](passkey-authenticator-account-label.md) — **Accepted
+  (2026-10-23), not implemented.** Credentials stay discoverable; `user.name` / `user.displayName`
+  carry a fixed non-identifying label, never an Email, Telephone, Employee Number or handle, so a
+  lost authenticator plus PIN does not reveal the account. Amends identifier-first: ORG requires
+  discoverable credentials; capacity ten per Identity.
 
 - `adr/authentication-security-mode.md` — `mfa_level_id` becomes `security_mode_id` with `NORMAL=3`
   and `ADVANCED=7`; owner-held mode with no Operator downgrade, per-mode step-up methods and
@@ -84,8 +113,9 @@ Current identity authority decision:
 - `adr/passkey-current-state-limit-and-chronicle-outbox.md` — **Accepted (2026-10-19)**; APP, COM,
   and ORG owner-serialized registration, physical lifecycle deletion and common Chronicle facts
   through principal transactional outboxes. Its ten-per-owner capacity is **partially superseded**
-  by [the 2026-10-21 four-slot target](passkey-identifier-first-sign-in.md); enforcement and
-  existing-data transition are unverified. Chronicle retention is still TBC.
+  by [the 2026-10-21 four-slot target](passkey-identifier-first-sign-in.md), and that supersession
+  is itself reversed on 2026-10-23 ([account label](passkey-authenticator-account-label.md)):
+  ten per owner again; enforcement is unverified. Chronicle retention is still TBC.
 
 - `adr/app-com-withdrawal-deadline-snapshot.md` — **Accepted (2026-10-19)**; Client and Visitor
   withdrawal deadlines use an immutable policy, persisted confirmation timestamps, and strict
@@ -481,7 +511,7 @@ Session and token decisions:
   `org`); implementation tracked in
   `plans/backlog/token-lifetime-policy-by-surface-implementation.md`.
 - `adr/session-token-hardening-baseline.md` — accepted hardening posture for production auth cookies
-  (`__Host-`/host-only/Secure/HttpOnly/`SameSite=Strict`/Partitioned), opaque-refresh + JWT-access,
+  (`__Host-`/host-only/Secure/HttpOnly/`SameSite=Strict`; `Partitioned` removed 2026-10-23, D-115), opaque-refresh + JWT-access,
   rotation/reuse/family-revoke, re-issue on security events, server-side timeouts, HSTS, and IP/UA
   as risk signal; implementation tracked in
   `plans/backlog/session-token-hardening-implementation.md`.

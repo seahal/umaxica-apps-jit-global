@@ -26,7 +26,7 @@ module Palm
             get palm_app_oidc_callback_url, params: { code: "retired-code" }
           end
 
-          assert_response :unprocessable_content
+          assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
           assert_equal "no-store", response.headers["Cache-Control"]
           assert_nil cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
           assert_nil cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE]
@@ -53,7 +53,10 @@ module Palm
           state, flow, authorization_params = start_palm_browser_flow
           client = OidcClientRegistry.find!("palm-app-jp")
           authentication_event_at = 1.minute.ago
-          root_token = ClientToken.create!(user: @user, authentication_event_at: authentication_event_at)
+          root_token = ClientToken.create!(
+            authentication_epoch: 0, user: @user,
+            authentication_event_at: authentication_event_at,
+          )
           authorization_code = OidcAuthorizationCodeIssuer.call(
             client: client,
             params: authorization_params.symbolize_keys,
@@ -170,7 +173,7 @@ module Palm
             }
           end
 
-          assert_response :unprocessable_content
+          assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
           assert_equal token_response.fetch(:access_token), cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE]
           assert_equal token_response.fetch(:refresh_token), cookies[OidcRpBrowserCredentialContract::REFRESH_COOKIE]
           assert_predicate candidate_session.reload, :active?
@@ -231,7 +234,7 @@ module Palm
             end
           end
 
-          assert_response :unprocessable_content
+          assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
           assert_nil cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE]
           assert_equal 0, RpPalmAppSession.count
         end
@@ -245,7 +248,7 @@ module Palm
             audience: "base-app-ww", source_record_id: @user.id, status_id: ClientIdentityState::ACTIVE,
           )
           authentication_event_at = 1.minute.ago
-          root_token = ClientToken.create!(user: @user, authentication_event_at:)
+          root_token = ClientToken.create!(authentication_epoch: 0, user: @user, authentication_event_at:)
           code = OidcAuthorizationCodeIssuer.call(
             client: OidcClientRegistry.find!("palm-app-jp"), params: authorization_params.symbolize_keys,
             resource: @user, session_token: root_token, authentication_event_at:,
@@ -265,14 +268,13 @@ module Palm
           result.token_response
         end
 
-        # The process role and its deployed contract epoch are process configuration.
+        # The process role is process configuration.
         def as_palm_cell
-          names = %w(UMAXICA_RUNTIME_ROLE UMAXICA_RP_CONTRACT_EPOCH UMAXICA_RP_BROWSER_ADMISSION)
+          names = %w(UMAXICA_RUNTIME_ROLE UMAXICA_RP_BROWSER_ADMISSION)
           previous = names.index_with { |name| ENV[name] }
           ENV["UMAXICA_RUNTIME_ROLE"] = "rp-palm-app-jp"
-          ENV["UMAXICA_RP_CONTRACT_EPOCH"] = OpAppProtocolEpoch.current_contract_epoch.to_s
           ENV["UMAXICA_RP_BROWSER_ADMISSION"] = "open"
-          RpCellLocalSession::JWKS_CLIENTS.clear
+          OidcOpJwksClient::CLIENTS.clear
           yield
         ensure
           previous.each { |name, value| value.nil? ? ENV.delete(name) : ENV[name] = value }
@@ -285,7 +287,7 @@ module Palm
               authenticity_token = css_select('input[name="authenticity_token"]').first["value"]
               post(
                 palm_app_sign_create_path(ri: "jp"),
-                params: { authenticity_token: authenticity_token, pt: "/dashboard" },
+                params: { authenticity_token: authenticity_token, target_link_uri: "/dashboard" },
                 headers: {
                   "Origin" => "https://#{HOST}",
                   "Sec-Fetch-Site" => "same-origin",
@@ -301,7 +303,7 @@ module Palm
             authorization_uri = URI.parse(jump_payload.fetch("url"))
             authorization_params = Rack::Utils.parse_nested_query(authorization_uri.query)
             state = authorization_params.fetch("state")
-            flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(state)
+            flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(OidcStateTestSupport.jti(state))
 
             [state, flow, authorization_params]
           end

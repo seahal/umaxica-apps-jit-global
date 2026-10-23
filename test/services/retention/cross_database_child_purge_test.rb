@@ -8,7 +8,10 @@ require_relative "../../support/avatar_test_factory"
 module Retention
   class CrossDatabaseChildPurgeTest < ActiveSupport::TestCase
     test "deletes non-audit cross-database children but retains chronicle audit" do
-      user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+      user = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+        status_id: ClientStatus::ACTIVE,
+      )
 
       notification = ClientNotificationRecord.create!(client: user)
 
@@ -36,7 +39,10 @@ module Retention
     end
 
     test "client purge retries the remaining database after a partial failure" do
-      user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+      user = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+        status_id: ClientStatus::ACTIVE,
+      )
       notification = ClientNotificationRecord.create!(client: user)
 
       capability = AvatarCapability.find_or_create_by!(id: AvatarCapability::NORMAL)

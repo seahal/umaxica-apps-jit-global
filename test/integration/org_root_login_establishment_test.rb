@@ -12,7 +12,7 @@ class OrgRootLoginEstablishmentTest < ActionDispatch::IntegrationTest
   # Provider HTTP is simulated; state, nonce, JWT signature, WebAuthn and Base issuance are real.
   # rubocop:disable Minitest/MultipleAssertions
   test "Entra and Passkey establish Normal root credentials only on Base" do
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     tenant = SecureRandom.uuid
     audience = SecureRandom.uuid
     object_id = SecureRandom.uuid

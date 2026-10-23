@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="<%= I18n.locale %>">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (#{brand_tld})",
+                          title: t("oidc_rp.interruption.title"),
+                          separator: "—",
+                          reverse: true %>
+    <%= render "shared/ui/standalone_ceremony_style" %>
+  </head>
+  <body>
+    <main>
+      <h1><%= t("oidc_rp.interruption.title") %></h1>
+      <p><%= t("oidc_rp.interruption.body") %></p>
+      <p>
+        <a href="<%= interruption_sign_path %>"><%= t("oidc_rp.interruption.sign_in") %></a>
+        <a href="/"><%= t("oidc_rp.interruption.top") %></a>
+      </p>
+    </main>
+  </body>
+</html>

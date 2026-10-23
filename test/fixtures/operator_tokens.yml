@@ -76,6 +76,7 @@ _fixture:
   model_class: OperatorToken
 #
 one:
+  authentication_epoch: 0
   staff_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
   device_session_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
   staff_token_binding_method_id: <%= OperatorTokenBindingMethod::NOTHING %>
@@ -88,6 +89,7 @@ one:
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 two:
+  authentication_epoch: 0
   staff_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
   device_session_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
   staff_token_binding_method_id: <%= OperatorTokenBindingMethod::NOTHING %>

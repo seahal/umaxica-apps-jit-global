@@ -15,10 +15,12 @@ class Edit::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
     begin
       fv5001 = OidcClientRegistry.find!("edit-org-ww")
       fv5002 = OperatorToken.create!(
+        authentication_epoch: 0,
         staff: @staff,
         staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       )
       fv5000 = OpOrgGrant.create!(
+        authentication_epoch: 0,
         operator_token: fv5002,
         oidc_client_id: fv5001.client_id,
         oidc_scope: "openid profile",
@@ -64,7 +66,8 @@ class Edit::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal @host, location.host
     assert_equal edit_org_sign_show_path, location.path
-    assert_equal edit_org_dashboard_path(ri: "jp"), Rack::Utils.parse_nested_query(location.query).fetch("pt")
+    # D-151: path only, no query.
+    assert_equal edit_org_dashboard_path, Rack::Utils.parse_nested_query(location.query).fetch("target_link_uri")
     assert_nil session["oidc_pending_flows"]
   end
 

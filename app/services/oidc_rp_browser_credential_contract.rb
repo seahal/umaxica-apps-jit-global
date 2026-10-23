@@ -137,7 +137,6 @@ module OidcRpBrowserCredentialContract
       httponly: true,
       same_site: :lax,
       path: "/",
-      domain: false,
       expires: expires_at,
     }.compact
   end

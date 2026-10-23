@@ -9,7 +9,7 @@ class OperatorCoverageTest < ActiveSupport::TestCase
     OperatorStatus.find_or_create_by!(id: 2)
     OperatorVisibility.find_or_create_by!(id: 1)
     OperatorVisibility.find_or_create_by!(id: 2)
-    @staff = Operator.create!(status_id: 2, visibility_id: 2)
+    @staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: 2, visibility_id: 2)
   end
 
   test "operator? and user? predicates" do
@@ -27,7 +27,7 @@ class OperatorCoverageTest < ActiveSupport::TestCase
   end
 
   test "assign_public_id! on create" do
-    s = Operator.new(status_id: 2, visibility_id: 2)
+    s = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: 2, visibility_id: 2)
 
     assert_nil s.public_id
     s.valid?
@@ -37,7 +37,7 @@ class OperatorCoverageTest < ActiveSupport::TestCase
   end
 
   test "explicit blank public_id input" do
-    s = Operator.new(status_id: 2, visibility_id: 2)
+    s = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: 2, visibility_id: 2)
     s.public_id = "  "
 
     assert_not s.valid?
@@ -49,7 +49,7 @@ class OperatorCoverageTest < ActiveSupport::TestCase
     # We can stub Operator.exists? to return true once
     calls = 0
     Operator.stub(:exists?, ->(_) { (calls += 1) == 1 }) do
-      s = Operator.create!(status_id: 2, visibility_id: 2)
+      s = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: 2, visibility_id: 2)
 
       assert_not_nil s.public_id
     end

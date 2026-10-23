@@ -43,10 +43,13 @@ module Auth
                 options_url: auth_com_sign_in_passkey_options_path(pt: pt, ri: ri, **binding),
                 verification_url: auth_com_sign_in_passkey_verification_path(pt: pt, ri: ri, **binding),
                 region: ri.to_s,
-                identifier_param: nil,
+                identifier_param: "identifier",
                 turnstile_site_key: turnstile_stealth_props.fetch(:site_key),
                 turnstile_error_message: t("turnstile_error"),
-                field: nil,
+                field: {
+                  label: t("sign.com.authentication.passkey.new.pii_label"),
+                  placeholder: t("sign.com.authentication.passkey.new.pii_placeholder"),
+                },
                 submit_label: t("sign.com.authentication.passkey.new.submit"),
               },
               back_link: {

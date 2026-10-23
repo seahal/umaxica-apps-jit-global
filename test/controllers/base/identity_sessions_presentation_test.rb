@@ -31,6 +31,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
     user.update!(status_id: ClientStatus::ACTIVE)
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -190,6 +191,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       principal = clients(:one)
       principal.update!(status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(
+        authentication_epoch: 0,
         user: principal, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 30.days.from_now,
       )
@@ -198,6 +200,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
       principal = visitors(:reserved_visitor)
       token = VisitorToken.create!(
+        authentication_epoch: 0,
         visitor: principal, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
       )
@@ -206,6 +209,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
       principal = operators(:one)
       token = OperatorToken.create!(
+        authentication_epoch: 0,
         staff: principal, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
         staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
@@ -217,6 +221,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
 
   def create_other_com_session(visitor)
     VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -225,6 +230,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
   def create_other_org_session(operator, except:)
     OperatorToken.where(staff_id: operator.id).where.not(id: except.id).update_all(discard_at: Time.current)
     OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_binding_method_id: OperatorTokenBindingMethod::DBSC,
@@ -246,6 +252,7 @@ class BaseIdentitySessionsPresentationTest < ActionDispatch::IntegrationTest
       end
     now = rp_class.database_now
     rp = rp_class.create!(
+      :authentication_epoch => 0,
       owner_key => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
       :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => now,
       :refresh_token_expires_at => [now + 2.hours, token.discard_at].min,

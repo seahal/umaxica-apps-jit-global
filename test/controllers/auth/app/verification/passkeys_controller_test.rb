@@ -9,7 +9,7 @@ class Auth::App::Verification::PasskeysControllerTest < ActionDispatch::Integrat
 
   setup do
     @user = clients(:one)
-    @token = ClientToken.create!(user: @user)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @user)
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @fake = WebAuthn::FakeClient.new("https://#{@host}", encoding: :base64url)
     registration = @fake.create(challenge: SecureRandom.urlsafe_base64(32), user_verified: true)

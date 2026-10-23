@@ -27,6 +27,14 @@ claimed. Follow [independent investigation](integrated-stack.md#independent-inve
   tests, including
   [root establishment](../../test/integration/root_login_establishment_flow_test.rb). Full
   family/surface matrix is planned where tests are missing; one app test does not certify all.
+- APP/COM ordinary authentication admission opens only Sign In; Sign Up requires the persisted
+  `prompt=create` or the Binding's server-fixed Switch selection. Wrong-intent GET and POST
+  requests leave the Binding and admission unconsumed, and a later request cannot reinterpret an
+  admitted ceremony by changing its path or parameters.
+- Every APP/COM/ORG Binding has a required immutable OP-issued 30-minute curfew and an explicit,
+  purpose-constrained intent. Switch copies its original curfew across repeated switches. A
+  re-verification Binding records `not_applicable`; NULL does not select an intent. The acceptance
+  code's shorter lifetime remains independent of curfew storage.
 
 ## FLOW-2 — Safe reload and contradictory safe requests
 
@@ -100,6 +108,11 @@ emergency paths retain their own contracts; APP/COM MFA coverage is not evidence
   transactions, device sessions or refresh/session tokens. Artifact cleanup cannot bypass terminal
   admission; all consumers must refuse unusable proof. Keep separate original-operation bounded
   receipts without fresh success or deadline extension (CONTACT-4).
+- APP/COM cleanup rechecks unfinished registration under the principal writer lock after the
+  terminal Flow lock. Contact, pending Passkey, audit outbox and actor retention changes share
+  one principal transaction. A failed write leaves all artifacts pending for retry; a registration
+  committed while cleanup waits is preserved. APP Secret sign-up operations and telephone Passkey
+  saving use the same Flow-before-principal order.
 - Check actual independent-connection races and public integration counts, not only token_id unique
   index presence. Start at root establishment and phase regression tests; comprehensive
   race/consumer evidence is planned. Boundary tests cover lock waits and deadline before/at/after,

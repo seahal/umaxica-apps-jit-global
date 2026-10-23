@@ -27,6 +27,7 @@ class EmailSignupVerificationStatusTest < ActiveSupport::TestCase
         nonce = "original-email-status-browser"
         now = flow_model.database_now
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,

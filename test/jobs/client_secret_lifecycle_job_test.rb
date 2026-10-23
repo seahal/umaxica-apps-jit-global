@@ -55,6 +55,7 @@ class ClientSecretLifecycleJobTest < ActiveJob::TestCase
       [clients(:one), clients(:two)].map do |actor|
         now = ClientSignUpFlow.database_now
         ClientSignUpFlow.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
           principal_id: actor.id, entry_method: "email", state: "STARTED", step: "start",
           nonce_digest: SecureRandom.hex(32), issued_at: now, expires_at: now + 1.minute,
           completed_requirements: [],

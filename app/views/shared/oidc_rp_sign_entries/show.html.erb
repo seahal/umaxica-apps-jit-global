@@ -13,6 +13,9 @@
     <main>
       <h1><%= t("actions.continue") %></h1>
       <%= form_with url: neutral_sign_form_url, method: :post, local: true do |form| %>
+        <% if neutral_sign_target_link_uri %>
+          <%= hidden_field_tag :target_link_uri, neutral_sign_target_link_uri %>
+        <% end %>
         <%= form.submit t("actions.continue") %>
       <% end %>
     </main>

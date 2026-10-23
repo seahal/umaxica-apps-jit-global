@@ -3,12 +3,14 @@
 // The ceremony is unchanged: solve an invisible Turnstile token, POST it to the anonymous options
 // endpoint, run `navigator.credentials.get`, POST the assertion to the verification
 // endpoint, and follow the redirect the server returns. Both endpoints are the same routes with the
-// same rate limits and the same CSRF header; the current panel keeps the ceremony discoverable and
-// does not collect or submit an account identifier. The status and error strings remain literals
-// rather than becoming new translation keys.
-import { useRef } from "react";
+// same rate limits and the same CSRF header. When the page names an identifier parameter and a
+// field, the panel collects the identifier first and submits it with the options request
+// (identifier-first sign-in, adr/passkey-identifier-first-sign-in.md). The status and error strings
+// remain literals rather than becoming new translation keys.
+import { useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
+import TextField from "@/components/ui/TextField";
 import {
   PASSKEY_MESSAGES,
   TURNSTILE_DEFAULT_ERROR,
@@ -67,9 +69,11 @@ export default function PasskeySignInPanel({
   identifier_param: identifierParam,
   turnstile_site_key: turnstileSiteKey,
   turnstile_error_message: turnstileErrorMessage,
+  field,
   submit_label: submitLabel,
 }: PasskeySignInPanelProps) {
   const host = useRef<HTMLDivElement>(null);
+  const [identifier, setIdentifier] = useState("");
   const { error, status, showError, showStatus, clearMessages } = useCeremonyMessages();
 
   const authenticate = async () => {
@@ -89,7 +93,7 @@ export default function PasskeySignInPanel({
 
       showStatus(PASSKEY_MESSAGES.fetchingOptions);
       const optionsResponse = await postJson(optionsUrl, {
-        ...(identifierParam === null ? {} : { [identifierParam]: "" }),
+        ...(identifierParam === null ? {} : { [identifierParam]: identifier }),
         "cf-turnstile-response": token,
         ri: region || undefined,
       });
@@ -162,6 +166,16 @@ export default function PasskeySignInPanel({
         </p>
       ) : null}
       {status ? <p className="text-base text-fg-muted">{status}</p> : null}
+
+      {identifierParam !== null && field ? (
+        <TextField
+          label={field.label}
+          placeholder={field.placeholder}
+          autoComplete="username"
+          value={identifier}
+          onChange={setIdentifier}
+        />
+      ) : null}
 
       <div>
         <Button

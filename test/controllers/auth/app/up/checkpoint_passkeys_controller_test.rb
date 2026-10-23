@@ -29,7 +29,7 @@ module Auth::App::Up
 
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
       )
       binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
@@ -93,6 +93,10 @@ module Auth::App::Up
       assert_kind_of Hash, json["options"]
       assert_predicate json.dig("options", "challenge"), :present?
       assert_predicate json.dig("options", "user", "id"), :present?
+      # adr/passkey-authenticator-account-label.md: the authenticator stores a fixed service label,
+      # never the telephone, an Email or the user handle.
+      assert_equal %w(umaxica.app umaxica.app),
+                   [json.dig("options", "user", "name"), json.dig("options", "user", "displayName")]
 
       challenge = session[:passkey_challenges][json["challenge_id"]]
 

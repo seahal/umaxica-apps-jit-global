@@ -29,9 +29,6 @@ class LegacyApiNamespaceGuardTest < ActiveSupport::TestCase
   # therefore a migration candidate; `ceremony` marks an endpoint whose classification the ADR does
   # not settle.
   LEGACY_OPERATIONS = {
-    "GET /edge/v0/cookie" => :api,
-    "PATCH /edge/v0/cookie" => :api,
-    "PUT /edge/v0/cookie" => :api,
     "GET /edge/v0/token/check" => :api,
     "POST /edge/v0/token/dbsc" => :api,
     "POST /edge/v0/token/refresh" => :api,

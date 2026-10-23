@@ -33,7 +33,7 @@ class BaseOrgDashboardLocalLoginJourneyTest < ActionDispatch::IntegrationTest
     auth_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     actor = Operator.create!(
       status_id: OperatorStatus::ACTIVE,
-      mfa_level_id: OperatorMfaLevel::NOTHING, mfa_status_id: OperatorMfaStatus::UNCONFIGURED,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: OperatorMfaStatus::UNCONFIGURED,
     )
     tenant = "11111111-2222-3333-4444-555555555555"
     audience = "22222222-3333-4444-5555-666666666666"

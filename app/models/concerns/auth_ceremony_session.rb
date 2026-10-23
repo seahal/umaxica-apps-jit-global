@@ -17,7 +17,7 @@ module AuthCeremonySession
   SID_BYTES = 32
   DEFAULT_TTL = 30.minutes
   AUTHENTICATION_METHODS = %w(email telephone secret passkey totp google apple entra).freeze
-  ADMISSION_PURPOSES = %w(local_sign_in local_sign_up authentication_handoff invitation_handoff
+  ADMISSION_PURPOSES = %w(authentication_handoff invitation_handoff
                           step_up_handoff reauthentication_handoff bootstrap_handoff
                           credential_registration_handoff credential_change_handoff).freeze
 
@@ -44,7 +44,6 @@ module AuthCeremonySession
     # database transaction. The old row is never revoked unless the new row
     # can also be created successfully.
     def rotate_and_admit!(admission_purpose:, previous_raw_sid: nil, authorization_transaction_ref: nil,
-                          local_sign_in_flow_ref: nil, local_sign_up_flow_ref: nil,
                           step_up_ceremony_transaction_ref: nil, ttl: DEFAULT_TTL, now: nil)
       unless ADMISSION_PURPOSES.include?(admission_purpose)
         raise InvalidTransition, "unsupported admission purpose"
@@ -71,8 +70,6 @@ module AuthCeremonySession
               sid_digest: digest,
               previous_sid_digest: previous_digest,
               authorization_transaction_ref: authorization_transaction_ref.to_s.presence,
-              local_sign_in_flow_ref: local_sign_in_flow_ref,
-              local_sign_up_flow_ref: local_sign_up_flow_ref,
               step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
               admission_purpose: admission_purpose,
               admitted_at: decision_time,

@@ -47,7 +47,6 @@
 class VisitorOidcAuthorizationTransaction < OpBaseComRecord
   include OidcAuthorizationTransactionable
 
-  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :cancellation_handoff_digest, :result_digest, length: { maximum: 64 }
 
   oidc_authorization_surface "com"

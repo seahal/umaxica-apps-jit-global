@@ -20,13 +20,14 @@ class TelephoneSignUpOtpDeliveryTest < ActiveSupport::TestCase
           when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
           when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
           end
-        owner = owner_model.create!(status_id: status)
+        owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         telephone = telephone_model.create!(
           owner_key => owner.id, :raw_number => "+12025550145", :confirm_policy => true,
         )
         now = flow_model.database_now
         nonce = "telephone-delivery-browser"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,

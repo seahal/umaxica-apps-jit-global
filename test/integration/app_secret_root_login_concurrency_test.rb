@@ -7,7 +7,7 @@ require "timeout"
 class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
   self.use_transactional_tests = false
   self.fixture_table_names = %w(
-    client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
@@ -30,12 +30,12 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
 
   %i(completion cancellation expiration).each do |outcome|
     test "Base Secret results racing #{outcome} cannot establish a second or terminal root login" do
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       identifier = "root-secret-#{SecureRandom.hex(4)}@example.com"
       actor.client_emails.create!(
         address: identifier, user_email_status_id: ClientEmailStatus::VERIFIED,
       ).finalize_binding!
-      token = ClientToken.create!(user: actor)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       token.update!(
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -505,7 +505,6 @@ class AppSecretRootLoginConcurrencyTest < ActionDispatch::IntegrationTest
             authorization_transaction_id: transaction_rows.select(:id),
           ).find_each(&:destroy!)
           transaction_rows.find_each(&:destroy!)
-          ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
         end
         ceremony&.destroy!
         flow&.destroy!

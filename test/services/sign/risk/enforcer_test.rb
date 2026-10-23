@@ -58,6 +58,7 @@ module Sign
         @user.client_tokens.destroy_all
 
         token = ClientToken.create!(
+          authentication_epoch: 0,
           user: @user,
           discard_at: 1.day.from_now,
           public_id: PublicId.generate,
@@ -80,6 +81,7 @@ module Sign
         staff.operator_tokens.destroy_all
 
         token = OperatorToken.create!(
+          authentication_epoch: 0,
           staff: staff,
           discard_at: 1.day.from_now,
           public_id: PublicId.generate,
@@ -114,6 +116,7 @@ module Sign
 
         # Create token with valid public_id and expiry
         token = ClientToken.create!(
+          authentication_epoch: 0,
           user: @user,
           discard_at: 1.day.from_now,
           public_id: PublicId.generate,

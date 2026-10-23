@@ -78,7 +78,9 @@ class PublicIdCapacityContractTest < ActiveSupport::TestCase
         assert constraint, "#{constraint_name} must be registered on #{table}"
         assert_match(/char_length\(\(?public_id\)?(?:::text)?\) = 21/, constraint.expression)
 
-        record = model.create!
+        record =
+          [Client,
+           Visitor,].include?(model) ? model.create!(security_mode_id: SecurityModeTestDefault.id_for(model)) : model.create!
         long_value = "a" * 22
 
         assert_raises(ActiveRecord::StatementInvalid) do

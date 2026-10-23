@@ -12,7 +12,10 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "commits the reviewed owner and lifecycle state as one idempotent unit" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "predeployment-backfill-client",
@@ -34,7 +37,10 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "does not create a lifecycle row when the explicit owner is rejected" do
-    client = Client.create!(status_id: ClientStatus::INACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::INACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "predeployment-backfill-inactive-client",
@@ -53,7 +59,10 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rolls back the owner when the lifecycle state conflicts" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "predeployment-backfill-lifecycle-conflict",
@@ -122,7 +131,10 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
   end
 
   def reviewed_client_persona_case
-    owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "all-six-client-persona",
@@ -135,13 +147,19 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
   end
 
   def reviewed_enterprise_case
-    owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     resource = I18n.with_locale(:en) { Enterprise.create!(name: "Enterprise", title: "Enterprise") }
     reviewed_case(:app, :enterprise, resource, owner)
   end
 
   def reviewed_individual_case
-    owner = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    owner = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     identity = VisitorIdentity.create!(
       issuer: "https://id.example.test",
       subject: "all-six-individual",
@@ -154,13 +172,19 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
   end
 
   def reviewed_company_case
-    owner = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    owner = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     resource = I18n.with_locale(:en) { Company.create!(name: "Company", title: "Company") }
     reviewed_case(:com, :company, resource, owner)
   end
 
   def reviewed_agent_case
-    owner = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH)
+    owner = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::BOTH,
+    )
     identity = OperatorIdentity.create!(
       issuer: "https://id.example.test",
       subject: "all-six-agent",
@@ -173,7 +197,10 @@ class AuthorityOwnerPredeploymentBackfillOperationTest < ActiveSupport::TestCase
   end
 
   def reviewed_bureau_case
-    owner = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH)
+    owner = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::BOTH,
+    )
     resource = I18n.with_locale(:en) { Bureau.create!(name: "Bureau", title: "Bureau") }
     reviewed_case(:org, :bureau, resource, owner)
   end

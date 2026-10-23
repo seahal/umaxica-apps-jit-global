@@ -6,7 +6,10 @@ require "test_helper"
 class OidcConnectionRecordTest < ActiveSupport::TestCase
   setup do
     ClientStatus.ensure_defaults!
-    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::ACTIVE,
+    )
   end
 
   test "status helpers classify active and revoked connections" do
@@ -61,9 +64,9 @@ class OidcConnectionRecordTest < ActiveSupport::TestCase
 
   test "active_tokens delegates to the surface token inventory" do
     client_connection = ClientOidcConnection.create!(user: @user, client_id: "core-app-jp")
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     operator_connection = OperatorOidcConnection.create!(staff: operator, client_id: "core-org-jp")
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     visitor_connection = VisitorOidcConnection.create!(visitor: visitor, client_id: "core-com-jp")
 
     assert_equal client_connection.user_tokens.session_inventory, client_connection.active_tokens

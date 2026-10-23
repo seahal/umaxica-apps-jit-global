@@ -17,17 +17,29 @@ module Base
             render inertia: true, props: mfa_challenge_page_props
           end
 
+          # adr/authentication-security-mode.md and the consolidation ADR 2.2/2.5: ADVANCED needs two
+          # active Passkeys, counted under the owner lock; leaving ADVANCED revokes every session.
           def update
-            previous_mfa_level_id = current_client.mfa_level_id
-            mfa_level_id = requested_mfa_level_id
-            current_client.update!(mfa_level_id: mfa_level_id, mfa_level_enabled: mfa_level_id != ClientMfaLevel::NOTHING)
-            CredentialSecurityTransition.call(
-              actor: current_client,
-              current_session: current_session,
-              reason: (mfa_level_id == ClientMfaLevel::NOTHING) ? :mfa_disabled : :mfa_level_changed,
-              affected_surface: "app",
-              request: request,
-            ) if previous_mfa_level_id != mfa_level_id
+            requested = requested_security_mode_id
+            previous = current_client.security_mode_id
+            current_client.with_lock do
+              if requested == ClientSecurityMode::ADVANCED && active_passkey_count < 2
+                raise ArgumentError, "ADVANCED requires two active passkeys"
+              end
+
+              current_client.update!(security_mode_id: requested)
+            end
+            if previous != requested
+              downgrade = requested == ClientSecurityMode::NORMAL
+              CredentialSecurityTransition.call(
+                actor: current_client,
+                current_session: current_session,
+                reason: downgrade ? :security_mode_normal : :security_mode_advanced,
+                affected_surface: "app",
+                revoke_current: downgrade,
+                request: request,
+              )
+            end
             redirect_to(
               base_app_identity_mfa_challenge_path(ri: params[:ri]),
             )
@@ -50,7 +62,7 @@ module Base
               title: t("sign.app.settings.mfa.show.title"),
               reset_unavailable: t("sign.app.settings.mfa.show.reset_unavailable"),
               toggle_title: t("sign.app.settings.mfa.show.toggle_title"),
-              state_label: current_client.mfa_level_enabled? ?
+              state_label: current_client.security_mode_advanced? ?
                 t("sign.app.settings.mfa.show.enabled") : t("sign.app.settings.mfa.show.disabled"),
               back_link: {
                 label: t("sign.app.settings.show.back"),
@@ -60,17 +72,15 @@ module Base
             }
           end
 
-          def requested_mfa_level_id
-            mfa_level_id = Integer(params.dig(:user, :mfa_level_id).to_s, 10)
-            allowed = [
-              ClientMfaLevel::NOTHING,
-              ClientMfaLevel::WEAK,
-              ClientMfaLevel::MEDIUM,
-              ClientMfaLevel::FULL,
-            ]
-            return mfa_level_id if allowed.include?(mfa_level_id)
+          def requested_security_mode_id
+            mode = Integer(params.dig(:user, :security_mode_id).to_s, 10)
+            return mode if ClientSecurityMode::DEFAULTS.include?(mode)
 
-            raise ArgumentError, "unsupported multi factor level"
+            raise ArgumentError, "unsupported security mode"
+          end
+
+          def active_passkey_count
+            current_client.client_passkeys.where(status_id: ClientPasskeyStatus::ACTIVE).count
           end
         end
       end

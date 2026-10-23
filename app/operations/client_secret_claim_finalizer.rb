@@ -115,9 +115,6 @@ class ClientSecretClaimFinalizer
 
     def terminal_ceremony_matches?(ceremony, flow, credential)
       return false unless ceremony&.admitted?
-      if ceremony.admission_purpose == "local_sign_in"
-        return ceremony.local_sign_in_flow_ref == flow.public_id
-      end
       return false unless ceremony.admission_purpose == "authentication_handoff"
 
       transaction = ClientOidcAuthorizationTransaction.find_by(

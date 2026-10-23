@@ -233,6 +233,7 @@ module Auth
               delivery_help: t("sign.app.registration.telephone.edit.delivery_help"),
               error_heading: errors.any? ? sign_up_telephone_error_heading(errors.count) : nil,
               errors: errors,
+              turnstile: turnstile_visible_props(challenge_id: SecureRandom.uuid),
               # The code has been sent and a ticket exists, so /sign/up is not a step back: the only exit
               # ends the sign-up through the existing DELETE cancellation.
               cancel: { label: t("actions.cancel"),
@@ -314,6 +315,7 @@ module Auth
           def issue_sign_up_flow!
             sign_up_flow_locator.issue!(
               ClientSignUpFlow.create!(
+                auth_admission_binding: auth_sign_up_admission_binding!,
                 principal_id: nil,
                 status_id: ClientSignUpFlowStatus::STARTED,
                 step: "start",
@@ -326,7 +328,7 @@ module Auth
           end
 
           def current_sign_up_flow
-            sign_up_flow_locator.current || issue_sign_up_flow!
+            current_sign_up_flow_ticket || issue_sign_up_flow!
           end
 
           def bind_sign_up_flow_to_telephone!(telephone)
@@ -347,7 +349,6 @@ module Auth
           def ensure_signup_reference_defaults!
             ClientStatus.ensure_defaults!
             ClientVisibility.ensure_defaults!
-            ClientMfaLevel.ensure_defaults!
             ClientMfaStatus.ensure_defaults!
             ClientTelephoneStatus.ensure_defaults!
           end

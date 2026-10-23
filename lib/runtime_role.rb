@@ -75,7 +75,7 @@ module RuntimeRole
   BROWSER_ADMISSION_STATES = %w(open closed).freeze
   # Controllers an RP cell serves while its browser entry is closed (R5-WU19): protocol-only
   # back-channel logout receivers, so durable revocation can still land, and process health.
-  CLOSED_CELL_PATHS = %r{/(oidc/backchannel_logouts|health|healths|revisions)\z}
+  CLOSED_CELL_PATHS = %r{/(oidc/closures|health|healths|revisions)\z}
 
   # The cell's trusted local deployment admission; required in every rp-* process, never derived
   # from a request. A new cell process starts closed until its exact manifest is enabled.
@@ -100,8 +100,8 @@ module RuntimeRole
   # sequence and reads canonical credentials, so both are OP pages as well.
   BASE_OP_PREFIXES = %w(
     oauth/authorizations oauth/tokens oauth/userinfos oauth/revocations oauth/refresh_delivery_queries
-    oidc/logouts well_known sign_byes edge/v0/token/checks edge/v0/token/refreshes edge/v0/cookies
-    identity identities verification verifications sign/completions sign/in secrets secret_issuances
+    oidc/logouts well_known sign_byes edge/v0/token/checks edge/v0/token/refreshes
+    identity identities verification verifications sign/in secrets secret_issuances
     secret_presentations social ceremony_binding_confirmations sign_outs edge/v0/token/dbsc selectors welcomes
     api/v0/identity api/v0/membership
   ).freeze
@@ -109,7 +109,7 @@ module RuntimeRole
   # Base paths the Base Self-RP cell serves: its own entry, callback, Refresh, logout receivers and
   # the relay pages whose logic lives at an HTTPS owner.
   BASE_RP_PREFIXES = %w(
-    sign/entries oidc/callbacks oidc/backchannel_logouts sign/cookie_purges roots
+    sign/entries sign/interruptions oidc/callbacks oidc/closures sign/cookie_purges roots
     switchers accounts organizations avatars avatar_ownership_transfers dashboard_avatar_images groups
     group_avatar_memberships billing billings iam support audit configurations system
   ).freeze

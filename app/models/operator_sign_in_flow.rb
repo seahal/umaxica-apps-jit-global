@@ -44,7 +44,7 @@
 class OperatorSignInFlow < OpBaseOrgRecord
   include SignInFlow
   include FlowSignIn
-  include LocalAuthenticationResultDelivery
+  include SignInFlowAuthenticationEvidence
 
   cycle_status_column :state_id
 

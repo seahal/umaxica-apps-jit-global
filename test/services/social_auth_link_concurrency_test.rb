@@ -10,7 +10,7 @@ class SocialAuthLinkConcurrencyTest < ActiveSupport::TestCase
   uses_transaction :test_concurrent_providers_for_one_client_keep_one_effective_binding
 
   test "concurrent clients for one social subject keep one owner" do
-    clients = 2.times.map { Client.create! }
+    clients = 2.times.map { Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL) }
     subject = SecureRandom.uuid
     principals = 2.times.map { verified_principal(provider: "google", subject: subject) }
 
@@ -26,7 +26,7 @@ class SocialAuthLinkConcurrencyTest < ActiveSupport::TestCase
   end
 
   test "concurrent providers for one client keep one effective binding" do
-    client = Client.create!
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     clients = [client]
     principals = [
       verified_principal(provider: "google", subject: SecureRandom.uuid),

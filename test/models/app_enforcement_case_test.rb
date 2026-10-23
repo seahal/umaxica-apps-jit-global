@@ -280,8 +280,14 @@ class AppEnforcementCaseTest < ActiveSupport::TestCase
   test "apply! on a method_protection case revokes only sessions matching the target method" do
     client = clients(:one)
     operator = operators(:one)
-    matching_token = ClientToken.create!(user_id: client.id, established_authentication_method: "passkey")
-    other_token = ClientToken.create!(user_id: client.id, established_authentication_method: "email")
+    matching_token = ClientToken.create!(
+      authentication_epoch: 0, user_id: client.id,
+      established_authentication_method: "passkey",
+    )
+    other_token = ClientToken.create!(
+      authentication_epoch: 0, user_id: client.id,
+      established_authentication_method: "email",
+    )
 
     the_case = AppEnforcementCase.new(
       kind: "method_protection",

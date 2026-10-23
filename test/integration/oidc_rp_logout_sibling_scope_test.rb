@@ -16,6 +16,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
     https!
     @user = clients(:one)
     @root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -41,6 +42,7 @@ class OidcRpLogoutSiblingScopeTest < ActionDispatch::IntegrationTest
   test "several siblings are revoked with the parent and another parent stays intact" do
     siblings = %w(warp-app-jp palm-app-jp).map { |client_id| create_rp_session(client_id) }
     other_root = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,

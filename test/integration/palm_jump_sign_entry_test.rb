@@ -99,7 +99,7 @@ class PalmJumpSignEntryTest < ActionDispatch::IntegrationTest
       assert_nil authorization_query["code_verifier"]
 
       state = authorization_query.fetch("state")
-      flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(state)
+      flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(OidcStateTestSupport.jti(state))
 
       assert_equal authorization_query.fetch("nonce"), flow.fetch("nonce")
       assert_predicate flow.fetch("code_verifier"), :present?

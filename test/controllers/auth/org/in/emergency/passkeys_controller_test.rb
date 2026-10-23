@@ -38,10 +38,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       status_id: OperatorPasskeyStatus::ACTIVE,
     )
 
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "org",
       intent: "sign_in",
-      nonce_digest: OperatorSignInFlow.digest_nonce("nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"),
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
       base_token: nil,
     )
@@ -67,7 +66,6 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     post form["action"], params: fields, headers: {
       "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_STAFF_URL")}", "Sec-Fetch-Site" => "same-origin",
     }
-    @flow = sign_in_flow_for_test(binding)
 
     assert_response :see_other
   end
@@ -96,14 +94,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_equal "/sign/in/emergency/passkey/verification", verification_uri.path
     assert_equal "jp", Rack::Utils.parse_nested_query(options_uri.query).fetch("ri")
     assert_equal "jp", Rack::Utils.parse_nested_query(verification_uri.query).fetch("ri")
-    assert_predicate(
-      SignInFlowBindingCodec.decode(Rack::Utils.parse_nested_query(options_uri.query).fetch("fb")),
-      :present?,
-    )
-    assert_predicate(
-      SignInFlowBindingCodec.decode(Rack::Utils.parse_nested_query(verification_uri.query).fetch("fb")),
-      :present?,
-    )
+    # An OIDC-parent primary phase has no sign-in flow, so the endpoints carry no phase binding.
+    assert_nil Rack::Utils.parse_nested_query(options_uri.query)["fb"]
+    assert_nil Rack::Utils.parse_nested_query(verification_uri.query)["fb"]
     assert_equal(
       I18n.t("sign.org.authentication.emergency.passkey.new.restricted_mode_notice"),
       inertia_props.fetch("restricted_mode_notice"),
@@ -159,70 +152,13 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
     assert_response :ok
     assert_equal "ok", response.parsed_body["status"]
 
-    assert_equal "standby", @flow.reload.authentication_context
-    assert_equal "passkey", @flow.authentication_method
+    flow = OperatorSignInFlow.where(principal_id: @staff.id).recent_first.first!
+
+    assert_equal "standby", flow.authentication_context
+    assert_equal "passkey", flow.authentication_method
     assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
     assert_nil response.parsed_body["access_token"]
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-  end
-
-  test "Base finalizes emergency evidence as an emergency session with narrowed scopes using a stubbed assertion" do
-    OpOrgProtocolEpoch.create!(id: 1, realm: "org", contract_epoch: 1, changed_at: Time.current)
-    challenge_id = issue_emergency_challenge!
-    verification_context = Struct.new(:sign_count, :verified_at).new(1, Time.current)
-
-    Webauthn::AssertionVerifier.stub(:verify!, verification_context) do
-      post auth_org_sign_in_emergency_passkey_verification_url(
-        ri: "jp", **org_emergency_binding_params,
-      ), params: verification_params(challenge_id)
-    end
-
-    get response.parsed_body.fetch("redirect_url")
-    follow_redirect!
-
-    assert_response :success
-    post auth_org_sign_handoff_path, params: { ri: "jp" }
-
-    assert_response :see_other
-    completion = URI.parse(response.location)
-
-    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), completion.host
-    assert_equal 0, OperatorToken.where(staff_id: @staff.id).count
-    host! completion.host
-    get completion.request_uri
-
-    assert_response :success
-    session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] = "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-    SignInCycleLocator.new(session, surface: :org).issue!(@flow, nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn")
-    session_key = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-    jar = ActionDispatch::Cookies::CookieJar.build(request, request.cookies)
-    jar.encrypted[session_key] = { value: session.to_hash.stringify_keys }
-    cookies.delete(session_key)
-    store_raw_cookies(
-      cookies,
-      "#{session_key}=#{Rack::Utils.escape(jar[session_key])}", URI.parse("https://#{completion.host}/"),
-    )
-    form = response.parsed_body.at_css("form")
-    fields = form.css("input[type='hidden']").to_h { |input| [input["name"], input["value"]] }
-    post form["action"], params: fields, headers: {
-      "Origin" => "https://#{completion.host}", "Sec-Fetch-Site" => "same-origin",
-    }
-
-    assert_response :see_other
-    token = OperatorToken.find(@flow.reload.token_id)
-
-    assert_equal "standby", token.authentication_context
-    assert_predicate token, :standby_authentication_context?
-    claims = AuthenticationToken.decode(
-      cookies[AuthenticationBase::ACCESS_COOKIE_KEY], host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
-                                                      resource_type: "operator", jwt_issuer_id: "surface:BASE_ORG",
-    )
-
-    assert_equal "standby", claims.fetch(AuthenticationContextValue::CLAIM)
-    scopes = AuthorizationTokenClaims.scopes(claims)
-
-    assert_includes scopes, "read:org"
-    assert_not_includes scopes, "write:org", "an emergency session must not carry org write scope"
   end
 
   test "a normal sign-in challenge is rejected by the emergency verifier" do
@@ -230,9 +166,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -292,9 +228,9 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
       admission_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       admission_sid = cookies["__Host-auth_sid"].presence || cookies["auth_sid"].presence
       admission_session = OperatorAuthCeremonySession.find_active_by_raw_sid(admission_sid) if admission_sid
-      unless admission_session&.admitted? && admission_session.admission_purpose == "local_sign_in"
+      unless admission_session&.admitted? && admission_session.admission_purpose == "authentication_handoff"
         admission_nonce = SecureRandom.urlsafe_base64(32)
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "org", intent: "sign_in", base_browser_nonce: admission_nonce, base_token: nil,
         )
         admission_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
@@ -413,9 +349,8 @@ class Auth::Org::Sign::In::Emergency::PasskeysControllerTest < ActionDispatch::I
 
   private
 
-  def org_emergency_binding_params
-    { fb: SignInFlowBindingCodec.encode(flow: @flow, surface: "org", phase: "PRIMARY_PENDING") }
-  end
+  # An OIDC-parent primary phase has no sign-in flow, so no phase binding is sent.
+  def org_emergency_binding_params = {}
 
   def issue_emergency_challenge!
     post(

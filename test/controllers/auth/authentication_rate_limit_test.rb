@@ -39,7 +39,7 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
 
   test "app passkey options sign-in hits explicit rails rate limit" do
     host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -242,9 +242,7 @@ class AuthAuthenticationRateLimitTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :see_other
-    phase_binding = SignInFlowBindingCodec.encode(
-      flow: admission.transaction, surface: "app", phase: "PRIMARY_PENDING",
-    )
+    phase_binding = nil
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 

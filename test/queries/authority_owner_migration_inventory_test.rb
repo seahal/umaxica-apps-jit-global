@@ -203,7 +203,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
   end
 
   test "classifies inactive principals without promoting them on every direct surface" do
-    client = Client.create!(status_id: ClientStatus::INACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::INACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     client_persona = ClientPersona.create!(
       client_identity: ClientIdentity.create!(
         issuer: "https://id.example.test",
@@ -215,7 +218,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
       title: "IncClientP",
     )
 
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     individual = Individual.create!(
       visitor_identity: VisitorIdentity.create!(
         issuer: "https://id.example.test",
@@ -227,7 +233,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
       title: "IncVisP",
     )
 
-    operator = Operator.create!(status_id: OperatorStatus::NOTHING, visibility_id: OperatorVisibility::BOTH)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::NOTHING, visibility_id: OperatorVisibility::BOTH,
+    )
     agent = Agent.create!(
       operator_identity: OperatorIdentity.create!(
         issuer: "https://id.example.test",
@@ -324,7 +333,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
   end
 
   test "classifies an administrator-only organization without promoting the administrator" do
-    administrator = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    administrator = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     enterprise = Enterprise.create!(name: "Administrator-only Enterprise", title: "AdminOnly")
     EnterpriseAdministrationGrant.create!(enterprise:, client: administrator)
 
@@ -359,7 +371,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
   alias active_client_identity client_identity
 
   def client_persona_with_active_owner(identity_label, title)
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: identity_label,
@@ -371,7 +386,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
   end
 
   def individual_with_active_owner(identity_label, title)
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     identity = VisitorIdentity.create!(
       issuer: "https://id.example.test",
       subject: identity_label,
@@ -383,7 +401,10 @@ class AuthorityOwnerMigrationInventoryTest < ActiveSupport::TestCase
   end
 
   def agent_with_active_owner(identity_label, title)
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH,
+    )
     identity = OperatorIdentity.create!(
       issuer: "https://id.example.test",
       subject: identity_label,

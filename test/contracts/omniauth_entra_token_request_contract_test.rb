@@ -94,6 +94,7 @@ class OmniauthEntraTokenRequestContractTest < ActiveSupport::TestCase
 
   def build_client
     client = Rack::OAuth2::Client.new(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       identifier: CLIENT_ID,
       secret: CLIENT_SECRET,
       scheme: "https",

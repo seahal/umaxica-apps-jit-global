@@ -55,8 +55,8 @@ class IdentityPasskeyNameCommitterTest < ActiveSupport::TestCase
   private
 
   def authorized_passkey(actor_class, key_class, token_class, owner_key, surface)
-    actor = actor_class.create!
-    token = token_class.create!(owner_key => actor.id)
+    actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
+    token = token_class.create!(:authentication_epoch => 0, owner_key => actor.id)
     metadata = (key_class == OperatorPasskey) ? {} : { uv_verified_at: Time.current }
     evidence_key = key_class.create!(
       owner_key => actor.id, :webauthn_id => SecureRandom.uuid, :public_key => "evidence-key", **metadata,

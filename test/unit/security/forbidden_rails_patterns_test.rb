@@ -94,9 +94,6 @@ class ForbiddenRailsPatternsTest < ActiveSupport::TestCase
   # Scoped Auth cancellation and Email ceremonies no longer skip these callbacks: their explicit
   # admitted context and ownership policy replace the former Auth root prerequisite.
   SENSITIVE_SKIP_ALLOWLIST = %w(
-    app/controllers/base/app/edge/v0/cookies_controller.rb
-    app/controllers/base/com/edge/v0/cookies_controller.rb
-    app/controllers/base/org/edge/v0/cookies_controller.rb
     app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/org/api/v0/preferences/dbsc_controller.rb

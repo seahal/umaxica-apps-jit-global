@@ -17,6 +17,7 @@ class Base::Com::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
     host! @host
     @visitor = visitors(:reserved_visitor)
     @token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: @visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
@@ -60,6 +61,7 @@ class Base::Com::Identity::WithdrawalsControllerTest < ActionDispatch::Integrati
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

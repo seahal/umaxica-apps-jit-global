@@ -19,12 +19,14 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
 
   test "a staff client revokes its own refresh token usage" do
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operators(:one),
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
     usage = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -43,12 +45,14 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
 
   test "a visitor client revokes its own refresh token usage" do
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitors(:reserved_visitor),
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
     usage = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: token, oidc_client_id: "core-com-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -67,12 +71,14 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
 
   test "a staff refresh token is not revoked by a visitor client" do
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operators(:one),
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
     usage = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token, oidc_client_id: "core-org-jp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -90,6 +96,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
 
   test "an access token sid that names only the parent does not revoke the parent" do
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: clients(:one),
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -115,6 +122,7 @@ class OidcTokenRevokerSurfaceLookupTest < ActiveSupport::TestCase
 
   test "an access token whose jti does not match the session is not revoked" do
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: clients(:one),
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,

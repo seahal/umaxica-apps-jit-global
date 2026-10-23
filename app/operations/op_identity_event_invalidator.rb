@@ -54,11 +54,11 @@ class OpIdentityEventInvalidator
 
     private
 
-    # Roots issued before the cutoff epoch; an unrecorded epoch predates epoch tracking.
+    # Roots issued before the cutoff epoch.
     def stale_roots(actor, cutoff_epoch)
       token_class, actor_key = ROOTS.fetch(actor.class)
       token_class.not_revoked.where(actor_key => actor.id)
-        .where("authentication_epoch IS NULL OR authentication_epoch < ?", cutoff_epoch)
+        .where(authentication_epoch: ...cutoff_epoch)
     end
 
     def actor_type(actor)

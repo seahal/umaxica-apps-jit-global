@@ -9,7 +9,7 @@ class ProsopiteSmokeTest < ActionDispatch::IntegrationTest
     created_user_ids =
       Prosopite.pause do
         3.times.map do |i|
-          user = Client.create!
+          user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
           ClientEmail.create!(user: user, address: "prosopite-smoke-#{i}-#{SecureRandom.hex(4)}@example.com")
           user.id
         end

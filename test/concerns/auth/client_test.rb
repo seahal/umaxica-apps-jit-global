@@ -89,7 +89,10 @@ class AuthClientTest < ActiveSupport::TestCase
 
   setup do
     @obj = DummyClass.new
-    @user = Client.create!(status_id: ClientStatus::NOTHING, public_id: SecureRandom.alphanumeric(21))
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      public_id: SecureRandom.alphanumeric(21),
+    )
     ClientToken.where(user_id: @user.id).delete_all
   end
 
@@ -182,10 +185,10 @@ class AuthClientTest < ActiveSupport::TestCase
 
   test "log_in at the active limit issues nothing, even beside a legacy restricted session" do
     2.times do
-      token = ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
       token.rotate_refresh_token!
     end
-    ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
+    ClientToken.create!(authentication_epoch: 0, user: @user, user_token_status_id: ClientTokenStatus::RESTRICTED)
     before_ids = ClientToken.where(user_id: @user.id).order(:id).pluck(:id, :user_token_status_id, :discard_at)
 
     result = @obj.log_in(

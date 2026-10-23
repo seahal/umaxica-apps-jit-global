@@ -4,8 +4,6 @@
 class OpAppGrant < OpBaseAppRecord
   include RpSession
 
-  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
-
   belongs_to :client_device_session, class_name: "ClientDeviceSession", foreign_key: :device_session_id,
                                      inverse_of: :op_app_grants
   # FIXME: The checker requests a token FK deliberately removed for stable device-session
@@ -13,6 +11,8 @@ class OpAppGrant < OpBaseAppRecord
   belongs_to :client_token, inverse_of: :op_app_grants
 
   validates :public_id, presence: true, uniqueness: true, length: { maximum: 21 }
+  # WU-17: written at issuance from the actor (roots) or the root (grants); never defaulted.
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validates :oidc_client_id, presence: true, length: { maximum: 64 }
   validates :last_logout_status, inclusion: { in: RpSession::LOGOUT_STATUSES }, allow_nil: true
   validates :refresh_token_digest, uniqueness: true, allow_nil: true

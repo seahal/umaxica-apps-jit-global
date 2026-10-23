@@ -32,7 +32,13 @@ class VisitorSecretCredentialPolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_and_create_allow_visitor
-    policy = VisitorSecretCredentialPolicy.new(VisitorSecretCredential.new, user: Visitor.new(id: 1))
+    policy = VisitorSecretCredentialPolicy.new(
+      VisitorSecretCredential.new,
+      user: Visitor.new(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 1,
+      ),
+    )
 
     assert_predicate policy, :index?
     assert_predicate policy, :create?
@@ -40,7 +46,13 @@ class VisitorSecretCredentialPolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_and_create_deny_other_actor_types
-    policy = VisitorSecretCredentialPolicy.new(VisitorSecretCredential.new, user: Client.new(id: 1))
+    policy = VisitorSecretCredentialPolicy.new(
+      VisitorSecretCredential.new,
+      user: Client.new(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 1,
+      ),
+    )
 
     assert_not policy.index?
     assert_not policy.create?
@@ -48,7 +60,7 @@ class VisitorSecretCredentialPolicyTest < ActiveSupport::TestCase
 
   # Per-record actions require ownership (record.visitor_id == user.id).
   def test_owner_may_manage_own_record
-    owner = Visitor.new(id: 1)
+    owner = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     record = VisitorSecretCredential.new(visitor_id: owner.id)
     policy = VisitorSecretCredentialPolicy.new(record, user: owner)
 
@@ -61,7 +73,13 @@ class VisitorSecretCredentialPolicyTest < ActiveSupport::TestCase
 
   def test_non_owner_may_not_manage_record
     record = VisitorSecretCredential.new(visitor_id: 1)
-    policy = VisitorSecretCredentialPolicy.new(record, user: Visitor.new(id: 2))
+    policy = VisitorSecretCredentialPolicy.new(
+      record,
+      user: Visitor.new(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 2,
+      ),
+    )
 
     assert_not policy.show?
     assert_not policy.update?

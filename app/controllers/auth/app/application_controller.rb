@@ -50,6 +50,7 @@ module Auth
       rescue_from ApplicationError, with: :handle_application_error
       rescue_from ActionController::InvalidCrossOriginRequest, with: :handle_csrf_failure
       rescue_from ActionPolicy::Unauthorized, with: :handle_authorization_error
+      rescue_from SignUpCycleLocator::OwnershipMismatch, with: :render_sign_up_ownership_mismatch
       helper_method :current_actor, :current_account, :current_session_public_id,
                     :signed_pt_param, :current_client, :logged_in?, :active_client?, :logged_in_client?,
                     :current_region_identifier
@@ -116,7 +117,12 @@ module Auth
       def after_login_path
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
-        auth_app_sign_handoff_path(ri: current_region_identifier)
+        # The Local completion is removed (D-60); without an OIDC login challenge the browser returns
+        # to its surface's Base RP entry.
+        base_app_sign_show_url(
+          ri: current_region_identifier, host: Rails.configuration.x.boot_config.fetch(:hosts).base_service.host,
+          protocol: "https",
+        )
       end
 
       def after_login_allows_other_host?

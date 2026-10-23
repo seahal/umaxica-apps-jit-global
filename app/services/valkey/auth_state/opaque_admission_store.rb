@@ -21,8 +21,6 @@ module Valkey
         credential_registration_handoff credential_registration_result
         credential_change_handoff credential_change_result
         cancellation_handoff
-        local_sign_in local_sign_up
-        local_sign_in_result
       ).freeze
       BINDING_FIELDS = %w(
         actor_type surface subject_ref base_session_ref ceremony_session_ref

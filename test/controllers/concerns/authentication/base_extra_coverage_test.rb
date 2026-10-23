@@ -183,7 +183,7 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "issue_bulletin! sets session" do
-    @harness.current_resource = Client.new
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert @harness.issue_bulletin!(kind: "welcome")
     assert_equal "welcome", @harness.session[AuthenticationBase::BULLETIN_SESSION_KEY]["kind"]
@@ -199,14 +199,14 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
 
   test "consume_bulletin! clears session" do
     @harness.session[AuthenticationBase::BULLETIN_SESSION_KEY] = { "bulletin_id" => 1 }
-    @harness.current_resource = Client.new
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @harness.consume_bulletin!
 
     assert_nil @harness.session[AuthenticationBase::BULLETIN_SESSION_KEY]
   end
 
   test "session_limit_conflict_result is a temporary failure, not a limit refusal" do
-    resource = Client.new(id: 123)
+    resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 123)
 
     result = @harness.send(:session_limit_conflict_result, resource)
 
@@ -306,7 +306,7 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "authenticate! short-circuits when already logged in" do
-    @harness.current_resource = Client.new
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     SignRiskEnforcer.stub(:call, nil) do
       @harness.authenticate!
@@ -317,7 +317,7 @@ class AuthenticationBaseExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "log_out clears session and cookies" do
-    @harness.current_resource = Client.new
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @harness.define_singleton_method(:current_session) do
       Struct.new(:public_id).new("session-public-id")
     end

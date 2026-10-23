@@ -30,13 +30,13 @@ class OidcSubjectTest < ActiveSupport::TestCase
   end
 
   test "infers operator resource type" do
-    operator = Operator.new(id: 1, public_id: "opr_xyz")
+    operator = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1, public_id: "opr_xyz")
 
     assert_equal "opr_#{operator.public_id}", OidcSubject.for(operator)
   end
 
   test "infers visitor resource type" do
-    visitor = Visitor.new(id: 1, public_id: "vis_xyz")
+    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1, public_id: "vis_xyz")
 
     assert_equal "vis_#{visitor.public_id}", OidcSubject.for(visitor)
   end

@@ -14,14 +14,14 @@ module WithdrawalCeremonyCookie
 
   def withdrawal_ceremony_cookie_options
     CoreCookieOptions.for(
-      surface: CoreSurface.current(request), request: request, same_site: :strict, path: "/", domain: false,
+      request: request, same_site: :strict, path: "/",
       expires: WithdrawalCeremonyRecordable::TTL.from_now,
     )
   end
 
   def withdrawal_ceremony_cookie_deletion_options
     CoreCookieOptions.for(
-      surface: CoreSurface.current(request), request: request, same_site: :strict, path: "/", domain: false,
+      request: request, same_site: :strict, path: "/",
     ).except(:expires, :httponly)
   end
 

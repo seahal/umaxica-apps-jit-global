@@ -51,6 +51,7 @@ class IdentityPasskeyRegistrationVerificationCommitter
       )
       context = Webauthn::RegistrationVerifier.verify!(
         credential_params: credential_params, challenge: challenge, config: config,
+        surface: binding.fetch(:surface),
       )
       material = candidate_material(context, credential_params, config, description)
       binding.fetch(:actor_class).connection_class_for_self.connected_to(role: :writing) do

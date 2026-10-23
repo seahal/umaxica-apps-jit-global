@@ -4,72 +4,61 @@
 require "test_helper"
 
 class CredentialSecurityTransitionTest < ActiveSupport::TestCase
-  test "credential changes end only owned unfinished local admissions without revoking retained root sessions" do
+  test "credential changes end only owned unfinished sign-in flows without revoking retained root sessions" do
     %i(app com org).each do |surface|
       [true, false].each_with_index do |revoke_step_up, index|
-        actor, foreign, token, flow_model, ceremony_model =
+        actor, foreign, token, =
           case surface
           when :app
-            actor = Client.create!(id: 9_119_000_000_000 + index)
-            [actor, Client.create!(id: 9_120_000_000_000 + index), ClientToken.create!(user: actor), ClientSignInFlow,
-             ClientAuthCeremonySession,]
+            actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_119_000_000_000 + index)
+            [
+              actor,
+              Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_120_000_000_000 + index),
+              ClientToken.create!(authentication_epoch: 0, user: actor),
+              ClientSignInFlow,
+              ClientAuthCeremonySession,
+            ]
           when :com
-            actor = Visitor.create!(id: 9_119_000_000_000 + index)
-            [actor, Visitor.create!(id: 9_120_000_000_000 + index), VisitorToken.create!(visitor: actor),
-             VisitorSignInFlow, VisitorAuthCeremonySession,]
+            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_119_000_000_000 + index)
+            [
+              actor,
+              Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_120_000_000_000 + index),
+              VisitorToken.create!(authentication_epoch: 0, visitor: actor),
+              VisitorSignInFlow,
+              VisitorAuthCeremonySession,
+            ]
           when :org
-            actor = Operator.create!(id: 9_119_000_000_000 + index)
-            [actor, Operator.create!(id: 9_120_000_000_000 + index), OperatorToken.create!(staff: actor),
-             OperatorSignInFlow, OperatorAuthCeremonySession,]
+            actor = Operator.create!(
+              security_mode_id: SecurityModeConfigurable::ADVANCED,
+              id: 9_119_000_000_000 + index,
+            )
+            [
+              actor,
+              Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_120_000_000_000 + index),
+              OperatorToken.create!(authentication_epoch: 0, staff: actor),
+              OperatorSignInFlow,
+              OperatorAuthCeremonySession,
+            ]
           end
         # Synthetic proof isolates revocation; real authentication is exercised by integration tests.
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s,
-          intent: "sign_in",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: nil,
-        )
-        flow = issuance.transaction
+        flow = SignInFlowTestFactory.create!(surface: surface.to_s, principal_id: nil)
         flow.update!(principal_id: actor.id)
-        flow.record_local_authentication_evidence!(method: "passkey")
+        flow.record_authentication_evidence!(method: "passkey")
         flow.advance_sign_in_to_guardrail!
         flow.advance_sign_in_to_checkpoint!
         flow.advance_sign_in_to_selector!
         flow.advance_sign_in_to_session_issuance!
-        digest = SecureRandom.hex(32)
-        flow.prepare_local_result_delivery!(digest: digest, ttl: 1.minute)
         event = flow.authentication_event_at
-        generation = flow.result_generation
-        ceremony, = ceremony_model.rotate_and_admit!(
-          admission_purpose: "local_sign_in",
-          local_sign_in_flow_ref: flow.public_id,
-        )
-        ceremony.record_authentication_evidence!(method: "passkey")
-        foreign_flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "foreign-browser-nonce", base_token: nil,
-        ).transaction
+        foreign_flow = SignInFlowTestFactory.create!(surface: surface.to_s, principal_id: nil)
         foreign_flow.update!(principal_id: foreign.id)
-        foreign_ceremony, = ceremony_model.rotate_and_admit!(
-          admission_purpose: "local_sign_in", local_sign_in_flow_ref: foreign_flow.public_id,
-        )
-        completed = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s, intent: "sign_in", base_browser_nonce: "historical-browser-nonce", base_token: nil,
-        ).transaction
+        completed = SignInFlowTestFactory.create!(surface: surface.to_s, principal_id: nil)
         completed.update!(principal_id: actor.id, token_id: token.id)
-        completed.record_local_authentication_evidence!(method: "passkey", authenticated_at: event)
+        completed.record_authentication_evidence!(method: "passkey", authenticated_at: event)
         completed.advance_sign_in_to_guardrail!
         completed.advance_sign_in_to_checkpoint!
         completed.advance_sign_in_to_selector!
         completed.advance_sign_in_to_session_issuance!
-        completed.prepare_local_result_delivery!(digest: SecureRandom.hex(32), ttl: 1.minute)
         completed.complete_sign_in!
-        completed.update!(base_finalized_at: event)
-        historical, = ceremony_model.rotate_and_admit!(
-          admission_purpose: "local_sign_in",
-          local_sign_in_flow_ref: completed.public_id,
-        )
-        historical.complete!
-        completed_at = historical.completed_at
 
         result = CredentialSecurityTransition.call(
           actor: actor, current_session: token, reason: :mfa_reset, affected_surface: surface,
@@ -77,51 +66,41 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
         )
 
         assert_predicate flow.reload, :sign_in_halted?
-        assert_not_nil ceremony.reload.revoked_at
-        assert_equal digest, flow.result_digest
-        assert_operator flow.result_expires_at, :<=, flow_model.database_now
-        assert_not flow.local_result_delivery_matches?(digest: digest, generation: generation)
         assert_equal event, flow.authentication_event_at
-        assert_equal generation, flow.result_generation
         assert_predicate token.reload, :currently_usable?
         assert_equal 0, result.revoked_session_count
         assert_predicate foreign_flow.reload, :sign_in_primary_pending?
-        assert_nil foreign_ceremony.reload.revoked_at
         assert_predicate completed.reload, :sign_in_completed?
-        assert_equal completed_at, historical.reload.completed_at
-        assert_nil historical.revoked_at
       end
     end
   end
 
-  test "credential changes revoke local continuity immediately before at and after flow expiry" do
+  test "credential changes end a sign-in flow immediately before at and after its expiry" do
     %i(app com org).each do |surface|
       [-1, 0, 1].each_with_index do |microseconds, index|
-        actor, token, flow_model, ceremony_model =
+        actor, token, flow_model, =
           case surface
           when :app
-            actor = Client.create!(id: 9_122_000_000_000 + index)
-            [actor, ClientToken.create!(user: actor), ClientSignInFlow, ClientAuthCeremonySession]
+            actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_122_000_000_000 + index)
+            [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientSignInFlow,
+             ClientAuthCeremonySession,]
           when :com
-            actor = Visitor.create!(id: 9_122_000_000_000 + index)
-            [actor, VisitorToken.create!(visitor: actor), VisitorSignInFlow, VisitorAuthCeremonySession]
+            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_122_000_000_000 + index)
+            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorSignInFlow,
+             VisitorAuthCeremonySession,]
           when :org
-            actor = Operator.create!(id: 9_122_000_000_000 + index)
-            [actor, OperatorToken.create!(staff: actor), OperatorSignInFlow, OperatorAuthCeremonySession]
+            actor = Operator.create!(
+              security_mode_id: SecurityModeConfigurable::ADVANCED,
+              id: 9_122_000_000_000 + index,
+            )
+            [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorSignInFlow,
+             OperatorAuthCeremonySession,]
           end
-        flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s,
-          intent: "sign_in",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: nil,
-        ).transaction
+        flow = SignInFlowTestFactory.create!(surface: surface.to_s, principal_id: nil)
         now = flow_model.database_now
         flow.update!(
           principal_id: actor.id, issued_at: now - 1.minute,
           expires_at: now + Rational(microseconds, 1_000_000),
-        )
-        ceremony, = ceremony_model.rotate_and_admit!(
-          admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
         )
         expiry = flow.expires_at
 
@@ -132,7 +111,6 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
           )
         end
 
-        assert_not_nil ceremony.reload.revoked_at
         assert_equal expiry, flow.reload.expires_at
         assert_equal microseconds.positive?, flow.sign_in_halted?
         assert_predicate token.reload, :currently_usable?
@@ -146,16 +124,22 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       actor, foreign, token, transactions, ceremonies =
         case surface
         when :app
-          actor = Client.create!(id: 9_123_000_000_000)
-          [actor, Client.create!(id: 9_124_000_000_000), ClientToken.create!(user: actor),
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_123_000_000_000)
+          [actor, Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_124_000_000_000,
+          ), ClientToken.create!(authentication_epoch: 0, user: actor),
            ClientOidcAuthorizationTransaction, ClientAuthCeremonySession,]
         when :com
-          actor = Visitor.create!(id: 9_123_000_000_000)
-          [actor, Visitor.create!(id: 9_124_000_000_000), VisitorToken.create!(visitor: actor),
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_123_000_000_000)
+          [actor, Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_124_000_000_000,
+          ), VisitorToken.create!(authentication_epoch: 0, visitor: actor),
            VisitorOidcAuthorizationTransaction, VisitorAuthCeremonySession,]
         when :org
-          actor = Operator.create!(id: 9_123_000_000_000)
-          [actor, Operator.create!(id: 9_124_000_000_000), OperatorToken.create!(staff: actor),
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_123_000_000_000)
+          [actor, Operator.create!(
+            security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_124_000_000_000,
+          ), OperatorToken.create!(authentication_epoch: 0, staff: actor),
            OperatorOidcAuthorizationTransaction, OperatorAuthCeremonySession,]
         end
       rows =
@@ -188,11 +172,9 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       resolutions =
         if surface == :app
           [actor, foreign].each_with_index.map do |owner, index|
-            flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-              surface: "app", intent: "sign_in", base_browser_nonce: "resolution-browser-nonce", base_token: nil,
-            ).transaction
+            flow = SignInFlowTestFactory.create!(surface: "app", principal_id: nil)
             flow.update!(principal_id: owner.id)
-            flow.record_local_authentication_evidence!(method: "passkey")
+            flow.record_authentication_evidence!(method: "passkey")
             flow.advance_sign_in_to_guardrail!
             flow.advance_sign_in_to_checkpoint!
             flow.advance_sign_in_to_selector!
@@ -241,14 +223,16 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       actor, token, transactions, ceremonies =
         case surface
         when :app
-          actor = Client.create!(id: 9_126_000_000_000)
-          [actor, ClientToken.create!(user: actor), ClientOidcAuthorizationTransaction, ClientAuthCeremonySession]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_126_000_000_000)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientOidcAuthorizationTransaction,
+           ClientAuthCeremonySession,]
         when :com
-          actor = Visitor.create!(id: 9_126_000_000_000)
-          [actor, VisitorToken.create!(visitor: actor), VisitorOidcAuthorizationTransaction, VisitorAuthCeremonySession]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_126_000_000_000)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorOidcAuthorizationTransaction,
+           VisitorAuthCeremonySession,]
         when :org
-          actor = Operator.create!(id: 9_126_000_000_000)
-          [actor, OperatorToken.create!(staff: actor), OperatorOidcAuthorizationTransaction,
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_126_000_000_000)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorOidcAuthorizationTransaction,
            OperatorAuthCeremonySession,]
         end
       now = transactions.database_now
@@ -290,78 +274,41 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
     end
   end
 
-  test "local admission revocation failure rolls back ticket state before root token changes" do
-    %i(app com org).each do |surface|
-      actor, token, ceremony_model =
-        case surface
-        when :app
-          actor = Client.create!(id: 9_121_000_000_000)
-          [actor, ClientToken.create!(user: actor), ClientAuthCeremonySession]
-        when :com
-          actor = Visitor.create!(id: 9_121_000_000_000)
-          [actor, VisitorToken.create!(visitor: actor), VisitorAuthCeremonySession]
-        when :org
-          actor = Operator.create!(id: 9_121_000_000_000)
-          [actor, OperatorToken.create!(staff: actor), OperatorAuthCeremonySession]
-        end
-      flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface: surface.to_s,
-        intent: "sign_in",
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-        base_token: nil,
-      ).transaction
-      flow.update!(principal_id: actor.id)
-      ceremony, = ceremony_model.rotate_and_admit!(
-        admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
-      )
-      failure = -> { raise ActiveRecord::ConnectionNotEstablished, "injected ticket clock failure" }
-
-      ceremony_model.stub(:database_now, failure) do
-        assert_raises(ActiveRecord::ConnectionNotEstablished) do
-          CredentialSecurityTransition.call(
-            actor: actor, current_session: token, reason: :mfa_reset, affected_surface: surface,
-            revoke_current: true,
-          )
-        end
-      end
-
-      assert_predicate flow.reload, :sign_in_primary_pending?
-      assert_nil flow.result_digest
-      assert_nil ceremony.reload.revoked_at
-      assert_predicate token.reload, :currently_usable?
-    end
-  end
-
   %i(app com org).each do |surface|
     %i(other_actor other_surface).each do |mismatch|
       test "#{surface} credential transition refuses current-session #{mismatch} before changing tokens" do
         case surface
         when :app
           actor = clients(:one)
-          owned_token = ClientToken.create!(user: actor)
+          owned_token = ClientToken.create!(authentication_epoch: 0, user: actor)
           foreign_token =
             if mismatch == :other_actor
-              ClientToken.create!(user: clients(:two))
+              ClientToken.create!(authentication_epoch: 0, user: clients(:two))
             else
-              OperatorToken.create!(staff: operators(:one))
+              OperatorToken.create!(authentication_epoch: 0, staff: operators(:one))
             end
         when :com
           actor = visitors(:reserved_visitor)
-          owned_token = VisitorToken.create!(visitor: actor)
+          owned_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
           foreign_token =
             if mismatch == :other_actor
-              VisitorToken.create!(visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE))
+              VisitorToken.create!(
+                authentication_epoch: 0,
+                visitor: Visitor.create!(
+                  security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+                ),
+              )
             else
-              ClientToken.create!(user: clients(:one))
+              ClientToken.create!(authentication_epoch: 0, user: clients(:one))
             end
         when :org
           actor = operators(:one)
-          owned_token = OperatorToken.create!(staff: actor)
+          owned_token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
           foreign_token =
             if mismatch == :other_actor
-              OperatorToken.create!(staff: operators(:two))
+              OperatorToken.create!(authentication_epoch: 0, staff: operators(:two))
             else
-              ClientToken.create!(user: clients(:one))
+              ClientToken.create!(authentication_epoch: 0, user: clients(:one))
             end
         end
 
@@ -380,15 +327,15 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       when :app
         actor = clients(:one)
         AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, user: actor)
       when :com
         actor = visitors(:reserved_visitor)
         AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-        token = VisitorToken.create!(visitor: actor)
+        token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
       when :org
         actor = operators(:one)
         AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-        token = OperatorToken.create!(staff: actor)
+        token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
       end
       retained = CredentialSecurityTransition.call(
         actor: actor, current_session: nil, reason: :mfa_reset, affected_surface: surface,
@@ -413,18 +360,18 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
         when :app
           actor = clients(:one)
           AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-          current_token = ClientToken.create!(user: actor)
-          other_token = ClientToken.create!(user: actor)
+          current_token = ClientToken.create!(authentication_epoch: 0, user: actor)
+          other_token = ClientToken.create!(authentication_epoch: 0, user: actor)
         when :com
           actor = visitors(:reserved_visitor)
           AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-          current_token = VisitorToken.create!(visitor: actor)
-          other_token = VisitorToken.create!(visitor: actor)
+          current_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
+          other_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
         when :org
           actor = operators(:one)
           AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-          current_token = OperatorToken.create!(staff: actor)
-          other_token = OperatorToken.create!(staff: actor)
+          current_token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
+          other_token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
         end
         result = CredentialSecurityTransition.call(
           actor: actor, current_session: current_token, reason: :mfa_reset, affected_surface: surface,
@@ -443,8 +390,8 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
   test "COM credential changes enumerate revocation targets on the writer inside a reading request" do
     actor = visitors(:reserved_visitor)
     AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-    current_token = VisitorToken.create!(visitor: actor)
-    other_token = VisitorToken.create!(visitor: actor)
+    current_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
+    other_token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
     roles = []
     subscriber =
       lambda do |_name, _start, _finish, _id, payload|
@@ -470,8 +417,8 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
   test "ORG credential changes enumerate revocation targets on the writer inside a reading request" do
     actor = operators(:one)
     AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
-    current_token = OperatorToken.create!(staff: actor)
-    other_token = OperatorToken.create!(staff: actor)
+    current_token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
+    other_token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     roles = []
     subscriber =
       lambda do |_name, _start, _finish, _id, payload|
@@ -496,8 +443,8 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
 
   test "credential changes enumerate revocation targets on the writer inside a reading request" do
     actor = clients(:one)
-    current_token = ClientToken.create!(user: actor)
-    other_token = ClientToken.create!(user: actor)
+    current_token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: actor)
     roles = []
     subscriber =
       lambda do |_name, _start, _finish, _id, payload|
@@ -522,7 +469,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
 
   test "credential changes revoke pending ceremonies even before freshness exists" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     requirement = StepUpRequirement.new(
       step_up_required: true,
       phishing_resistant_required: false,
@@ -562,6 +509,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
     actor = clients(:one)
     AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
     current_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       last_step_up_at: 1.minute.ago,
@@ -575,6 +523,7 @@ class CredentialSecurityTransitionTest < ActiveSupport::TestCase
       last_step_up_session_public_id: "current_session",
     )
     other_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       last_step_up_at: 1.minute.ago,

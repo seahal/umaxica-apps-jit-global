@@ -863,16 +863,14 @@ module PreferenceBase
   # ==========================================================================
   # 6) Cookie/header/session helpers (I/O boundary)
   # ==========================================================================
-  def preference_cookie_options(expires_at:, httponly:, domain: false)
+  def preference_cookie_options(expires_at:, httponly:)
     ::CoreCookieOptions.for(
-      surface: ::CoreSurface.current(request),
       request: request,
       expires: expires_at,
       httponly: httponly,
       secure: ::JitSessionCookieConfig.force_secure?,
       same_site: :strict,
       path: "/",
-      domain: domain,
     )
   end
 
@@ -937,7 +935,6 @@ module PreferenceBase
      *PreferenceCookieName.legacy_dbsc_names(surface: preference_cookie_surface),].uniq.each do |cookie_name|
       cookies.delete(cookie_name, **preference_cookie_deletion_options)
     end
-    clear_legacy_preference_auth_domain_cookies!
   end
 
   def clear_legacy_preference_auth_cookies!
@@ -950,44 +947,10 @@ module PreferenceBase
 
       cookies.delete(cookie_name, **preference_cookie_deletion_options)
     end
-    clear_legacy_preference_auth_domain_cookies!
-  end
-
-  def clear_legacy_preference_auth_domain_cookies!
-    deletion_options = preference_domain_cookie_deletion_options
-    return if deletion_options[:domain].blank?
-
-    # Older preference credential cookies were apex-scoped. Delete only legacy
-    # names with a Domain attribute so stale refresh tokens stop shadowing the
-    # current host-only transport slot.
-    [*PreferenceCookieName.legacy_access_names(surface: preference_cookie_surface),
-     *PreferenceCookieName.legacy_refresh_names(surface: preference_cookie_surface),
-     *PreferenceCookieName.legacy_dbsc_names(surface: preference_cookie_surface),].uniq.each do |cookie_name|
-      next if cookie_name == access_token_cookie_name
-      next if cookie_name == refresh_token_cookie_name
-      next if cookie_name == preference_dbsc_cookie_name
-      next if cookie_name.start_with?(PreferenceIoKeys::HOST_COOKIE_PREFIX)
-
-      cookies.delete(cookie_name, **deletion_options)
-    end
   end
 
   def preference_cookie_deletion_options
     opts = preference_auth_cookie_options(expires_at: nil)
-    opts.delete(:expires)
-    opts
-  end
-
-  def preference_domain_cookie_deletion_options
-    opts = ::CoreCookieOptions.for(
-      surface: ::CoreSurface.current(request),
-      request: request,
-      httponly: true,
-      secure: ::JitSessionCookieConfig.force_secure?,
-      same_site: :strict,
-      path: "/",
-      domain: true,
-    )
     opts.delete(:expires)
     opts
   end

@@ -29,7 +29,7 @@ class AuthAdmissionCsrfTransportTest < ActionDispatch::IntegrationTest
           when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
           when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
           end
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        issuance = OidcTestEntry.issue!(
           surface:, intent: "sign_in", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
         )
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
@@ -59,7 +59,7 @@ class AuthAdmissionCsrfTransportTest < ActionDispatch::IntegrationTest
         assert_nil binding.base_confirmed_at
         assert_nil binding.redeemed_at
         assert_nil binding.admitted_auth_ceremony_session_id
-        assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
+        assert_equal "pending", issuance.transaction.reload.status
         if binding.attached?
           auth_session = binding.class.auth_admission_session_class.find(binding.auth_ceremony_session_id)
 

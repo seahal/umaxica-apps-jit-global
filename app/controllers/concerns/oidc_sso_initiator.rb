@@ -6,7 +6,9 @@ module OidcSsoInitiator
   include CommonRedirect
 
   OIDC_PENDING_FLOWS_SESSION_KEY = "oidc_pending_flows"
-  OIDC_PENDING_FLOW_LIMIT = 2
+  # D-155: one sign-in per browser and RP. Each POST /sign replaces the entry, so an earlier tab is
+  # refused at the callback. This is the intended behavior, not a limit to raise.
+  OIDC_PENDING_FLOW_LIMIT = 1
 
   def authenticate!
     if logged_in?
@@ -32,29 +34,30 @@ module OidcSsoInitiator
   # OIDC flow (specs/sign-fqdn-integrated-plan/plan.md section 5).
   # Every first-party browser RP serves its neutral entry at GET /sign on its own host
   # (test/integration/routes/neutral_rp_entry_contract_test.rb).
+  # D-151: the RP target travels as a path-only `target_link_uri` (no query); the method name is the
+  # shared AuthenticationBase contract, which Auth also implements for its own signed `pt` lane.
   def sign_in_url_with_pt(pt)
-    query = { ri: RequestContextContract.normalize_region(params[:ri]), pt: pt.present? ? decode_pt(pt).presence : nil }
+    target = RpTargetLinkUri.normalize(pt.present? ? URI.parse(decode_pt(pt)).path : nil)
+    query = { ri: RequestContextContract.normalize_region(params[:ri]), target_link_uri: target }
     "/sign?#{query.compact.to_query}"
+  rescue URI::InvalidURIError
+    "/sign?#{{ ri: RequestContextContract.normalize_region(params[:ri]) }.compact.to_query}"
   end
 
   private
 
-  def initiate_oidc_session!(pt: "/", prompt: nil, max_age: nil)
+  def initiate_oidc_session!(target_link_uri: nil, prompt: nil, max_age: nil)
     prompt = OidcAuthorizeRequestResolver.normalize_prompt(prompt)
     max_age = OidcAuthorizeRequestResolver.normalize_max_age(max_age)
     verifier = SecureRandom.urlsafe_base64(48)
     challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false)
-    state = SecureRandom.urlsafe_base64(32)
     nonce = SecureRandom.urlsafe_base64(32)
-
-    oidc_pt = safe_oidc_pt(pt)
-    remember_oidc_pending_flow!(
-      state: state,
-      verifier: verifier,
-      nonce: nonce,
-      pt: oidc_pt,
-      max_age: max_age,
+    state, jti = OidcStateJwt.issue(
+      client_id: oidc_client_id,
+      target_link_uri: RpTargetLinkUri.normalize(target_link_uri),
     )
+
+    remember_oidc_pending_flow!(jti:, verifier:, nonce:, max_age:)
     log_oidc_pending_flow_created
 
     oidc_authorization_url(
@@ -116,20 +119,15 @@ module OidcSsoInitiator
     oidc_acme_service_origin.authorization_endpoint(query: query)
   end
 
-  def remember_oidc_pending_flow!(state:, verifier:, nonce:, pt:, max_age: nil)
-    flows = session[OIDC_PENDING_FLOWS_SESSION_KEY]
-    flows = {} unless flows.is_a?(Hash)
+  # The pending entry is keyed by the `state` JWS's `jti` and replaces any earlier one (D-155).
+  def remember_oidc_pending_flow!(jti:, verifier:, nonce:, max_age: nil)
     flow =
       {
         "code_verifier" => verifier,
         "nonce" => nonce,
-        "pt" => pt,
         "created_at" => Time.current.to_i,
       }.tap { |pending_flow| pending_flow["max_age"] = max_age if max_age.present? }
-    flows[state] = flow
-    session[OIDC_PENDING_FLOWS_SESSION_KEY] = flows.sort_by { |_key, entry| entry["created_at"].to_i }
-      .last(OIDC_PENDING_FLOW_LIMIT)
-      .to_h
+    session[OIDC_PENDING_FLOWS_SESSION_KEY] = { jti => flow }
   end
 
   def log_oidc_pending_flow_created
@@ -198,14 +196,6 @@ module OidcSsoInitiator
 
   def local_oidc_token_endpoint_port
     Integer(ENV.fetch("PORT"), exception: false) || 3000
-  end
-
-  # Tighten the OIDC pt to a same-host internal path using the repository's shared resolver.
-  # The resolver also rejects nested redirect parameters, encoded host escapes, and control
-  # characters that a URI-only check would otherwise accept.
-  def safe_oidc_pt(pt)
-    result = RedirectsPathTargetResolver.call(pt.to_s, source: :oidc_return_target)
-    result.ok? ? result.value : "/"
   end
 
   def oidc_client_id

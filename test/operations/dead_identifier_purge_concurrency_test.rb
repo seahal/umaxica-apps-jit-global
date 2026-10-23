@@ -204,6 +204,9 @@ class DeadIdentifierPurgeConcurrencyTest < ActiveSupport::TestCase
 
   def create_test_owner(owner_model, **attributes)
     # Avoid cross-database children left by committed test/dev runs with fixture-range IDs.
-    owner_model.create!(**attributes, id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
+    owner_model.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, **attributes,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
   end
 end

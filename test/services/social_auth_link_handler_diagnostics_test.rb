@@ -13,7 +13,10 @@ class SocialAuthLinkHandlerDiagnosticsTest < ActiveSupport::TestCase
   setup do
     @previous_level = Rails.logger.level
     Rails.logger.level = Logger::DEBUG
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
   end
 
   teardown do
@@ -40,7 +43,7 @@ class SocialAuthLinkHandlerDiagnosticsTest < ActiveSupport::TestCase
   end
 
   test "an identity that belongs to another account is refused" do
-    foreign = Client.create!(status_id: ClientStatus::ACTIVE)
+    foreign = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     identity = ClientExternalIdentity.create!(
       client: foreign, provider: "google", issuer: "https://accounts.google.com", subject: "uid-1",
       audience: "test-client", verification_authority: "google_oidc", verified_at: ClientExternalIdentity.database_now,

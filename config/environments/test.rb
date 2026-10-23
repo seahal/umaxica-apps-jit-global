@@ -56,6 +56,7 @@ Rails.application.configure do
   # the KVS instance (logical DBs 4 and 6) with a run/worker key namespace.
   valkey = Umaxica::Valkey::Settings.current
   config.cache_store = :memory_store
+  config.x.rate_limit.namespace = Umaxica::Valkey::TestNamespace.rate_limit_namespace
   config.x.rate_limit.store =
     TestSupport::SwappableCacheStore.new(
       ActiveSupport::Cache::RedisCacheStore.new(

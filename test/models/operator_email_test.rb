@@ -168,7 +168,7 @@ class OperatorEmailTest < ActiveSupport::TestCase
   end
 
   test "enforces maximum emails per staff" do
-    staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
     Prosopite.pause do
       OperatorEmail::MAX_EMAILS_PER_STAFF.times do |i|
         OperatorEmail.create!(

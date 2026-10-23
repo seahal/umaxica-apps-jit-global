@@ -7,7 +7,10 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
   test "reconciles a case whose sessions_revoked_at and audited_at are still nil after apply!" do
     client = create_test_client!
     operator = operators(:one)
-    token = ClientToken.create!(user_id: client.id, established_authentication_method: "passkey")
+    token = ClientToken.create!(
+      authentication_epoch: 0, user_id: client.id,
+      established_authentication_method: "passkey",
+    )
 
     the_case = AppEnforcementCase.new(
       kind: "method_protection",
@@ -266,6 +269,7 @@ class EnforcementReconciliationJobTest < ActiveJob::TestCase
 
   def create_test_client!
     Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::BOTH,

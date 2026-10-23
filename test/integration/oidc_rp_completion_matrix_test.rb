@@ -8,18 +8,21 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
     client_actor = clients(:one)
     client_root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: client_actor,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     visitor_actor = visitors(:reserved_visitor)
     visitor_root_token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor_actor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
     )
     operator_actor = operators(:one)
     operator_root_token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator_actor,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -38,6 +41,7 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
         actor = client_actor
         root_token = client_root_token
         rp_session = OpAppGrant.create!(
+          authentication_epoch: 0,
           client_token: root_token,
           oidc_client_id: client.client_id,
           oidc_scope: "openid profile",
@@ -50,6 +54,7 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
         actor = visitor_actor
         root_token = visitor_root_token
         rp_session = OpComGrant.create!(
+          authentication_epoch: 0,
           visitor_token: root_token,
           oidc_client_id: client.client_id,
           oidc_scope: "openid profile",
@@ -62,6 +67,7 @@ class OidcRpCompletionMatrixTest < ActionDispatch::IntegrationTest
         actor = operator_actor
         root_token = operator_root_token
         rp_session = OpOrgGrant.create!(
+          authentication_epoch: 0,
           operator_token: root_token,
           oidc_client_id: client.client_id,
           oidc_scope: "openid profile",

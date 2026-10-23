@@ -110,7 +110,7 @@ class OrgEntraSignInPreflightTest < ActiveSupport::TestCase
   private
 
   def provision_active_identity!
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     OperatorEntraIdentity.create!(
       operator_id: operator.id,
       entra_tenant_id: TENANT_ID,

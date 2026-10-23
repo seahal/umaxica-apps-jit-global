@@ -126,7 +126,12 @@ module Auth
       def after_login_path
         return oidc_authorization_after_login_path if oidc_authorization_login_challenge.present?
 
-        auth_org_sign_handoff_path(ri: current_region_identifier)
+        # The Local completion is removed (D-60); without an OIDC login challenge the browser returns
+        # to its surface's Base RP entry.
+        base_org_sign_show_url(
+          ri: current_region_identifier, host: Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host,
+          protocol: "https",
+        )
       end
 
       def after_login_allows_other_host?

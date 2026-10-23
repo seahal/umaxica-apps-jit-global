@@ -18,7 +18,7 @@ class SignedReturnPathHardeningTest < ActionDispatch::IntegrationTest
       VisitorEmailStatus::DEFAULTS.each { |id| VisitorEmailStatus.find_or_create_by!(id: id) }
     end
     nonce = SecureRandom.urlsafe_base64(32)
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_up", base_browser_nonce: nonce, base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: issuance.reference)
@@ -34,8 +34,8 @@ class SignedReturnPathHardeningTest < ActionDispatch::IntegrationTest
       raw_auth_sid: raw_sid,
     )
     admitted, admitted_sid = VisitorAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "local_sign_up", previous_raw_sid: raw_sid,
-      local_sign_in_flow_ref: issuance.transaction.public_id,
+      admission_purpose: "authentication_handoff", previous_raw_sid: raw_sid,
+      authorization_transaction_ref: issuance.transaction.transaction_id,
     )
     binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
     cookies[JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"] = admitted_sid

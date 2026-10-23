@@ -8,7 +8,8 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
   setup do
     @host = Rails.configuration.x.boot_config.fetch(:hosts).base_staff.host
     OperatorStatus.find_or_create_by!(id: OperatorStatus::ACTIVE)
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator)
   end
 
   test "show reports that a birthdate is not set" do
@@ -63,6 +64,7 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
     client = OidcClientRegistry.find!("base-org-ww")
     now = OpOrgGrant.database_now
     rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
       refresh_token_expires_at: now + 1.hour,
@@ -136,6 +138,7 @@ class Base::Org::Identity::BirthdatesControllerTest < ActionDispatch::Integratio
     client = OidcClientRegistry.find!("base-org-ww")
     now = OpOrgGrant.database_now
     rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: now,
       refresh_token_expires_at: now + 1.hour,

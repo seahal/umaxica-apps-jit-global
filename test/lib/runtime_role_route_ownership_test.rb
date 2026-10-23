@@ -51,8 +51,7 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
 
   test "receipt recovery logout completion and root credential endpoints are OP owned in every realm" do
     %w(app com org).each do |realm|
-      %w(oauth/refresh_delivery_queries sign_byes edge/v0/token/checks edge/v0/token/refreshes
-         edge/v0/cookies).each do |path|
+      %w(oauth/refresh_delivery_queries sign_byes edge/v0/token/checks edge/v0/token/refreshes).each do |path|
         controller = "base/#{realm}/#{path}"
 
         assert_equal "op-base-#{realm}", RuntimeRole.route_owner(controller)
@@ -65,7 +64,7 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
   test "Base Self-RP entry, callback, Refresh, logout receiver and relay pages belong to the Base cell" do
     assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/sign/entries")
     assert_equal "rp-base-com-ww", RuntimeRole.route_owner("base/com/oidc/callbacks")
-    assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/oidc/backchannel_logouts")
+    assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/oidc/closures")
     assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/avatars")
   end
 
@@ -109,7 +108,7 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
   test "a closed RP cell serves only its back-channel logout receiver and health" do
     ENV["UMAXICA_RP_BROWSER_ADMISSION"] = "closed"
 
-    assert RuntimeRole.serves?("base/app/oidc/backchannel_logouts", "rp-base-app-ww")
+    assert RuntimeRole.serves?("base/app/oidc/closures", "rp-base-app-ww")
     assert RuntimeRole.serves?("base/app/healths", "rp-base-app-ww")
     assert_not RuntimeRole.serves?("base/app/avatars", "rp-base-app-ww")
     assert_not RuntimeRole.serves?("core/app/oidc/callbacks", "rp-core-app-jp")

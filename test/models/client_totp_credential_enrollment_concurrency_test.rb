@@ -13,7 +13,7 @@ class ClientTotpCredentialEnrollmentConcurrencyTest < ActiveSupport::TestCase
   setup do
     ClientStatus.ensure_defaults! if ClientStatus.respond_to?(:ensure_defaults!)
     ClientTotpCredentialStatus.ensure_defaults! if ClientTotpCredentialStatus.respond_to?(:ensure_defaults!)
-    @user = Client.create!(status_id: ClientStatus::NOTHING)
+    @user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
   end
 
   teardown do

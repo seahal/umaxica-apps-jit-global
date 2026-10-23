@@ -6,8 +6,14 @@ require "test_helper"
 
 class AccountPolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    @other_user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    @other_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @record = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user).account
     @other_record = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @other_user).account
     @policy = AccountPolicy.new(@record, user: @user)

@@ -3,7 +3,7 @@
 require "test_helper"
 
 class ClientSecretOutboxRecoveryTest < ActiveSupport::TestCase
-  self.fixture_table_names = %w(client_statuses client_mfa_levels client_mfa_statuses client_visibilities)
+  self.fixture_table_names = %w(client_statuses client_security_modes client_mfa_statuses client_visibilities)
 
   test "periodic retention rescans a surviving outbox whose Client has no Secret source rows" do
     previous_delay = ENV["APP_SECRET_PURGE_DELAY_SECONDS"]
@@ -12,7 +12,7 @@ class ClientSecretOutboxRecoveryTest < ActiveSupport::TestCase
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "86400"
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "2592000"
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
     # Unrelated durable rows can survive other tests; deliver their events without deleting them.

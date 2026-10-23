@@ -37,10 +37,13 @@ class TelephoneSignUpCandidateCreator
     def create_candidate(telephone)
       case telephone
       when ClientTelephone
-        telephone.user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+        telephone.user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP, security_mode_id: ClientSecurityMode::NORMAL)
         telephone.user_telephone_status_id = ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
       when VisitorTelephone
-        telephone.visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+        telephone.visitor = Visitor.create!(
+          status_id: VisitorStatus::ACTIVE,
+          security_mode_id: VisitorSecurityMode::NORMAL, visibility_id: VisitorVisibility::VISITOR,
+        )
         telephone.visitor_telephone_status_id = VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP
       else raise ArgumentError, "unsupported Telephone signup candidate"
       end

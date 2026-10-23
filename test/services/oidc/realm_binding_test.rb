@@ -26,7 +26,9 @@ class OidcRealmBindingTest < ActiveSupport::TestCase
       end
     end.new
 
-    client = Client.new(registered_token_endpoint_auth_method: "none")
+    client = Client.new(
+      registered_token_endpoint_auth_method: "none",
+    )
     result = nil
 
     OidcClientRegistry.stub(:find, client) do
@@ -60,7 +62,9 @@ class OidcRealmBindingTest < ActiveSupport::TestCase
       end
     end.new
 
-    client = Client.new(registered_token_endpoint_auth_method: "none")
+    client = Client.new(
+      registered_token_endpoint_auth_method: "none",
+    )
     result = nil
 
     OidcClientRegistry.stub(:find, client) do

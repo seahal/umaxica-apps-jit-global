@@ -4,7 +4,10 @@ require "test_helper"
 
 class AvatarEnterprisePersonaGrantUniquenessTest < ActiveSupport::TestCase
   test "AvatarEnterprisePersonaGrant preserves history capability scope and raw DB refusal" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
     avatar = bootstrap.avatar
     period = avatar.enterprise_ownership_periods.current.sole
@@ -42,7 +45,10 @@ class AvatarEnterprisePersonaGrantUniquenessTest < ActiveSupport::TestCase
   end
 
   test "AvatarEnterprisePersonaGrant rejects only an active matching capability tuple" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
     avatar = bootstrap.avatar
     period = avatar.enterprise_ownership_periods.current.sole
@@ -72,7 +78,10 @@ end
 
 class AvatarBureauAgentGrantUniquenessTest < ActiveSupport::TestCase
   test "AvatarBureauAgentGrant preserves history capability scope and raw DB refusal" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    actor = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: actor)
     created = AvatarProvisioning::Create.call(
       actor: actor, subject_type: :agent, subject: bootstrap.account,
@@ -117,7 +126,10 @@ class AvatarBureauAgentGrantUniquenessTest < ActiveSupport::TestCase
   end
 
   test "AvatarBureauAgentGrant rejects only an active matching capability tuple" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    actor = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: actor)
     created = AvatarProvisioning::Create.call(
       actor: actor, subject_type: :agent, subject: bootstrap.account,

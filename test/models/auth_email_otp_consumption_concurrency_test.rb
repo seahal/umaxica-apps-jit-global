@@ -13,7 +13,7 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
 
   %w(app com).each do |surface|
     test "#{surface} concurrent Auth email verification consumes once and returns one retained receipt" do
-      owner_model, contact_association, contact_status, auth_model, binding_model, ticket_owner =
+      owner_model, contact_association, contact_status, auth_model, _, ticket_owner =
         if surface == "app"
           [Client, :client_emails, { user_email_status_id: ClientEmailStatus::VERIFIED },
            ClientAuthCeremonySession, ClientAuthAdmissionBinding, OpBaseAppRecord,]
@@ -21,16 +21,16 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
           [Visitor, :visitor_emails, { visitor_email_status_id: VisitorEmailStatus::VERIFIED },
            VisitorAuthCeremonySession, VisitorAuthAdmissionBinding, OpBaseComRecord,]
         end
-      owner = owner_model.create!(id: next_owner_id(owner_model))
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: next_owner_id(owner_model))
       contact = owner.public_send(contact_association).create!(
         address: "auth-consume-#{SecureRandom.hex(12)}@example.test", confirm_policy: "1", **contact_status,
       ).tap(&:finalize_binding!)
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
-      flow = issuance.transaction
       ceremony, = auth_model.rotate_and_admit!(
-        admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
+        admission_purpose: "authentication_handoff",
+        authorization_transaction_ref: issuance.transaction.transaction_id,
       )
       code = ceremony.issue_email_otp!(contact: contact, destination: contact.address)
       source_before = contact.reload.attributes
@@ -64,9 +64,7 @@ class AuthEmailOtpConsumptionConcurrencyTest < ActiveSupport::TestCase
     ensure
       threads&.each(&:join)
       # Only rows created by this nontransactional race fixture are removed; lifecycle purge is tested separately.
-      binding_model&.where(sign_in_flow_id: flow&.id)&.delete_all if flow
       auth_model&.where(id: ceremony&.id)&.delete_all if ceremony
-      flow&.class&.where(id: flow.id)&.delete_all if flow
       contact&.class&.where(id: contact.id)&.delete_all if contact
       owner_model&.where(id: owner&.id)&.delete_all if owner
     end

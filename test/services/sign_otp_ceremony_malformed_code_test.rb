@@ -18,6 +18,7 @@ class SignOtpCeremonyMalformedCodeTest < ActiveSupport::TestCase
   ].each do |owner_model, contact_model, owner_key, flow_model, surface, channel|
     test "#{surface} #{channel} malformed code partitions refuse without consuming or changing proof" do
       owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
       )
       destination =
@@ -29,6 +30,7 @@ class SignOtpCeremonyMalformedCodeTest < ActiveSupport::TestCase
       )
       now = flow_model.database_now
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::STARTED, step: "start",
         nonce_digest: flow_model.digest_nonce("malformed-code-browser"), issued_at: now,
         expires_at: now + 15.minutes, entry_method: channel.to_s,

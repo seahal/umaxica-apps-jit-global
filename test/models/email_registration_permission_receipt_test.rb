@@ -13,15 +13,27 @@ class EmailRegistrationPermissionReceiptTest < ActiveSupport::TestCase
       test "#{surface} email permission receipt #{kind} uses original locked database clock" do
         actor =
           if surface == :app
-            Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000)
+            Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
+              id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+            )
           else
-            Visitor.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000)
+            Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
+              id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+            )
           end
         token =
           if surface == :app
-            ClientToken.create!(user: actor, root_login_established_at: ClientToken.database_now)
+            ClientToken.create!(
+              authentication_epoch: 0, user: actor,
+              root_login_established_at: ClientToken.database_now,
+            )
           else
-            VisitorToken.create!(visitor: actor, root_login_established_at: VisitorToken.database_now)
+            VisitorToken.create!(
+              authentication_epoch: 0, visitor: actor,
+              root_login_established_at: VisitorToken.database_now,
+            )
           end
         token.rotate_refresh_token!
         requirement = StepUpRequirement.new(

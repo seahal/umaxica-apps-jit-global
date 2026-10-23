@@ -6,7 +6,10 @@ class ClientExternalIdentityTest < ActiveSupport::TestCase
   fixtures :client_statuses
 
   test "deterministically encrypts a provider subject while preserving subject lookup" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     identity = ClientExternalIdentity.create!(
       client: client,
       provider: "apple",
@@ -30,7 +33,10 @@ class ClientExternalIdentityTest < ActiveSupport::TestCase
   end
 
   test "allows one effective external identity binding per client" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     ClientExternalIdentity.create!(
       client: client,
       provider: "google",
@@ -56,7 +62,10 @@ class ClientExternalIdentityTest < ActiveSupport::TestCase
   end
 
   test "touch_authenticated! records the latest sign-in without touching the binding" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     identity = ClientExternalIdentity.create!(
       client: client,
       provider: "google",

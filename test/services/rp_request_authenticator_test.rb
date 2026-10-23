@@ -12,7 +12,7 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
     @key = OpenSSL::PKey::EC.generate("secp384r1")
     @enrollment = RpCallbackCommitter.call(
       cell: @cell, issuer: ISSUER, subject: "subject-a", sid: "sid-1",
-      absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      absolute_expires_at: 1.hour.from_now,
     )
   end
 
@@ -38,10 +38,9 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
     assert_equal :invalid, authenticate(token: forged).status
   end
 
-  test "the Access JWT must name the session's sid, subject and contract epoch" do
+  test "the Access JWT must name the session's sid and subject" do
     assert_equal :invalid, authenticate(token: token(payload.merge("sid" => "sid-other"))).status
     assert_equal :invalid, authenticate(token: token(payload.merge("sub" => "subject-b"))).status
-    assert_equal :invalid, authenticate(token: token(payload.merge("umx_contract_epoch" => 2)), epoch: 2).status
   end
 
   test "a revoked OP binding, a revoked session or an expired session stops authenticating" do
@@ -58,21 +57,6 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
     @enrollment.session.update_columns(revoked_at: nil, absolute_expires_at: 1.second.ago)
 
     assert_equal :invalid, authenticate.status
-  end
-
-  test "pre-cutover credentials stay refused even with forged local rows matching them" do
-    pre_r5 = token(payload.except("umx_contract_epoch"))
-
-    assert_equal :invalid, authenticate(token: pre_r5).status
-
-    # The cell moved to epoch 2; a validly signed epoch-1 token with an epoch-1 local row is old profile.
-    assert_equal :invalid, authenticate(epoch: 2).status
-
-    # Forging the local row to the new epoch does not help a token signed under the old one.
-    @enrollment.session.update_columns(contract_epoch: 2)
-
-    assert_equal :invalid, authenticate(epoch: 2).status
-    assert_equal :invalid, authenticate(token: pre_r5, epoch: 2).status
   end
 
   test "a disabled local principal stops authenticating" do
@@ -95,7 +79,6 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
         "client_id" => @cell.client_id,
         "jti" => "writer-expiry",
         "scope" => "openid",
-        "umx_contract_epoch" => 1,
         "authn_ctx" => "normal", },
       @key, "ES384", { "kid" => "k1", "typ" => "at+jwt" },
     )
@@ -108,7 +91,7 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
         RpCoreAppRecord.connected_to(role: :reading) do
           result = RpRequestAuthenticator.call(
             cell: @cell, access_token: access, local_session_id: @enrollment.session.public_id,
-            issuer: ISSUER, contract_epoch: 1, jwks_client: keys,
+            issuer: ISSUER, jwks_client: keys,
           )
 
           assert_equal offset.negative? ? :authenticated : :invalid, result.status
@@ -119,9 +102,9 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
 
   private
 
-  def authenticate(token: token(payload), session_id: @enrollment.session.public_id, epoch: 1)
+  def authenticate(token: token(payload), session_id: @enrollment.session.public_id)
     RpRequestAuthenticator.call(
-      cell: @cell, access_token: token, local_session_id: session_id, issuer: ISSUER, contract_epoch: epoch,
+      cell: @cell, access_token: token, local_session_id: session_id, issuer: ISSUER,
       jwks_client: OidcOpJwksClient.new(
         jwks_uri: "https://www.umaxica.app/.well-known/jwks.json",
         fetcher: -> { { "keys" => [JitSecurityJwtJwk.export_public(@key, kid: "k1")] } },
@@ -147,7 +130,6 @@ class RpRequestAuthenticatorTest < ActiveSupport::TestCase
       "client_id" => "core-app-jp",
       "jti" => "jti-1",
       "scope" => "openid",
-      "umx_contract_epoch" => 1,
       "authn_ctx" => "normal",
     }
   end

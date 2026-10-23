@@ -95,8 +95,10 @@ uncommented verbatim and the Web Push blocks removed. It caches `/offline` on in
 failed `request.mode === "navigate"` requests from that cache. It performs no runtime caching, so no
 authenticated HTML, page props, JSON, CSRF token, or `Set-Cookie` response can enter the cache.
 
-`app/views/pwa/offline.html.erb` is the generator's file with `lang`, the `<title>`, and three body
-strings localized to Japanese. Markup, CSS, and `prefers-color-scheme` handling are unchanged. The
+`app/views/pwa/offline.html.erb` uses the shared `pwa.offline` translation keys for its title,
+body copy, and retry control, with English and Japanese text in all four canonical locale bundles.
+The `lang` attribute follows `I18n.locale`. The framework controller does not resolve user locale
+preferences; the cached document uses the rendering locale at service worker installation time. Markup, CSS, and `prefers-color-scheme` handling are unchanged. The
 retry control drops the generator's `action="."`; see "Retry target" below.
 
 Both templates are shared by all ten surfaces. This is compatible with `project/surfaces.mdc` only

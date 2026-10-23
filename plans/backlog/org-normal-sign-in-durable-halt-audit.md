@@ -1,6 +1,9 @@
 # ORG normal sign-in durable halt audit
 
-Status: known defect; deferred by the user for the current delivery on 2026-10-13.
+Status: **closed 2026-10-23** (D-90, D-134): `OrgNormalSignInTransaction#record_org_normal_sign_in_halt!`
+writes one `SIGN_FLOW_HALTED` row; a partial unique index makes it exactly-once; the positive
+assertion is restored. Evidence: `evidence/2026-10-23-wu32-org-halt-audit-H2C9.md`. Originally a known
+defect deferred by the user for the delivery of 2026-10-13.
 
 The user requested that this defect remain recorded while the current acceptance suite passes. This
 is a delivery exception, not a repair or a change to the durable FLOW-6 contract. No target cycle

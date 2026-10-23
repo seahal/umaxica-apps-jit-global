@@ -167,7 +167,6 @@ class JwtTemporalValidationTest < ActiveSupport::TestCase
         "jti" => "temporal-jti",
         "client_id" => "core-app-jp",
         "scope" => "openid",
-        "umx_contract_epoch" => 1,
         "authn_ctx" => "normal",
       }
       cases = [
@@ -179,7 +178,7 @@ class JwtTemporalValidationTest < ActiveSupport::TestCase
         token = JWT.encode(payload.merge(claim => value), key, "ES384", { typ: "at+jwt", kid: "temporal-key" })
         result = OidcOpAccessTokenVerifier.new(
           access_token: token, client_id: "core-app-jp", realm: "app", issuer: issuer,
-          audience: "core-app-jp", contract_epoch: 1, jwks_client: jwks_client,
+          audience: "core-app-jp", jwks_client: jwks_client,
         ).call
 
         assert_equal accepted, result.success?, "#{claim}=#{value - now}"

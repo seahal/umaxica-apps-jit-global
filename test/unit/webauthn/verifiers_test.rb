@@ -58,7 +58,10 @@ module Webauthn
                  backup_state: true,
       )
 
-      context = RegistrationVerifier.verify!(credential_params: params, challenge: challenge, config: APP_CONFIG)
+      context = RegistrationVerifier.verify!(
+        credential_params: params, challenge: challenge, config: APP_CONFIG,
+        surface: :app,
+      )
 
       assert context.user_verified
       assert context.user_present
@@ -68,12 +71,47 @@ module Webauthn
       assert_predicate context.webauthn_id, :present?
     end
 
+    # adr/passkey-authenticator-account-label.md: ORG accepts only a credential reported discoverable.
+    { "missing" => nil, "false" => { "credProps" => { "rk" => false } } }.each do |label, extensions|
+      test "an ORG attestation whose credProps rk is #{label} is refused" do
+        org_client = webauthn_fake_client(origin: ORG_CONFIG.origin)
+        challenge = registration_challenge
+        params = fake_attestation(org_client, challenge: challenge, extensions: extensions)
+
+        assert_raises(RegistrationVerifier::DiscoverableCredentialRequiredError) do
+          RegistrationVerifier.verify!(
+            credential_params: params, challenge: challenge, config: ORG_CONFIG,
+            surface: :org,
+          )
+        end
+      end
+    end
+
+    test "an ORG attestation reported discoverable is accepted" do
+      org_client = webauthn_fake_client(origin: ORG_CONFIG.origin)
+      challenge = registration_challenge
+      params = fake_attestation(org_client, challenge: challenge, extensions: { "credProps" => { "rk" => true } })
+
+      assert RegistrationVerifier.verify!(
+        credential_params: params, challenge: challenge, config: ORG_CONFIG,
+        surface: :org,
+      )
+    end
+
+    test "registration options request credProps on every surface" do
+      [[APP_CONFIG, :app], [COM_CONFIG, :com], [ORG_CONFIG, :org]].each do |config, surface|
+        options = RegistrationVerifier.options_for(config: config, user_id: "u", user_name: "n", surface: surface)
+
+        assert_equal({ credProps: true }, options.extensions)
+      end
+    end
+
     test "a UV=false attestation is rejected" do
       challenge = registration_challenge
       params = fake_attestation(@client, challenge: challenge, user_verified: false)
 
       assert_raises(RegistrationVerifier::UserVerificationRequiredError, WebAuthn::UserVerifiedVerificationError) do
-        RegistrationVerifier.verify!(credential_params: params, challenge: challenge, config: APP_CONFIG)
+        RegistrationVerifier.verify!(credential_params: params, challenge: challenge, config: APP_CONFIG, surface: :app)
       end
     end
 
@@ -168,7 +206,10 @@ module Webauthn
     def register_fake_credential
       challenge = registration_challenge
       params = fake_attestation(@client, challenge: challenge, user_verified: true)
-      context = RegistrationVerifier.verify!(credential_params: params, challenge: challenge, config: APP_CONFIG)
+      context = RegistrationVerifier.verify!(
+        credential_params: params, challenge: challenge, config: APP_CONFIG,
+        surface: :app,
+      )
       credential = WebAuthn::Credential.from_create(params, relying_party: APP_CONFIG.relying_party)
 
       { webauthn_id: context.webauthn_id, public_key: credential.public_key, sign_count: context.sign_count }

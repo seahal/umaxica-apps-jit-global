@@ -7,7 +7,10 @@ require "test_helper"
 class DbscRegistrationServiceTest < ActiveSupport::TestCase
   test "sets user token to active dbsc state" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     token.update!(dbsc_challenge: "challenge-1", dbsc_challenge_issued_at: Time.current)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -65,7 +68,10 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
 
   test "returns challenge_expired when dbsc_challenge_issued_at is too old" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-old-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     token.update!(dbsc_challenge: "old-challenge", dbsc_challenge_issued_at: 10.minutes.ago)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -83,7 +89,10 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
 
   test "returns challenge_expired when dbsc_challenge_issued_at is blank" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-blank-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     token.update!(dbsc_challenge: "stale-challenge", dbsc_challenge_issued_at: nil)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -101,7 +110,10 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
 
   test "rejects registration proof with mismatched audience" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-aud-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     token.update!(dbsc_challenge: "aud-challenge", dbsc_challenge_issued_at: Time.current)
     private_key = OpenSSL::PKey::EC.generate("prime256v1")
     public_jwk = JWT::JWK.new(private_key).export
@@ -126,7 +138,10 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
     user = create_verified_user_with_email(
       email_address: "dbsc-registration-signature-#{SecureRandom.hex(4)}@example.com",
     )
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     token.update!(dbsc_challenge: "signature-challenge", dbsc_challenge_issued_at: Time.current)
     verification_key = OpenSSL::PKey::EC.generate("prime256v1")
     signing_key = OpenSSL::PKey::EC.generate("prime256v1")
@@ -161,7 +176,10 @@ class DbscRegistrationServiceTest < ActiveSupport::TestCase
   # kept because either one alone would leave the invariant implicit.
   test "refuses to bind a session to a symmetric registration JWK" do
     user = create_verified_user_with_email(email_address: "dbsc-registration-oct-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     token.update!(dbsc_challenge: "oct-challenge", dbsc_challenge_issued_at: Time.current)
     shared_secret = "attacker-known-secret"
 
@@ -225,7 +243,6 @@ class DbscRegistrationServiceTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -257,7 +274,10 @@ class DbscRegistrationServiceTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -504,7 +524,6 @@ class DbscRegistrationServiceTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -513,7 +532,10 @@ class DbscRegistrationServiceTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

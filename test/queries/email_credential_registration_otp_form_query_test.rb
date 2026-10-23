@@ -7,22 +7,22 @@ class EmailCredentialRegistrationOtpFormQueryTest < ActiveSupport::TestCase
     test "#{surface} Email registration form reads only its original Root browser and bounded ceremony" do
       actor, token, email =
         if surface == "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_emails.create!(
             raw_address: "registration-query-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
           )
           [owner, root, candidate]
         elsif surface == "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
           candidate = owner.visitor_emails.create!(
             raw_address: "registration-query-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
           )
           [owner, root, candidate]
         else
-          owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-          root = OperatorToken.create!(staff: owner, discard_at: 1.day.from_now)
+          owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+          root = OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now)
           candidate = owner.staff_emails.create!(
             raw_address: "registration-query-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
           )

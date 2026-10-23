@@ -20,7 +20,7 @@ class CoreRpBridgeTest < ActiveSupport::TestCase
   end
 
   test "com bridge exposes core visitor identity for the visitor actor" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     bridge = CoreComVisitorBridge.create!(visitor:)
 
     assert_predicate bridge.public_id, :present?

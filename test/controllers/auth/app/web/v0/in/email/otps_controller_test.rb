@@ -15,7 +15,7 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
   setup do
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
     @host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost")
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     get "/sign/in", params: { entry_ref: admission.reference, ri: "jp" }, headers: { "Host" => @host }
@@ -32,12 +32,7 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
                      headers: { "Host" => @host }
 
     assert_response :see_other
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: ClientSignInFlow.find_by!(
-        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-      ),
-      surface: "app", phase: "PRIMARY_PENDING",
-    )
+    @primary_sign_in_binding = nil
     ActionMailer::Base.deliveries.clear
   end
 
@@ -46,6 +41,7 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     TurnstileVerifierStub.challenge_response = { "success" => true }
     address = "stale-resend-#{SecureRandom.hex(8)}@example.test"
     owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
     )
     contact = owner.client_emails.create!(
@@ -128,7 +124,7 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     state = inertia_props.fetch("otp_resend").fetch("state")
     other = open_session
     other.host!(@host)
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     other.get("/sign/in", params: { entry_ref: admission.reference, ri: "jp" })
@@ -191,7 +187,10 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     address = "released-resend-#{SecureRandom.hex(8)}@example.test"
-    owner = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
     original = owner.client_emails.create!(
       address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
@@ -209,6 +208,7 @@ class Auth::App::Web::V0::In::Email::OtpsControllerTest < ActionDispatch::Integr
     state = inertia_props.fetch("otp_resend").fetch("state")
     original.release_binding!
     replacement_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
     )
     replacement = replacement_owner.client_emails.create!(

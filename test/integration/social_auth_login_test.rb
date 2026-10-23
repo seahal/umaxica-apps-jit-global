@@ -98,7 +98,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     existing_uid = "existing_google_user_#{SecureRandom.hex(4)}"
 
     # Create existing user with Google identity
-    existing_user = Client.create!(status_id: ClientStatus::NOTHING, public_id: PublicId.generate)
+    existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::NOTHING, public_id: PublicId.generate,
+    )
     ClientGoogleIdentity.create!(
       user: existing_user,
       uid: existing_uid,
@@ -186,6 +189,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -253,6 +257,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr0_token.rotate_refresh_token! unless rr0_token.device_session_record.current_refresh_token_id
                     rr0_now = Time.current
                     rr0_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr0_token,
                       oidc_client_id: rr0_client.client_id,
                       oidc_scope: "openid profile",
@@ -517,8 +522,14 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "a duplicate provider subject loses the unique index and the callback uses the winning identity" do
     subject = "race_google_#{SecureRandom.hex(4)}"
     setup_google_mock_auth(uid: subject)
-    winner = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
-    loser = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    winner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
+    loser = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     identity = ClientGoogleIdentity.create!(
       user: winner,
       uid: subject,
@@ -548,6 +559,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Google login with existing identity completes on the app Dashboard, never Home" do
     existing_uid = "existing_google_welcome_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -636,6 +648,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -703,6 +716,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr2_token.rotate_refresh_token! unless rr2_token.device_session_record.current_refresh_token_id
                     rr2_now = Time.current
                     rr2_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr2_token,
                       oidc_client_id: rr2_client.client_id,
                       oidc_scope: "openid profile",
@@ -962,6 +976,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Google login with session limit pending redirects to acme sign-in limitation" do
     existing_uid = "existing_google_session_limit_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -1051,6 +1066,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -1118,6 +1134,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr3_token.rotate_refresh_token! unless rr3_token.device_session_record.current_refresh_token_id
                     rr3_now = Time.current
                     rr3_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr3_token,
                       oidc_client_id: rr3_client.client_id,
                       oidc_scope: "openid profile",
@@ -1421,7 +1438,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   end
 
   def create_active_user_session_for_limit(user)
-    token = ClientToken.new(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.new(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
     token.save!
     token
   end
@@ -1429,6 +1446,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Google established login callback posts a one-shot result to acme without provider tokens" do
     existing_uid = "existing_google_transport_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -1526,6 +1544,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -1593,6 +1612,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr4_token.rotate_refresh_token! unless rr4_token.device_session_record.current_refresh_token_id
                     rr4_now = Time.current
                     rr4_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr4_token,
                       oidc_client_id: rr4_client.client_id,
                       oidc_scope: "openid profile",
@@ -1690,6 +1710,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Google sign up entry with existing identity falls through to sign in flow" do
     existing_uid = "existing_google_signup_entry_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -1780,6 +1801,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -1847,6 +1869,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr5_token.rotate_refresh_token! unless rr5_token.device_session_record.current_refresh_token_id
                     rr5_now = Time.current
                     rr5_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr5_token,
                       oidc_client_id: rr5_client.client_id,
                       oidc_scope: "openid profile",
@@ -2200,6 +2223,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -2267,6 +2291,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr6_token.rotate_refresh_token! unless rr6_token.device_session_record.current_refresh_token_id
                     rr6_now = Time.current
                     rr6_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr6_token,
                       oidc_client_id: rr6_client.client_id,
                       oidc_scope: "openid profile",
@@ -2871,6 +2896,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -2938,6 +2964,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr7_token.rotate_refresh_token! unless rr7_token.device_session_record.current_refresh_token_id
                     rr7_now = Time.current
                     rr7_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr7_token,
                       oidc_client_id: rr7_client.client_id,
                       oidc_scope: "openid profile",
@@ -3343,6 +3370,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -3410,6 +3438,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr8_token.rotate_refresh_token! unless rr8_token.device_session_record.current_refresh_token_id
                     rr8_now = Time.current
                     rr8_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr8_token,
                       oidc_client_id: rr8_client.client_id,
                       oidc_scope: "openid profile",
@@ -3823,6 +3852,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -3890,6 +3920,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr9_token.rotate_refresh_token! unless rr9_token.device_session_record.current_refresh_token_id
                     rr9_now = Time.current
                     rr9_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr9_token,
                       oidc_client_id: rr9_client.client_id,
                       oidc_scope: "openid profile",
@@ -4220,7 +4251,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Apple login with existing identity does not create new user" do
     existing_uid = "existing_apple_user_#{SecureRandom.hex(4)}"
 
-    existing_user = Client.create!(status_id: ClientStatus::NOTHING, public_id: PublicId.generate)
+    existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::NOTHING, public_id: PublicId.generate,
+    )
     ClientAppleIdentity.create!(
       user: existing_user,
       uid: existing_uid,
@@ -4306,6 +4340,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -4373,6 +4408,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr10_token.rotate_refresh_token! unless rr10_token.device_session_record.current_refresh_token_id
                     rr10_now = Time.current
                     rr10_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr10_token,
                       oidc_client_id: rr10_client.client_id,
                       oidc_scope: "openid profile",
@@ -4665,6 +4701,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Apple login with existing identity completes on the app Dashboard, never Home" do
     existing_uid = "existing_apple_dashboard_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -4752,6 +4789,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -4819,6 +4857,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr11_token.rotate_refresh_token! unless rr11_token.device_session_record.current_refresh_token_id
                     rr11_now = Time.current
                     rr11_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr11_token,
                       oidc_client_id: rr11_client.client_id,
                       oidc_scope: "openid profile",
@@ -5115,6 +5154,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
   test "Apple sign up entry with existing identity falls through to sign in flow" do
     existing_uid = "existing_apple_signup_entry_#{SecureRandom.hex(4)}"
     existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -5203,6 +5243,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -5270,6 +5311,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr12_token.rotate_refresh_token! unless rr12_token.device_session_record.current_refresh_token_id
                     rr12_now = Time.current
                     rr12_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr12_token,
                       oidc_client_id: rr12_client.client_id,
                       oidc_scope: "openid profile",
@@ -5672,6 +5714,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -5739,6 +5782,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr13_token.rotate_refresh_token! unless rr13_token.device_session_record.current_refresh_token_id
                     rr13_now = Time.current
                     rr13_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr13_token,
                       oidc_client_id: rr13_client.client_id,
                       oidc_scope: "openid profile",
@@ -6178,6 +6222,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -6245,6 +6290,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr14_token.rotate_refresh_token! unless rr14_token.device_session_record.current_refresh_token_id
                     rr14_now = Time.current
                     rr14_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr14_token,
                       oidc_client_id: rr14_client.client_id,
                       oidc_scope: "openid profile",
@@ -6609,6 +6655,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                       rp_now = Time.current
                       rp_session = OpAppGrant.create!(
+                        authentication_epoch: 0,
                         client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                         oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                         refresh_token_expires_at: rp_now + 10.minutes,
@@ -6675,6 +6722,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr15_token.rotate_refresh_token! unless rr15_token.device_session_record.current_refresh_token_id
                   rr15_now = Time.current
                   rr15_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: rr15_token,
                     oidc_client_id: rr15_client.client_id,
                     oidc_scope: "openid profile",
@@ -6810,6 +6858,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                       rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                       rp_now = Time.current
                       rp_session = OpAppGrant.create!(
+                        authentication_epoch: 0,
                         client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                         oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                         refresh_token_expires_at: rp_now + 10.minutes,
@@ -6876,6 +6925,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   rr16_token.rotate_refresh_token! unless rr16_token.device_session_record.current_refresh_token_id
                   rr16_now = Time.current
                   rr16_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: rr16_token,
                     oidc_client_id: rr16_client.client_id,
                     oidc_scope: "openid profile",
@@ -7036,6 +7086,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -7103,6 +7154,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr18_token.rotate_refresh_token! unless rr18_token.device_session_record.current_refresh_token_id
                     rr18_now = Time.current
                     rr18_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr18_token,
                       oidc_client_id: rr18_client.client_id,
                       oidc_scope: "openid profile",
@@ -7404,6 +7456,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     old_auth_time = 1.week.ago
 
     existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -7496,6 +7549,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                         rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                         rp_now = Time.current
                         rp_session = OpAppGrant.create!(
+                          authentication_epoch: 0,
                           client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                           refresh_token_expires_at: rp_now + 10.minutes,
@@ -7563,6 +7617,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                     rr19_token.rotate_refresh_token! unless rr19_token.device_session_record.current_refresh_token_id
                     rr19_now = Time.current
                     rr19_session = OpAppGrant.create!(
+                      authentication_epoch: 0,
                       client_token: rr19_token,
                       oidc_client_id: rr19_client.client_id,
                       oidc_scope: "openid profile",
@@ -7913,7 +7968,6 @@ class SocialAuthLoginTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -7938,7 +7992,10 @@ class SocialAuthLoginTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -8200,7 +8257,6 @@ class SocialAuthLoginTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -8216,7 +8272,10 @@ class SocialAuthLoginTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

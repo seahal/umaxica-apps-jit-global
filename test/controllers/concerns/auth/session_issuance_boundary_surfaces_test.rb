@@ -15,7 +15,12 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       foreign_key: :user_id,
       limit: ClientToken::MAX_SESSIONS_PER_USER,
       flow_class: ClientSignInFlow,
-      resource: -> { Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01") },
+      resource: -> {
+        Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+          birthdate: "2000-01-01",
+        )
+      },
     },
     com: {
       controller: Base::Com::AuthorityController,
@@ -24,7 +29,12 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       foreign_key: :visitor_id,
       limit: VisitorToken::MAX_SESSIONS_PER_VISITOR,
       flow_class: VisitorSignInFlow,
-      resource: -> { Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR) },
+      resource: -> {
+        Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+          visibility_id: VisitorVisibility::VISITOR,
+        )
+      },
     },
     org: {
       controller: Base::Org::AuthorityController,
@@ -33,12 +43,20 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       foreign_key: :staff_id,
       limit: OperatorToken::MAX_SESSIONS_PER_STAFF,
       flow_class: OperatorSignInFlow,
-      resource: -> { Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF) },
+      resource: -> {
+        Operator.create!(
+          security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+          visibility_id: OperatorVisibility::STAFF,
+        )
+      },
     },
   }.freeze
 
   test "app outer Ticket rollback leaves no root token or authentication cookies" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     request = ActionDispatch::TestRequest.create
     request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     request.session = ActionController::TestSession.new
@@ -48,7 +66,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
     assert_no_difference -> { ClientToken.where(user_id: actor.id).count } do
       OpBaseAppRecord.transaction(requires_new: true) do
-        controller.log_in(actor, establishment: :root_login)
+        controller.log_in(actor, establishment: :root_login, require_totp_check: false)
 
         assert_equal 1, ClientToken.where(user_id: actor.id).count
         assert_nil request.cookie_jar[AuthenticationBase::ACCESS_COOKIE_KEY]
@@ -62,12 +80,18 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
   test "expired root issuance commits only expiry through each surface outer Ticket owner" do
     [
-      [Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01"),
+      [Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01",
+      ),
        ClientSignInFlow, ClientToken, :user_id, Base::App::AuthorityController, ENV.fetch("PUBLIC_BASE_SERVICE_URL"),],
-      [Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR),
+      [Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      ),
        VisitorSignInFlow, VisitorToken, :visitor_id, Base::Com::AuthorityController,
        ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),],
-      [Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF),
+      [Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      ),
        OperatorSignInFlow, OperatorToken, :staff_id, Base::Org::AuthorityController,
        ENV.fetch("PUBLIC_BASE_STAFF_URL"),],
     ].each do |actor, model, token_model, owner_key, controller_class, host|
@@ -109,7 +133,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
       result = nil
       assert_difference(-> { tokens(config, resource).count }, 1) do
-        result = controller.log_in(resource, establishment: :root_login)
+        result = controller.log_in(resource, establishment: :root_login, require_totp_check: false)
       end
 
       assert_equal :success, result.fetch(:status)
@@ -132,7 +156,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
       result = nil
       assert_no_difference(-> { config[:token_class].count }) do
-        result = controller.log_in(resource, establishment: :root_login, sign_in_flow: flow)
+        result = controller.log_in(resource, establishment: :root_login, sign_in_flow: flow, require_totp_check: false)
       end
 
       assert_equal :session_limit_pending, result.fetch(:status)
@@ -153,7 +177,10 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
       result = nil
       assert_no_difference(-> { config[:token_class].count }) do
-        result = build_controller(config).log_in(resource, establishment: :root_login, sign_in_flow: flow)
+        result = build_controller(config).log_in(
+          resource, establishment: :root_login, sign_in_flow: flow,
+                    require_totp_check: false,
+        )
       end
 
       assert_equal :invalid_request, result.fetch(:status)
@@ -166,7 +193,10 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
       result = nil
       assert_no_difference(-> { config[:token_class].count }) do
-        result = build_controller(config).log_in(resource, establishment: :root_login, sign_in_flow: flow)
+        result = build_controller(config).log_in(
+          resource, establishment: :root_login, sign_in_flow: flow,
+                    require_totp_check: false,
+        )
       end
 
       assert_equal :invalid_request, result.fetch(:status)
@@ -177,7 +207,10 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
       resource = config[:resource].call
       flow = issuance_pending_flow(config, resource)
 
-      result = build_controller(config).log_in(resource, establishment: :root_login, sign_in_flow: flow)
+      result = build_controller(config).log_in(
+        resource, establishment: :root_login, sign_in_flow: flow,
+                  require_totp_check: false,
+      )
 
       assert_equal :success, result.fetch(:status)
       flow.reload
@@ -192,7 +225,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
 
       controller.stub(:ensure_device_session_for!, ->(*) { raise ActiveRecord::StatementInvalid, "injected" }) do
         assert_no_difference(-> { config[:token_class].count }) do
-          assert_raises(ActiveRecord::StatementInvalid) { controller.log_in(resource, establishment: :root_login) }
+          assert_raises(ActiveRecord::StatementInvalid) { controller.log_in(resource, establishment: :root_login, require_totp_check: false) }
         end
       end
 
@@ -214,7 +247,7 @@ class AuthSessionIssuanceBoundarySurfacesTest < ActiveSupport::TestCase
   end
 
   def fill_sessions(config, resource, count)
-    Array.new(count) { config[:token_class].create!(config[:foreign_key] => resource.id) }
+    Array.new(count) { config[:token_class].create!(:authentication_epoch => 0, config[:foreign_key] => resource.id) }
   end
 
   def issuance_pending_flow(config, resource, token: nil)

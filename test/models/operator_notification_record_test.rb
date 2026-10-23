@@ -26,7 +26,7 @@ class OperatorNotificationRecordTest < ActiveSupport::TestCase
   end
 
   test "belongs to operator through notification_records" do
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     notification = OperatorNotificationRecord.create!(operator: operator)
 
     assert_equal operator, notification.operator

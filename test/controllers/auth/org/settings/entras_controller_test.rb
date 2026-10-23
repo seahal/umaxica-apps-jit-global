@@ -6,14 +6,14 @@ require "test_helper"
 class Auth::Org::Settings::EntrasControllerTest < ActionDispatch::IntegrationTest
   fixtures :operators, :operator_statuses, :operator_token_binding_methods,
            :operator_token_kinds, :operator_token_statuses, :operator_token_dbsc_statuses,
-           :operator_mfa_levels, :operator_mfa_statuses, :operator_visibilities
+           :operator_security_modes, :operator_mfa_statuses, :operator_visibilities
 
   setup do
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
     host! @host
     @operator = operators(:one)
     @operator.update!(status_id: OperatorStatus::ACTIVE)
-    @token = OperatorToken.create!(staff: @operator, staff_token_status_id: OperatorTokenStatus::ACTIVE)
+    @token = OperatorToken.create!(authentication_epoch: 0, staff: @operator, staff_token_status_id: OperatorTokenStatus::ACTIVE)
     @token.rotate_refresh_token!
     @headers = {
       "Host" => @host,

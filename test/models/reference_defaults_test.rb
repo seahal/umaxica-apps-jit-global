@@ -15,7 +15,7 @@ class ReferenceDefaultsTest < ActiveSupport::TestCase
     TelephoneOccurrenceStatus,
     ClientOccurrenceStatus,
     ClientEmailStatus,
-    ClientMfaLevel,
+
     ClientPreferenceLanguageOption,
     ClientPreferenceRegionOption,
     ClientStatus,

@@ -445,53 +445,6 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
     assert_equal "/checkpoint?pt=pt:/return", @harness.sign_in_sequence_redirect_path
   end
 
-  test "continue_selector_sequence! rejects, advances, and rescues selector participant errors" do
-    assert_not @harness.continue_selector_sequence!
-    assert_equal :bad_request, @harness.rendered[:status]
-
-    @harness.cycle = FakeCycle.new(states: { selector: false })
-
-    assert_not @harness.continue_selector_sequence!
-    assert_equal :bad_request, @harness.rendered[:status]
-
-    @harness.cycle = FakeCycle.new(states: { selector: true })
-    @harness.allowed_policy = false
-
-    assert_not @harness.continue_selector_sequence!
-    assert_equal :bad_request, @harness.rendered[:status]
-
-    @harness.cycle = FakeCycle.new(states: { selector: true }, return_to: "/after")
-    @harness.allowed_policy = true
-    @harness.current_resource = Client.new(id: 123)
-    actor_authn = Struct.new(:login_public_id).new("login-1")
-
-    Actor.stub(:authn, actor_authn) do
-      SignInSelectorParticipant.stub(:new, Struct.new(:auto_commit_single!).new(true)) do
-        @harness.selector_result = { status: :success }
-
-        @harness.continue_selector_sequence!
-
-        assert_equal "/welcome?pt=/after", @harness.redirected.first
-      end
-
-      @harness.cycle = FakeCycle.new(states: { selector: true }, return_to: "/after")
-      SignInSelectorParticipant.stub(:new, Struct.new(:auto_commit_single!).new(true)) do
-        @harness.selector_result = { status: :failed }
-
-        assert_not @harness.continue_selector_sequence!
-        assert_equal :bad_request, @harness.rendered[:status]
-      end
-
-      @harness.cycle = FakeCycle.new(states: { selector: true }, return_to: "/after")
-      raiser = Object.new
-      raiser.define_singleton_method(:auto_commit_single!) { raise SignInSelectorParticipant::Error, "boom" }
-      SignInSelectorParticipant.stub(:new, raiser) do
-        assert_not @harness.continue_selector_sequence!
-        assert_equal :bad_request, @harness.rendered[:status]
-      end
-    end
-  end
-
   test "require_sign_in_sequence_participant! renders bad request when policy denies" do
     sequence = Struct.new(:expired?, :state, :actor_type).new(false, "CHECKPOINT_PENDING", "client")
     @harness.allowed_policy = false
@@ -520,7 +473,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "enforce_sign_in_selector_gate! renders forbidden for json and redirects for html" do
-    @harness.current_resource = Client.new
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @harness.cycle = FakeCycle.new(states: { selector: true })
     @harness.request.format = Struct.new(:html?).new(false)
     @harness.request.path = "/blocked"
@@ -546,11 +499,15 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
 
   test "current_db_sign_in_flow_for_sequence resumes an actorless flow only for an OIDC-started ceremony" do
     [
-      [:app, Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE),
+      [:app, Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: ClientStatus::ACTIVE,
+      ),
        ClientSignInFlow, :pending_login_user_id,],
-      [:com, Visitor.create!(public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE),
+      [:com, Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE,
+      ),
        VisitorSignInFlow, :pending_login_visitor_id,],
-      [:org, Operator.create!(status_id: OperatorStatus::ACTIVE),
+      [:org, Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE),
        OperatorSignInFlow, :pending_login_staff_id,],
     ].each do |surface, actor, cycle_class, pending_key|
       harness = LocatorHarness.new
@@ -589,7 +546,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "continue_checkpoint_sequence_without_content! advances a checkpoint cycle" do
-    @harness.current_resource = Client.new(id: 123)
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 123)
     @harness.cycle = FakeCycle.new(states: { checkpoint: true, dashboard: true }, return_to: "/after")
     @harness.checkpoint_result = Result.new(false)
 
@@ -607,7 +564,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "continue_checkpoint_sequence_without_content! redirects to after_login_path for an OIDC login challenge" do
-    @harness.current_resource = Client.new(id: 123)
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 123)
     @harness.cycle = FakeCycle.new(states: { checkpoint: true, dashboard: true }, return_to: "/after")
     @harness.checkpoint_result = Result.new(false)
     @harness.oidc_authorization_login_challenge = "challenge-1"
@@ -761,7 +718,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
       "expires_at" => 1.minute.from_now.to_i,
       "sequence_id" => "seq-shown",
     }
-    @harness.current_resource = Client.new(id: 5)
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 5)
     @harness.current_session = Struct.new(:id).new(999)
 
     @harness.continue_welcome_sequence_without_content!
@@ -841,7 +798,7 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "enforce_sign_in_selector_gate! does nothing when the current request is already an allowed selector request" do
-    @harness.current_resource = Client.new
+    @harness.current_resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @harness.cycle = FakeCycle.new(states: { selector: true })
     @harness.request.path = "/app/selector"
 
@@ -852,7 +809,10 @@ class AuthenticationSequenceGateExtraCoverageTest < ActiveSupport::TestCase
   end
 
   test "sign_in_guardrail_participant builds a real guardrail participant bound to the resolved actor" do
-    actor = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::ACTIVE,
+    )
     @harness.current_resource = actor
     cycle = FakeCycle.new
 

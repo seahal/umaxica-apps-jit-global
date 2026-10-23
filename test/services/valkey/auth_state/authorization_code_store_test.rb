@@ -34,7 +34,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
       client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       subject: "sub-1",
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       resource_type: "client",
       scope: "openid",
@@ -70,7 +70,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
       client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       subject: "sub-1",
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       resource_type: "client",
     )
@@ -87,7 +87,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
       client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       subject: "sub-1",
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       resource_type: "client",
     )
@@ -118,7 +118,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
       client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       subject: "sub-1",
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       resource_type: "client",
     )
@@ -148,7 +148,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
       client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       subject: "sub-1",
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       resource_type: "client",
     )
@@ -232,7 +232,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
     {
       "issue" => -> {
         store.issue!(
-          client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub", code_challenge: "c",
+          client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub",
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256", resource_type: "client",
         )
       },
@@ -255,7 +256,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
 
     assert_raises(Umaxica::Valkey::OperationError) do
       store.issue!(
-        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub", code_challenge: "c",
+        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub",
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256", resource_type: "client",
       )
     end
@@ -264,7 +266,8 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
   test "issue rejects a non-S256 code challenge method" do
     assert_raises(ArgumentError) do
       @store.issue!(
-        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub", code_challenge: "c",
+        client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, subject: "sub",
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "plain", resource_type: "client",
       )
     end
@@ -324,7 +327,7 @@ class ValkeyAuthStateAuthorizationCodeStoreTest < ActiveSupport::TestCase
       client_id: CLIENT_ID,
       redirect_uri: REDIRECT_URI,
       subject: "sub-1",
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       resource_type: "client",
     )

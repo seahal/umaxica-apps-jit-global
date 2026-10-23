@@ -4,7 +4,10 @@ require "test_helper"
 
 class SocialAuditDeliveryJobTest < ActiveJob::TestCase
   test "Chronicle failure leaves a committed Source intent for one later delivery" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     identity = ClientExternalIdentity.create!(
       client: client, provider: "google", issuer: "https://accounts.google.com",
       subject: SecureRandom.uuid, audience: "google-test-client-id",
@@ -31,7 +34,10 @@ class SocialAuditDeliveryJobTest < ActiveJob::TestCase
   end
 
   test "a conflicting Chronicle UUID does not acknowledge the Source event" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     identity = ClientExternalIdentity.create!(
       client: client, provider: "apple", issuer: "https://appleid.apple.com",
       subject: SecureRandom.uuid, audience: "apple-test-client-id",
@@ -55,7 +61,10 @@ class SocialAuditDeliveryJobTest < ActiveJob::TestCase
   end
 
   test "Source acknowledgement failure after Chronicle creation retries without duplicating delivery" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     identity = ClientExternalIdentity.create!(
       client: client, provider: "google", issuer: "https://accounts.google.com",
       subject: SecureRandom.uuid, audience: "google-test-client-id",

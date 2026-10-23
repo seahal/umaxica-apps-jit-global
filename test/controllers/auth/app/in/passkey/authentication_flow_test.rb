@@ -40,7 +40,7 @@ module Auth::App::Sign::In::Passkey
         description: "Test Passkey", status_id: ClientPasskeyStatus::ACTIVE,
       )
       nonce = SecureRandom.urlsafe_base64(32)
-      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission = OidcTestEntry.issue!(
         surface: "app", intent: "sign_in", base_browser_nonce: nonce, base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
@@ -58,13 +58,11 @@ module Auth::App::Sign::In::Passkey
         raw_auth_sid: raw_sid,
       )
       admitted, admitted_sid = ClientAuthCeremonySession.rotate_and_admit!(
-        admission_purpose: "local_sign_in", previous_raw_sid: raw_sid,
-        local_sign_in_flow_ref: admission.transaction.public_id,
+        admission_purpose: "authentication_handoff", previous_raw_sid: raw_sid,
+        authorization_transaction_ref: admission.transaction.transaction_id,
       )
       binding.redeem!(auth_session: attached, admitted_auth_session: admitted)
-      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-        flow: admission.transaction, surface: "app", phase: "PRIMARY_PENDING",
-      )
+      @primary_sign_in_binding = nil
       cookie_name = JitSessionCookieConfig.force_secure? ? "__Host-auth_sid" : "auth_sid"
       cookies.merge(
         "#{cookie_name}=#{Rack::Utils.escape(admitted_sid)}", URI.parse(@fake.origin),
@@ -135,7 +133,7 @@ module Auth::App::Sign::In::Passkey
       # Credential persistence may advance the owner's optimistic-lock version through
       # existing MFA status bookkeeping; refresh before this independent mutation.
       @user.reload
-      @user.update!(mfa_level_enabled: true)
+      @user.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
       ClientTotpCredential.create!(
         user: @user,
         private_key: ROTP::Base32.random_base32,

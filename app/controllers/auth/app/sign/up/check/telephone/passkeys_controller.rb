@@ -123,17 +123,19 @@ module Auth
               def passkey_registration_passkeys = ClientPasskey.where(user_id: @sign_up_actor.id)
 
               def save_passkey_registration!(passkey, event_type: "passkey.registered.signup")
-                @sign_up_actor.with_lock do
-                  PasskeyRegistrationOperation.call!(
-                    actor: @sign_up_actor,
-                    passkey: passkey,
-                    audit: { event_type: event_type, surface: "app" },
-                  )
-                  @sign_up_ticket.update!(pending_passkey_registration_id: passkey.id)
-                  ClientSecretPasskeyReservationIssuer.call_for_sign_up!(
-                    flow: @sign_up_ticket, nonce: sign_up_session_state.cycle_payload.stringify_keys.fetch("nonce"),
-                    passkey: passkey, expires_after: ClientSecretLifetimesValue.issuance_ttl,
-                  )
+                @sign_up_ticket.with_cycle_lock do
+                  @sign_up_actor.with_lock do
+                    PasskeyRegistrationOperation.call!(
+                      actor: @sign_up_actor,
+                      passkey: passkey,
+                      audit: { event_type: event_type, surface: "app" },
+                    )
+                    @sign_up_ticket.update!(pending_passkey_registration_id: passkey.id)
+                    ClientSecretPasskeyReservationIssuer.call_for_sign_up!(
+                      flow: @sign_up_ticket, nonce: sign_up_session_state.cycle_payload.stringify_keys.fetch("nonce"),
+                      passkey: passkey, expires_after: ClientSecretLifetimesValue.issuance_ttl,
+                    )
+                  end
                 end
               end
 

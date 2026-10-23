@@ -36,8 +36,8 @@ class UnsupportedInputRefusalsTest < ActiveSupport::TestCase
   end
 
   test "quota policies refuse a principal from another surface" do
-    account_policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: Visitor.new)
-    organization_policy = Acme::OrganizationQuotaPolicy.new(surface: :com, principal: Client.new)
+    account_policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
+    organization_policy = Acme::OrganizationQuotaPolicy.new(surface: :com, principal: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL))
 
     assert_raises(ArgumentError) { account_policy.current_count }
     assert_raises(ArgumentError) { organization_policy.current_count }

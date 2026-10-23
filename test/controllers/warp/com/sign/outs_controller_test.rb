@@ -14,7 +14,7 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "get sign out renders confirmation without mutation" do
     visitor = visitors(:reserved_visitor)
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     auth_refresh_token = token.rotate_refresh_token!
     auth_refresh_digest = token.reload.refresh_token_digest
     auth_refresh_generation = token.refresh_token_generation
@@ -32,7 +32,7 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out redirects to the registered base authority" do
     visitor = visitors(:reserved_visitor)
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     auth_refresh_token = token.rotate_refresh_token!
     auth_refresh_digest = token.reload.refresh_token_digest
     auth_refresh_generation = token.refresh_token_generation
@@ -63,7 +63,7 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   # Org do for their own mirrors.
   test "a write that creates the browser preference synchronizes the visitor preference mirror" do
     visitor = visitors(:reserved_visitor)
-    token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
     authenticate_rp!(visitor, token)
     mirror = -> { ComZenithRecord.connected_to(role: :writing) { VisitorPreference.find_by(visitor_id: visitor.id) } }
@@ -88,6 +88,7 @@ class Warp::Com::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   def authenticate_rp!(visitor, token)
     oidc_client = OidcClientRegistry.find!("warp-com-jp")
     @rp_session = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

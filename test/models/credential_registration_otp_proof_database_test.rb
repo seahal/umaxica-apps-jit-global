@@ -13,8 +13,8 @@ class CredentialRegistrationOtpProofDatabaseTest < ActiveSupport::TestCase
     [Operator, OperatorToken, OperatorTelephone, :staff_id, :org, :telephone],
   ].each do |owner_model, root_model, contact_model, owner_key, surface, channel|
     test "#{surface} #{channel} registration proof rejects malformed direct writes and protects verified facts" do
-      owner = owner_model.create!
-      root = root_model.create!(owner_key => owner.id, :discard_at => 1.day.from_now)
+      owner = owner_model.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_model))
+      root = root_model.create!(:authentication_epoch => 0, owner_key => owner.id, :discard_at => 1.day.from_now)
       root.rotate_refresh_token!
       contact = contact_model.create!(
         owner_key => owner.id,

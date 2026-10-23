@@ -29,7 +29,7 @@ require "test_helper"
 class VisitorBannerTest < ActiveSupport::TestCase
   include ActiveSupport::Testing::TimeHelpers
 
-  fixtures :visitor_banners, :visitors, :visitor_statuses, :visitor_visibilities, :visitor_mfa_levels,
+  fixtures :visitor_banners, :visitors, :visitor_statuses, :visitor_visibilities, :visitor_security_modes,
            :visitor_mfa_statuses
 
   test "inherits from principal record" do

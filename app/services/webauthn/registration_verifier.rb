@@ -14,12 +14,17 @@ module Webauthn
 
     class UserPresenceRequiredError < VerificationError; end
 
+    class DiscoverableCredentialRequiredError < VerificationError; end
+
     RESIDENT_KEY_BY_SURFACE = {
       app: "required",
       com: "required",
       org: "required",
     }.freeze
     ATTESTATION = "none"
+    # adr/passkey-authenticator-account-label.md: ORG refuses a credential the client does not report
+    # as discoverable. `credProps` is the only server-visible report of that property.
+    DISCOVERABLE_REQUIRED_SURFACES = %i(org).freeze
 
     def self.options_for(config:, user_id:, user_name:, exclude_ids: [], surface: :org)
       config.relying_party.options_for_registration(
@@ -30,6 +35,7 @@ module Webauthn
           user_verification: UvPolicy.for(:registration).client_value,
         },
         attestation: ATTESTATION,
+        extensions: { credProps: true },
       )
     end
 
@@ -38,7 +44,7 @@ module Webauthn
     end
     private_class_method :resident_key_for
 
-    def self.verify!(credential_params:, challenge:, config:)
+    def self.verify!(credential_params:, challenge:, config:, surface:)
       policy = UvPolicy.for(:registration)
       credential =
         begin
@@ -53,6 +59,10 @@ module Webauthn
         raise UserVerificationRequiredError, "attestation is not user-verified"
       end
       raise UserPresenceRequiredError, "attestation is not user-present" unless authenticator_data.user_present?
+      if DISCOVERABLE_REQUIRED_SURFACES.include?(Webauthn::Surface.for(surface).key) &&
+          credential.client_extension_outputs&.dig("credProps", "rk") != true
+        raise DiscoverableCredentialRequiredError, "credential is not reported as discoverable"
+      end
 
       AuthenticationContext.from_credential(
         credential,

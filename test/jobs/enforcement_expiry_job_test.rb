@@ -92,6 +92,7 @@ class EnforcementExpiryJobTest < ActiveJob::TestCase
 
   def create_test_client!
     Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::BOTH,

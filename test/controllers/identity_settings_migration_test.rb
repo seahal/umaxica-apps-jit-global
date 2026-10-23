@@ -12,8 +12,12 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
     @sign_host = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
     @acme_host = ENV.fetch("PRIVATE_BASE_SERVICE_URL")
     host! @acme_host
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -66,6 +70,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -124,6 +129,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -182,6 +188,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -242,6 +249,7 @@ class IdentitySettingsMigrationTest < ActionDispatch::IntegrationTest
                   f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
                   f3_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                     refresh_token_expires_at: f3_now + 10.minutes,

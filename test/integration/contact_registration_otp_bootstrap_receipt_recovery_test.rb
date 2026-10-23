@@ -36,10 +36,12 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
             raise ArgumentError, "unsupported test surface"
           end
         actor = actor_model.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
           status_id: (surface == "app") ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
         )
         token = token_model.create!(
+          :authentication_epoch => 0,
           owner_key => actor.id, :root_login_established_at => token_model.database_now,
           :discard_at => 1.day.from_now,
         )
@@ -48,6 +50,7 @@ class ContactRegistrationOtpBootstrapReceiptRecoveryTest < ActionDispatch::Integ
         token.rotate_refresh_token!
         client = OidcClientRegistry.find!(client_id)
         rp = rp_model.create!(
+          :authentication_epoch => 0,
           rp_key => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
           :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => Time.current,
           :refresh_token_expires_at => 10.minutes.from_now,

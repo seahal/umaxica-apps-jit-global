@@ -7,7 +7,10 @@ class ExternalAuthenticationLinkUseCaseTest < ActiveSupport::TestCase
   fixtures
 
   test "links a verified principal and returns a typed result" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     principal = ExternalAuthentication::VerifiedPrincipal.new(
       provider: "google",
       subject: "link-use-case-subject",
@@ -52,8 +55,14 @@ class ExternalAuthenticationLinkUseCaseTest < ActiveSupport::TestCase
   end
 
   test "a pre-release grant cannot reattach another client but a new grant can" do
-    original = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
-    challenger = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    original = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
+    challenger = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     subject = SecureRandom.uuid
     identity = ClientExternalIdentity.create!(
       client: original, provider: "google", issuer: "https://accounts.google.com",
@@ -98,8 +107,14 @@ class ExternalAuthenticationLinkUseCaseTest < ActiveSupport::TestCase
   end
 
   test "a grant issued before app account termination cannot reattach its deleted social subject" do
-    original = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
-    challenger = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    original = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
+    challenger = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     subject = SecureRandom.uuid
     identity = ClientExternalIdentity.create!(
       client: original, provider: "apple", issuer: "https://appleid.apple.com",

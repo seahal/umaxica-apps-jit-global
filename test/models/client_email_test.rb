@@ -205,7 +205,7 @@ class ClientEmailTest < ActiveSupport::TestCase
   end
 
   test "pending email rows do not reserve capacity and the database permits only one effective binding" do
-    owner = Client.create!
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal 0, owner.client_emails.effective_binding.count
     candidates =
@@ -628,7 +628,10 @@ class ClientEmailTest < ActiveSupport::TestCase
   end
 
   def create_email_record(address)
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @identifier_race_client_ids << client.id
 
     ClientEmail.create!(

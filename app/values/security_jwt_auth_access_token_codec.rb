@@ -21,7 +21,7 @@ class SecurityJwtAuthAccessTokenCodec
                amr: nil, access_token_ttl: SecurityTokenLifetimes::AUTH_ACCESS_JWT_TTL,
                jwt_issuer_id: nil, issuer: nil, audiences: nil,
                subject: nil, auth_time: nil, step_up_until: nil, client_id: nil,
-               authentication_context: nil, contract_epoch: nil)
+               authentication_context: nil)
       resource_type ||=
         case resource
         when ::Client then "client"
@@ -56,7 +56,6 @@ class SecurityJwtAuthAccessTokenCodec
         step_up_until: step_up_until,
         client_id: client_id,
         authentication_context: authentication_context,
-        contract_epoch: contract_epoch,
       )
 
       JitSecurityJwtKeyring.encode(payload, typ: TOKEN_TYPE, issuer_id: resolve_jwt_issuer_id(jwt_issuer_id))

@@ -49,7 +49,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   test "app refuses a foreign session id without mutating the owner sessions" do
     host! @app_host
     setup_app_actor!
-    foreign = ClientToken.create!(user: clients(:two))
+    foreign = ClientToken.create!(authentication_epoch: 0, user: clients(:two))
 
     delete base_app_identity_session_url(foreign.public_id, ri: "jp", host: @app_host), headers: @app_headers
 
@@ -188,13 +188,12 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
   def setup_com_actor!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     @actor = Visitor.create!(
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: VisitorStatus::NOTHING,
       visibility_id: VisitorVisibility::VISITOR,
-      mfa_level_id: VisitorMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
     )
     @current_token = create_visitor_token
@@ -216,8 +215,8 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
     }
     rp_session =
       case token
-      when ClientToken then OpAppGrant.create!(attributes.merge(client_token: token))
-      when VisitorToken then OpComGrant.create!(attributes.merge(visitor_token: token))
+      when ClientToken then OpAppGrant.create!(attributes.merge(authentication_epoch: 0, client_token: token))
+      when VisitorToken then OpComGrant.create!(attributes.merge(authentication_epoch: 0, visitor_token: token))
       end
     access = AuthenticationTokenService.encode(
       actor, host: host, resource_type: resource_type, session_public_id: token.public_id,
@@ -236,6 +235,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
 
   def create_client_token
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @actor,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -248,6 +248,7 @@ class IdentitySessionRevocationTest < ActionDispatch::IntegrationTest
 
   def create_visitor_token
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: @actor,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,

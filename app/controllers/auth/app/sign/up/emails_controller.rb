@@ -354,7 +354,7 @@ module Auth
           end
 
           def cleanup_pending_signup!
-            cycle = sign_up_flow_locator.current
+            cycle = current_sign_up_flow_ticket
             return unless cycle&.principal_id
 
             Client.find_by(id: cycle.principal_id, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)&.destroy!
@@ -382,6 +382,7 @@ module Auth
           def issue_sign_up_flow!
             sign_up_flow_locator.issue!(
               ClientSignUpFlow.create!(
+                auth_admission_binding: auth_sign_up_admission_binding!,
                 principal_id: nil,
                 status_id: ClientSignUpFlowStatus::STARTED,
                 step: "start",
@@ -395,7 +396,7 @@ module Auth
           end
 
           def current_sign_up_flow
-            sign_up_flow_locator.current || issue_sign_up_flow!
+            current_sign_up_flow_ticket || issue_sign_up_flow!
           end
 
           def bind_sign_up_flow_to_email!(email)

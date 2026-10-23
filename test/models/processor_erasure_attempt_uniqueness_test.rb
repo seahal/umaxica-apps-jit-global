@@ -13,7 +13,10 @@ class ProcessorErasureAttemptUniquenessTest < ActiveSupport::TestCase
   SURFACES.each do |principal_class, status, visibility, request_class, owner_key,
                     notification_class, request_key, attempt_class|
     test "#{attempt_class.name} keeps attempt claims serialized and raw uniqueness authoritative" do
-      principal = principal_class.create!(status_id: status, visibility_id: visibility)
+      principal = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
       request = request_class.create!(owner_key => principal)
       notification = notification_class.create!(request_key => request, :processor_key => "email_delivery")
       now = notification_class.database_now
@@ -42,7 +45,10 @@ class ProcessorErasureAttemptUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{attempt_class.name} refuses the same notification generation and ordinal before creation" do
-      principal = principal_class.create!(status_id: status, visibility_id: visibility)
+      principal = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
       request = request_class.create!(owner_key => principal)
       notification = notification_class.create!(request_key => request, :processor_key => "email_delivery")
       first = notification.begin_attempt!(

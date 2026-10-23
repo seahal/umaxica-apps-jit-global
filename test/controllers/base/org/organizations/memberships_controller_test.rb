@@ -9,7 +9,11 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    @staff = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    @staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
+    @staff = OperatorPasskeyTestSupport.give_two_active_passkeys!(@staff)
     @bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @staff)
     @organization_public_id = @bootstrap.collective.public_id
     @membership = @bootstrap.account.current_memberships.first
@@ -53,6 +57,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -126,6 +131,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -199,6 +205,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -267,6 +274,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -335,6 +343,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -375,7 +384,10 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
   end
 
   test "member of one org cannot access another org membership collection" do
-    other_staff = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     other_bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_staff)
 
     http_headers_3 =
@@ -408,6 +420,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -446,7 +459,10 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
   end
 
   test "org idor cannot swap membership id from another org" do
-    other_staff = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     other_bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_staff)
     other_membership = other_bootstrap.account.current_memberships.first
 
@@ -480,6 +496,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -522,7 +539,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
       "discard_at > ?",
       Time.current,
     ).order(created_at: :desc).first
-    token ||= OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    token ||= OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     token.update!(
       last_step_up_at: 1.minute.ago,
       last_step_up_scope: "org_membership",
@@ -533,7 +550,10 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
       last_step_up_session_public_id: token.public_id,
       last_step_up_audience: "step_up:org",
     )
-    other_staff = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     other_bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_staff)
     other_membership = other_bootstrap.account.current_memberships.first
 
@@ -567,6 +587,7 @@ class Base::Org::Organizations::MembershipsControllerTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -684,6 +705,7 @@ class Base::Org::Organizations::MembershipsControllerTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

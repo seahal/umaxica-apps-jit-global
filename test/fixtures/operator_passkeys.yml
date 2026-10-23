@@ -76,3 +76,125 @@ one:
   status_id: 1
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
+
+# D-132: every fixture Operator is ADVANCED and holds the two active Passkeys it requires.
+placeholder_passkey_1:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:placeholder) %>
+  description: "D-132 fixture passkey 1"
+  webauthn_id: "webauthn_id_placeholder_1"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_placeholder_1"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+placeholder_passkey_2:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:placeholder) %>
+  description: "D-132 fixture passkey 2"
+  webauthn_id: "webauthn_id_placeholder_2"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_placeholder_2"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+none_staff_passkey_1:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:none_staff) %>
+  description: "D-132 fixture passkey 1"
+  webauthn_id: "webauthn_id_none_staff_1"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_none_staff_1"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+none_staff_passkey_2:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:none_staff) %>
+  description: "D-132 fixture passkey 2"
+  webauthn_id: "webauthn_id_none_staff_2"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_none_staff_2"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+two_passkey_1:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
+  description: "D-132 fixture passkey 1"
+  webauthn_id: "webauthn_id_two_1"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_two_1"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+two_passkey_2:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:two) %>
+  description: "D-132 fixture passkey 2"
+  webauthn_id: "webauthn_id_two_2"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_two_2"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+sample_staff_passkey_1:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:sample_staff) %>
+  description: "D-132 fixture passkey 1"
+  webauthn_id: "webauthn_id_sample_staff_1"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_sample_staff_1"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+sample_staff_passkey_2:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:sample_staff) %>
+  description: "D-132 fixture passkey 2"
+  webauthn_id: "webauthn_id_sample_staff_2"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_sample_staff_2"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+reserved_staff_passkey_1:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:reserved_staff) %>
+  description: "D-132 fixture passkey 1"
+  webauthn_id: "webauthn_id_reserved_staff_1"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_reserved_staff_1"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+reserved_staff_passkey_2:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:reserved_staff) %>
+  description: "D-132 fixture passkey 2"
+  webauthn_id: "webauthn_id_reserved_staff_2"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_reserved_staff_2"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+one_passkey_2:
+  staff_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
+  description: "D-132 fixture passkey 2"
+  webauthn_id: "webauthn_id_one_2"
+  external_id: <%= SecureRandom.uuid %>
+  public_key: "public_key_one_2"
+  sign_count: 0
+  status_id: 1
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>

@@ -9,7 +9,7 @@ require "test_helper"
 class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   setup do
     @user = clients(:one)
-    @user_session_token = ClientToken.create!(user: @user)
+    @user_session_token = ClientToken.create!(authentication_epoch: 0, user: @user)
     @authentication_event_at = Time.utc(2026, 1, 2, 3, 4, 5)
     @code_verifier = SecureRandom.urlsafe_base64(32)
     @code_challenge = Base64.urlsafe_encode64(
@@ -62,14 +62,27 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "invalid_request", result.error
   end
 
-  test "fails for wrong response_type" do
-    result = authorize_service_call(
-      params: valid_params.merge(response_type: "token"),
+  test "preserves unsupported_response_type without issuing an authorization redirect" do
+    result = OidcAuthorizeCoordinator.call(
+      params: {
+        response_type: "token",
+        client_id: "core-app-jp",
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "test_state",
+        nonce: "test_nonce",
+        scope: "openid profile email",
+      },
       resource: @user,
+      session_token: @user_session_token,
+      authentication_event_at: @authentication_event_at,
     )
 
     assert_not result.success?
-    assert_equal "invalid_request", result.error
+    assert_equal "unsupported_response_type", result.error
+    assert_nil result.redirect_url
+    assert_nil result.redirect_uri
   end
 
   test "fails for unknown client_id" do
@@ -212,14 +225,27 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
       purge_eligible_at: 1.day.from_now,
     )
 
-    result = authorize_service_call(
-      params: valid_params,
+    result = OidcAuthorizeCoordinator.call(
+      params: {
+        response_type: "code",
+        client_id: "core-app-jp",
+        redirect_uri: @redirect_uri,
+        code_challenge: @code_challenge,
+        code_challenge_method: "S256",
+        state: "test_state",
+        nonce: "test_nonce",
+        scope: "openid profile email",
+      },
       resource: @user,
+      session_token: @user_session_token,
+      authentication_event_at: @authentication_event_at,
     )
 
     assert_not result.success?
-    assert_equal "invalid_request", result.error
+    assert_equal "access_denied", result.error
     assert_equal "resource is not active", result.error_description
+    assert_nil result.redirect_url
+    assert_nil result.redirect_uri
   end
 
   test "authorization code is stored in Valkey auth-state" do
@@ -507,8 +533,7 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   def create_visitor!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
-    Visitor.create!
+    Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
   end
 
   def authorize_service_call(
@@ -528,13 +553,16 @@ class OidcAuthorizeCoordinatorTest < ActiveSupport::TestCase
   def default_session_token_for(resource)
     case resource
     when Client
-      @user_session_token ||= ClientToken.create!(user: @user)
+      @user_session_token ||= ClientToken.create!(authentication_epoch: 0, user: @user)
     when Operator
-      @staff_session_token ||= OperatorToken.create!(staff: resource)
+      @staff_session_token ||= OperatorToken.create!(authentication_epoch: 0, staff: resource)
     when Visitor
       ensure_visitor_reference_records!
       ensure_visitor_token_reference_records!
-      @visitor_session_token ||= VisitorToken.create!(visitor: resource, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+      @visitor_session_token ||= VisitorToken.create!(
+        authentication_epoch: 0, visitor: resource,
+        visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
+      )
     else
       raise ArgumentError, "unsupported resource: #{resource.class.name}"
     end
@@ -581,7 +609,6 @@ class OidcAuthorizeCoordinatorTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -613,7 +640,10 @@ class OidcAuthorizeCoordinatorTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -860,7 +890,6 @@ class OidcAuthorizeCoordinatorTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -869,7 +898,10 @@ class OidcAuthorizeCoordinatorTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -28,7 +28,7 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
   end
 
   test "destroying client destroys currency preference child" do
-    client = Client.create!
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     preference = ClientPreference.create!(user: client)
     currency = ClientPreferenceCurrency.create!(preference: preference)
 
@@ -42,7 +42,7 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
   end
 
   test "destroying visitor destroys currency preference child" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     preference = VisitorPreference.create!(visitor: visitor)
     currency = VisitorPreferenceCurrency.create!(preference: preference)
 
@@ -56,7 +56,7 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
   end
 
   test "destroying operator destroys currency preference child" do
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     preference = OperatorPreference.create!(staff: operator)
     currency = OperatorPreferenceCurrency.create!(preference: preference)
 
@@ -73,17 +73,17 @@ class PreferenceCurrencyAssociationDestroyTest < ActiveSupport::TestCase
     [
       ClientStatus,
       ClientVisibility,
-      ClientMfaLevel,
+
       ClientMfaStatus,
       ClientPreferenceCurrencyOption,
       VisitorStatus,
       VisitorVisibility,
-      VisitorMfaLevel,
+
       VisitorMfaStatus,
       VisitorPreferenceCurrencyOption,
       OperatorStatus,
       OperatorVisibility,
-      OperatorMfaLevel,
+
       OperatorMfaStatus,
       OperatorPreferenceCurrencyOption,
     ].each(&:ensure_defaults!)

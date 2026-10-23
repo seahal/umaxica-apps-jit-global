@@ -43,3 +43,5 @@ step_up_failed:
   id: 16
 refresh_token_reuse_detected:
   id: 17
+sign_flow_halted:
+  id: 18

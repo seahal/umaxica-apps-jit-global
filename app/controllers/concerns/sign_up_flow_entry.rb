@@ -10,11 +10,18 @@ module SignUpFlowEntry
 
   private
 
+  def current_sign_up_flow_ticket
+    sign_up_flow_locator.current(
+      admission_binding: auth_sign_up_admission_binding!, ceremony_session: admitted_auth_ceremony_session,
+      public_id: SignUpSessionState.for(session, surface: sign_up_surface).sequence_id,
+    )
+  end
+
   # Query parameters that bind a generated step URL to the flow this request is serving, so the
   # server can tell which flow instance a later request from that page presumes. With no flow there
   # is nothing to bind and the step gate refuses the resulting unbound request.
   def sign_up_flow_binding_params
-    flow = @sign_up_ticket || sign_up_flow_locator.current
+    flow = @sign_up_ticket || current_sign_up_flow_ticket
     return {} unless flow
 
     { AuthIoKeys::Params::FLOW_BINDING => SignFlowBindingCodec.encode(flow: flow, surface: sign_up_surface) }
@@ -26,7 +33,7 @@ module SignUpFlowEntry
   # nonce, and nothing rendered for the earlier flow can act on the new one. This runs before the
   # new contact is created so the earlier flow's artifact cleanup cannot remove the new artifacts.
   def supersede_active_sign_up_flow!
-    flow = sign_up_flow_locator.current
+    flow = current_sign_up_flow_ticket
     return unless flow
 
     SignUpPhaseViolationEnforcer.call(

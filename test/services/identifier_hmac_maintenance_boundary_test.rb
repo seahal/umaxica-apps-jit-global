@@ -10,19 +10,27 @@ class IdentifierHmacMaintenanceBoundaryTest < ActiveSupport::TestCase
         model, owner, owner_key, identifier, digest_column, audit_model =
           case [realm, channel]
           when ["app", "email"]
-            [ClientEmail, Client.create!(status_id: ClientStatus::ACTIVE), :user_id,
+            [ClientEmail, Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+            ), :user_id,
              { raw_address: "maintenance-#{SecureRandom.hex(8)}@example.test" }, :address_digest,
              ClientIdentifierRotationAudit,]
           when ["com", "email"]
-            [VisitorEmail, Visitor.create!(status_id: VisitorStatus::ACTIVE), :visitor_id,
+            [VisitorEmail, Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+            ), :visitor_id,
              { raw_address: "maintenance-#{SecureRandom.hex(8)}@example.test" }, :address_digest,
              VisitorIdentifierRotationAudit,]
           when ["app", "telephone"]
-            [ClientTelephone, Client.create!(status_id: ClientStatus::ACTIVE), :user_id,
+            [ClientTelephone, Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+            ), :user_id,
              { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
              :number_digest, ClientIdentifierRotationAudit,]
           when ["com", "telephone"]
-            [VisitorTelephone, Visitor.create!(status_id: VisitorStatus::ACTIVE), :visitor_id,
+            [VisitorTelephone, Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+            ), :visitor_id,
              { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
              :number_digest, VisitorIdentifierRotationAudit,]
           end

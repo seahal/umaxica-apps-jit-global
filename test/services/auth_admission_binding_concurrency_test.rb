@@ -10,7 +10,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
 
   %w(app com org).each do |surface|
     test "#{surface} simultaneous exact Base confirmations converge on one immutable proof without admission" do
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       model = BaseAuthAdmissionCoordinator.admission_binding_model(surface)
@@ -52,7 +52,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
       assert_nil binding.admitted_auth_ceremony_session_id
       assert_predicate continuity.reload, :active?
       assert_not_predicate continuity, :admitted?
-      assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
+      assert_equal "pending", issuance.transaction.reload.status
     ensure
       2.times { release << true } if release
       workers&.each { |worker| worker.wait(10) }
@@ -62,10 +62,10 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
     end
 
     test "#{surface} concurrent confirmed redemption rotates once and preserves the other tab's parent" do
-      first = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      first = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
-      sibling = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      sibling = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
       model = BaseAuthAdmissionCoordinator.admission_binding_model(surface)
@@ -91,8 +91,8 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
                   binding: locked, raw_auth_sid: raw_sid,
                 )
                 admitted, = auth_model.rotate_and_admit!(
-                  admission_purpose: "local_sign_in", previous_raw_sid: raw_sid,
-                  local_sign_in_flow_ref: first.transaction.public_id,
+                  admission_purpose: "authentication_handoff", previous_raw_sid: raw_sid,
+                  authorization_transaction_ref: first.transaction.transaction_id,
                 )
                 locked.redeem!(auth_session: original, admitted_auth_session: admitted)
                 [:redeemed, admitted.id]
@@ -116,7 +116,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
       assert_not_predicate original.reload, :active?
       assert_equal 1, auth_model.where(previous_sid_digest: original.sid_digest).count
       assert_nil bindings.last.reload.redeemed_at
-      assert_predicate sibling.transaction.reload, :sign_in_primary_pending?
+      assert_equal "pending", sibling.transaction.reload.status
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
         BaseAuthAdmissionCoordinator.consume_entry_reference!(
           reference: sibling.reference, surface:, expected_intent: "sign_in", binding: bindings.last,
@@ -134,7 +134,7 @@ class AuthAdmissionBindingConcurrencyTest < ActiveSupport::TestCase
     end
 
     test "#{surface} competing Auth attachment has one winner under real Ticket row locks" do
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       model = BaseAuthAdmissionCoordinator.admission_binding_model(surface)

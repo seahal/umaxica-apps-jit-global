@@ -43,7 +43,7 @@ class BranchCoverageBatch32ThresholdPushTest < ActiveSupport::TestCase
   test "SignRiskEnforcer disabled env and blank resource" do
     ENV["RISK_ENFORCEMENT_DISABLED"] = "true"
     begin
-      assert_nil SignRiskEnforcer.call(Client.new)
+      assert_nil SignRiskEnforcer.call(Client.new(security_mode_id: SecurityModeConfigurable::NORMAL))
       assert_nil SignRiskEmitter.emit("test")
     ensure
       ENV.delete("RISK_ENFORCEMENT_DISABLED")

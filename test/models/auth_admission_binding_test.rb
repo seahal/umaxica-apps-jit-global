@@ -8,7 +8,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
 
   test "confirmation references require UUID version four at adjacent representable versions in every realm" do
     %w(app com org).each do |surface|
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
@@ -28,15 +28,18 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
 
   test "every realm database rejects invalid parent and partial admission proof writes" do
     %w(app com org).each do |surface|
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
       auth_session, = binding.class.auth_admission_session_class.issue!
       invalid_writes = [
-        [{ sign_in_flow_id: nil }, "one_parent"],
-        [{ step_up_ceremony_transaction_id: binding.sign_in_flow_id }, "one_parent"],
-        [{ purpose: "step_up_handoff" }, "parent_purpose"],
+        [{ authorization_transaction_id: nil }, "one_parent"],
+        [{ step_up_ceremony_transaction_id: binding.authorization_transaction_id }, "one_parent"],
+        [{ purpose: "step_up_handoff", entry_intent: "not_applicable" }, "parent_purpose"],
+        # D-60: the retired Local purposes have no parent that accepts them.
+        [{ purpose: "local_sign_in" }, "entry_intent"],
+        [{ purpose: "local_sign_up" }, "entry_intent"],
         [{ confirmation_ref: SecureRandom.uuid }, "auth_proof_pair"],
         [{ auth_ceremony_session_id: auth_session.id }, "auth_proof_pair"],
         [{ base_confirmed_at: binding.class.database_now }, "confirmation_requires_auth"],
@@ -52,7 +55,15 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             end
           end
 
-        assert_includes error.message, "admission_bindings_#{constraint}"
+        # The purpose/intent CHECK also rejects retired purposes before the parent CHECK.
+        expected =
+          if constraint == "entry_intent"
+            "admission_binding_entry_intent"
+          else
+            "admission_bindings_#{constraint}"
+          end
+
+        assert_includes error.message, expected
         assert_equal [nil, nil, nil, nil],
                      [binding.reload.auth_ceremony_session_id, binding.confirmation_ref,
                       binding.base_confirmed_at, binding.redeemed_at,]
@@ -62,7 +73,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
         changed =
           case fact
           when :entry_ref then SecureRandom.uuid
-          when :purpose then "local_sign_up"
+          when :purpose then "invitation_handoff"
           when :base_browser_digest then "b" * 64
           when :expires_at then binding.expires_at + 1.second
           end
@@ -76,13 +87,13 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
       assert_raises(ActiveRecord::RecordNotUnique, "#{surface}: one live binding per parent") do
         binding.class.transaction(requires_new: true) { binding.class.create!(duplicate) }
       end
-      assert_equal issuance.transaction.id, binding.reload.sign_in_flow_id
+      assert_equal issuance.transaction.id, binding.reload.authorization_transaction_id
     end
   end
 
   test "each realm binding expiry uses a strict deadline at the nearest database microsecond" do
     %w(app com org).each do |surface|
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
@@ -107,7 +118,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
       ["com", VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
       ["org", OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
     ].each do |surface, binding_model, session_model|
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       binding = binding_model.find_by!(entry_ref: issuance.reference)
@@ -151,7 +162,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
               scope: "openid",
               state: SecureRandom.urlsafe_base64(16),
               nonce: SecureRandom.urlsafe_base64(16),
-              code_challenge: "a" * 43,
+              code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
               code_challenge_method: "S256",
               login_challenge: fv5024,
               login_challenge_expires_at: fv5023 + 10.minutes,
@@ -166,6 +177,8 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             {
               entry_ref: SecureRandom.uuid,
               purpose: "authentication_handoff",
+              entry_intent: "sign_in",
+              curfew_at: ClientAuthAdmissionBinding.database_now + 30.minutes,
               base_browser_digest: "a" * 64,
               expires_at: 10.minutes.from_now,
               created_at: Time.current,
@@ -198,10 +211,10 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
       ["org", OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
     ].each do |surface, binding_model, session_model|
       browser_nonce = SecureRandom.urlsafe_base64(32)
-      first = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      first = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: browser_nonce, base_token: nil,
       )
-      second = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      second = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: browser_nonce, base_token: nil,
       )
       first_binding = binding_model.find_by!(entry_ref: first.reference)
@@ -228,6 +241,8 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
         {
           entry_ref: SecureRandom.uuid,
           purpose: "authentication_handoff",
+          entry_intent: "sign_in",
+          curfew_at: ClientAuthAdmissionBinding.database_now + 30.minutes,
           base_browser_digest: "a" * 64,
           expires_at: 10.minutes.from_now,
           created_at: Time.current,
@@ -237,7 +252,12 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
 
     assert_not ClientAuthAdmissionBinding.new(attrs).valid?
 
-    multiple = ClientAuthAdmissionBinding.new(attrs.merge(sign_in_flow_id: 1, authorization_transaction_id: 1))
+    multiple = ClientAuthAdmissionBinding.new(
+      attrs.merge(
+        authorization_transaction_id: 1,
+        step_up_ceremony_transaction_id: 1,
+      ),
+    )
 
     assert_not multiple.valid?
     assert_includes multiple.errors[:base], "exactly one admission parent is required"
@@ -262,7 +282,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
           scope: "openid",
           state: SecureRandom.urlsafe_base64(16),
           nonce: SecureRandom.urlsafe_base64(16),
-          code_challenge: "a" * 43,
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           login_challenge: fv5019,
           login_challenge_expires_at: fv5018 + 10.minutes,
@@ -288,6 +308,8 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             {
               entry_ref: SecureRandom.uuid,
               purpose: "authentication_handoff",
+              entry_intent: "sign_in",
+              curfew_at: ClientAuthAdmissionBinding.database_now + 30.minutes,
               base_browser_digest: "a" * 64,
               expires_at: 10.minutes.from_now,
               created_at: Time.current,
@@ -334,7 +356,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
               scope: "openid",
               state: SecureRandom.urlsafe_base64(16),
               nonce: SecureRandom.urlsafe_base64(16),
-              code_challenge: "a" * 43,
+              code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
               code_challenge_method: "S256",
               login_challenge: fv5014,
               login_challenge_expires_at: fv5013 + 10.minutes,
@@ -349,6 +371,8 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             {
               entry_ref: SecureRandom.uuid,
               purpose: "authentication_handoff",
+              entry_intent: "sign_in",
+              curfew_at: ClientAuthAdmissionBinding.database_now + 30.minutes,
               base_browser_digest: "a" * 64,
               expires_at: 10.minutes.from_now,
               created_at: Time.current,
@@ -383,7 +407,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
           scope: "openid",
           state: SecureRandom.urlsafe_base64(16),
           nonce: SecureRandom.urlsafe_base64(16),
-          code_challenge: "a" * 43,
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           login_challenge: fv5009,
           login_challenge_expires_at: fv5008 + 10.minutes,
@@ -401,6 +425,8 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             {
               entry_ref: SecureRandom.uuid,
               purpose: "authentication_handoff",
+              entry_intent: "sign_in",
+              curfew_at: ClientAuthAdmissionBinding.database_now + 30.minutes,
               base_browser_digest: "a" * 64,
               expires_at: 10.minutes.from_now,
               created_at: Time.current,
@@ -414,6 +440,8 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
         {
           entry_ref: SecureRandom.uuid,
           purpose: "authentication_handoff",
+          entry_intent: "sign_in",
+          curfew_at: ClientAuthAdmissionBinding.database_now + 30.minutes,
           base_browser_digest: "a" * 64,
           expires_at: 10.minutes.from_now,
           created_at: Time.current,
@@ -439,7 +467,7 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
               scope: "openid",
               state: SecureRandom.urlsafe_base64(16),
               nonce: SecureRandom.urlsafe_base64(16),
-              code_challenge: "a" * 43,
+              code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
               code_challenge_method: "S256",
               login_challenge: fv5004,
               login_challenge_expires_at: fv5003 + 10.minutes,
@@ -454,6 +482,8 @@ class AuthAdmissionBindingTest < ActiveSupport::TestCase
             {
               entry_ref: SecureRandom.uuid,
               purpose: "authentication_handoff",
+              entry_intent: "sign_in",
+              curfew_at: ClientAuthAdmissionBinding.database_now + 30.minutes,
               base_browser_digest: "a" * 64,
               expires_at: 10.minutes.from_now,
               created_at: Time.current,

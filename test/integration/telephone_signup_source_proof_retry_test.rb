@@ -100,6 +100,7 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
           browser.host!(target.host)
           browser.get(target.request_uri, params: { ri: "jp" })
         end
+        switch_browser_to_sign_up!(browser, surface: surface.to_s)
         browser.get("/sign/up/telephone/new", params: { ri: "jp" })
 
         assert_equal 200, browser.response.status
@@ -109,7 +110,11 @@ class TelephoneSignupSourceProofRetryTest < ActionDispatch::IntegrationTest
         clear_enqueued_jobs
         browser.post(
           "/sign/up/telephone", params: {
-            scope => { raw_number: number, confirm_policy: "1" }, "cf-turnstile-response" => "test", :ri => "jp",
+            scope => { raw_number: number,
+                       confirm_policy: "1",
+                       confirm_using_mfa: "1", },
+            "cf-turnstile-response" => "test",
+            :ri => "jp",
           }, headers: headers,
         )
 

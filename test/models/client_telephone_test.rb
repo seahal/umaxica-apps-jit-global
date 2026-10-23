@@ -38,7 +38,7 @@
 require "test_helper"
 
 class ClientTelephoneTest < ActiveSupport::TestCase
-  fixtures :clients, :client_statuses, :client_visibilities, :client_mfa_levels,
+  fixtures :clients, :client_statuses, :client_visibilities, :client_security_modes,
            :client_mfa_statuses, :client_telephone_statuses
   uses_transaction \
     :test_concurrent_creates_for_same_normalized_number_commit_at_most_one_active_telephone,
@@ -233,7 +233,7 @@ class ClientTelephoneTest < ActiveSupport::TestCase
   end
 
   test "pending telephone rows do not reserve capacity and the database permits only one effective binding" do
-    owner = Client.create!
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal 0, owner.client_telephones.effective_binding.count
     candidates =
@@ -772,7 +772,10 @@ class ClientTelephoneTest < ActiveSupport::TestCase
   end
 
   def create_telephone_record(number)
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @identifier_race_client_ids << client.id
 
     ClientTelephone.create!(

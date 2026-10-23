@@ -10,6 +10,7 @@ module Authentication
 
     setup do
       @user = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         public_id: PublicId.generate,
         status_id: ClientStatus::ACTIVE,
         visibility_id: ClientVisibility::USER,

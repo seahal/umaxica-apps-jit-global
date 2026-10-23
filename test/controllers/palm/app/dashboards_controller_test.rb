@@ -13,9 +13,10 @@ class Palm::App::DashboardsControllerTest < ActionDispatch::IntegrationTest
 
   test "authenticated Palm browser credentials render the protected dashboard" do
     client = clients(:one)
-    root_token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    root_token = ClientToken.create!(authentication_epoch: 0, user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     oidc_client = OidcClientRegistry.find!("palm-app-jp")
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root_token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -64,7 +65,8 @@ class Palm::App::DashboardsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal @host, location.host
     assert_equal palm_app_sign_show_path, location.path
-    assert_equal "/dashboard?ri=jp", query.fetch("pt")
+    # D-151: path only, no query.
+    assert_equal "/dashboard", query.fetch("target_link_uri")
     assert_nil session[OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY]
   end
 end

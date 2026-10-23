@@ -20,7 +20,7 @@ class OpIdentityEventInvalidatorTest < ActiveSupport::TestCase
 
   test "applying the event revokes roots issued before the cutoff, including unrecorded ones" do
     old_root = ClientToken.create!(user: @client, authentication_epoch: 0)
-    legacy_root = ClientToken.create!(user: @client)
+    legacy_root = ClientToken.create!(authentication_epoch: 0, user: @client)
     event = record_stop
 
     assert_equal :applied, OpIdentityEventInvalidator.call(event:)

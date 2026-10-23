@@ -13,8 +13,8 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
     [[Client, ClientPasskey, ClientToken, :user_id],
      [Visitor, VisitorPasskey, VisitorToken, :visitor_id],
      [Operator, OperatorPasskey, OperatorToken, :staff_id],].each do |actor_class, key_class, token_class, owner_key|
-      actor = actor_class.create!
-      token = token_class.create!(owner_key => actor.id)
+      actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
+      token = token_class.create!(:authentication_epoch => 0, owner_key => actor.id)
       metadata = (key_class == OperatorPasskey) ? {} : { uv_verified_at: Time.current }
       key_class.create!(
         owner_key => actor.id, :webauthn_id => SecureRandom.uuid,
@@ -60,11 +60,11 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
 
   [false, true].each do |revoked|
     test "registration finalization #{revoked ? "refuses revoked" : "accepts current"} existing authority" do
-      actor = Client.create!
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
       existing = actor.client_passkeys.create!(
         webauthn_id: SecureRandom.uuid, public_key: "existing-key", uv_verified_at: Time.current,
       )
-      token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
       token.update!(
         last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
         last_step_up_credential_ref: existing.public_id, last_step_up_session_public_id: token.public_id,
@@ -129,8 +129,8 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
      [Visitor, VisitorPasskey, VisitorToken, VisitorPasskeyPolicy, :visitor_id, "com"],
      [Operator, OperatorPasskey, OperatorToken, OperatorPasskeyPolicy, :staff_id, "org"],].each do |
       actor_class, key_class, token_class, policy_class, owner_key, surface|
-      actor = actor_class.create!
-      token = token_class.create!(owner_key => actor.id)
+      actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
+      token = token_class.create!(:authentication_epoch => 0, owner_key => actor.id)
       token.rotate_refresh_token!
       metadata = (key_class == OperatorPasskey) ? {} : { uv_verified_at: Time.current }
       key = key_class.create!(
@@ -156,7 +156,7 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
                      "#{surface}: event #{event_at.iso8601(6)} evaluated at #{now.iso8601(6)}"
       end
       token.update!(last_step_up_at: now)
-      foreign_actor = actor_class.create!
+      foreign_actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
       foreign_key = key_class.create!(
         owner_key => foreign_actor.id, :webauthn_id => SecureRandom.uuid,
         :public_key => "foreign-key", :description => "Foreign", **metadata,
@@ -185,12 +185,12 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
           raise ArgumentError, "unsupported email owner"
         end
       statuses.each do |status|
-        actor = actor_class.create!
+        actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
         email = email_class.create!(
           owner_key => actor.id, status_key => status, :address => "policy-#{SecureRandom.hex(8)}@example.test",
         )
         email.finalize_binding!
-        token = token_class.create!(owner_key => actor.id)
+        token = token_class.create!(:authentication_epoch => 0, owner_key => actor.id)
         now = token_class.database_now
         token.update!(
           last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "email_otp",
@@ -209,12 +209,12 @@ class PasskeyMutationAuthorizationTest < ActiveSupport::TestCase
   end
 
   test "app passkey management accepts usable TOTP evidence and refuses it after revocation" do
-    actor = Client.create!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     totp = actor.client_totp_credentials.create!(
       private_key: ROTP::Base32.random_base32,
       user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     now = ClientToken.database_now
     token.update!(
       last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "totp",

@@ -11,8 +11,8 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
         when "com" then [Visitor, VisitorToken, VisitorEmail, :visitor_id, VisitorStatus::ACTIVE]
         when "org" then [Operator, OperatorToken, OperatorEmail, :staff_id, OperatorStatus::ACTIVE]
         end
-      actor = owner_model.create!(status_id: active_status)
-      token = root_model.create!(owner_key => actor.id)
+      actor = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: active_status)
+      token = root_model.create!(:authentication_epoch => 0, owner_key => actor.id)
       token.rotate_refresh_token!
       email = email_model.create!(
         owner_key => actor.id, :raw_address => "infinite-root-#{SecureRandom.hex(8)}@example.test",
@@ -36,24 +36,24 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       actor, token, email =
         case surface
         when "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_emails.create!(
             raw_address: "verify-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
           )
           [owner, root, candidate]
         when "org"
-          owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-          root = OperatorToken.create!(staff: owner, discard_at: 1.day.from_now)
+          owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+          root = OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now)
           candidate = owner.staff_emails.create!(
             raw_address: "verify-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
           )
           [owner, root, candidate]
         when "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
           candidate = owner.visitor_emails.create!(
             raw_address: "verify-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
@@ -98,24 +98,24 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       actor, token, email, transaction_model =
         case surface
         when "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_emails.create!(
             raw_address: "email-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
           )
           [owner, root, candidate, ClientEmailCeremonyTransaction]
         when "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
           candidate = owner.visitor_emails.create!(
             raw_address: "email-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
           )
           [owner, root, candidate, VisitorEmailCeremonyTransaction]
         when "org"
-          owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-          root = OperatorToken.create!(staff: owner, discard_at: 1.day.from_now)
+          owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+          root = OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now)
           candidate = owner.staff_emails.create!(
             raw_address: "email-registration-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
@@ -168,8 +168,8 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
   end
 
   test "app Email registration retries a transaction reference collision in a savepoint" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
     email = actor.client_emails.create!(
       raw_address: "collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true, otp_attempts_count: 1,
     )
@@ -202,8 +202,8 @@ class EmailCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
   end
 
   test "app Email registration retries a grant reference collision in a savepoint" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
     email = actor.client_emails.create!(
       raw_address: "grant-collision-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
       otp_attempts_count: 1,

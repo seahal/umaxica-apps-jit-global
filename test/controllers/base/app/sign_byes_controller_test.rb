@@ -10,7 +10,7 @@ class Base::App::SignByesControllerTest < ActionController::TestCase
     @request.env["HTTPS"] = "on"
     @request.headers["Sec-Fetch-Site"] = "same-origin"
     @request.headers["Origin"] = "https://#{@request.host}"
-    root = ClientToken.create!(user: clients(:one))
+    root = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     @result = OpLogoutCommitter.call(
       realm: "app", root_token: root, idempotency_key: "k", browser_binding: "b", audit_ref: "a",
     )

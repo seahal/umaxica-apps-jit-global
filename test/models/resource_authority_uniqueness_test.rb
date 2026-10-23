@@ -8,8 +8,14 @@ class EnterpriseAuthorityUniquenessTest < ActiveSupport::TestCase
 
   MODELS.each do |model, initial, principal_key|
     test "#{model.name} retains DB one-row ownership and ordinary updates" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        visibility_id: ClientVisibility::USER,
+      )
       first_resource = Enterprise.create!(name: "First resource", title: "First")
       second_resource = Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -33,8 +39,14 @@ class EnterpriseAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicate and reassigned resource keys before SQL" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        visibility_id: ClientVisibility::USER,
+      )
       first_resource = Enterprise.create!(name: "First resource", title: "First")
       second_resource = Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -59,8 +71,14 @@ class EnterpriseAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} adds one resource probe and skips an unchanged persisted key" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        visibility_id: ClientVisibility::USER,
+      )
       first_resource = Enterprise.create!(name: "First resource", title: "First")
       second_resource = Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -90,8 +108,14 @@ class ClientPersonaAuthorityUniquenessTest < ActiveSupport::TestCase
 
   MODELS.each do |model, initial, principal_key|
     test "#{model.name} retains DB one-row ownership and ordinary updates" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       ClientIdentityState.ensure_defaults!
       first_identity = ClientIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -124,8 +148,14 @@ class ClientPersonaAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicate and reassigned resource keys before SQL" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       ClientIdentityState.ensure_defaults!
       first_identity = ClientIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -159,8 +189,14 @@ class ClientPersonaAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} adds one resource probe and skips an unchanged persisted key" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       ClientIdentityState.ensure_defaults!
       first_identity = ClientIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -199,8 +235,14 @@ class CompanyAuthorityUniquenessTest < ActiveSupport::TestCase
 
   MODELS.each do |model, initial, principal_key|
     test "#{model.name} retains DB one-row ownership and ordinary updates" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+        visibility_id: VisitorVisibility::VISITOR,
+      )
       first_resource = Company.create!(name: "First resource", title: "First")
       second_resource = Company.create!(name: "Second resource", title: "Second")
 
@@ -224,8 +266,14 @@ class CompanyAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicate and reassigned resource keys before SQL" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+        visibility_id: VisitorVisibility::VISITOR,
+      )
       first_resource = Company.create!(name: "First resource", title: "First")
       second_resource = Company.create!(name: "Second resource", title: "Second")
 
@@ -250,8 +298,14 @@ class CompanyAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} adds one resource probe and skips an unchanged persisted key" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+        visibility_id: VisitorVisibility::VISITOR,
+      )
       first_resource = Company.create!(name: "First resource", title: "First")
       second_resource = Company.create!(name: "Second resource", title: "Second")
 
@@ -281,8 +335,14 @@ class IndividualAuthorityUniquenessTest < ActiveSupport::TestCase
 
   MODELS.each do |model, initial, principal_key|
     test "#{model.name} retains DB one-row ownership and ordinary updates" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       VisitorIdentityState.ensure_defaults!
       first_identity = VisitorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -315,8 +375,14 @@ class IndividualAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicate and reassigned resource keys before SQL" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       VisitorIdentityState.ensure_defaults!
       first_identity = VisitorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -350,8 +416,14 @@ class IndividualAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} adds one resource probe and skips an unchanged persisted key" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       VisitorIdentityState.ensure_defaults!
       first_identity = VisitorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -390,8 +462,14 @@ class BureauAuthorityUniquenessTest < ActiveSupport::TestCase
 
   MODELS.each do |model, initial, principal_key|
     test "#{model.name} retains DB one-row ownership and ordinary updates" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+        visibility_id: OperatorVisibility::STAFF,
+      )
       first_resource = Bureau.create!(name: "First resource", title: "First")
       second_resource = Bureau.create!(name: "Second resource", title: "Second")
 
@@ -415,8 +493,14 @@ class BureauAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicate and reassigned resource keys before SQL" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+        visibility_id: OperatorVisibility::STAFF,
+      )
       first_resource = Bureau.create!(name: "First resource", title: "First")
       second_resource = Bureau.create!(name: "Second resource", title: "Second")
 
@@ -441,8 +525,14 @@ class BureauAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} adds one resource probe and skips an unchanged persisted key" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+        visibility_id: OperatorVisibility::STAFF,
+      )
       first_resource = Bureau.create!(name: "First resource", title: "First")
       second_resource = Bureau.create!(name: "Second resource", title: "Second")
 
@@ -472,8 +562,14 @@ class AgentAuthorityUniquenessTest < ActiveSupport::TestCase
 
   MODELS.each do |model, initial, principal_key|
     test "#{model.name} retains DB one-row ownership and ordinary updates" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       OperatorIdentityState.ensure_defaults!
       first_identity = OperatorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -506,8 +602,14 @@ class AgentAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicate and reassigned resource keys before SQL" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       OperatorIdentityState.ensure_defaults!
       first_identity = OperatorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -541,8 +643,14 @@ class AgentAuthorityUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} adds one resource probe and skips an unchanged persisted key" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       OperatorIdentityState.ensure_defaults!
       first_identity = OperatorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",

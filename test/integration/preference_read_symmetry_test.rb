@@ -61,7 +61,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
   test "signed-in theme read reflects the same token-side value after adoption" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     rp_cookie =
       begin
         fixture_root = token
@@ -74,6 +74,7 @@ class PreferenceReadSymmetryTest < ActionDispatch::IntegrationTest
         unless @base_rp_fixture_credentials[fixture_key]
           fixture_now = OpAppGrant.database_now
           fixture_rp = OpAppGrant.create!(
+            authentication_epoch: 0,
             client_token: fixture_root, oidc_client_id: fixture_client.client_id,
             oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
             oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,

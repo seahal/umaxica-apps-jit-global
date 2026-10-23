@@ -20,14 +20,17 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
-    @visitor = Visitor.create!(id: 9_116_000_000_000 + Zlib.crc32(name))
+    @visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: 9_116_000_000_000 + Zlib.crc32(name),
+    )
     email = VisitorEmail.create!(
       visitor_id: @visitor.id,
       address: "com_mfa_passkey_#{SecureRandom.hex(4)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    @visitor.reload.update!(mfa_level_enabled: true)
+    @visitor.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     @visitor.visitor_telephones.create!(
       number: "+8190" + format("%08d", SecureRandom.random_number(100_000_000)),
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
@@ -43,7 +46,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
       status_id: VisitorPasskeyStatus::ACTIVE,
     )
     # A real Base admission precedes every Auth-only MFA assertion; no root cookie is injected.
-    @issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    @issuance = OidcTestEntry.issue!(
       surface: "com",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -63,12 +66,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     post auth_com_sign_in_path, params: { entry_ref: @issuance.reference, authenticity_token: csrf, ri: "jp" }
 
     assert_response :see_other
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: VisitorSignInFlow.find_by!(
-        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-      ),
-      surface: "com", phase: "PRIMARY_PENDING",
-    )
+    @primary_sign_in_binding = nil
   end
 
   teardown do
@@ -79,12 +77,13 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
   test "new requires pending MFA session" do
     get mfa_passkey_path, headers: @origin_headers
 
-    assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    # Without an MFA-phase flow the request restarts at the OIDC sign-in page.
+    assert_response :see_other
+    assert_equal auth_com_sign_in_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
   %i(failed foreign_actor advanced).each do |interruption|
-    test "late #{interruption} interruption of local MFA returns to Base without issuing root credentials" do
+    test "late #{interruption} interruption of OIDC MFA returns to sign-in without recording evidence" do
       email = @visitor.visitor_emails.first
       post auth_com_sign_in_email_path(fb: @primary_sign_in_binding),
            params: { :user_email => { address: email.address }, "cf-turnstile-response" => "test-only", :ri => "jp" }
@@ -99,22 +98,27 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
                       "cf-turnstile-response" => "test-only",
                       :ri => "jp", }
 
-      assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
+      assert_predicate mfa_flow.reload, :sign_in_mfa_pending?
       get mfa_passkey_path
 
       assert_response :success
       challenge_id = session[:passkey_challenges].keys.first
-      continuity = VisitorAuthCeremonySession.find_by!(local_sign_in_flow_ref: @issuance.transaction.public_id)
-      foreign = Visitor.create!(id: 9_127_000_000_000) if interruption == :foreign_actor
+      continuity = VisitorAuthCeremonySession.find_by!(
+        authorization_transaction_ref: @issuance.transaction.transaction_id,
+      )
+      foreign = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 9_127_000_000_000,
+      ) if interruption == :foreign_actor
       verification =
         ->(**) do
           # Public verifier fault seam models the flow changing after successful signature validation.
           if interruption == :failed
-            @issuance.transaction.halt_sign_in!
+            mfa_flow.halt_sign_in!
           elsif interruption == :advanced
-            @issuance.transaction.advance_sign_in_to_guardrail!
+            mfa_flow.advance_sign_in_to_guardrail!
           else
-            @issuance.transaction.update!(principal_id: foreign.id)
+            mfa_flow.update!(principal_id: foreign.id)
           end
           Struct.new(:sign_count, :verified_at).new(11, Time.current)
         end
@@ -125,48 +129,43 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
         }
       end
 
-      assert_redirected_to base_com_sign_show_url(
-        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https", ri: "jp",
-      )
+      # An OIDC-parent refusal records nothing and returns to the sign-in page of the same transaction.
+      assert_redirected_to auth_com_sign_in_url(ri: "jp")
       assert_nil session[:pending_mfa]
-      assert_nil session[:passkey_challenges]
-      assert_nil @issuance.transaction.reload.authentication_event_at
+      assert_empty session[:passkey_challenges].to_h
+      assert_nil mfa_flow.reload.authentication_event_at
       assert_nil @issuance.transaction.base_finalized_at
-      assert_not_nil continuity.reload.revoked_at
+      assert_not_predicate continuity.reload, :authentication_evidence_recorded?
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
       assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
       assert_equal 0, VisitorToken.where(visitor_id: @visitor.id).count
-      follow_redirect!
-
-      assert_response :success
-      assert_not_nil response.parsed_body.at_css('form[method="post"]')
     end
   end
 
   test "a stale MFA Cookie cannot reopen a Base flow that has advanced past MFA" do
     establish_pending_mfa!
-    @issuance.transaction.advance_sign_in_to_guardrail!
+    mfa_flow.advance_sign_in_to_guardrail!
     get mfa_passkey_path
 
     assert_response :conflict
     assert_equal "戻るはだめです", response.body
     assert_predicate session[:pending_mfa], :present?
     assert_nil session[:passkey_challenges]
-    assert_predicate @issuance.transaction.reload, :sign_in_guardrail_pending?
-    assert_nil @issuance.transaction.authentication_event_at
+    assert_predicate mfa_flow.reload, :sign_in_guardrail_pending?
+    assert_nil mfa_flow.authentication_event_at
   end
 
   test "the MFA Cookie actor must match the admitted Base flow principal" do
     establish_pending_mfa!
-    foreign = Visitor.create!(id: 9_118_000_000_000)
-    @issuance.transaction.update!(principal_id: foreign.id)
+    foreign = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_118_000_000_000)
+    mfa_flow.update!(principal_id: foreign.id)
     get mfa_passkey_path
 
     assert_response :conflict
     assert_equal "戻るはだめです", response.body
     assert_predicate session[:pending_mfa], :present?
     assert_nil session[:passkey_challenges]
-    assert_nil @issuance.transaction.reload.authentication_event_at
+    assert_nil mfa_flow.reload.authentication_event_at
   end
 
   # Every refusal on the MFA passkey challenge sends the person back to the challenge
@@ -190,7 +189,7 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
     assert_response :see_other
     assert_redirected_to_path(mfa_challenge_path)
     assert_nil session[:passkey_challenges]
-    assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
+    assert_predicate mfa_flow.reload, :sign_in_mfa_pending?
   end
 
   test "new sends the visitor back to the chooser when the relying party is not configured" do
@@ -264,15 +263,18 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
 
       assert_response :see_other
       assert_redirected_to_path(mfa_challenge_path)
-      assert_predicate @issuance.transaction.reload, :sign_in_mfa_pending?
-      assert_nil @issuance.transaction.authentication_event_at
+      assert_predicate mfa_flow.reload, :sign_in_mfa_pending?
+      assert_nil mfa_flow.authentication_event_at
       assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
       assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
     end
   end
 
   test "create sends the visitor back to the chooser when the credential belongs to another account" do
-    other_visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    other_visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
     establish_pending_mfa!
     get mfa_passkey_path, headers: @origin_headers
     challenge_id = session[:passkey_challenges].keys.first
@@ -331,25 +333,32 @@ class Auth::Com::Sign::In::Challenge::PasskeysControllerTest < ActionDispatch::I
 
     assert_response :redirect
 
-    uri = URI.parse(response.location)
-
-    assert_equal ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), uri.host
+    assert_predicate VisitorAuthCeremonySession.find_by!(
+      authorization_transaction_ref: @issuance.transaction.transaction_id,
+    ), :authentication_evidence_recorded?
     assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
     assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
-    assert_equal "email", @issuance.transaction.reload.authentication_method
-    assert_equal auth_com_sign_in_check_path, uri.path
+    assert_equal "email", mfa_flow.reload.authentication_method
     assert_nil session[:pending_mfa]
     assert_equal 6, @passkey.reload.sign_count
   end
 
   private
 
+  # An OIDC-parent sign-in has no flow until primary authentication succeeds; the MFA phase
+  # then lives on the actor's newest flow.
+  def mfa_flow
+    @mfa_flow ||= VisitorSignInFlow.where(principal_id: @visitor.id).recent_first.first
+  end
+
   def assert_redirected_to_path(path)
     assert_equal URI.parse(path).path, URI.parse(response.location).path
   end
 
   def mfa_binding_params
-    { fb: SignInFlowBindingCodec.encode(flow: @issuance.transaction, surface: "com", phase: "MFA_PENDING") }
+    return {} unless mfa_flow
+
+    { fb: SignInFlowBindingCodec.encode(flow: mfa_flow, surface: "com", phase: "MFA_PENDING") }
   end
 
   def mfa_challenge_path

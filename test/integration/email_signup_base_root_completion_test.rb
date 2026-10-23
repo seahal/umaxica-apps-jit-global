@@ -70,6 +70,12 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
           target = URI.parse(payload.fetch("url"))
         end
 
+        # A registration journey explicitly requests create; a neutral admission no longer
+        # authorizes signup merely because a later browser request visits that page (D-72).
+        if index.zero?
+          target.query = URI.encode_www_form(URI.decode_www_form(target.query) + [["prompt", "create"]])
+        end
+
         assert_equal "https", target.scheme
         assert_equal(index.zero? ? base_host : auth_host, target.host)
         owner.host!(target.host)
@@ -123,6 +129,7 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         ceremony.authorization_transaction_ref == parent.transaction_id
       }
 
+      switch_browser_to_sign_up!(auth, surface: surface.to_s)
       auth.get("/sign/up/email/new", params: { ri: "jp" })
 
       assert_equal 200, auth.response.status

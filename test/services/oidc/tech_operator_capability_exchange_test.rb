@@ -6,7 +6,10 @@ require "test_helper"
 class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
   setup do
     @operator = operators(:one)
-    @operator_token = OperatorToken.create!(staff: @operator, authentication_event_at: 1.minute.ago)
+    @operator_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: @operator,
+      authentication_event_at: 1.minute.ago,
+    )
     @client = OidcClientRegistry.find!("tech-org-ww")
     @redirect_uri = @client.redirect_uris_by_realm.fetch("operator").first
     @code_verifier = SecureRandom.urlsafe_base64(32)
@@ -85,7 +88,8 @@ class OidcTechOperatorCapabilityExchangeTest < ActiveSupport::TestCase
       )
 
       assert_not_predicate result, :success?
-      assert_equal "invalid_request", result.error
+      # RFC 6749 5.2 / RFC 7636 4.6 (D-147 N-3): a wrong verifier or a foreign redirect_uri.
+      assert_equal "invalid_grant", result.error
       assert_not OpOrgGrant.exists?(operator_token: @operator_token, oidc_client_id: "tech-org-ww")
       assert_predicate @operator_token.reload, :currently_usable?
     end

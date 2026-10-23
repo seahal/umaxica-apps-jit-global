@@ -62,22 +62,19 @@ module Auth
 
         def method_selection_links(scope)
           pt = signed_pt_param
-          binding = sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING")
-
           [
             {
               key: "email",
               label: page_t("#{scope}.links.email"),
-              href: new_auth_app_sign_in_email_path(pt: pt, **binding),
+              href: new_auth_app_sign_in_email_path(pt: pt),
             },
             { key: "passkey",
               label: page_t("#{scope}.links.passkey"),
-              href: new_auth_app_sign_in_passkey_path(pt: pt, **binding), },
+              href: new_auth_app_sign_in_passkey_path(pt: pt), },
             { key: "secret",
               label: t("sign.app.authentication.new.links.secret"),
               href: new_auth_app_sign_in_secret_url(
                 pt: pt, ri: current_region_identifier,
-                **binding,
                 host: ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
               ), },
           ]
@@ -94,9 +91,7 @@ module Auth
           {
             key: "google",
             label: page_t("#{scope}.links.google"),
-            action: auth_app_social_google_session_path(
-              **sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING"),
-            ),
+            action: auth_app_social_google_session_path,
             authenticity_token: form_authenticity_token,
             aria_label: "Sign in with Google",
             artwork: {
@@ -118,9 +113,7 @@ module Auth
           {
             key: "apple",
             label: page_t("#{scope}.links.apple"),
-            action: auth_app_social_apple_session_path(
-              **sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING"),
-            ),
+            action: auth_app_social_apple_session_path,
             authenticity_token: form_authenticity_token,
             aria_label: nil,
             artwork: nil,

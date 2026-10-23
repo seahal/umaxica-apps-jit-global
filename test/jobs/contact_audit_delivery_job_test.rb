@@ -83,7 +83,7 @@ class ContactAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "Contact mutation and Source intent roll back together" do
-    owner = Client.create!
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     contact = ClientEmail.create!(user_id: owner.id, address: "outbox@example.test", confirm_policy: "1")
     operation_ref = SecureRandom.uuid
     ClientEmail.transaction(requires_new: true) do
@@ -104,7 +104,7 @@ class ContactAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "invalid Contact audit event cannot commit its binding" do
-    owner = Visitor.create!
+    owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     contact = VisitorTelephone.create!(visitor_id: owner.id, number: "+819012345681", confirm_policy: "1")
     assert_raises(ActiveRecord::RecordInvalid) do
       VisitorTelephone.transaction(requires_new: true) do

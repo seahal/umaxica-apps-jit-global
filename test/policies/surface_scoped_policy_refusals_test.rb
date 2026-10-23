@@ -26,7 +26,10 @@ class SurfaceScopedPolicyRefusalsTest < ActiveSupport::TestCase
   # execute their own -- that separation is the whole point of the request.
   test "lifecycle requests are refused to anyone who is not an operator" do
     request = Struct.new(:requested_by_operator_id, :pending?, :approved?).new(1, true, true)
-    client = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     policy = OperatorLifecycleRequestPolicy.new(request, user: client)
 
     assert_not policy.index?

@@ -76,6 +76,9 @@ module Auth
               end
             end
 
+            # adr/authentication-security-mode.md C1: only ADVANCED reaches the second step, and TOTP does
+            # not satisfy it. The endpoint refuses every request before any phase or OTP work.
+            prepend_before_action :refuse_sign_in_phase_request!
             before_action -> { enforce_sign_in_phase_binding!(expected_phase: "MFA_PENDING") }
             before_action :ensure_pending_mfa!
 

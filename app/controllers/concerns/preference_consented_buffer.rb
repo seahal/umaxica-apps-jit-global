@@ -9,7 +9,6 @@ module PreferenceConsentedBuffer
   # Write-only buffer cookie for JS. Rails must not read this cookie.
   def set_preference_consented_buffer!(consented:, expires_at:)
     cookie_options = ::CoreCookieOptions.for(
-      surface: ::CoreSurface.current(request),
       request: request,
       # SameSite=Strict: this is a JS-readable projection of the JWT consent state, apex-scoped
       # for cross-subdomain reads within a surface (still same-site). The only cost of Strict is a

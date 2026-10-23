@@ -39,6 +39,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -90,6 +91,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -155,6 +157,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                 f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = OpComGrant.create!(
+                  authentication_epoch: 0,
                   visitor_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                   refresh_token_expires_at: f0_now + 10.minutes,
@@ -258,6 +261,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                  rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                  rp_now = Time.current
                  rp_session = OpComGrant.create!(
+                   authentication_epoch: 0,
                    visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                    refresh_token_expires_at: rp_now + 10.minutes,
@@ -336,6 +340,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                 f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = OpComGrant.create!(
+                  authentication_epoch: 0,
                   visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                   refresh_token_expires_at: f1_now + 10.minutes,
@@ -443,6 +448,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                 f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                 f2_now = Time.current
                 f2_session = OpComGrant.create!(
+                  authentication_epoch: 0,
                   visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                   refresh_token_expires_at: f2_now + 10.minutes,
@@ -537,6 +543,7 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                rp_now = Time.current
                rp_session = OpComGrant.create!(
+                 authentication_epoch: 0,
                  visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                  refresh_token_expires_at: rp_now + 10.minutes,
@@ -592,7 +599,10 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id,
       address: email_address,
@@ -611,7 +621,6 @@ class Base::Com::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     [

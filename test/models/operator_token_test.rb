@@ -79,9 +79,9 @@ require "test_helper"
 
 class OperatorTokenTest < ActiveSupport::TestCase
   def setup
-    @staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    @staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
 
-    @token = OperatorToken.create!(staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
+    @token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_status_id: OperatorTokenStatus::ACTIVE)
   end
 
   test "inherits from OpBaseOrgRecord" do
@@ -101,7 +101,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
   end
 
   test "device session rejects a current token owned by another session" do
-    other_token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    other_token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     session = @token.device_session
 
     error =
@@ -143,8 +143,11 @@ class OperatorTokenTest < ActiveSupport::TestCase
   end
 
   test "token device session must belong to the same staff" do
-    other_staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
-    other_token = OperatorToken.create!(staff: other_staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    other_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      staff_status: OperatorStatus.find(OperatorStatus::NOTHING),
+    )
+    other_token = OperatorToken.create!(authentication_epoch: 0, staff: other_staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
 
     error =
       assert_raises(ActiveRecord::InvalidForeignKey) do
@@ -254,7 +257,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
   end
 
   test "enforces maximum concurrent sessions per staff" do
-    staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
     token_status = OperatorTokenStatus.find(OperatorTokenStatus::ACTIVE)
     token_kind = OperatorTokenKind.find(OperatorTokenKind::BROWSER_WEB)
     binding_method = OperatorTokenBindingMethod.find(OperatorTokenBindingMethod::NOTHING)
@@ -262,6 +265,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
 
     OperatorToken::MAX_TOTAL_SESSIONS_PER_STAFF.times do
       OperatorToken.create!(
+        authentication_epoch: 0,
         staff: staff,
         staff_token_status: token_status,
         staff_token_kind: token_kind,
@@ -271,6 +275,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
     end
 
     extra_token = OperatorToken.new(
+      authentication_epoch: 0,
       staff: staff,
       staff_token_status: token_status,
       staff_token_kind: token_kind,
@@ -294,7 +299,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
 
   test "active state reflects revoked and expired refresh tokens" do
     freeze_time do
-      token = OperatorToken.create!(staff: @staff)
+      token = OperatorToken.create!(authentication_epoch: 0, staff: @staff)
 
       assert_predicate token, :active?
 
@@ -334,6 +339,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
   test "rotated replacement preserves forced logout window" do
     freeze_time do
       token = OperatorToken.create!(
+        authentication_epoch: 0,
         staff: @staff,
         staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         discard_at: 12.hours.from_now,
@@ -365,6 +371,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
   test "purge_eligible_at persists on create when provided" do
     purge_eligible_at = 2.days.from_now
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       discard_at: 1.day.from_now,
@@ -377,6 +384,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
   test "purge_eligible_at is preserved when discard_at changes" do
     purge_eligible_at = 4.days.from_now
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       discard_at: 1.day.from_now,
@@ -390,9 +398,13 @@ class OperatorTokenTest < ActiveSupport::TestCase
   end
 
   test "purgeability query returns only tokens purgeable at or before now" do
-    staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
-    past_token = OperatorToken.create!(staff: staff, discard_at: 20.minutes.ago, purge_eligible_at: 10.minutes.ago)
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    past_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: staff, discard_at: 20.minutes.ago,
+      purge_eligible_at: 10.minutes.ago,
+    )
     future_token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: staff,
       discard_at: 10.minutes.ago,
       purge_eligible_at: 10.minutes.from_now,
@@ -414,6 +426,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
 
   test "rotate_refresh! consumes old row and creates new generation in same family" do
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
     )
     raw = token.rotate_refresh_token!
@@ -437,6 +450,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
 
   test "rotate_refresh! classifies second attempt as replay" do
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
     )
     raw = token.rotate_refresh_token!
@@ -460,17 +474,29 @@ class OperatorTokenTest < ActiveSupport::TestCase
   end
 
   test "rotate_refresh! rejects revoked compromised and expired tokens" do
-    revoked_staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
-    compromised_staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
-    expired_staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    revoked_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      staff_status: OperatorStatus.find(OperatorStatus::NOTHING),
+    )
+    compromised_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      staff_status: OperatorStatus.find(OperatorStatus::NOTHING),
+    )
+    expired_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      staff_status: OperatorStatus.find(OperatorStatus::NOTHING),
+    )
     revoked = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: revoked_staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
     )
     compromised = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: compromised_staff,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
     )
     expired = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: expired_staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
     )
     revoked_raw = revoked.rotate_refresh_token!
@@ -504,7 +530,7 @@ class OperatorTokenTest < ActiveSupport::TestCase
   end
 
   test "find_from_signed_ref resolves token when verifier payload has string keys" do
-    token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     signed_ref = Rails.application.message_verifier(:session_ref).generate(
       { "id" => token.id, "pid" => token.public_id },
       expires_in: 1.hour,

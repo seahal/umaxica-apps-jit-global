@@ -10,8 +10,8 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
   test "Secret root sessions cannot bootstrap a newly registered Step-Up method" do
     [[:passkey, "settings_passkey", "/settings/passkeys/new"],
      [:totp, "settings_totp", "/settings/totps/new"],].each do |method, scope, path|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor, established_authentication_method: "secret")
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor, established_authentication_method: "secret")
       requirement = StepUpRequirement.new(
         scope: scope, purpose: "bootstrap", step_up_required: false, allowed_methods: [method],
         audience: "step_up:app", session_binding: token.public_id, token_binding: token.public_id,
@@ -37,7 +37,7 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
 
   test "canonical Secret management uses scoped bound Step-Up without an AAL threshold" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor, established_authentication_method: "secret")
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, established_authentication_method: "secret")
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
       step_up_required: true,
@@ -66,8 +66,8 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
   end
 
   test "Secret management refuses bootstrap even before any authenticator is configured" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     requirement = StepUpRequirement.new(
       step_up_required: false, scope: "settings_secret_credential", purpose: "bootstrap",
       audience: "step_up:app", allowed_methods: [:passkey],
@@ -87,7 +87,7 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
 
   test "Secret scope cannot authorize another operation legacy path or arbitrary destination" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
       step_up_required: true,
@@ -110,8 +110,8 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
 
   test "Secret management refuses another session binding without a transaction" do
     actor = clients(:one)
-    first = ClientToken.create!(user: actor)
-    second = ClientToken.create!(user: actor)
+    first = ClientToken.create!(authentication_epoch: 0, user: actor)
+    second = ClientToken.create!(authentication_epoch: 0, user: actor)
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
       step_up_required: true,
@@ -137,7 +137,7 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
 
   test "Secret itself cannot be the method of Secret management Step-Up" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor, established_authentication_method: "secret")
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, established_authentication_method: "secret")
     requirement = StepUpRequirement.new(
       scope: "settings_secret_credential", purpose: "step_up", audience: "step_up:app",
       step_up_required: true,
@@ -166,11 +166,11 @@ class AppSecretStepUpBindingTest < ActiveSupport::TestCase
       actor, token =
         case surface
         when "com"
-          visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [visitor, VisitorToken.create!(visitor: visitor)]
+          visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [visitor, VisitorToken.create!(authentication_epoch: 0, visitor: visitor)]
         when "org"
-          operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
-          [operator, OperatorToken.create!(staff: operator)]
+          operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+          [operator, OperatorToken.create!(authentication_epoch: 0, staff: operator)]
         else
           raise ArgumentError, "unsupported test surface"
         end

@@ -41,6 +41,7 @@ class Base::Com::Identity::RotationsControllerTest < ActionDispatch::Integration
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -112,6 +113,7 @@ class Base::Com::Identity::RotationsControllerTest < ActionDispatch::Integration
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -175,7 +177,10 @@ class Base::Com::Identity::RotationsControllerTest < ActionDispatch::Integration
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id,
       address: email_address,
@@ -191,7 +196,10 @@ class Base::Com::Identity::RotationsControllerTest < ActionDispatch::Integration
 
   def create_visitor_with_verified_telephone
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     visitor.visitor_telephones.create!(
       number: "+8190#{format("%08d", SecureRandom.random_number(100_000_000))}",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
@@ -205,7 +213,6 @@ class Base::Com::Identity::RotationsControllerTest < ActionDispatch::Integration
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     [

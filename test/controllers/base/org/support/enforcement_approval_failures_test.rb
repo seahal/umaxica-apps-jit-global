@@ -12,11 +12,16 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     @operator_a = operators(:one)
     @operator_b = operators(:two)
-    @operator_c = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    @operator_c = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator_c)
     @client = clients(:one)
     @tokens =
       [@operator_a, @operator_b, @operator_c].to_h do |operator|
         token = OperatorToken.create!(
+          authentication_epoch: 0,
           staff_id: operator.id, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
           staff_token_status_id: OperatorTokenStatus::ACTIVE,
           staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
@@ -90,6 +95,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -168,6 +174,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -248,6 +255,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -297,7 +305,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
   end
 
   test "failure in the lock after the state change commits marks the Case failed and keeps the approver" do
-    lock_fails = ->(**) { raise ActiveRecord::RecordInvalid, Client.new }
+    lock_fails = ->(**) { raise ActiveRecord::RecordInvalid, Client.new(security_mode_id: SecurityModeConfigurable::NORMAL) }
 
     AdministrativeAccessLock.stub(:lock!, lock_fails) do
       http_headers_3 =
@@ -335,6 +343,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -416,6 +425,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -516,6 +526,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -586,6 +597,7 @@ class Base::Org::Support::EnforcementApprovalFailuresTest < ActionDispatch::Inte
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

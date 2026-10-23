@@ -38,7 +38,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
   [["Turnstile rejection", false], ["malformed TOTP", true]].each do |failure, turnstile_success|
     test "APP #{failure} retains the pending ceremony without granting authority" do
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       credential = ClientTotpCredential.create_for_user!(
         user: actor, private_key: ROTP::Base32.random_base32,
         user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
@@ -46,7 +46,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
       assert_nil credential.last_otp_at
 
-      token = ClientToken.create!(user: actor)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       issuance =
         begin
           admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -125,8 +125,8 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
 
   test "bootstrap registration and credential-change continuity cannot enter ordinary step-up endpoints" do
     %w(bootstrap credential_registration credential_change).each do |purpose|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: purpose,
         required_scope: "settings_totp", required_aal: "none", allowed_methods: %w(passkey totp),
@@ -158,12 +158,12 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "APP TOTP verifies the admitted credential without an Auth login or Base freshness" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     credential = ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -247,7 +247,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
       address: "admitted-email@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -353,12 +353,12 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "COM Email OTP admission uses only the Visitor transaction and verified credential" do
-    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
     email = actor.visitor_emails.create!(
       address: "admitted-com-email@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    token = VisitorToken.create!(visitor: actor)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -437,7 +437,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
     )
     credential = WebAuthn::Credential.from_create(registration, relying_party: relying_party)
     actor.client_passkeys.create!(webauthn_id: credential.id, public_key: credential.public_key, sign_count: 0)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -542,7 +542,7 @@ class AuthStepUpAdmissionTest < ActionDispatch::IntegrationTest
   test "Auth accepts step-up through a nonconsuming GET and CSRF POST without an Auth root credential" do
     actor = clients(:one)
     actor.client_passkeys.create!(webauthn_id: "admission-passkey", public_key: "public-key")
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(

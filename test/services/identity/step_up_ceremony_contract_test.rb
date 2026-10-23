@@ -12,6 +12,7 @@ class IdentityStepUpCeremonyContractTest < ActiveSupport::TestCase
     @now = Time.zone.parse("2026-06-03 12:00:00")
     @client = clients(:one)
     @token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @client,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,

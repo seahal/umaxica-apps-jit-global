@@ -17,6 +17,7 @@ module Auth::Org
       @staff =
         Operator.find_or_create_by!(id: 1) do |s|
           s.status_id = OperatorStatus::NOTHING
+          s.security_mode_id = SecurityModeConfigurable::ADVANCED
         end
     end
 
@@ -61,7 +62,7 @@ module Auth::Org
 
     test "authenticate_operator! allows access when operator is logged in" do
       host = ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost")
-      token = OperatorToken.create!(staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+      token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
       jwt = AuthenticationToken.encode(
         @staff, host: host, session_public_id: token.public_id, resource_type: "operator",
                 jwt_issuer_id: "surface:AUTH_ORG",

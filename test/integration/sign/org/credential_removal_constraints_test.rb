@@ -23,6 +23,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     operator = create_operator
     email = create_verified_email(operator, "org-removal-contact-email@example.com")
     create_active_passkey(operator)
+    create_active_passkey(operator)
     create_active_secret_credential(operator)
 
     http_headers_7 =
@@ -32,6 +33,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx0_host = @base_host
         fx0_token = OperatorToken.where(staff: fx0_operator).first ||
           OperatorToken.create!(
+            authentication_epoch: 0,
             staff: fx0_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
             staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
             root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -63,6 +65,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -130,6 +133,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                 refresh_token_expires_at: f0_now + 10.minutes,
@@ -177,6 +181,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     operator = create_operator
     telephone = create_verified_telephone(operator, "+819033330001")
     create_active_passkey(operator)
+    create_active_passkey(operator)
     create_active_secret_credential(operator)
 
     http_headers_6 =
@@ -186,6 +191,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx1_host = @base_host
         fx1_token = OperatorToken.where(staff: fx1_operator).first ||
           OperatorToken.create!(
+            authentication_epoch: 0,
             staff: fx1_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
             staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
             root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -217,6 +223,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -284,6 +291,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                 refresh_token_expires_at: f1_now + 10.minutes,
@@ -340,6 +348,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx2_host = @base_host
         fx2_token = OperatorToken.where(staff: fx2_operator).first ||
           OperatorToken.create!(
+            authentication_epoch: 0,
             staff: fx2_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
             staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
             root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -371,6 +380,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -438,6 +448,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,
@@ -481,7 +492,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     assert_equal OperatorPasskeyStatus::ACTIVE, passkey.reload.status_id
   end
 
-  test "secret removal requires an independent step-up method" do
+  test "secret removal by an operator without passkeys is redirected to passkey registration" do
     operator = create_operator
     create_verified_telephone(operator, "+819033330003")
     secret_credential = create_active_secret_credential(operator)
@@ -493,6 +504,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx3_host = @base_host
         fx3_token = OperatorToken.where(staff: fx3_operator).first ||
           OperatorToken.create!(
+            authentication_epoch: 0,
             staff: fx3_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
             staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
             root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -524,6 +536,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
                   f3_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                     refresh_token_expires_at: f3_now + 10.minutes,
@@ -591,6 +604,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                 refresh_token_expires_at: f3_now + 10.minutes,
@@ -630,8 +644,9 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     delete base_org_identity_secret_url(secret_credential.public_id, ri: "jp", host: @base_host),
            headers: http_headers_4
 
+    # D-132: an Operator without two Passkeys is sent to Passkey registration before any removal.
     assert_response :redirect
-    assert_includes response.location, "/verification/setup"
+    assert_includes response.location, "/identity/passkeys/new"
     assert_equal OperatorSecretCredential.status_id_for(:active), secret_credential.reload.staff_secret_status_id
   end
 
@@ -641,6 +656,8 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
     create_verified_telephone(operator, "+819033330004")
     telephone = create_verified_telephone(operator, "+819033330005")
     passkey = create_active_passkey(operator)
+    create_active_passkey(operator)
+    # D-132: ADVANCED keeps two active Passkeys, so a third lets one be removed.
     create_active_passkey(operator)
     secret_credential = create_active_secret_credential(operator)
     create_active_secret_credential(operator)
@@ -653,6 +670,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           fx4_host = @base_host
           fx4_token = OperatorToken.where(staff: fx4_operator).first ||
             OperatorToken.create!(
+              authentication_epoch: 0,
               staff: fx4_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
               staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
               root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -687,6 +705,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                     f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                     f4_now = Time.current
                     f4_session = OpOrgGrant.create!(
+                      authentication_epoch: 0,
                       operator_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                       refresh_token_expires_at: f4_now + 10.minutes,
@@ -754,6 +773,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                 f4_now = Time.current
                 f4_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                   refresh_token_expires_at: f4_now + 10.minutes,
@@ -808,6 +828,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           fx5_host = @base_host
           fx5_token = OperatorToken.where(staff: fx5_operator).first ||
             OperatorToken.create!(
+              authentication_epoch: 0,
               staff: fx5_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
               staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
               root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -842,6 +863,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                     f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                     f5_now = Time.current
                     f5_session = OpOrgGrant.create!(
+                      authentication_epoch: 0,
                       operator_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                       refresh_token_expires_at: f5_now + 10.minutes,
@@ -909,6 +931,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                 f5_now = Time.current
                 f5_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                   refresh_token_expires_at: f5_now + 10.minutes,
@@ -962,6 +985,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx6_host = @base_host
         fx6_token = OperatorToken.where(staff: fx6_operator).first ||
           OperatorToken.create!(
+            authentication_epoch: 0,
             staff: fx6_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
             staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
             root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -993,6 +1017,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                   f6_now = Time.current
                   f6_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                     refresh_token_expires_at: f6_now + 10.minutes,
@@ -1060,6 +1085,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                 refresh_token_expires_at: f6_now + 10.minutes,
@@ -1109,6 +1135,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
           fx7_host = @base_host
           fx7_token = OperatorToken.where(staff: fx7_operator).first ||
             OperatorToken.create!(
+              authentication_epoch: 0,
               staff: fx7_operator, staff_token_status_id: OperatorTokenStatus::ACTIVE,
               staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
               root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -1143,6 +1170,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                     f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                     f7_now = Time.current
                     f7_session = OpOrgGrant.create!(
+                      authentication_epoch: 0,
                       operator_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                       refresh_token_expires_at: f7_now + 10.minutes,
@@ -1210,6 +1238,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                 f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                 f7_now = Time.current
                 f7_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                   refresh_token_expires_at: f7_now + 10.minutes,
@@ -1265,7 +1294,7 @@ class SignOrgCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
   private
 
   def create_operator
-    Operator.create!(status_id: OperatorStatus::ACTIVE)
+    Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
   end
 
   def create_verified_email(operator, address)
@@ -1356,7 +1385,6 @@ class SignOrgCredentialRemovalConstraintsTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1388,7 +1416,10 @@ class SignOrgCredentialRemovalConstraintsTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -1673,7 +1704,6 @@ class SignOrgCredentialRemovalConstraintsTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1682,7 +1712,10 @@ class SignOrgCredentialRemovalConstraintsTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

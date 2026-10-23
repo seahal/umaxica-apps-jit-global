@@ -136,6 +136,13 @@ Current old-kid verification windows are:
 - OIDC ID Token:
   `Security::TokenLifetimes::OIDC_ID_TOKEN_TTL + JWKS_ROTATION_LEEWAY + CDN_STALE_LEEWAY`.
 - JumpRT: `Security::TokenLifetimes::JUMP_RT_TTL + JWKS_ROTATION_LEEWAY + CDN_STALE_LEEWAY`.
+- RP OIDC `state` (decided, applies once WU-43 signs `state` with the RP `oidc_client:<namespace>`
+  key): keep the old public key for at least 30 minutes plus `CLOCK_SKEW_LEEWAY_SECONDS`, so
+  in-flight `state` values still verify (`adr/rp-oidc-state-and-return-target.md`).
+
+Publication lead time (decided, applies once WU-11 caches RP JWKS with the shared refetch limit):
+publish a new OP signing key in the JWKS at least `CACHE_TTL + MAX_STALE_TTL` (1 h 5 min) before it
+signs anything, so every RP cache already holds it.
 
 Old verification keys should be public JWKs only. Do not keep old private keys in production runtime
 unless rollback still requires the previous signer.

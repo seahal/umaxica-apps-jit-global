@@ -46,6 +46,7 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
     visitor = visitors(:reserved_visitor)
     visitor.update!(birthdate: "1990-01-02")
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -84,6 +85,7 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -129,6 +131,7 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
     operator = operators(:one)
     operator.update!(birthdate: "1985-03-04")
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -167,6 +170,7 @@ class SurfaceSignOutEntryAndBirthdateTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

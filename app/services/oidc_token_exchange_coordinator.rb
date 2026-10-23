@@ -196,8 +196,7 @@ class OidcTokenExchangeCoordinator < ApplicationService
       usage.oidc_client_id == client_id
 
     resource_type = resource_type_for_usage(usage)
-    profile_failure = refresh_profile_failure(usage, resource_type)
-    return profile_failure if profile_failure
+    return failure("invalid_grant", "refresh token realm mismatch") unless expected_realm_matches?(resource_type)
 
     client = OidcClientRegistry.find(client_id)
     return failure("invalid_client", "unknown OIDC client") unless client
@@ -381,10 +380,11 @@ class OidcTokenExchangeCoordinator < ApplicationService
   def prevalidate_payload(payload)
     return failure("invalid_grant", "Authorization code expired") if payload_expired?(payload)
 
-    return failure("invalid_request", "redirect_uri mismatch") unless payload["redirect_uri"] == redirect_uri
-    return failure("invalid_request", "client_id mismatch") unless payload["client_id"] == client_id
+    # RFC 6749 5.2 (D-147 N-3): a code bound to another client or redirect_uri is invalid_grant.
+    return failure("invalid_grant", "redirect_uri mismatch") unless payload["redirect_uri"] == redirect_uri
+    return failure("invalid_grant", "client_id mismatch") unless payload["client_id"] == client_id
     return failure(
-      "invalid_request",
+      "invalid_grant",
       "redirect_uri is not registered for this authorization code's realm",
     ) unless OidcClientRegistry.valid_redirect_uri?(
       client_id, payload["redirect_uri"], resource_type: payload["resource_type"],
@@ -481,13 +481,17 @@ class OidcTokenExchangeCoordinator < ApplicationService
 
   def verify_pkce(payload)
     return failure("invalid_request", "code_verifier is required") if code_verifier.blank?
+    return failure("invalid_request", "code_verifier is malformed") unless OidcPkce::CODE_VERIFIER_PATTERN.match?(code_verifier.to_s)
+    return failure("invalid_request", "code_challenge_method must be S256") unless
+      payload["code_challenge_method"] == "S256"
     return nil if OidcPkce.verify(
       code_verifier: code_verifier,
       code_challenge: payload["code_challenge"],
       code_challenge_method: payload["code_challenge_method"],
     )
 
-    failure("invalid_request", "PKCE verification failed")
+    # RFC 7636 4.6: a verifier that does not match the stored challenge is invalid_grant.
+    failure("invalid_grant", "PKCE verification failed")
   end
 
   def issue_tokens_for_consumed!(payload, dpop_jkt:)
@@ -881,9 +885,8 @@ class OidcTokenExchangeCoordinator < ApplicationService
         last_used_at: now,
         refresh_token_expires_at: refresh_expires_at_for(root_token, now: now),
         device_session_id: device_session.id,
-        # R5-WU06: the grant inherits its root's actor epoch and is minted under the current profile.
+        # R5-WU06: the grant inherits its root's actor epoch.
         authentication_epoch: root_token.authentication_epoch,
-        contract_epoch: op_contract_epoch(resource_type_for_usage_class(usage_class)),
       }
       attributes.merge!(grant_parent_attributes(usage_class, root_token, device_session))
       usage = usage_class.create!(**attributes)
@@ -1004,7 +1007,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
       auth_time: auth_time,
       client_id: client.client_id,
       authentication_context: root_token.strict_authentication_context_value.to_s,
-      contract_epoch: op_contract_epoch(resource_type),
     )
   end
 
@@ -1063,7 +1065,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
       auth_time: auth_time,
       client_id: client.client_id,
       authentication_context: root_token.strict_authentication_context_value.to_s,
-      contract_epoch: op_contract_epoch(resource_type),
     )
   end
 
@@ -1086,26 +1087,6 @@ class OidcTokenExchangeCoordinator < ApplicationService
       sid: usage.public_id,
       auth_time: auth_time,
     )
-  end
-
-  def refresh_profile_failure(usage, resource_type)
-    return failure("invalid_grant", "refresh token realm mismatch") unless expected_realm_matches?(resource_type)
-    # A NULL or older Grant epoch is a pre-cutover family; Refresh must not restamp it current.
-    return if usage.contract_epoch == op_contract_epoch(resource_type)
-
-    failure("invalid_grant", "refresh token predates the contract epoch")
-  end
-
-  # Current OP protocol epoch of the realm that issues this token (single-row table, R5-WU02).
-  def op_contract_epoch(resource_type)
-    model =
-      case resource_type.to_s
-      when "client" then OpAppProtocolEpoch
-      when "visitor" then OpComProtocolEpoch
-      when "operator" then OpOrgProtocolEpoch
-      else raise ArgumentError, "unsupported resource type for OP protocol epoch"
-      end
-    model.current_contract_epoch
   end
 
   # The grant's root and device-session associations, named per realm.

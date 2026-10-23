@@ -7,8 +7,11 @@ require "test_helper"
 class Base::Com::SwitcherControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
-    @visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    @token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    @visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    @token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
   end
 
   test "unauthenticated visitor cannot access switcher" do
@@ -53,6 +56,7 @@ class Base::Com::SwitcherControllerTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -131,6 +135,7 @@ class Base::Com::SwitcherControllerTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -218,6 +223,7 @@ class Base::Com::SwitcherControllerTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

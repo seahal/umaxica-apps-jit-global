@@ -9,11 +9,11 @@ class SignInOtpResenderFailuresTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   setup do
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     @ceremony = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "local_sign_in", local_sign_in_flow_ref: admission.transaction.public_id,
+      admission_purpose: "authentication_handoff", authorization_transaction_ref: admission.transaction.transaction_id,
     ).first
     @ceremony.issue_email_otp!(contact: nil, destination: "failure-resend-#{SecureRandom.hex(8)}@example.test")
   end

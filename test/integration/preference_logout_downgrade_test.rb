@@ -16,13 +16,14 @@ class PreferenceLogoutDowngradeTest < ActionDispatch::IntegrationTest
 
   test "logout keeps guest-safe display cookies and clears the session cookie" do
     user = clients(:one)
-    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     headers = as_user_headers(user, host: host, session_public_id: token.public_id)
     rp_client = OidcClientRegistry.find!("base-app-ww")
     token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token, oidc_client_id: rp_client.client_id,
       oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: Time.current, refresh_token_expires_at: 10.minutes.from_now,

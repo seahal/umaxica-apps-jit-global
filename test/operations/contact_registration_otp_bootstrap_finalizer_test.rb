@@ -23,10 +23,12 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
              VisitorContactAuditOutbox, :visitor_id,]
           end
         actor = owner_model.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
           status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
         )
         token = token_model.create!(
+          :authentication_epoch => 0,
           owner_key => actor.id,
           :root_login_established_at => token_model.database_now -
             ((scenario == :primary_freshness_elapsed) ? 9.minutes + 30.seconds : 0.seconds),
@@ -103,10 +105,12 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           arguments[:bootstrap_transaction] = nil
         when :foreign_parent
           foreign_actor = owner_model.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
             id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
             status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
           )
           foreign_token = token_model.create!(
+            :authentication_epoch => 0,
             owner_key => foreign_actor.id, :root_login_established_at => token_model.database_now,
             :discard_at => 1.day.from_now,
           )
@@ -129,12 +133,16 @@ class ContactRegistrationOtpBootstrapFinalizerTest < ActiveSupport::TestCase
           arguments[:bootstrap_transaction] = foreign_admission.transaction
         when :foreign_owner
           arguments[:actor] = owner_model.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
             status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
           )
         when :foreign_browser
           arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
         when :foreign_root
-          replacement = token_model.create!(owner_key => actor.id, :discard_at => 1.day.from_now)
+          replacement = token_model.create!(
+            :authentication_epoch => 0, owner_key => actor.id,
+            :discard_at => 1.day.from_now,
+          )
           replacement.rotate_refresh_token!
           arguments[:token] = replacement
         when :expired_parent

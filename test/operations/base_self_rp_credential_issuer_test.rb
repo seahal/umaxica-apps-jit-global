@@ -7,9 +7,10 @@ class BaseSelfRpCredentialIssuerTest < ActiveSupport::TestCase
 
   setup do
     @client = clients(:one)
-    @root_token = ClientToken.create!(user: @client, discard_at: 1.day.from_now)
+    @root_token = ClientToken.create!(authentication_epoch: 0, user: @client, discard_at: 1.day.from_now)
     @root_token.rotate_refresh_token!
     @rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @root_token,
       oidc_client_id: "base-app-ww",
       oidc_scope: "openid profile",

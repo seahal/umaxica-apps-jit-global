@@ -134,7 +134,10 @@ module AvatarBackfill
     end
 
     def create_client
-      Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        visibility_id: ClientVisibility::USER,
+      )
     end
 
     def create_persona(client)

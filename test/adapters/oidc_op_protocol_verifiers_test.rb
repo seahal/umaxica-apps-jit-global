@@ -32,7 +32,6 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
       "wrong audience" => [valid_payload.merge("aud" => ["other-client"]), {}],
       "wrong client" => [valid_payload.merge("client_id" => "warp-app-jp"), {}],
       "wrong realm scope" => [valid_payload.merge("scope" => "openid domain:operator"), {}],
-      "wrong contract epoch" => [valid_payload.merge("umx_contract_epoch" => 2), {}],
       "unknown authentication context" => [valid_payload.merge("authn_ctx" => "standby"), {}],
       "missing session binding" => [valid_payload.except("sid"), {}],
     }
@@ -54,20 +53,28 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
     assert_equal 0, @jwks_fetches
   end
 
-  test "an unknown kid gets one bounded rotation fetch" do
+  # D-144: a kid absent from a fresh fetch is invalid without another fetch inside the window;
+  # after the window a new lease may fetch again.
+  test "an unknown kid absent from a fresh fetch is refused until the refetch window passes" do
     first_jwk = public_jwk(@private_key, kid: "access-a")
     rotated_jwk = public_jwk(@rotated_private_key, kid: "access-b")
     documents = [{ "keys" => [first_jwk] }, { "keys" => [rotated_jwk] }]
+    now = [Time.current]
     fetcher =
       lambda do
         @jwks_fetches += 1
         documents.fetch(@jwks_fetches - 1, documents.last)
       end
+    client = jwks_client(fetcher:, limiter: local_limiter(-> { now.first }))
     token = encode(access_payload, key: @rotated_private_key, kid: "access-b")
 
-    result = access_verifier(token: token, fetcher: fetcher).call
+    assert_equal "invalid_token", verify_with(client, token).error
+    assert_equal "invalid_token", verify_with(client, token).error
+    assert_equal 1, @jwks_fetches
 
-    assert_predicate result, :success?, "error=#{result.error.inspect} fetches=#{@jwks_fetches}"
+    now[0] += OidcJwksRefetchLimiter::WINDOW + 1.second
+
+    assert_predicate verify_with(client, token), :success?
     assert_equal 2, @jwks_fetches
   end
 
@@ -83,14 +90,14 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
       end
     client = jwks_client(fetcher: fetcher, clock: -> { clock.first })
 
-    assert client.public_key_for("access-a")
+    assert_predicate client.lookup("access-a"), :found?
     clock[0] += OidcOpJwksClient::CACHE_TTL + 1.minute
 
-    assert client.public_key_for("access-a")
+    assert_predicate client.lookup("access-a"), :found?
 
     clock[0] += OidcOpJwksClient::MAX_STALE_TTL + 1.second
 
-    assert_nil client.public_key_for("access-a")
+    assert_not_predicate client.lookup("access-a"), :found?
   end
 
   test "JWKS client rejects duplicate, private and oversized key documents" do
@@ -104,7 +111,7 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
     invalid_documents.each do |document|
       client = jwks_client(fetcher: -> { document })
 
-      assert_nil client.public_key_for("access-a")
+      assert_not_predicate client.lookup("access-a"), :found?
     end
   end
 
@@ -113,35 +120,6 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
 
     assert_predicate result, :success?
     assert_equal CLIENT_ID, result.payload.fetch("aud").first
-  end
-
-  test "access verifier rejects a floating point contract epoch despite numeric equality" do
-    now = Time.current.to_i
-    token = JWT.encode(
-      { "iss" => ISSUER,
-        "aud" => [CLIENT_ID],
-        "exp" => now + 300,
-        "nbf" => now - 5,
-        "iat" => now - 5,
-        "sub" => "subject",
-        "sid" => "sid",
-        "client_id" => CLIENT_ID,
-        "jti" => "epoch-type",
-        "scope" => "openid",
-        "umx_contract_epoch" => 1.0,
-        "authn_ctx" => "normal", },
-      @private_key, "ES384", { "kid" => "epoch-key", "typ" => "at+jwt" },
-    )
-    client = OidcOpJwksClient.new(
-      jwks_uri: "https://base.example/.well-known/jwks.json",
-      fetcher: -> { { "keys" => [JitSecurityJwtJwk.export_public(@private_key, kid: "epoch-key")] } },
-    )
-    result = OidcOpAccessTokenVerifier.new(
-      access_token: token, client_id: CLIENT_ID, realm: REALM, issuer: ISSUER,
-      audience: AUDIENCE, contract_epoch: 1, jwks_client: client,
-    ).call
-
-    assert_not_predicate result, :success?
   end
 
   test "a successful JWKS rotation removing a known key cannot restore its stale trust" do
@@ -157,11 +135,11 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
       },
     )
 
-    assert client.public_key_for("old")
+    assert_predicate client.lookup("old"), :found?
     now += OidcOpJwksClient::CACHE_TTL + 1.second
 
-    assert_nil client.public_key_for("old")
-    assert client.public_key_for("new")
+    assert_not_predicate client.lookup("old"), :found?
+    assert_predicate client.lookup("new"), :found?
     assert_equal 2, fetch_count
   end
 
@@ -181,24 +159,25 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
           },
         )
 
-        assert client.public_key_for("known")
+        assert_predicate client.lookup("known"), :found?
         now = base + limit + offset
         if limit + offset <= OidcOpJwksClient::CACHE_TTL + OidcOpJwksClient::MAX_STALE_TTL
-          assert client.public_key_for("known"), "age=#{limit + offset}"
+          assert_predicate client.lookup("known"), :found?, "age=#{limit + offset}"
         else
-          assert_nil client.public_key_for("known")
+          assert_not_predicate client.lookup("known"), :found?
         end
 
-        assert_nil client.public_key_for("unknown")
+        assert_not_predicate client.lookup("unknown"), :found?
       end
     end
   end
 
-  test "an OP key rotation during a JWKS outage refuses the new key until a successful fetch" do
+  test "an OP key rotation during a JWKS outage is unavailable, not invalid, until a successful fetch" do
     old_jwk = public_jwk(@private_key, kid: "access-a")
     new_jwk = public_jwk(@rotated_private_key, kid: "access-b")
     outage = true
     fetch_count = 0
+    now = [Time.current]
     client = jwks_client(
       fetcher: -> {
         fetch_count += 1
@@ -207,31 +186,27 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
 
         { "keys" => [old_jwk, new_jwk] }
       },
+      limiter: local_limiter(-> { now.first }),
     )
-    verify =
-      lambda do |token|
-        OidcOpAccessTokenVerifier.new(
-          access_token: token, client_id: CLIENT_ID, realm: REALM, issuer: ISSUER,
-          audience: AUDIENCE, contract_epoch: 1, jwks_client: client,
-          expected_authentication_context: "normal",
-        ).call
-      end
     old_token = encode(access_payload)
     new_token = encode(access_payload, key: @rotated_private_key, kid: "access-b")
     forged_token = encode(access_payload, key: OpenSSL::PKey::EC.generate("secp384r1"), kid: "access-a")
 
-    assert_predicate verify.call(old_token), :success?
-    assert_not_predicate verify.call(new_token), :success?
+    assert_predicate verify_with(client, old_token), :success?
+    now[0] += OidcJwksRefetchLimiter::WINDOW + 1.second
+
+    assert_equal "key_unavailable", verify_with(client, new_token).error
     assert_equal 2, fetch_count, "a kid miss during the outage makes exactly one refetch"
-    assert_predicate verify.call(old_token), :success?, "a failed refetch keeps the fresh cached key"
-    assert_not_predicate verify.call(forged_token), :success?
+    assert_predicate verify_with(client, old_token), :success?, "a failed refetch keeps the fresh cached key"
+    assert_not_predicate verify_with(client, forged_token), :success?
+    assert_equal "key_unavailable", verify_with(client, new_token).error, "the failed outcome holds the window"
     assert_equal 2, fetch_count
 
     outage = false
+    now[0] += OidcJwksRefetchLimiter::WINDOW + 1.second
 
-    assert_predicate verify.call(new_token), :success?
+    assert_predicate verify_with(client, new_token), :success?
     assert_equal 3, fetch_count
-    assert_predicate verify.call(old_token), :success?
   end
 
   test "ID verifier rejects nonce, audience, type and max-age mismatches" do
@@ -260,7 +235,7 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
       realm: REALM,
       issuer: ISSUER,
       audience: AUDIENCE,
-      contract_epoch: 1,
+
       jwks_client: jwks_client(fetcher: fetcher, clock: clock),
       expected_authentication_context: "normal",
     )
@@ -279,7 +254,26 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
     )
   end
 
-  def jwks_client(fetcher: nil, clock: -> { Time.current })
+  # The Valkey half of the limiter is replaced by a connection that is always unavailable, so the
+  # process-local window (same length, never "no limit") decides with the injected clock.
+  class UnavailableValkey
+    def key(suffix) = "test:#{suffix}"
+
+    def call(*) = raise(Umaxica::Valkey::Unavailable, "unavailable")
+  end
+
+  def local_limiter(clock)
+    OidcJwksRefetchLimiter.new(connection: UnavailableValkey.new, clock:)
+  end
+
+  def verify_with(client, token)
+    OidcOpAccessTokenVerifier.new(
+      access_token: token, client_id: CLIENT_ID, realm: REALM, issuer: ISSUER, audience: AUDIENCE,
+      jwks_client: client, expected_authentication_context: "normal",
+    ).call
+  end
+
+  def jwks_client(fetcher: nil, clock: -> { Time.current }, limiter: OidcJwksRefetchLimiter.shared)
     @jwks_fetches ||= 0
     fetcher ||=
       lambda do
@@ -290,6 +284,7 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
       jwks_uri: "https://base.example/.well-known/jwks.json",
       fetcher: fetcher,
       clock: clock,
+      limiter: limiter,
     )
   end
 
@@ -310,7 +305,6 @@ class OidcOpProtocolVerifiersTest < ActiveSupport::TestCase
       "client_id" => CLIENT_ID,
       "jti" => "jti-1",
       "scope" => "openid domain:client read:self",
-      "umx_contract_epoch" => 1,
       "authn_ctx" => "normal",
     }
   end

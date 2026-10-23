@@ -14,7 +14,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "get sign out renders confirmation without mutation" do
     operator = operators(:one)
-    token = OperatorToken.create!(staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     auth_refresh_token = token.rotate_refresh_token!
     auth_refresh_digest = token.reload.refresh_token_digest
     auth_refresh_generation = token.refresh_token_generation
@@ -32,7 +32,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out redirects to the registered base authority" do
     operator = operators(:one)
-    token = OperatorToken.create!(staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     auth_refresh_token = token.rotate_refresh_token!
     auth_refresh_digest = token.reload.refresh_token_digest
     auth_refresh_generation = token.refresh_token_generation
@@ -60,7 +60,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "a write that creates the browser preference synchronizes the operator preference mirror" do
     operator = operators(:sample_staff)
-    token = OperatorToken.create!(staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
     authenticate_rp!(operator, token)
     mirror = -> { OrgZenithRecord.connected_to(role: :writing) { OperatorPreference.find_by(staff_id: operator.id) } }
@@ -85,6 +85,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   def authenticate_rp!(operator, token)
     oidc_client = OidcClientRegistry.find!("warp-org-jp")
     @rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

@@ -17,8 +17,11 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: ClientToken.database_now)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: actor,
+      root_login_established_at: ClientToken.database_now,
+    )
     passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.hex(32), public_key: "public-key")
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
     BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
@@ -49,6 +52,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -147,6 +151,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -225,6 +230,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -290,8 +296,9 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
 
   test "a Secret session cannot start Base passkey registration without an independent Step-Up" do
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor, established_authentication_method: "secret", root_login_established_at: ClientToken.database_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
@@ -316,6 +323,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -365,9 +373,10 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
   test "a Secret-origin session with a valid other-method Step-Up reaches the admitted Auth registration" do
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     passkey = actor.client_passkeys.create!(webauthn_id: "secret-session-step-up-passkey", public_key: "public-key")
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor, established_authentication_method: "secret", root_login_established_at: ClientToken.database_now,
     )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
@@ -399,6 +408,7 @@ class AppPasskeySecretSessionStepUpTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

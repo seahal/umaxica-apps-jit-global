@@ -8,7 +8,7 @@ stateDiagram-v2
     [*] --> IDLE
     IDLE --> PENDING: SignUpTermination terminal retention
     FAILED --> PENDING: SignUpTermination replay / cleanup worker
-    PENDING --> COMPLETED: cleanup successful
+    PENDING --> COMPLETED: atomic principal cleanup or registered owner preserved
     PENDING --> FAILED: cleanup exception
     PENDING --> PENDING: cleanup attempt
     COMPLETED --> [*]
@@ -18,5 +18,7 @@ stateDiagram-v2
     note right of NOTHING
         NOTHING has no ordinary entry path.
         FAILED is retryable; cap may strand it.
-        Public cleanup can be called before enqueue.
+        Public cleanup requires a terminal main Flow.
+        Lock order: Flow then principal.
+        Pending decision and dependent writes share the principal transaction.
     end note

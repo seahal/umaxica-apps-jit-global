@@ -9,6 +9,8 @@ module EnforcementRecoveryCeremonyFlow
 
   include EmailOtpResponseTiming
   include EmailValidation
+  include CloudflareTurnstile
+  include TurnstilePageProps
 
   REENTRY_SESSION_KEY = :enforcement_recovery_reentry
 
@@ -30,6 +32,10 @@ module EnforcementRecoveryCeremonyFlow
 
   def start_recovery_otp
     started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    # Visible Turnstile before the address is resolved: a refusal looks the same for every address
+    # and sends nothing (D-141, D-156). The verify branch keeps its OTP budget without Turnstile.
+    return render_recovery_turnstile_refusal unless cloudflare_turnstile_validation["success"]
+
     normalized_address = validate_and_normalize_email(recovery_reentry_address)
     email = normalized_address.present? ? find_email_with_timing_protection(normalized_address) : nil
     subject = recovery_subject_from_email(email)
@@ -118,6 +124,15 @@ module EnforcementRecoveryCeremonyFlow
   end
 
   def recovery_reentry_address = params.dig(:recovery_reentry, :address).to_s
+
+  def render_recovery_turnstile_refusal
+    @email_record = identity_email_model.new(address: recovery_reentry_address)
+    @reentry_state = recovery_reentry_state
+    @recovery_errors = [I18n.t("turnstile_error")]
+    render_recovery_reentry_new(status: :unprocessable_content)
+  end
+
+  def recovery_address_turnstile_props = turnstile_visible_props(challenge_id: SecureRandom.uuid)
 
   def recovery_subject_eligible?(subject)
     subject.present? && recovery_case_class.in_force.exists?(

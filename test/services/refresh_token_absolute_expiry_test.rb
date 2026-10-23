@@ -78,16 +78,19 @@ class RefreshTokenAbsoluteExpiryTest < ActiveSupport::TestCase
       client = clients(:one)
       client.update!(status_id: ClientStatus::ACTIVE)
       ClientToken.create!(
+        authentication_epoch: 0,
         user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: expires_at,
       )
     when :com
       VisitorToken.create!(
+        authentication_epoch: 0,
         visitor: visitors(:reserved_visitor), visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: expires_at,
       )
     when :org
       OperatorToken.create!(
+        authentication_epoch: 0,
         staff: operators(:one), staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: expires_at,
       )

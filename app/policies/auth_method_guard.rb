@@ -19,9 +19,24 @@ class AuthMethodGuard
     VisitorTelephoneStatus::VERIFIED_WITH_SIGN_UP,
   ].freeze
 
+  # Consolidation ADR 2.2: an ADVANCED actor keeps at least two active Passkeys; a deletion from two
+  # to one is refused whatever authentication preceded it. Callers evaluate this under the owner lock.
   def self.can_remove_passkey?(actor, passkey)
+    return false if actor.security_mode_advanced? && active_passkeys_remaining(actor, passkey) < 2
+
     preserves_required_capabilities?(actor, passkey)
   end
+
+  def self.active_passkeys_remaining(actor, passkey)
+    surface = Webauthn::Surface.for({ Client => :app, Visitor => :com, Operator => :org }.fetch(actor.class))
+    surface.passkey_class.where(
+      surface.actor_foreign_key => actor.id,
+      :status_id => surface.passkey_status_class::ACTIVE,
+    )
+      .where.not(id: passkey.id).count
+  end
+
+  private_class_method :active_passkeys_remaining
 
   def self.can_remove_email?(actor, email)
     preserves_required_capabilities?(actor, email)

@@ -8,7 +8,7 @@ class Auth::Com::Verification::PasskeysControllerTest < ActionDispatch::Integrat
   fixtures :visitors
 
   setup do
-    @visitor = Visitor.create!
+    @visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     @visitor.visitor_emails.create!(
       address: "com-passkey-stepup-#{SecureRandom.hex(4)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -17,7 +17,7 @@ class Auth::Com::Verification::PasskeysControllerTest < ActionDispatch::Integrat
       number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
     )
-    @token = VisitorToken.create!(visitor: @visitor)
+    @token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor)
     @host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     @fake = WebAuthn::FakeClient.new("https://#{@host}", encoding: :base64url)
     registration = @fake.create(challenge: SecureRandom.urlsafe_base64(32), user_verified: true)

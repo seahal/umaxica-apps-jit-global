@@ -41,7 +41,12 @@ class OperatorSecretCredentialPolicyTest < ActiveSupport::TestCase
 
   # index?/new?/create? allow any operator actor (registration has no persisted record yet).
   def test_index_and_create_allow_operator
-    policy = OperatorSecretCredentialPolicy.new(OperatorSecretCredential.new, user: Operator.new(id: 1))
+    policy = OperatorSecretCredentialPolicy.new(
+      OperatorSecretCredential.new,
+      user: Operator.new(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1,
+      ),
+    )
 
     assert_predicate policy, :index?
     assert_predicate policy, :create?
@@ -49,7 +54,13 @@ class OperatorSecretCredentialPolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_and_create_deny_other_actor_types
-    policy = OperatorSecretCredentialPolicy.new(OperatorSecretCredential.new, user: Client.new(id: 1))
+    policy = OperatorSecretCredentialPolicy.new(
+      OperatorSecretCredential.new,
+      user: Client.new(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 1,
+      ),
+    )
 
     assert_not policy.index?
     assert_not policy.create?
@@ -57,7 +68,7 @@ class OperatorSecretCredentialPolicyTest < ActiveSupport::TestCase
 
   # Per-record actions require ownership (record.staff_id == user.id).
   def test_owner_may_manage_own_record
-    owner = Operator.new(id: 1)
+    owner = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1)
     record = OperatorSecretCredential.new(staff_id: owner.id)
     policy = OperatorSecretCredentialPolicy.new(record, user: owner)
 
@@ -69,7 +80,12 @@ class OperatorSecretCredentialPolicyTest < ActiveSupport::TestCase
 
   def test_non_owner_may_not_manage_record
     record = OperatorSecretCredential.new(staff_id: 1)
-    policy = OperatorSecretCredentialPolicy.new(record, user: Operator.new(id: 2))
+    policy = OperatorSecretCredentialPolicy.new(
+      record,
+      user: Operator.new(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, id: 2,
+      ),
+    )
 
     assert_not policy.show?
     assert_not policy.update?
@@ -95,7 +111,7 @@ class OperatorSecretCredentialPolicyTest < ActiveSupport::TestCase
       end
     end.new
 
-    user = Operator.new(id: 1)
+    user = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1)
 
     assert_equal :where_scope, OperatorSecretCredentialPolicy.new(OperatorSecretCredential.new, user: user).apply_scope(
       relation,

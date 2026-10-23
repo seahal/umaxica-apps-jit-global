@@ -212,173 +212,11 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
                   ).reload.browser_session_ref,
                   ClientOidcAuthorizationTransaction.find(binding.authorization_transaction_id).consumed?,]
   end
-  test "a local signup receipt resumes the exact completed Source and Root without another issuance" do
-    subject = "new-social-#{SecureRandom.hex(8)}"
-    base = self
-    auth = open_session
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    auth_headers = { "Origin" => "https://#{auth_host}", "Sec-Fetch-Site" => "same-origin" }
-    base.host!(base_host)
-    base.https!
-    base.get("/sign", params: { ri: "jp" })
-
-    assert_equal 200, base.response.status
-    entry_form = Nokogiri::HTML(base.response.body).at_css("form")
-    entry_fields = entry_form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    base.post(entry_form["action"], params: entry_fields, headers: base_headers)
-
-    assert_equal 303, base.response.status
-    # The initiating Base POST owns its nonce; the public coordinator supplies the local parent.
-    # The authorize endpoint shares this origin, so the start moves by path without a Jump rt.
-    authorization = URI.parse(base.response.location)
-
-    assert_equal base_host, authorization.host
-    assert_nil Rack::Utils.parse_query(authorization.query)["rt"]
-    base.get(authorization.request_uri)
-    form = Nokogiri::HTML(base.response.body).at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    base.post(form["action"], params: fields, headers: base_headers)
-    nonce = base.request.session.fetch(BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY)
-    local = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_up", base_browser_nonce: nonce, base_token: nil,
-    )
-    entry_reference = local.reference
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: entry_reference)
-    auth.host!(auth_host)
-    auth.https!
-    auth.get(auth_app_sign_up_path, params: { entry_ref: entry_reference, ri: "jp" })
-
-    assert_equal 200, auth.response.status
-    csrf = nil
-    3.times do |admission_index|
-      browser = (admission_index == 1) ? base : auth
-      form = Nokogiri::HTML(browser.response.body).at_css("form")
-
-      assert_not_nil form, "Admission step #{admission_index} must render its real continuation"
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      csrf = fields.fetch("authenticity_token") if admission_index == 2
-      assert_nil binding.reload.base_confirmed_at if admission_index == 1
-      browser.post(form["action"], params: fields, headers: (admission_index == 1) ? base_headers : auth_headers)
-
-      assert_equal 303, browser.response.status
-      assert_not_nil binding.reload.base_confirmed_at if admission_index == 1
-      next if admission_index == 2
-
-      target = URI.parse(browser.response.location)
-      receiver = admission_index.zero? ? base : auth
-
-      assert_equal(admission_index.zero? ? base_host : auth_host, target.host)
-      receiver.get(target.request_uri)
-    end
-
-    binding.reload
-    OmniAuth.config.mock_auth[:google] = OmniAuth::AuthHash.new(
-      provider: "google", uid: subject, info: { name: "Provider fixture" },
-      credentials: { token: "provider-fixture", expires_at: 1.hour.from_now.to_i },
-    )
-    auth.post(
-      auth_app_social_google_registration_path, params: { ri: "jp" },
-                                                headers: auth_headers.merge("X-CSRF-Token" => csrf),
-    )
-
-    assert_equal 307, auth.response.status
-    state = auth.session.fetch(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
-    assert_no_difference("Client.count") do
-      assert_no_difference("ClientExternalIdentity.count") do
-        auth.get(auth_app_social_google_callback_path, params: { state:, ri: "jp" }, headers: auth_headers)
-      end
-    end
-    assert_equal 302, auth.response.status
-    auth.follow_redirect!
-    auth.follow_redirect!
-
-    signup = SignUpCycleLocator.new(auth.session, surface: :app).current
-
-    assert_equal [200, true, nil], [auth.response.status, signup.present?, signup&.principal_id]
-    fb = SignFlowBindingCodec.encode(flow: signup, surface: :app)
-    auth.patch(
-      auth_app_sign_up_check_google_confirmation_path(ri: "jp", fb:),
-      params: { :confirm_new_social_identity => "1",
-                :checkpoint_version => signup.checkpoint_version,
-                "cf-turnstile-response" => "fixture", },
-      headers: auth_headers.merge("X-CSRF-Token" => csrf),
-    )
-
-    assert_equal 302, auth.response.status
-    fb = Rack::Utils.parse_query(URI.parse(auth.response.location).query).fetch("fb")
-    assert_no_difference("Client.count") do
-      auth.patch(
-        auth_app_sign_up_check_google_birthdate_path(ri: "jp", fb:),
-        params: { requirement: "birthdate",
-                  birthdate: "2000-02-03",
-                  checkpoint_version: signup.reload.checkpoint_version, },
-        headers: auth_headers.merge("X-CSRF-Token" => csrf),
-      )
-    end
-    result_receiver = URI.parse(auth.response.location)
-
-    assert_equal [303, base_host], [auth.response.status, result_receiver.host]
-    base.get(result_receiver.request_uri)
-
-    assert_equal 200, base.response.status
-    form = Nokogiri::HTML(base.response.body).at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    # Commit the real Source result first to reproduce a stop before the separate Root commit.
-    result_token = SocialCeremonyResultAdapter.new.read(reference: fields.fetch("result_ref"))
-    assert_no_difference("ClientToken.count") do
-      assert_difference(["Client.count", "ClientExternalIdentity.count"], 1) do
-        IdentitySocialCeremonyFinalCommitter.call!(
-          result_token: result_token, actor: nil, session_ref: binding.entry_ref, surface: "app",
-        )
-      end
-    end
-    flow = ClientSignInFlow.find(binding.sign_in_flow_id)
-
-    assert_equal [true, nil], [signup.reload.completed?, flow.reload.principal_id]
-    assert_difference("ClientToken.count", 1) do
-      assert_no_difference(["Client.count", "ClientExternalIdentity.count"]) do
-        base.post(form["action"], params: fields, headers: base_headers)
-      end
-    end
-    completion_destination = base.response.location
-
-    original_completion_status = base.response.status
-    base.get(base_app_root_url(ri: "jp", host: base_host))
-    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-    assert_no_difference(["Client.count", "ClientExternalIdentity.count", "ClientToken.count"]) do
-      base.post(
-        form["action"], params: fields.merge("authenticity_token" => csrf), headers: base_headers,
-      )
-    end
-    assert_equal [303, 303, completion_destination],
-                 [original_completion_status, base.response.status, base.response.location]
-    identity = ClientExternalIdentity.find_by!(provider: "google", subject:)
-    actor = Client.find(identity.client_id)
-
-    token = ClientToken.find_by!(user_id: actor.id)
-    ceremony = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
-
-    assert_equal [actor.id, true, true, true, true],
-                 [signup.reload.principal_id, signup.completed?, ClientIdentity.exists?(source_record_id: actor.id),
-                  token.currently_usable?, ceremony.completed?,]
-    assert_equal [ceremony.authentication_event_at, "google", token.id],
-                 [token.authentication_event_at, token.established_authentication_method,
-                  ClientSignInFlow.find(binding.sign_in_flow_id).reload.token_id,]
-    token.revoke!
-    base.get(base_app_root_url(ri: "jp", host: base_host))
-    csrf = response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
-    assert_no_difference(["Client.count", "ClientExternalIdentity.count", "ClientToken.count"]) do
-      base.post(
-        form["action"], params: fields.merge("authenticity_token" => csrf), headers: base_headers,
-      )
-    end
-    assert_equal [422, true, true], [base.response.status, token.reload.revoked?, signup.reload.completed?]
-  end
-
   test "completion retains the actual Auth authentication event time through the Base Root boundary" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     subject = "ordinary-social-#{SecureRandom.hex(8)}"
     ClientGoogleIdentity.create!(
       user: actor,
@@ -1233,7 +1071,10 @@ class Base::App::Social::AuthenticationsControllerTest < ActionDispatch::Integra
   end
   test "a competing Root login after Social verification makes the original Base completion refuse cooldown" do
     Rails.application.config.x.authentication.login_cooldown = 60.seconds
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     subject = "cooldown-social-#{SecureRandom.hex(8)}"
     ClientGoogleIdentity.create!(
       user: actor,

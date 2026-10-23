@@ -9,6 +9,7 @@ module BrowserRpLogoutFlowHelper
   def create_rp_session(client_id, root_token: @root_token)
     client = OidcClientRegistry.find!(client_id)
     OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root_token,
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",

@@ -18,7 +18,7 @@ class BranchCoverageBatch33PreciseArmsTest < ActiveSupport::TestCase
     resolver = Object.new
     resolver.define_singleton_method(:candidates) { [] }
 
-    actor = Client.new
+    actor = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     actor.define_singleton_method(:id) { 1 }
     participant = SignInSelectorParticipant.new(cycle: cycle, actor: actor, resolver: resolver)
     participant.define_singleton_method(:ensure_selector_cycle!) { true }

@@ -48,6 +48,11 @@ class OidcAccessTokenAuthenticator < ApplicationService
     end
     return failure("invalid_token") unless token_subject_matches?(resource, payload)
     return failure("invalid_token") unless base_session_actor_matches?(base_session, resource)
+    # D-165: a root issued before a stop never becomes valid again when the account is restored.
+    return failure("invalid_token") unless AuthenticationEpochValue.root_current?(
+      root_token: base_session,
+      actor: resource,
+    )
 
     Result.new(success: true, payload: payload, token: base_session, resource: resource, error: nil)
   end
@@ -122,7 +127,8 @@ class OidcAccessTokenAuthenticator < ApplicationService
     )
     return if public_id.blank?
 
-    resource_class_for_resource_type.connection_class_for_self.connected_to(role: :reading) do
+    # D-165: the stop state and epoch are read from the authoritative writer, never a lagging replica.
+    resource_class_for_resource_type.connection_class_for_self.connected_to(role: :writing) do
       resource_class_for_resource_type.find_by(public_id: public_id)
     end
   end

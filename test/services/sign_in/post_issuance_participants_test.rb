@@ -207,15 +207,15 @@ module SignIn
     private
 
     def create_client
-      Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+      Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
     end
 
     def create_visitor
-      Visitor.create!(public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE)
+      Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE)
     end
 
     def create_operator
-      Operator.create!(status_id: OperatorStatus::ACTIVE)
+      Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     end
 
     def create_cycle(actor, cycle_class: ClientSignInFlow, status_name:, return_to: "/dashboard")

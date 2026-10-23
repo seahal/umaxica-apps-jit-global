@@ -194,7 +194,7 @@ module CoreBrowserApiBoundary
       "#{cell.record_prefix}Record".constantize.connected_to(role: :writing) do
         RpRefreshCommitter.call(
           cell:, local_session_id: cookies[OidcRpBrowserCredentialContract::SESSION_COOKIE].to_s,
-          refresh_token: refresh_plain, issuer: rp_cell_issuer, contract_epoch: rp_cell_contract_epoch,
+          refresh_token: refresh_plain, issuer: rp_cell_issuer,
           jwks_client: rp_cell_jwks_client, token_url: OidcIssuer.token_endpoint(core_resource_type),
           query_url: OidcIssuer.refresh_delivery_query_endpoint(core_resource_type),
         )

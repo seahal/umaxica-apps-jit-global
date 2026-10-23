@@ -19,7 +19,6 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
     host! host
     VisitorStatus.find_or_create_by!(id: VisitorStatus::ACTIVE)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
     VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
@@ -29,7 +28,7 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
     visitor = Visitor.create!(
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
-      mfa_level_id: VisitorMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
       discard_at: 20.years.from_now,
       purge_eligible_at: 20.years.from_now,
@@ -67,6 +66,7 @@ class ComVisitorPreferenceControllerAdoptionTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

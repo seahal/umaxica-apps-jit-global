@@ -9,6 +9,17 @@ require "test_helper"
 class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
 
+  # The recovery send branch verifies visible Turnstile first (D-156); these cases pass it.
+  setup do
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+  end
+
+  teardown do
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
+
   self.fixture_table_names = []
 
   test "app appeal submission records the appeal and returns to the recovery page" do
@@ -16,12 +27,11 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     host! host
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     client = Client.create!(
       status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     email = ClientEmail.create!(
       user: client, address: "recovery-appeal-client@example.test", confirm_policy: "1",
@@ -65,12 +75,11 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     host! host
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     client = Client.create!(
       status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     email = ClientEmail.create!(
       user: client, address: "recovery-appeal-invalid@example.test", confirm_policy: "1",
@@ -113,12 +122,11 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     host! host
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)
     client = Client.create!(
       status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
+      security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     email = ClientEmail.create!(
       user: client, address: "recovery-completion-client@example.test", confirm_policy: "1",
@@ -155,7 +163,10 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     email = VisitorEmail.create!(
       visitor: visitor, address: "recovery-appeal-visitor@example.test", confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -198,7 +209,10 @@ class BaseIdentityRecoveryActionsTest < ActionDispatch::IntegrationTest
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     email = VisitorEmail.create!(
       visitor: visitor, address: "recovery-completion-visitor@example.test", confirm_policy: "1",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,

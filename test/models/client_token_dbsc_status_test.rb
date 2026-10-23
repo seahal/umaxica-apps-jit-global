@@ -65,10 +65,11 @@ class ClientTokenDbscStatusTest < ActiveSupport::TestCase
     status = ClientTokenDbscStatus.find(ClientTokenDbscStatus::NOTHING)
     user = Client.create!(
       status_id: ClientStatus::NOTHING,
-      mfa_level_enabled: false,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
     )
 
     user_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,

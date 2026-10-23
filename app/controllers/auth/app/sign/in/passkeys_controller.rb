@@ -57,12 +57,12 @@ module Auth
                 options_url: auth_app_sign_in_passkey_options_path(pt: pt, ri: ri, **binding),
                 verification_url: auth_app_sign_in_passkey_verification_path(pt: pt, ri: ri, **binding),
                 region: ri.to_s,
-                identifier_param: nil,
+                identifier_param: "identifier",
                 # The stealth site key is public by design and the ERB already published it in the
                 # rendered HTML; the secret key and the token verification stay server side.
                 turnstile_site_key: JitSecurityTurnstileConfig.stealth_site_key.to_s,
                 turnstile_error_message: t("turnstile_error"),
-                field: nil,
+                field: { label: page_t("#{scope}.pii_label"), placeholder: page_t("#{scope}.pii_placeholder") },
                 submit_label: page_t("#{scope}.submit"),
               },
               back_link: {

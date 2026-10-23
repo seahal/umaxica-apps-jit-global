@@ -1,0 +1,7 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "no authentication evidence (derived)" as empty
+    state "evidence present (derived)" as evidence
+    [*] --> empty
+    empty --> evidence: record_authentication_evidence!
+    evidence --> [*]

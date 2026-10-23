@@ -5,16 +5,19 @@ require "test_helper"
 # require "helpers/global_test_support"
 
 class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::IntegrationTest
+  include AuthEmailMfaHelper
+
   fixtures :clients, :client_statuses, :client_passkey_statuses,
            :client_email_statuses, :client_totp_credential_statuses
 
   setup do
+    @test_started_at = ClientSignInFlow.database_now
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     https!
     ClientSignInFlowState.ensure_defaults!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
-    @user = Client.create!(mfa_level_enabled: true)
+    @user = Client.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     @email = "challenge_hub_#{SecureRandom.hex(4)}@example.com".freeze
     @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
     @email_record.finalize_binding!
@@ -24,7 +27,7 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
       title: "totp",
     )
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -39,18 +42,12 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
 
     assert_response :see_other
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: ClientSignInFlow.find_by!(
-        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-      ),
-      surface: "app", phase: "PRIMARY_PENDING",
-    )
+    @primary_sign_in_binding = nil
   end
 
   test "contradictory MFA GET and HEAD preserve the original app flow and issue no session" do
-    flow = ClientSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
     before = flow.attributes
     path = auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
 
@@ -75,9 +72,8 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "missing malformed and wrong-surface MFA bindings cannot halt the app flow" do
-    flow = ClientSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
     wrong_surface = SignInFlowBindingCodec.encode(flow: flow, surface: "com", phase: "PRIMARY_PENDING")
     before = flow.attributes
 
@@ -93,9 +89,8 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "a contradictory app mutation halts once and replay cannot issue a session" do
-    flow = ClientSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
     path = auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
 
     assert_no_difference -> { ClientToken.count } do
@@ -119,9 +114,8 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "show refuses an MFA request whose binding is ahead of the active phase" do
-    flow = ClientSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
 
     translation_called = false
     original_translate = I18n.method(:t)
@@ -145,13 +139,12 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     assert_response :conflict
     assert translation_called
     assert_equal "戻るはだめです", response.body
-    assert_equal ClientSignInFlowState::PRIMARY_PENDING, flow.reload.state_id
+    assert_equal ClientSignInFlowState::MFA_PENDING, flow.reload.state_id
   end
 
   test "show refuses a binding whose flow has expired without mutating the flow" do
-    flow = ClientSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
     flow.update!(expires_at: flow.issued_at + 1.second)
     expired_binding = SignInFlowBindingCodec.encode(
       flow: flow, surface: "app", phase: "PRIMARY_PENDING",
@@ -162,14 +155,13 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
       assert_response :conflict
       assert_equal "戻るはだめです", response.body
-      assert_equal ClientSignInFlowState::PRIMARY_PENDING, flow.reload.state_id
+      assert_equal ClientSignInFlowState::MFA_PENDING, flow.reload.state_id
     end
   end
 
   test "a state-changing request bound to this flow but the wrong phase halts the active flow" do
-    flow = ClientSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
 
     delete auth_app_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
 
@@ -264,9 +256,9 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
       delete mfa_challenge_path
     end
 
-    assert_response :conflict
-    assert_equal "戻るはだめです", response.body
-    assert_nil response.location
+    # Without an MFA-phase flow the request restarts at the OIDC sign-in page.
+    assert_response :see_other
+    assert_equal auth_app_sign_in_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
   test "the method selection page offers cancellation and no back link" do
@@ -327,6 +319,14 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
 
   private
 
+  # An OIDC-parent flow exists only after primary authentication; a PRIMARY binding to that
+  # MFA-phase flow is the contradictory observation these cases submit.
+  def establish_contradictory_primary_binding!
+    sign_in_with_email_to_mfa!(surface: :app, email_record: @email_record, email: @email)
+    @mfa_flow = ClientSignInFlow.where(principal_id: @user.id).recent_first.first!
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(flow: @mfa_flow, surface: "app", phase: "PRIMARY_PENDING")
+  end
+
   def establish_pending_mfa_via_email!
     post(
       auth_app_sign_in_email_path(ri: "jp", fb: @primary_sign_in_binding), params: {
@@ -361,7 +361,8 @@ class Auth::App::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   def mfa_binding_params
     locator = session[:app_sign_in_flow_locator]
     cycle = ClientSignInFlow.find_by(public_id: locator&.[]("public_id"))
-    cycle ||= ClientSignInFlow.where(principal_id: @user.id).order(:id).last
+    # Only a flow this test created; rows left by non-transactional tests never stand in for it.
+    cycle ||= ClientSignInFlow.where(principal_id: @user.id, created_at: @test_started_at..).order(:id).last
     return {} unless cycle
 
     { fb: SignInFlowBindingCodec.encode(flow: cycle, surface: "app", phase: "MFA_PENDING") }

@@ -20,9 +20,8 @@ class RpCoreComSession < RpCoreComRecord
             uniqueness: { conditions: -> { where(revoked_at: nil) } },
             on: :create, if: -> { revoked_at.nil? }
 
-  validates :absolute_expires_at, :contract_epoch, presence: true
+  validates :absolute_expires_at, presence: true
   validates :installed_generation, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
-  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }
   validate :identity_binding_must_be_resolved
   validates :current_access_jti_digest, length: { maximum: 64 }
 

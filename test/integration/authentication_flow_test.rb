@@ -234,6 +234,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
   test "GET sign-in does not transparently mutate authentication state" do
     token_record = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
@@ -252,6 +253,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
   test "GET sign-in with a refresh cookie leaves the refresh credential unchanged" do
     token_record = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
@@ -267,6 +269,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
 
   test "GET sign-in does not depend on the refresh audit writer" do
     token_record = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
@@ -299,6 +302,7 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
     assert_not inactive_user.active?, "Client should be inactive after setting withdrawn_at"
 
     token_record = ClientToken.create!(
+      authentication_epoch: 0,
       user: inactive_user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )

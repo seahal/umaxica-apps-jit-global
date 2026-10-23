@@ -31,6 +31,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
         fx0_host = host
         fx0_scope = "settings_email"
         fx0_token = ClientToken.create!(
+          authentication_epoch: 0,
           user: fx0_user,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -76,6 +77,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -146,6 +148,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
         fx1_host = host
         fx1_scope = "settings_telephone"
         fx1_token = ClientToken.create!(
+          authentication_epoch: 0,
           user: fx1_user,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -191,6 +194,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -260,6 +264,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
         fx2_visitor = visitor
         fx2_host = host
         fx2_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx2_visitor,
           visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           visitor_token_status_id: VisitorTokenStatus::ACTIVE,
@@ -342,6 +347,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -419,6 +425,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
         fx3_host = host
         fx3_scope = "settings_telephone"
         fx3_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx3_visitor,
           visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           visitor_token_status_id: VisitorTokenStatus::ACTIVE,
@@ -464,6 +471,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                   f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
                   f3_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                     refresh_token_expires_at: f3_now + 10.minutes,
@@ -541,6 +549,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
         fx4_host = host
         fx4_scope = "settings_email"
         fx4_token = OperatorToken.create!(
+          authentication_epoch: 0,
           staff: fx4_operator,
           staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
           staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -586,6 +595,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                   f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                   f4_now = Time.current
                   f4_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                     refresh_token_expires_at: f4_now + 10.minutes,
@@ -664,6 +674,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
         fx5_host = host
         fx5_scope = "settings_telephone"
         fx5_token = OperatorToken.create!(
+          authentication_epoch: 0,
           staff: fx5_operator,
           staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
           staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -709,6 +720,7 @@ class EnforcementIdentifierAttachmentGateTest < ActionDispatch::IntegrationTest
                   f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                   f5_now = Time.current
                   f5_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                     refresh_token_expires_at: f5_now + 10.minutes,

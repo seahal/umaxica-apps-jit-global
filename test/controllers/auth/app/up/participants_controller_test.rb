@@ -13,10 +13,12 @@ class Auth::App::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
     ClientSignUpFlowStatus.ensure_defaults!
   end
 
-  test "guard redirects direct access without a cycle to signup entry" do
+  test "guard refuses direct access without a sign-up admission" do
     get auth_app_sign_up_guard_email_url(ri: "jp"), headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_url(ri: "jp")
+    # D-73: without a sign-up admission ownership is not proven; the uniform error ends nothing.
+    assert_response :bad_request
+    assert_equal I18n.t("errors.messages.invalid_request", locale: :ja), response.body
     assert_empty flash.to_hash
   end
 
@@ -29,7 +31,9 @@ class Auth::App::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
 
     get auth_app_sign_up_guard_email_url(ri: "jp", sid: ticket.public_id), headers: default_headers
 
-    assert_redirected_to auth_app_sign_up_url(ri: "jp")
+    # D-73: without a sign-up admission ownership is not proven; the uniform error ends nothing.
+    assert_response :bad_request
+    assert_equal I18n.t("errors.messages.invalid_request", locale: :ja), response.body
     assert_empty flash.to_hash
   end
 
@@ -61,9 +65,10 @@ class Auth::App::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
 
     get auth_app_sign_up_check_email_birthdate_url(ri: "jp", sid: ticket.public_id), headers: default_headers
 
-    assert_response :conflict
+    # D-73: without a sign-up admission ownership is not proven; the uniform error ends nothing.
+    assert_response :bad_request
     assert_nil response.location
-    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
+    assert_equal I18n.t("errors.messages.invalid_request", locale: :ja), response.body
     assert_empty flash.to_hash
   end
 
@@ -72,9 +77,10 @@ class Auth::App::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
           params: { requirement: "birthdate" },
           headers: default_headers
 
-    assert_response :conflict
+    # D-73: without a sign-up admission ownership is not proven; the uniform error ends nothing.
+    assert_response :bad_request
     assert_nil response.location
-    assert_equal I18n.t("errors.messages.phase_violation_refused", locale: :ja), response.body
+    assert_equal I18n.t("errors.messages.invalid_request", locale: :ja), response.body
   end
 
   test "checkpoint destroy is routed for sign up cancellation" do
@@ -109,7 +115,7 @@ class Auth::App::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
         issued_at: Time.current,
         expires_at: 15.minutes.from_now,
         entry_method: "email",
-      }.merge(attrs),
+      }.merge(attrs).merge(auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)),
     )
   end
 
@@ -144,6 +150,8 @@ class Auth::App::Sign::Up::ParticipantsControllerTest < ActionDispatch::Integrat
   def build_guard_controller(ticket)
     controller = Auth::App::Sign::Up::Guard::EmailsController.new
     controller.define_singleton_method(:params) { ActionController::Parameters.new(ri: "jp") }
+    # E1: the Flow comes from the admitted Binding; this direct call supplies it.
+    controller.define_singleton_method(:current_sign_up_flow_ticket) { ticket }
     controller.define_singleton_method(:session) do
       {
         app_sign_up_flow_locator: {
@@ -208,7 +216,6 @@ class Auth::App::Sign::Up::ParticipantsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -240,7 +247,10 @@ class Auth::App::Sign::Up::ParticipantsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -487,7 +497,6 @@ class Auth::App::Sign::Up::ParticipantsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -496,7 +505,10 @@ class Auth::App::Sign::Up::ParticipantsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

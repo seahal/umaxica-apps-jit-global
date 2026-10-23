@@ -42,7 +42,6 @@ require "test_helper"
 class VisitorPreferenceTest < ActiveSupport::TestCase
   setup do
     Prosopite.pause do
-      VisitorMfaLevel.ensure_defaults!
       VisitorMfaStatus.ensure_defaults!
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
@@ -60,7 +59,7 @@ class VisitorPreferenceTest < ActiveSupport::TestCase
   end
 
   test "belongs to visitor and keeps defaults" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     preference = VisitorPreference.create!(visitor: visitor)
 
     assert_equal visitor, preference.visitor
@@ -72,20 +71,22 @@ class VisitorPreferenceTest < ActiveSupport::TestCase
   end
 
   test "generates public_id on create" do
-    preference = VisitorPreference.create!(visitor: Visitor.create!)
+    preference = VisitorPreference.create!(visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL))
 
     assert_not_nil preference.public_id
     assert_equal 21, preference.public_id.length
   end
 
   test "does not overwrite existing public_id" do
-    preference = VisitorPreference.create!(visitor: Visitor.create!, public_id: "visitor_pref_customxx")
+    preference = VisitorPreference.create!(
+      visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL), public_id: "visitor_pref_customxx",
+    )
 
     assert_equal "visitor_pref_customxx", preference.public_id
   end
 
   test "loading an existing preference preserves stored defaults" do
-    preference = VisitorPreference.create!(visitor: Visitor.create!)
+    preference = VisitorPreference.create!(visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL))
     preference.update!(
       consented: true,
       functional: true,
@@ -102,7 +103,7 @@ class VisitorPreferenceTest < ActiveSupport::TestCase
   end
 
   test "child preference records default to expected option ids" do
-    preference = VisitorPreference.create!(visitor: Visitor.create!)
+    preference = VisitorPreference.create!(visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL))
 
     language = VisitorPreferenceLanguage.create!(preference: preference)
     timezone = VisitorPreferenceTimezone.create!(preference: preference)

@@ -6,8 +6,11 @@ require "test_helper"
 
 class BaseSelectorAuthorityTest < ActiveSupport::TestCase
   setup do
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    @token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    @token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     @bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
   end
 
@@ -53,8 +56,8 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
   end
 
   test "com automatic selection returns its authenticated Dashboard" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-    token = VisitorToken.create!(visitor: visitor)
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     result = BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
 
@@ -64,11 +67,14 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
   end
 
   test "rejects another identity selection" do
-    other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)
     other_candidate = BaseSelectorAuthority.new(
       surface: :app, principal: other,
-      session: ClientToken.create!(user: other),
+      session: ClientToken.create!(authentication_epoch: 0, user: other),
     )
       .selectable_candidates
       .first
@@ -102,8 +108,11 @@ class BaseSelectorAuthorityTest < ActiveSupport::TestCase
   end
 
   test "org selector keeps Avatar optional and can select a Bureau owned Avatar" do
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    token = OperatorToken.create!(staff: operator)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     selector = BaseSelectorAuthority.new(surface: :org, principal: operator, session: token)
 

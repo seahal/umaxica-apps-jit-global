@@ -11,6 +11,13 @@ Accepted (2026-10-06) as the target architecture for the `two.md` implementation
 > Back-Channel Logout is removed. Authority-first logout and the irreversible commit point are
 > unchanged.
 
+> **Partial supersession (2026-10-22, design only):**
+> [OP, Auth, and RP responsibility separation](op-auth-rp-authentication-responsibility-separation.md)
+> separates the OP from application Base, which becomes an RP, and permits authenticated method
+> management and step-up directly through Auth. OP sessions and existing security contracts remain;
+> direct-path protocol details remain open. The combined-Base implementation described below is
+> not certified as migrated by this decision.
+
 ## Context
 
 Base is both the physical OAuth/OIDC authority and an ordinary browser relying party of itself.

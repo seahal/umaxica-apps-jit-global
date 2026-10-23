@@ -7,16 +7,19 @@ require "timeout"
 class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = %w(
-    client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
   test "separate writers serialize manual and registered Passkey reservations at eighteen nineteen and twenty" do
     [18, 19, 20].product([%i(manual manual), %i(manual passkey), %i(passkey passkey)]).each do |count, paths|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
+      actor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        visibility_id: ClientVisibility::BOTH,
+      )
       tokens =
         Array.new(2) do |index|
-          token = ClientToken.create!(user: actor)
+          token = ClientToken.create!(authentication_epoch: 0, user: actor)
           token.update!(
             last_step_up_at: ClientToken.database_now,
             last_step_up_scope: ((paths[index] == :manual) ? "settings_secret_credential" : "settings_passkey"),
@@ -140,8 +143,11 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
   end
 
   test "expiry cleanup racing a new reservation preserves writer capacity and the new operation" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -247,10 +253,13 @@ class ClientSecretManualReservationConcurrencyTest < ActiveSupport::TestCase
   end
 
   test "cancellation racing another session reservation never exceeds capacity or revives the old operation" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
     tokens =
       Array.new(2) do
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, user: actor)
         token.update!(
           last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
           last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,

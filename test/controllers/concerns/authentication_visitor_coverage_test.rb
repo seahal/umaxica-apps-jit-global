@@ -22,7 +22,7 @@ class AuthenticationVisitorCoverageTest < ActiveSupport::TestCase
 
   test "audit_visitor_login_failed records a login-failed event for a present visitor" do
     harness = Harness.new
-    visitor = Visitor.new
+    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     recorded = []
     harness.define_singleton_method(:record_audit) { |event, **kwargs| recorded << [event, kwargs] }
 

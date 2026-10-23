@@ -40,7 +40,7 @@ class ClientWebauthnCredentialPolicyTest < ActiveSupport::TestCase
   end
 
   def test_record_owner_returns_false_when_user_does_not_own_record
-    user = Client.create!
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     record = ClientPasskey.new(user_id: user.id + 1)
     policy = ClientWebauthnCredentialPolicy.new(record, user: user)
 

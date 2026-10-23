@@ -110,8 +110,6 @@ class OperatorToken < OpBaseOrgRecord
   MAX_TOTAL_SESSIONS_PER_STAFF = 2
   session_oidc_connection_config actor_name: :staff, connection_class: OperatorOidcConnection
 
-  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
-
   attribute :staff_token_status_id, default: OperatorTokenStatus::ACTIVE
   attribute :staff_token_kind_id, default: OperatorTokenKind::BROWSER_WEB
   attribute :staff_token_binding_method_id, default: OperatorTokenBindingMethod::NOTHING
@@ -137,6 +135,8 @@ class OperatorToken < OpBaseOrgRecord
           dependent: :destroy
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
+  # WU-17: written at issuance from the actor (roots) or the root (grants); never defaulted.
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   validate :enforce_concurrent_session_limit, on: :create
   validates :device_session_id, :staff_id, exclusion: { in: [nil] }

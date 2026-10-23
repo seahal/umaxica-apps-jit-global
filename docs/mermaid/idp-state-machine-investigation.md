@@ -98,8 +98,8 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 | From machine | Relationship | To machine | Source |
 | --- | --- | --- | --- |
 | idp-client-sign-in | Auth admits Base-issued local flow | idp-client-auth-ceremony-session | app/controllers/concerns/auth_ceremony_admission.rb |
-| idp-client-auth-ceremony-session | Auth evidence / generation delivery | idp-client-local-result-delivery | app/controllers/concerns/auth_local_result_handoff.rb |
-| idp-client-local-result-delivery | Base commit rechecks flow and finalizes login | idp-client-sign-in | app/operations/local_authentication_session_committer.rb |
+| idp-client-auth-ceremony-session | Auth evidence / generation delivery | idp-client-sign-in-flow-evidence | app/controllers/concerns/auth_local_result_handoff.rb |
+| idp-client-sign-in-flow-evidence | Base commit rechecks flow and finalizes login | idp-client-sign-in | app/operations/local_authentication_session_committer.rb |
 | idp-client-sign-in | successful root log_in establishes token | idp-client-token | app/controllers/concerns/authentication_base.rb |
 | idp-client-oidc-authorization | Auth admits Base-issued OIDC transaction | idp-client-auth-ceremony-session | app/controllers/concerns/auth_ceremony_admission.rb |
 | idp-client-oidc-authorization | Base finalize establishes root browser session | idp-client-token | app/controllers/base/app/oauth/authorizations_controller.rb |
@@ -132,8 +132,8 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 | idp-client-withdrawal-ceremony | restricted withdrawal proof authorizes recovery/termination | idp-client-actor-withdrawal | app/controllers/concerns/withdrawal_ceremony_authentication.rb |
 | idp-client-enforcement-recovery-ceremony | verified recovery ends security_lock case | idp-client-enforcement-case | app/controllers/concerns/enforcement_recovery_ceremony_flow.rb |
 | idp-visitor-sign-in | Auth admits Base-issued local flow | idp-visitor-auth-ceremony-session | app/controllers/concerns/auth_ceremony_admission.rb |
-| idp-visitor-auth-ceremony-session | Auth evidence / generation delivery | idp-visitor-local-result-delivery | app/controllers/concerns/auth_local_result_handoff.rb |
-| idp-visitor-local-result-delivery | Base commit rechecks flow and finalizes login | idp-visitor-sign-in | app/operations/local_authentication_session_committer.rb |
+| idp-visitor-auth-ceremony-session | Auth evidence / generation delivery | idp-visitor-sign-in-flow-evidence | app/controllers/concerns/auth_local_result_handoff.rb |
+| idp-visitor-sign-in-flow-evidence | Base commit rechecks flow and finalizes login | idp-visitor-sign-in | app/operations/local_authentication_session_committer.rb |
 | idp-visitor-sign-in | successful root log_in establishes token | idp-visitor-token | app/controllers/concerns/authentication_base.rb |
 | idp-visitor-oidc-authorization | Auth admits Base-issued OIDC transaction | idp-visitor-auth-ceremony-session | app/controllers/concerns/auth_ceremony_admission.rb |
 | idp-visitor-oidc-authorization | Base finalize establishes root browser session | idp-visitor-token | app/controllers/base/com/oauth/authorizations_controller.rb |
@@ -166,8 +166,8 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 | idp-visitor-withdrawal-ceremony | restricted withdrawal proof authorizes recovery/termination | idp-visitor-actor-withdrawal | app/controllers/concerns/withdrawal_ceremony_authentication.rb |
 | idp-visitor-enforcement-recovery-ceremony | verified recovery ends security_lock case | idp-visitor-enforcement-case | app/controllers/concerns/enforcement_recovery_ceremony_flow.rb |
 | idp-operator-sign-in | Auth admits Base-issued local flow | idp-operator-auth-ceremony-session | app/controllers/concerns/auth_ceremony_admission.rb |
-| idp-operator-auth-ceremony-session | Auth evidence / generation delivery | idp-operator-local-result-delivery | app/controllers/concerns/auth_local_result_handoff.rb |
-| idp-operator-local-result-delivery | Base commit rechecks flow and finalizes login | idp-operator-sign-in | app/operations/local_authentication_session_committer.rb |
+| idp-operator-auth-ceremony-session | Auth evidence / generation delivery | idp-operator-sign-in-flow-evidence | app/controllers/concerns/auth_local_result_handoff.rb |
+| idp-operator-sign-in-flow-evidence | Base commit rechecks flow and finalizes login | idp-operator-sign-in | app/operations/local_authentication_session_committer.rb |
 | idp-operator-sign-in | successful root log_in establishes token | idp-operator-token | app/controllers/concerns/authentication_base.rb |
 | idp-operator-oidc-authorization | Auth admits Base-issued OIDC transaction | idp-operator-auth-ceremony-session | app/controllers/concerns/auth_ceremony_admission.rb |
 | idp-operator-oidc-authorization | Base finalize establishes root browser session | idp-operator-token | app/controllers/base/org/oauth/authorizations_controller.rb |
@@ -207,19 +207,19 @@ All lines in the overview describe orchestration/read dependencies, not FK. Shar
 | idp-operator-operator-lifecycle | withdraw/suspend/terminate entitlement; restore separate | idp-operator-entra-identity | app/services/org_operator_lifecycle_execute.rb |
 | idp-operator-entra-identity | Entra resolver requires ACTIVE mapping | idp-operator-sign-in | app/resolvers/external_sign_in/org_entra_resolver.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-client-auth-ceremony-session | app/services/base_auth_admission_coordinator.rb |
-| idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-client-local-result-delivery | app/services/base_auth_admission_coordinator.rb |
+| idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-client-sign-in-flow-evidence | app/services/base_auth_admission_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-client-oidc-authorization | app/services/base_auth_admission_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-client-step-up-ceremony | app/services/base_auth_admission_coordinator.rb |
 | idp-client-secret-credential-ceremony | temporary signed-result candidate | idp-identity-secret-credential-candidate | app/services/identity_secret_credential_ceremony_candidate_store.rb |
 | idp-shared-authorization-code | legacy exchange one-time code then RP creation | idp-client-rp-session | app/services/oidc_token_exchange_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-visitor-auth-ceremony-session | app/services/base_auth_admission_coordinator.rb |
-| idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-visitor-local-result-delivery | app/services/base_auth_admission_coordinator.rb |
+| idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-visitor-sign-in-flow-evidence | app/services/base_auth_admission_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-visitor-oidc-authorization | app/services/base_auth_admission_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-visitor-step-up-ceremony | app/services/base_auth_admission_coordinator.rb |
 | idp-visitor-secret-credential-ceremony | temporary signed-result candidate | idp-identity-secret-credential-candidate | app/services/identity_secret_credential_ceremony_candidate_store.rb |
 | idp-shared-authorization-code | legacy exchange one-time code then RP creation | idp-visitor-rp-session | app/services/oidc_token_exchange_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-operator-auth-ceremony-session | app/services/base_auth_admission_coordinator.rb |
-| idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-operator-local-result-delivery | app/services/base_auth_admission_coordinator.rb |
+| idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-operator-sign-in-flow-evidence | app/services/base_auth_admission_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-operator-oidc-authorization | app/services/base_auth_admission_coordinator.rb |
 | idp-shared-opaque-admission | purpose/binding code resolves durable authority | idp-operator-step-up-ceremony | app/services/base_auth_admission_coordinator.rb |
 | idp-operator-secret-credential-ceremony | temporary signed-result candidate | idp-identity-secret-credential-candidate | app/services/identity_secret_credential_ceremony_candidate_store.rb |

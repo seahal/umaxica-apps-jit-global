@@ -265,11 +265,10 @@ CREATE TABLE public.rp_sessions (
     installed_generation bigint DEFAULT 0 NOT NULL,
     current_access_jti_digest character varying(64),
     current_access_expires_at timestamp(6) with time zone,
-    contract_epoch bigint DEFAULT 1 NOT NULL,
     created_at timestamp(6) with time zone NOT NULL,
     updated_at timestamp(6) with time zone NOT NULL,
     CONSTRAINT chk_rp_sessions_pid CHECK ((char_length((public_id)::text) = 21)),
-    CONSTRAINT chk_rp_warp_app_sessions_shape CHECK (((installed_generation >= 0) AND (contract_epoch >= 1)))
+    CONSTRAINT chk_rp_warp_app_sessions_shape CHECK ((installed_generation >= 0))
 );
 
 
@@ -567,6 +566,8 @@ ALTER TABLE ONLY public.rp_sessions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261023130001'),
+('20261023130000'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261019111013'),

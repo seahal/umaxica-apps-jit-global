@@ -8,7 +8,7 @@ class AuthMethodGuardConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
   setup do
-    @client = Client.create!(id: 9_122_000_000_000)
+    @client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_122_000_000_000)
     @passkeys =
       2.times.map do
         @client.client_passkeys.create!(
@@ -20,6 +20,7 @@ class AuthMethodGuardConcurrencyTest < ActiveSupport::TestCase
     @tokens =
       @passkeys.map do |passkey|
         ClientToken.create!(
+          authentication_epoch: 0,
           user: @client, last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
           last_step_up_method: "passkey", last_step_up_credential_ref: passkey.public_id,
           last_step_up_purpose: "step_up", last_step_up_audience: "step_up:app",

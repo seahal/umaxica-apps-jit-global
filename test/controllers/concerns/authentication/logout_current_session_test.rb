@@ -47,7 +47,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "revokes current user session token by public id" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     assert_difference -> { ClientSignOutFlow.count }, 1 do
@@ -74,15 +74,17 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "revokes every unrevoked RP session row with the parent" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     active_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
     expired_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "warp-app-jp",
       oidc_scope: "openid profile",
@@ -105,9 +107,10 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "revokes unrevoked RP sessions when the parent token was already revoked" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -128,8 +131,9 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "a precondition that fails under the parent lock revokes nothing" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -151,7 +155,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "a precondition is evaluated while the parent Device Session row is locked" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     device_session = token.device_session
     locked = nil
     precondition =
@@ -175,7 +179,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "revokes current user session token by oidc sid" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     AuthenticationLogoutCurrentSession.call(
@@ -190,7 +194,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "is idempotent when token is already revoked" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.revoke!
 
     assert_difference -> { ClientSignOutFlow.count }, 1 do
@@ -208,9 +212,10 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "repairs an unrevoked RP session after a recent completed sign-out flow" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -245,11 +250,14 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   end
 
   test "records visitor and operator sign-out cycles on their own surfaces" do
-    visitor = Visitor.create!(public_id: "v#{SecureRandom.hex(10)}", status_id: VisitorStatus::ACTIVE)
-    visitor_token = VisitorToken.create!(visitor: visitor)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      public_id: "v#{SecureRandom.hex(10)}", status_id: VisitorStatus::ACTIVE,
+    )
+    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor)
     visitor_token.rotate_refresh_token!
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    operator_token = OperatorToken.create!(staff: operator)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    operator_token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
     operator_token.rotate_refresh_token!
 
     assert_difference -> { VisitorSignOutFlow.count }, 1 do
@@ -278,7 +286,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   test "rolls back the sign-out flow and re-raises when a step raises" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     original_create = ClientSignOutFlow.method(:create!)
@@ -310,7 +318,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "rolls back an already-failed sign-out cycle with the parent transaction" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     original_create = ClientSignOutFlow.method(:create!)
@@ -342,7 +350,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "rolls back a discarded sign-out cycle with the parent transaction" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     original_create = ClientSignOutFlow.method(:create!)
@@ -380,7 +388,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   test "resolves the session public id from current when session_public_id is omitted" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     current = Struct.new(:session).new(token.public_id)
 
@@ -400,7 +408,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   test "resolves the token via its device session when session_public_id targets the device session" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     device_session = token.reload.device_session
 
@@ -470,7 +478,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # failure and the resolver falls back to the ordinary public_id lookup.
   test "a device-session lookup failure propagates and revokes nothing" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     ClientDeviceSession.stub(:active, -> { raise ActiveRecord::StatementInvalid, "boom" }) do
@@ -493,7 +501,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   test "propagates a device-session revoke failure without revoking the token" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     device_session = token.reload.device_session
 
@@ -519,7 +527,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # blow up when resource and the resolved token are both absent.
   test "logs safely without resource or token identifiers when the device session revoke raises" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     device_session = token.reload.device_session
 
     assert_not_nil device_session
@@ -545,7 +553,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "failure logs carry no actor reference, token identifier or error message" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     output = StringIO.new
     original_logger = Rails.logger
     original_revoke = ClientDeviceSession.instance_method(:revoke!)
@@ -587,7 +595,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "a revocation failure propagates and the token stays unrevoked" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:revoke!) { raise ActiveRecord::RecordInvalid.new(token) }
 
     assert_raises(ActiveRecord::RecordInvalid) do
@@ -606,7 +614,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # resource present.
   test "a revocation failure propagates without a resource" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:revoke!) { raise ActiveRecord::RecordInvalid.new(token) }
 
     assert_raises(ActiveRecord::RecordInvalid) do
@@ -623,7 +631,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "rolls back the parent and sign-out flow when token cascade fails" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     device_session = token.reload.device_session
 
@@ -646,10 +654,11 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "rolls back the parent, RP sessions and sign-out flow when an RP revoke fails" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     device_session = token.reload.device_session
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -677,7 +686,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "confirms the persisted parent when the writer reports a lost commit response" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     transaction_depth = 0
 
@@ -708,7 +717,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "raises an indeterminate outcome when the post-commit read cannot use the writer" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     transaction_depth = 0
     read_available = true
@@ -754,7 +763,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   test "propagates a sign-out cycle creation failure without revoking the token" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     flow_count = ClientSignOutFlow.count
@@ -776,7 +785,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "propagates a sign-out cycle creation failure without a resource" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
 
     ClientSignOutFlow.stub(:create!, ->(*) { raise ArgumentError, "boom" }) do
@@ -799,7 +808,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   test "logout proceeds normally when checking for a recent completed sign-out cycle raises" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.revoke!
 
     result =
@@ -849,7 +858,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # ------------------------------------------------------------------
   test "sign-out cycle refresh expiry mirrors the token's future discard_at" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.rotate_refresh_token!
     expected_discard_at = token.reload.discard_at
 
@@ -870,7 +879,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
 
   test "sign-out cycle refresh expiry falls back to the current time when discard_at is not in the future" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.revoke!
 
     assert_operator token.reload.discard_at, :<, Time.current
@@ -898,7 +907,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # No finite expiry is invented for an infinite one (REQ-008): after sign-out the refresh ends now.
   test "sign-out cycle refresh expiry is the sign-out time when the token's discard_at is infinite" do
     user = clients(:one)
-    token = ClientToken.new(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.new(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     assert token.discard_at.respond_to?(:infinite?) && token.discard_at.infinite?
 
@@ -916,7 +925,7 @@ class AuthenticationLogoutCurrentSessionTest < ActiveSupport::TestCase
   # current time rather than raising.
   test "sign-out cycle refresh expiry falls back to the current time when the token cannot report discard_at" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.define_singleton_method(:respond_to?) do |name, include_all = false|
       next false if name == :discard_at
 

@@ -11,9 +11,10 @@ class SignUpStepGateTest < ActiveSupport::TestCase
 
   ControllerBoundary = Struct.new(:session, :params, :current_sign_up_flow_ticket, :sign_up_ticket_public_id)
 
-  test "for_show falls back to the session sequence id with its signed flow binding" do
-    ClientSignUpFlowStatus.ensure_defaults!
+  test "for_show refuses a flow named only by the session sequence id" do
+    # E1: the Flow comes from the admitted Binding; a session hint alone never selects one.
     cycle = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "google", step: "checkpoint",
       status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
       nonce_digest: ClientSignUpFlow.digest_nonce("gate-sequence"),
@@ -27,14 +28,9 @@ class SignUpStepGateTest < ActiveSupport::TestCase
 
     gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "google", step: :confirmation)
 
-    assert_predicate gate, :success?
-    assert_equal cycle, gate.ticket
-    assert_equal :ok, gate.status
-    binding = SignFlowBindingCodec.decode(controller.params.fetch(AuthIoKeys::Params::FLOW_BINDING))
-
-    assert_equal cycle.step, binding.phase
-    assert_equal cycle.checkpoint_version, binding.generation
-    assert_equal cycle.expires_at.to_i, binding.expires_at
+    assert_equal :refused, gate.status
+    assert_equal :no_active_flow, gate.refusal
+    assert_nil gate.ticket
   end
 
   test "for_show prefers the controller ticket with its signed flow binding when the locator is empty" do
@@ -80,6 +76,7 @@ class SignUpStepGateTest < ActiveSupport::TestCase
 
   test "for_show refuses a signed binding from an earlier checkpoint generation" do
     cycle = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "email", step: "checkpoint",
       status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
       nonce_digest: ClientSignUpFlow.digest_nonce("stale-checkpoint-binding"),
@@ -87,11 +84,7 @@ class SignUpStepGateTest < ActiveSupport::TestCase
     )
     binding = SignFlowBindingCodec.encode(flow: cycle, surface: :app)
     cycle.update!(checkpoint_version: cycle.checkpoint_version + 1)
-    controller = ControllerBoundary.new(
-      { auth_app_up_sequence_id: cycle.public_id },
-      { AuthIoKeys::Params::FLOW_BINDING => binding },
-      nil, cycle.public_id,
-    )
+    controller = ControllerBoundary.new({}, { AuthIoKeys::Params::FLOW_BINDING => binding }, cycle, nil)
 
     gate = SignUpStepGate.for_show(controller: controller, surface: :app, family: "email", step: :otp)
 

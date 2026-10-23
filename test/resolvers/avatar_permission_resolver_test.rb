@@ -5,9 +5,15 @@ require "test_helper"
 
 class AvatarPermissionResolverTest < ActiveSupport::TestCase
   setup do
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @app = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    @operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     @org = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
   end
 
@@ -61,7 +67,10 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
       permission: "avatar.view",
     )
 
-    other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: other)
 
     assert_not AvatarPermissionResolver.call(
@@ -75,7 +84,7 @@ class AvatarPermissionResolverTest < ActiveSupport::TestCase
 
   test "com and unsupported membership permissions fail closed" do
     assert_not AvatarPermissionResolver.call(
-      actor: Visitor.new,
+      actor: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL),
       surface: :com,
       subject_public_id: "individual-public-id",
       owner_collective_public_id: "company-public-id",

@@ -11,14 +11,14 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       actor, token, host =
         case surface
         when "app"
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
         when "com"
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
         when "org"
-          actor = Operator.create!
-          [actor, OperatorToken.create!(staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
         end
       requirement = StepUpRequirement.new(
         scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
@@ -117,14 +117,14 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       actor, token, host =
         case surface
         when "app"
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
         when "com"
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
         when "org"
-          actor = Operator.create!
-          [actor, OperatorToken.create!(staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
         end
       requirement = StepUpRequirement.new(
         scope: "settings_passkey", purpose: "reauthentication", step_up_required: true, allowed_methods: [:passkey],
@@ -198,7 +198,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       browser = open_session
       browser.host!(host)
       browser.https!
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
       )
       browser.get("/sign/in", params: { entry_ref: issuance.reference, ri: "jp" })
@@ -233,14 +233,14 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       actor, token, host =
         case surface
         when "app"
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")]
         when "com"
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")]
         when "org"
-          actor = Operator.create!
-          [actor, OperatorToken.create!(staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), ENV.fetch("PUBLIC_AUTH_STAFF_URL")]
         end
       requirement = StepUpRequirement.new(
         scope: "settings_passkey", purpose: "reauthentication", step_up_required: true, allowed_methods: [:passkey],
@@ -356,7 +356,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         end
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
@@ -384,7 +384,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         end
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
@@ -436,7 +436,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal [nil, nil, nil],
                    [binding.reload.base_confirmed_at, binding.redeemed_at,
                     binding.admitted_auth_ceremony_session_id,]
-      assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
+      assert_equal "pending", issuance.transaction.reload.status
     end
   ensure
     ActionController::Base.allow_forgery_protection = protection
@@ -452,7 +452,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         end
-      first = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      first = OidcTestEntry.issue!(
         surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: first.reference)
@@ -502,9 +502,9 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_equal [400, nil, raw_sid, count],
                    [browser.response.status, browser.response.location, browser.cookies[cookie_name],
                     continuity.class.count,]
-      restarted = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface:, intent: "sign_in", base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
-        restart_of: first.reference,
+      restarted = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: first.transaction, base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+        base_token: nil, restart_of: first.reference,
       )
 
       assert_equal first.transaction.id, restarted.transaction.id
@@ -547,13 +547,13 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       ["com", ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), VisitorAuthAdmissionBinding, VisitorAuthCeremonySession],
       ["org", ENV.fetch("PUBLIC_AUTH_STAFF_URL"), OperatorAuthAdmissionBinding, OperatorAuthCeremonySession],
     ].each do |surface, host, binding_model, session_model|
-      original = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      original = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       continuity, raw_sid = session_model.rotate_and_admit!(
-        admission_purpose: "local_sign_in", local_sign_in_flow_ref: original.transaction.public_id,
+        admission_purpose: "authentication_handoff", authorization_transaction_ref: original.transaction.transaction_id,
       )
-      incoming = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      incoming = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       binding = binding_model.find_by!(entry_ref: incoming.reference)
@@ -599,7 +599,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       assert_nil binding.base_confirmed_at
       assert_nil binding.redeemed_at
       assert_predicate continuity.reload, :active?
-      assert_equal original.transaction.public_id, continuity.local_sign_in_flow_ref
+      assert_equal original.transaction.transaction_id, continuity.authorization_transaction_ref
       assert_not_includes browser.response.headers["Set-Cookie"].to_s, "#{cookie_name}="
     end
   ensure
@@ -618,7 +618,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: "core-app-jp",
       redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch("client").first,
-      code_challenge: "a" * 43,
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       scope: "openid",
       state: SecureRandom.urlsafe_base64(32),
@@ -670,7 +670,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         protection = ActionController::Base.allow_forgery_protection
         ActionController::Base.allow_forgery_protection = true
         host = ENV.fetch(host_key)
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        issuance = OidcTestEntry.issue!(
           surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
         browser = open_session
@@ -710,7 +710,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         assert_equal deadline, binding.expires_at
         assert_nil binding.base_confirmed_at
         assert_nil binding.redeemed_at
-        assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
+        assert_equal "pending", issuance.transaction.reload.status
       ensure
         ActionController::Base.allow_forgery_protection = protection
       end
@@ -719,7 +719,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         protection = ActionController::Base.allow_forgery_protection
         ActionController::Base.allow_forgery_protection = true
         host = ENV.fetch(host_key)
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        issuance = OidcTestEntry.issue!(
           surface: surface, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
         browser = open_session
@@ -775,7 +775,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal [deadline, confirmed_at], [binding.expires_at, binding.base_confirmed_at]
-        assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
+        assert_equal "pending", issuance.transaction.reload.status
       ensure
         ActionController::Base.allow_forgery_protection = protection
       end
@@ -802,7 +802,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
         response_type: "code",
         client_id: client_id,
         redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
-        code_challenge: "a" * 43,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256",
         scope: "openid",
         state: SecureRandom.urlsafe_base64(32),
@@ -894,7 +894,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
           response_type: "code",
           client_id: client_id,
           redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
-          code_challenge: "a" * 43,
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           scope: "openid",
           state: SecureRandom.urlsafe_base64(32),
@@ -2218,215 +2218,37 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "wrong-purpose admission is rejected" do
-    host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    host! host
-    issuance = OidcAuthorizationTransactionCoordinator.issue!(
-      surface: "app",
-      intent: "sign_up",
-      params: authorize_params("app").merge(screen_hint: "signup"),
+  test "wrong-purpose admission is rejected before offering a continuation or consuming it" do
+    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    https!
+    transaction = OidcAuthorizationTransactionCoordinator.issue!(
+      surface: "app", intent: "sign_up",
+      params: {
+        response_type: "code",
+        client_id: "core-app-jp",
+        redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch("client").first,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+        state: SecureRandom.hex(16),
+        nonce: SecureRandom.hex(16),
+        scope: "openid profile",
+        prompt: "create",
+      },
+    ).transaction
+    handoff = BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction: transaction, base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
+    binding = ClientAuthAdmissionBinding.find_by!(entry_ref: handoff.reference)
+    before = binding.attributes
+    session_count = ClientAuthCeremonySession.count
 
-    begin
-      fv5127 = auth_app_sign_in_path(ri: "jp")
-      fv5126 = handoff_reference(issuance)
-      fv5125 = :entry_ref
-      fv5124 = { ri: "jp" }
-      fv5123 = { "Host" => host }
-      fv5122 = false
-      fv5121 = nil
-      fv5120 = nil
-      begin
-        fv5068 = self
-        fv5075 = fv5127
-        fv5118 = fv5126
-        fv5119 = fv5125
-        fv5084 = fv5124
-        fv5077 = fv5123
-        fv5106 = fv5122
-        fv5105 = fv5121
-        fv5080 = fv5120
-        fv5074 = fv5084.merge(fv5119 => fv5118)
-        fv5068.get(fv5075, params: fv5074, headers: fv5077)
-        fv5112 =
-          begin
-            fv5117 = fv5068.response.body
-            fv5116 = true
-            fv5115 = Nokogiri::HTML(fv5117).at_css("form")
-            if fv5115.nil? && fv5116
-              nil
-            else
-              raise RuntimeError, "Auth continuation form is missing" unless fv5115
-
-              fv5114 = fv5115.at_css("input[name='authenticity_token']")&.[]("value")
-              raise RuntimeError,
-                    "Auth continuation is missing its CSRF token" if fv5114.blank?
-
-              fv5113 = fv5115.css("input[type='hidden']").to_h do |input|
-                [input["name"], input["value"]]
-              end.except("authenticity_token")
-              [fv5115["action"], fv5114, fv5113]
-            end
-          end
-        if fv5112
-
-          fv5111, fv5109, fv5110 = fv5112
-
-          fv5068.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
-            "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-          fv5068.post(
-            fv5111, params: fv5110.merge(authenticity_token: fv5109),
-                    headers: fv5077,
-          )
-          fv5108 = fv5068.response.location
-          if fv5108.present?
-
-            fv5104 = URI.parse(fv5108)
-            fv5103 = fv5104.host
-            fv5079 =
-              begin
-                fv5107 = fv5103
-                {
-                  ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
-                  ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
-                  ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
-                }.fetch(fv5107)
-              end
-            fv5078 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
-              surface: fv5079, reference: fv5104.path.split("/").fetch(-2),
-            )
-
-            if fv5106
-              fv5086 = fv5105 || fv5068
-              fv5086.host!(fv5103)
-              fv5086.https!
-              fv5086.session[BaseAdmissionBrowserBinding::BROWSER_NONCE_SESSION_KEY] ||=
-                "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
-              fv5102 = fv5104.request_uri
-              fv5093 = fv5077.merge(
-                "Host" => fv5103,
-                "Origin" => "https://#{fv5103}",
-                "Sec-Fetch-Site" => "same-origin",
-              )
-              fv5086.get(fv5102, headers: fv5093)
-              fv5096, fv5094, fv5095 =
-                begin
-                  fv5101 = fv5086.response.body
-                  fv5100 = false
-                  fv5099 = Nokogiri::HTML(fv5101).at_css("form")
-                  if fv5099.nil? && fv5100
-                    nil
-                  else
-                    raise RuntimeError, "Auth continuation form is missing" unless fv5099
-
-                    fv5098 = fv5099.at_css("input[name='authenticity_token']")&.[]("value")
-                    raise RuntimeError,
-                          "Auth continuation is missing its CSRF token" if fv5098.blank?
-
-                    fv5097 = fv5099.css("input[type='hidden']").to_h do |input|
-                      [input["name"], input["value"]]
-                    end.except("authenticity_token")
-                    [fv5099["action"], fv5098, fv5097]
-                  end
-                end
-              fv5086.post(
-                fv5096,
-                params: fv5095.merge(authenticity_token: fv5094),
-                headers: fv5093,
-              )
-              begin
-                fv5087 = fv5086
-                fv5089 = "session"
-                fv5088 = fv5087.response.cookies[fv5089]
-                if fv5088.nil?
-                  fv5092 = fv5087.response.headers["Set-Cookie"] || fv5087.response.headers["set-cookie"]
-                  fv5091 =
-                    if fv5092.is_a?(String) && fv5092.start_with?("[")
-                      JSON.parse(fv5092)
-                    else
-                      Array(fv5092)
-                    end
-                  fv5090 =
-                    fv5091.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-                      entry.split(";", 2).first.to_s.start_with?("#{fv5089}=")
-                    end
-                  if fv5090
-
-                    _, fv5088 = fv5090.split(";", 2).first.to_s.split("=", 2)
-                    fv5088 = Rack::Utils.unescape(fv5088.to_s)
-                  end
-                end
-
-                unless fv5088.nil?
-                  fv5087.cookies.delete(fv5089)
-                  # Rack::Test's []= uses its default host. The current request may target a
-                  # different surface, so install the cookie against the browser's active host.
-                  fv5087.cookies.merge(
-                    "#{fv5089}=#{Rack::Utils.escape(fv5088)}",
-                    URI.parse("https://#{fv5087.host}/"),
-                  )
-                end
-              end
-              fv5085 = fv5086.response.location
-              raise RuntimeError, "Base confirmation did not return to Auth" if fv5085.blank?
-
-              fv5082 = URI.parse(fv5085)
-              if fv5084[:ri].present?
-                fv5083 = Rack::Utils.parse_nested_query(fv5082.query.to_s)
-                fv5083["ri"] ||= fv5084[:ri].to_s
-                fv5082.query = URI.encode_www_form(fv5083)
-              end
-              fv5068.host!(fv5082.host)
-              fv5068.https!
-              fv5081 = fv5082.request_uri
-              fv5064 = fv5077.merge("Host" => fv5082.host)
-              fv5068.get(fv5081, headers: fv5064)
-            else
-              fv5078.confirm_base!(
-                base_token: fv5080,
-                browser_digest: AuthAdmissionBinding.browser_digest(
-                  surface: fv5079,
-                  entry_ref: fv5078.entry_ref,
-                  nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-                ),
-              )
-              fv5076 = fv5068.host
-              fv5068.host!(fv5076)
-              fv5068.https!
-              fv5064 = fv5077.merge("Host" => fv5076)
-              fv5068.get(fv5075, params: fv5074, headers: fv5064)
-            end
-            fv5067, fv5065, fv5066 =
-              begin
-                fv5073 = fv5068.response.body
-                fv5072 = false
-                fv5071 = Nokogiri::HTML(fv5073).at_css("form")
-                if fv5071.nil? && fv5072
-                  nil
-                else
-                  raise RuntimeError, "Auth continuation form is missing" unless fv5071
-
-                  fv5070 = fv5071.at_css("input[name='authenticity_token']")&.[]("value")
-                  raise RuntimeError,
-                        "Auth continuation is missing its CSRF token" if fv5070.blank?
-
-                  fv5069 = fv5071.css("input[type='hidden']").to_h do |input|
-                    [input["name"], input["value"]]
-                  end.except("authenticity_token")
-                  [fv5071["action"], fv5070, fv5069]
-                end
-              end
-            fv5068.post(
-              fv5067,
-              params: fv5066.merge(authenticity_token: fv5065),
-              headers: fv5064,
-            )
-          end
-        end
-      end
-    end
+    # WU-24b refuses on GET before a form is offered; wrong-intent POST refusal is covered by
+    # EffectiveEntryIntentTest. There is no continuation to submit for this invalid entry.
+    get auth_app_sign_in_path(ri: "jp"), params: { entry_ref: handoff.reference }
 
     assert_response :bad_request
+    assert_equal before, binding.reload.attributes
+    assert_equal session_count, ClientAuthCeremonySession.count
     assert_nil session[:oidc_authorization_login_challenge]
   end
 
@@ -2677,7 +2499,7 @@ class AuthCeremonyAdmissionBoundaryTest < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: spec.fetch(:client_id),
       redirect_uri: redirect,
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: "state-#{surface_name}",
       nonce: "nonce-#{surface_name}",

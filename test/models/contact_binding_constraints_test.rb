@@ -10,7 +10,7 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
     [VisitorTelephone, Visitor, :visitor_id, :number, :number_digest, "+819012345671"],
   ].each do |model, owner_class, owner_key, destination_key, digest_key, destination|
     test "#{model.name} effective digest rejects nil empty and whitespace and accepts one nonblank character" do
-      owner = owner_class.create!
+      owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = model.create!(owner_key => owner.id, destination_key => destination, :confirm_policy => "1")
       original = contact.attributes
       decision_time = model.database_now
@@ -32,7 +32,7 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
 
       # U+2000..U+200A is the Unicode whitespace range; its immediately adjacent values are nonblank.
       ["\u1fff", "\u200b"].each do |nonblank|
-        adjacent_owner = owner_class.create!
+        adjacent_owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
         adjacent = model.create!(owner_key => adjacent_owner.id, destination_key => destination, :confirm_policy => "1")
         adjacent.update_columns(digest_key => nonblank, :binding_finalized_at => decision_time)
 
@@ -49,8 +49,8 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
       [ClientTelephone, Client, :user_id, :number, "+819012345678"],
       [VisitorTelephone, Visitor, :visitor_id, :number, "+819012345678"],
     ].each do |model, owner_class, owner_key, destination_key, destination|
-      owner = owner_class.create!
-      other_owner = owner_class.create!
+      owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
+      other_owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       first = model.create!(owner_key => owner.id, destination_key => destination, :confirm_policy => "1")
       rival = model.create!(owner_key => other_owner.id, destination_key => destination, :confirm_policy => "1")
       second_destination = (destination_key == :address) ? "other-bindings@example.test" : "+819087654321"
@@ -88,7 +88,7 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
       [ClientTelephone, Client, :user_id, :number, "+819012345680"],
       [VisitorTelephone, Visitor, :visitor_id, :number, "+819012345680"],
     ].each do |model, owner_class, owner_key, destination_key, destination|
-      owner = owner_class.create!
+      owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = model.create!(owner_key => owner.id, destination_key => destination, :confirm_policy => "1")
       unchanged = contact.reload.attributes
       assert_raises(ActiveRecord::StatementInvalid) do
@@ -110,8 +110,8 @@ class ContactBindingConstraintsTest < ActiveSupport::TestCase
       [ClientTelephone, Client, :user_id, :number, :number_digest, "+819012345679"],
       [VisitorTelephone, Visitor, :visitor_id, :number, :number_digest, "+819012345679"],
     ].each do |model, owner_class, owner_key, destination_key, digest_key, destination|
-      owner = owner_class.create!
-      other_owner = owner_class.create!
+      owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
+      other_owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = model.create!(owner_key => owner.id, destination_key => destination, :confirm_policy => "1")
       contact.finalize_binding!
       recognized_at = contact.reload.binding_finalized_at

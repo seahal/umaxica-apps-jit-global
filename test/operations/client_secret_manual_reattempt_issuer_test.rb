@@ -6,8 +6,8 @@ class ClientSecretManualReattemptIssuerTest < ActiveSupport::TestCase
   setup do
     @previous_issuance_ttl = ENV["APP_SECRET_ISSUANCE_TTL_SECONDS"]
     ENV["APP_SECRET_ISSUANCE_TTL_SECONDS"] = "600"
-    @actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    @token = ClientToken.create!(user: @actor)
+    @actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     now = Client.database_now
     @token.update!(
       last_step_up_at: now, last_step_up_scope: "settings_secret_credential",
@@ -96,7 +96,7 @@ class ClientSecretManualReattemptIssuerTest < ActiveSupport::TestCase
     ClientSecretManualIssuanceInvalidator.call_for_payload_failure!(
       actor_context: @context, token: @token, issuance: unfailed, purge_after: 1.day,
     )
-    other_token = ClientToken.create!(user: @actor)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     wrong_context = @context
     assert_raises(ClientSecretManualReattemptIssuer::Denied) do
       ClientSecretManualReattemptIssuer.call!(

@@ -10,7 +10,10 @@ class AuthorityResourceLifecycleBackfillOperationTest < ActiveSupport::TestCase
     ClientStatus.ensure_defaults!
     ClientVisibility.ensure_defaults!
 
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "lifecycle-backfill-#{SecureRandom.hex(6)}",

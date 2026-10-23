@@ -39,7 +39,10 @@ class DpopAndOneTimeRevealRefusalsTest < ActiveSupport::TestCase
       actor: actor, session_nonce: "nonce-1", value: %w(passcode-1), purpose: "client.recovery_secret_credential",
     ).token
 
-    wrong_actor = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    wrong_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
 
     assert_nil IdentityOneTimeReveal.consume!(
       actor: wrong_actor, session_nonce: "nonce-1", token: token, purpose: "client.recovery_secret_credential",

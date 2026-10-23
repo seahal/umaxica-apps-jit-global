@@ -18,6 +18,7 @@ class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
   ].each do |owner_model, contact_model, owner_key, flow_model, surface, channel|
     test "#{surface} #{channel} signup proof database shape and immutable committed result" do
       owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
       )
       destination =
@@ -36,6 +37,7 @@ class SignupOtpProofDatabaseTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = SecureRandom.hex(32)
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now,
         expires_at: now + 15.minutes, entry_method: channel.to_s,

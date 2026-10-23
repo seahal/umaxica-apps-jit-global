@@ -9,7 +9,7 @@ class OperatorEntraIdentityActivationTest < ActiveSupport::TestCase
 
   setup do
     OperatorEntraIdentityState.ensure_defaults!
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     @identity = OperatorEntraIdentity.create!(
       operator_id: @operator.id,
       entra_tenant_id: TENANT_ID,
@@ -51,7 +51,7 @@ class OperatorEntraIdentityActivationTest < ActiveSupport::TestCase
   end
 
   test "rejects an operator with no provisioned identity" do
-    other = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
 
     error =
       assert_raises(OperatorEntraIdentityActivation::IdentityNotFound) do

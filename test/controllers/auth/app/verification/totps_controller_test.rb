@@ -16,7 +16,7 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
   end
 
   test "the page offers a selector that lists only the admitted actor's two active authenticators" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     first = ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
@@ -25,12 +25,12 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    stranger = Client.create!(status_id: ClientStatus::ACTIVE)
+    stranger = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     foreign = ClientTotpCredential.create_for_user!(
       user: stranger, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -95,12 +95,12 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
   end
 
   test "a wrong six-digit code keeps the ceremony pending and grants nothing" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     credential = ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -171,12 +171,12 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
   end
 
   test "the correct code of a revoked authenticator is refused" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     credential = ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -246,7 +246,7 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
   end
 
   test "a code window verified in one ceremony cannot be replayed in a second ceremony" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     credential = ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
@@ -256,7 +256,7 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
     # Two browsers, each with its own admitted ceremony for the same actor.
     ceremonies =
       2.times.map do
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, user: actor)
         issuance =
           begin
             admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -333,12 +333,12 @@ class Auth::App::Verification::TotpsControllerTest < ActionDispatch::Integration
   end
 
   test "the TOTP endpoints are refused when Base did not admit TOTP for the ceremony" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     credential = ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(

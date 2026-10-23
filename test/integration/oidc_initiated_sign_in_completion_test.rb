@@ -996,7 +996,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
+    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
     begin
       fv5067 = action
       post(
@@ -1145,7 +1145,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
+    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
     begin
       fv5053 = action
       post(
@@ -1310,7 +1310,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     action = @oidc_result_action
-    existing_tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: @user) }
+    existing_tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
     assert_no_difference "ClientToken.count" do
       begin
         fv5038 = action
@@ -1803,7 +1803,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: "core-app-jp",
       redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris_by_realm.fetch(realm).first,
-      code_challenge: "a" * 43,
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: SecureRandom.urlsafe_base64(32),
       nonce: SecureRandom.urlsafe_base64(32),

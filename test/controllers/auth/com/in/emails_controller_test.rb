@@ -14,7 +14,10 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     pending_signup: VisitorEmailStatus::UNVERIFIED_WITH_SIGN_UP,
     verified_without_binding: VisitorEmailStatus::VERIFIED, }.each do |label, status|
     test "unbound #{label} email cannot authenticate or dispatch login OTP" do
-      owner = Visitor.create!(status_id: VisitorStatus::ACTIVE, birthdate: "2000-01-01")
+      owner = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+        birthdate: "2000-01-01",
+      )
       VisitorEmailStatus.find_or_create_by!(id: status)
       email = VisitorEmail.create!(
         visitor: owner, address: "unbound-#{label}-com@example.test", confirm_policy: "1",
@@ -51,7 +54,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   include ActiveJob::TestHelper
 
   test "dummy visitor sign in verification counts shared destination failures without creating an identity" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     get auth_com_sign_in_url(ri: "jp", entry_ref: issuance.reference), headers: { "Host" => @host }
@@ -69,14 +72,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: { "Host" => @host }
 
     assert_response :see_other
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: VisitorSignInFlow.find_by!(
-        public_id: VisitorAuthCeremonySession.find(
-          binding.reload.admitted_auth_ceremony_session_id,
-        ).local_sign_in_flow_ref,
-      ),
-      surface: "com", phase: "PRIMARY_PENDING",
-    )
+    @primary_sign_in_binding = nil
     address = "dummy-budget-#{SecureRandom.hex(8)}@example.test"
     post auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
          params: { :user_email => { address: address }, "cf-turnstile-response" => "test_token" },
@@ -110,7 +106,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "shared authentication budget refuses a correct visitor OTP without consuming its candidate" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     get auth_com_sign_in_url(ri: "jp", entry_ref: issuance.reference), headers: { "Host" => @host }
@@ -129,14 +125,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
          params: { entry_ref: issuance.reference, authenticity_token: csrf }, headers: { "Host" => @host }
 
     assert_response :see_other
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: VisitorSignInFlow.find_by!(
-        public_id: VisitorAuthCeremonySession.find(
-          binding.reload.admitted_auth_ceremony_session_id,
-        ).local_sign_in_flow_ref,
-      ),
-      surface: "com", phase: "PRIMARY_PENDING",
-    )
+    @primary_sign_in_binding = nil
 
     visitor = create_verified_visitor_with_email(email_address: "shared-signin-#{SecureRandom.hex(8)}@example.test")
     contact = visitor.visitor_emails.last
@@ -187,7 +176,7 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
 
     # Endpoint tests start after the production attach/confirm/redeem boundary, not a direct Auth grant.
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     get auth_com_sign_in_url(ri: "jp", entry_ref: admission.reference), headers: { "Host" => @host }
@@ -206,11 +195,8 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_response :see_other
     ceremony = VisitorAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
-    flow_ref = ceremony.local_sign_in_flow_ref
-    flow = VisitorSignInFlow.find_by!(public_id: flow_ref)
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: flow, surface: "com", phase: "PRIMARY_PENDING",
-    )
+    @current_auth_ceremony = ceremony
+    @primary_sign_in_binding = nil
   end
 
   teardown do
@@ -413,12 +399,14 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     visitor = create_verified_visitor_with_email(email_address: "limit-#{SecureRandom.hex(4)}@example.com")
     email = visitor.visitor_emails.last
     VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       skip_session_limit_check: true,
     )
     VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_status_id: VisitorTokenStatus::RESTRICTED,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
@@ -560,7 +548,88 @@ class Auth::Com::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal email.id, session[:user_email_authentication_id]
   end
 
+  test "a second update in the same ceremony with a different code after success records no second evidence" do
+    contact = start_retained_result_case("retained")
+    code = @current_auth_ceremony.issue_email_otp!(contact: contact, destination: contact.address)
+    submit_com_code(self, @primary_sign_in_binding, code)
+
+    assert_response :see_other
+    assert_predicate @current_auth_ceremony.reload, :authentication_evidence_recorded?
+    state_after_first = @current_auth_ceremony.reload.attributes
+
+    submit_com_code(self, @primary_sign_in_binding, code.to_s.tr("0123456789", "1234567890"))
+
+    # ADR 2026-10-11 B: a different code after success re-records nothing (D-89 case 1).
+    assert_equal state_after_first, @current_auth_ceremony.reload.attributes
+  end
+
+  test "resubmitting the same correct code after success records no second authentication event" do
+    contact = start_retained_result_case("repeat")
+    code = @current_auth_ceremony.issue_email_otp!(contact: contact, destination: contact.address)
+    submit_com_code(self, @primary_sign_in_binding, code)
+
+    assert_response :see_other
+    assert_predicate @current_auth_ceremony.reload, :authentication_evidence_recorded?
+    first_event = [@current_auth_ceremony.reload.authentication_method, @current_auth_ceremony.authentication_event_at]
+
+    submit_com_code(self, @primary_sign_in_binding, code)
+
+    # ADR 2026-10-11 B / R23-INV-4: sequential form of D-89 case 3.
+    assert_equal first_event,
+                 [@current_auth_ceremony.reload.authentication_method, @current_auth_ceremony.authentication_event_at]
+  end
+
+  test "a code issued to one admitted ceremony is refused when submitted from another ceremony" do
+    contact = start_retained_result_case("cross")
+    code = @current_auth_ceremony.issue_email_otp!(contact: contact, destination: contact.address)
+
+    other = open_session
+    other.host!(@host)
+    admission = OidcTestEntry.issue!(
+      surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
+    )
+    other.get(auth_com_sign_in_url(ri: "jp", entry_ref: admission.reference))
+    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    other.post("/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    other.get(auth_com_sign_in_url(ri: "jp", entry_ref: admission.reference))
+    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    other.post(auth_com_sign_in_url(ri: "jp"), params: { entry_ref: admission.reference, authenticity_token: csrf })
+    other_binding = nil
+    other_ceremony = VisitorAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
+    other.post(
+      auth_com_sign_in_email_url(ri: "jp", fb: other_binding),
+      params: { :user_email => { address: contact.address }, "cf-turnstile-response" => "t" },
+    )
+
+    submit_com_code(other, other_binding, code)
+
+    # ADR 2026-10-11 A: only the originating ceremony accepts the code (D-89 case 2).
+    assert_not_predicate other_ceremony.reload, :authentication_evidence_recorded?
+  end
+
   private
+
+  def start_retained_result_case(label)
+    visitor = create_verified_visitor_with_email(email_address: "#{label}-#{SecureRandom.hex(6)}@example.test")
+    contact = visitor.visitor_emails.last
+    contact.finalize_binding!
+    post(
+      auth_com_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+      params: { :user_email => { address: contact.address }, "cf-turnstile-response" => "t" },
+      headers: { "Host" => @host },
+    )
+    contact
+  end
+
+  def submit_com_code(client, binding, code)
+    client.patch(
+      auth_com_sign_in_email_url(ri: "jp", fb: binding),
+      params: { "visitor_email" => { "pass_code" => code }, "cf-turnstile-response" => "t" },
+      headers: { "Host" => @host },
+    )
+  end
 end
 
 # DAMP local helper copy for former shared test support.
@@ -603,7 +672,6 @@ class Auth::Com::Sign::In::EmailsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -635,7 +703,10 @@ class Auth::Com::Sign::In::EmailsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -882,7 +953,6 @@ class Auth::Com::Sign::In::EmailsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -891,7 +961,10 @@ class Auth::Com::Sign::In::EmailsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

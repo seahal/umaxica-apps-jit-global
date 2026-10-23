@@ -7,7 +7,10 @@ class OrganizationMembershipPolicyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "app client can manage memberships in its own enterprise" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
     membership = bootstrap.account.current_memberships.first
 
@@ -16,8 +19,14 @@ class OrganizationMembershipPolicyTest < ActiveSupport::TestCase
   end
 
   test "app client cannot manage memberships in another enterprise" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    other_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     other_bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
 
     assert_not OrganizationMembershipPolicy.new(other_bootstrap.collective, user: client).index?
@@ -25,7 +34,10 @@ class OrganizationMembershipPolicyTest < ActiveSupport::TestCase
   end
 
   test "nil actor is denied" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
 
     assert_not OrganizationMembershipPolicy.new(bootstrap.collective, user: nil).index?
@@ -34,7 +46,10 @@ class OrganizationMembershipPolicyTest < ActiveSupport::TestCase
   # Holding a membership (even the OWNER kind the selector bootstrap assigns) lets an operator read
   # their bureau's roster, not change it: who may change org memberships is not yet decided.
   test "org operator can read but not change memberships in its own bureau" do
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     membership = bootstrap.account.current_memberships.first
 
@@ -46,8 +61,14 @@ class OrganizationMembershipPolicyTest < ActiveSupport::TestCase
   end
 
   test "visitor cannot manage app enterprise memberships" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: client)
 
     assert_not OrganizationMembershipPolicy.new(bootstrap.collective, user: visitor).index?

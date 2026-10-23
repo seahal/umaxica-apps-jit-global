@@ -11,7 +11,7 @@ class TotpWindowConsumerTest < ActiveSupport::TestCase
 
   setup do
     @now = Time.zone.parse("2026-09-19 12:00:00")
-    @user = Client.create!(mfa_level_enabled: true)
+    @user = Client.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     @credential = create_credential!
   end
 
@@ -44,7 +44,7 @@ class TotpWindowConsumerTest < ActiveSupport::TestCase
   end
 
   test "a selector for another client does not bind an attempt" do
-    other = Client.create!(mfa_level_enabled: true)
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     foreign = create_credential_for!(other)
 
     result = consume(wrong_code_for(@credential), credential_public_id: foreign.public_id)

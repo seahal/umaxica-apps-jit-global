@@ -32,6 +32,7 @@ module ValkeyTestIsolation
     wrapper = Rails.configuration.x.rate_limit.fetch(:store)
     wrapper.default_backend = store if wrapper.respond_to?(:default_backend=)
     wrapper.backend = store if wrapper.respond_to?(:backend=)
+    Rails.configuration.x.rate_limit.namespace = Umaxica::Valkey::TestNamespace.rate_limit_namespace
   end
 
   def cleanup_worker_keys!

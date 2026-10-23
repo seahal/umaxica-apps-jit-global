@@ -310,7 +310,7 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
     old_attempt = ClientProcessorErasureNotificationAttempt.find_by!(
       client_processor_erasure_notification_id: notification.id,
     )
-    operator = Operator.new
+    operator = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)
     assert_difference(
       -> { ClientOccurrence.where(event_type: "processor_erasure.manual_recovery_requested").count },
       1,
@@ -349,7 +349,7 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
       status_id: notification.class.status_id_for("PERMANENT_FAILURE"),
       permanent_failed_at: notification.class.database_now,
     )
-    operator = Operator.new(access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED)
+    operator = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED)
 
     assert_raises(ProcessorErasureNotificationRecoveryOperation::Unauthorized) do
       ProcessorErasureNotificationRecoveryOperation.call(notification: notification, authorized_by: operator)
@@ -366,7 +366,7 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
     assert_raises(ProcessorErasureNotificationReceiptError) do
       ProcessorErasureNotificationRecoveryOperation.call(
         notification: notification,
-        authorized_by: Operator.new,
+        authorized_by: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED),
       )
     end
 
@@ -412,12 +412,11 @@ class ProcessorErasureNotificationDeliveryContractTest < ActiveSupport::TestCase
   def build_notification
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
     client = Client.create!(
       status_id: ClientStatus::NOTHING,
       visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     privacy_request = ClientPrivacyRequest.create!(client: client)

@@ -22,12 +22,11 @@ class RpRequestAuthenticator
   # invalid        - a credential failed verification or does not match the other one.
   STATUSES = %i(authenticated missing invalid).freeze
 
-  def initialize(cell:, access_token:, local_session_id:, issuer:, contract_epoch:, jwks_client:)
+  def initialize(cell:, access_token:, local_session_id:, issuer:, jwks_client:)
     @cell = cell
     @access_token = access_token
     @local_session_id = local_session_id
     @issuer = issuer
-    @contract_epoch = contract_epoch
     @jwks_client = jwks_client
   end
 
@@ -44,8 +43,10 @@ class RpRequestAuthenticator
 
     verification = OidcOpAccessTokenVerifier.new(
       access_token:, client_id: cell.client_id, realm: cell.realm, issuer:, audience: cell.client_id,
-      contract_epoch:, jwks_client:,
+      jwks_client:,
     ).call
+    # BX-7: an unobtainable OP key is a dependency failure; callers answer it with 503.
+    raise OidcOpJwksClient::FetchError, "OP signing key unavailable" if verification.error == "key_unavailable"
     return result(:invalid) unless verification.success?
 
     payload = verification.payload
@@ -62,7 +63,7 @@ class RpRequestAuthenticator
 
   private
 
-  attr_reader :cell, :access_token, :local_session_id, :issuer, :contract_epoch, :jwks_client
+  attr_reader :cell, :access_token, :local_session_id, :issuer, :jwks_client
 
   def writer_session
     record_class.uncached do
@@ -73,7 +74,6 @@ class RpRequestAuthenticator
 
   def bound?(session, payload)
     return false unless session&.active?(now: record_class.database_now)
-    return false unless session.contract_epoch == payload.fetch("umx_contract_epoch")
 
     anchor = session.op_session_binding
     identity = anchor.identity_binding

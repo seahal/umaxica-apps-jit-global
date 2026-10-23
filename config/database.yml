@@ -41,10 +41,12 @@ default: &default
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 32 } %>
   port: 5432
   timeout: 30000
-  lock_timeout: 2s
-  # Raised from 2s so background jobs (e.g. RetentionPurgeJob batch deletes) are not
-  # killed mid-statement. Web requests are additionally bounded by rack-timeout (10s).
-  statement_timeout: 15s
+  # Session settings are applied only from `variables:`; top-level keys were ignored (D-142).
+  variables:
+    lock_timeout: 2s
+    # Raised from 2s so background jobs (e.g. RetentionPurgeJob batch deletes) are not
+    # killed mid-statement. Web requests are additionally bounded by rack-timeout (10s).
+    statement_timeout: 15s
   advisory_locks: false
 <% if Rails.env.production? %>
   sslmode: <%= production_value.call("NEON_PGSSLMODE") %>
@@ -63,9 +65,9 @@ test_default: &test_default
   timeout: 20000
   prepared_statements: false
   advisory_locks: true
-  lock_timeout: 2s
-  statement_timeout: 10s
   variables:
+    lock_timeout: 2s
+    statement_timeout: 10s
     max_parallel_workers: 0
     max_parallel_workers_per_gather: 0
     max_parallel_maintenance_workers: 0

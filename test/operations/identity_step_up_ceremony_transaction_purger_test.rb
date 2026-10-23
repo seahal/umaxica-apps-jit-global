@@ -79,7 +79,7 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
 
   test "retires an expired binding before deleting it and its parent" do
     now = Time.current.change(usec: 0)
-    token = ClientToken.create!(user: clients(:one), created_at: now - 9.days)
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one), created_at: now - 9.days)
     parent = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: clients(:one).public_id, session_ref: token.public_id, required_scope: "settings_passkey",
       required_aal: "none", allowed_methods: ["passkey"], now: now - 9.days,
@@ -87,6 +87,7 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
     )
     binding = ClientAuthAdmissionBinding.create!(
       entry_ref: SecureRandom.uuid, purpose: "step_up_handoff",
+      entry_intent: "not_applicable", curfew_at: now - 9.days + 30.minutes,
       step_up_ceremony_transaction_id: parent.id, base_token_id: token.id,
       base_browser_digest: "a" * 64, expires_at: now - 8.days,
       created_at: now - 9.days, updated_at: now - 9.days,
@@ -112,7 +113,7 @@ class IdentityStepUpCeremonyTransactionPurgerTest < ActiveSupport::TestCase
 
   test "a retained StepUpSession prevents parent deletion until its explicit purge deadline" do
     now = Time.current
-    token = ClientToken.create!(user: clients(:one), created_at: now - 9.days)
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one), created_at: now - 9.days)
     parent = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: clients(:one).public_id, session_ref: token.public_id, required_scope: "settings_passkey",
       required_aal: "none", allowed_methods: ["passkey"], now: now - 9.days, expires_at: now - 8.days,

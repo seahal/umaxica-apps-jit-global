@@ -9,7 +9,10 @@ require "test_helper"
 # membership row untouched.
 class GroupAvatarMembershipAuthorizationTest < ActiveSupport::TestCase
   setup do
-    @actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @actor)
     @account_public_id = @bootstrap.account.public_id
     @group = AvatarGroup.create!(
@@ -86,7 +89,10 @@ class GroupAvatarMembershipAuthorizationTest < ActiveSupport::TestCase
   end
 
   test "detach is denied to a client who does not own the group" do
-    stranger = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    stranger = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     stranger_account_public_id =
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: stranger).account.public_id
 

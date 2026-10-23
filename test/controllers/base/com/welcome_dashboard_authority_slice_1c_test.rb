@@ -34,7 +34,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "dashboard_renders_when_signed_in" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
     selected_persona(token).update!(moniker: "Selected Com Individual")
     token.update!(last_used_at: 10.minutes.ago)
@@ -74,6 +74,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                 refresh_token_expires_at: f0_now + 10.minutes,
@@ -162,7 +163,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "dashboard_identity_uses_the_selected_com_persona_not_request_parameters" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
     selected_persona(token).update!(moniker: "Authenticated Com Individual")
     selected_account_public_id = token.selected_account_public_id
@@ -203,6 +204,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                 refresh_token_expires_at: f1_now + 10.minutes,
@@ -253,7 +255,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "dashboard_fails_explicitly_when_the_selected_com_persona_has_no_display_name" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
     selected_persona(token).update!(moniker: " ")
 
@@ -295,6 +297,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,
@@ -341,7 +344,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "authenticated direct root request returns 404 without redirect" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
 
     http_headers_6 =
@@ -378,6 +381,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                 refresh_token_expires_at: f3_now + 10.minutes,
@@ -430,7 +434,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "authenticated direct dashboard request renders Dashboard" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
 
     http_headers_5 =
@@ -467,6 +471,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
               f4_now = Time.current
               f4_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                 refresh_token_expires_at: f4_now + 10.minutes,
@@ -524,7 +529,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "root_with_an_expired_com_session_renders_the_home" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
     token.update!(discard_at: token.created_at)
     travel 1.second
@@ -563,6 +568,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                 refresh_token_expires_at: f5_now + 10.minutes,
@@ -637,6 +643,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -690,7 +697,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "authenticated_preference_navigation_returns_to_the_canonical_com_root" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
     token.update!(last_used_at: 10.minutes.ago)
     last_used_at = token.reload.last_used_at
@@ -730,6 +737,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
                 f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                 f6_now = Time.current
                 f6_session = OpComGrant.create!(
+                  authentication_epoch: 0,
                   visitor_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                   refresh_token_expires_at: f6_now + 10.minutes,
@@ -774,7 +782,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "identity_show_links_up_to_the_dashboard" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
 
     http_headers_2 =
@@ -811,6 +819,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
               f7_now = Time.current
               f7_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                 refresh_token_expires_at: f7_now + 10.minutes,
@@ -855,7 +864,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "menu links preserve the full request context" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
 
     http_headers_1 =
@@ -896,6 +905,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
               f8_now = Time.current
               f8_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
                 refresh_token_expires_at: f8_now + 10.minutes,
@@ -947,7 +957,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "identity_show_links_to_identity_pages" do
-    token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     select_token!(surface: :com, principal: @visitor, token: token)
 
     http_headers_0 =
@@ -984,6 +994,7 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
               f9_token.rotate_refresh_token! unless f9_token.device_session_record.current_refresh_token_id
               f9_now = Time.current
               f9_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f9_token, oidc_client_id: f9_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f9_now,
                 refresh_token_expires_at: f9_now + 10.minutes,
@@ -1057,9 +1068,9 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
   end
 
   test "invalid browser cookie partitions remain anonymous on literal Home and Dashboard" do
-    expired = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    expired = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     expired.update!(discard_at: expired.created_at)
-    revoked = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    revoked = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     revoked.revoke!
     session_ids = [
       ["expired", expired.public_id],
@@ -1141,7 +1152,6 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1173,7 +1183,10 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -1452,7 +1465,6 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1461,7 +1473,10 @@ class Base::Com::WelcomeDashboardAuthoritySlice1CTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

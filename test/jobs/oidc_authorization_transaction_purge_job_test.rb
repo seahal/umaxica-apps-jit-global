@@ -14,7 +14,7 @@ class OidcAuthorizationTransactionPurgeJobTest < ActiveJob::TestCase
       response_type: "code",
       client_id: client.client_id,
       redirect_uri: client.redirect_uris_by_realm.fetch("client").first,
-      code_challenge: "a" * 43,
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       nonce: "nonce",
       scope: "openid",

@@ -5,7 +5,10 @@ require "test_helper"
 
 class AvatarAccessGrantsTest < ActiveSupport::TestCase
   setup do
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @app = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
     @app.avatar.current_avatar_persona_binding.revoke!(force: true)
     @period = @app.avatar.reload.enterprise_ownership_periods.current.first
@@ -69,7 +72,10 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
   end
 
   test "a non-owner cannot issue a grant for the current ownership generation" do
-    other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
 
     assert_raises(AvatarOwnerMembershipLockService::AuthorizationDenied) do
       AvatarAccessGrants::IssueOperation.call(
@@ -120,7 +126,10 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
   end
 
   test "issues and evaluates a concrete Bureau Agent grant separately from app grants" do
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     org = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
     result = AvatarProvisioning::Create.call(
       actor: operator,
@@ -182,7 +191,10 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
   end
 
   test "an owner can grant a current generation to another concrete member" do
-    recipient_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     recipient = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_actor)
     CollectiveMembership::Grant.call(
       account: recipient.account,
@@ -209,7 +221,10 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
   end
 
   test "a grant recipient without owner authority cannot issue another grant" do
-    recipient_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     recipient = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_actor)
 
     grant = AvatarAccessGrants::IssueOperation.call(
@@ -244,11 +259,20 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
   end
 
   test "independent Persona grants allow multiple recipients and multiple Avatars without owner membership" do
-    recipient_a_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient_a_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     recipient_a = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_a_actor)
-    recipient_b_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    recipient_b_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     recipient_b = BaseSelectorBootstrapAuthority.call(surface: :app, principal: recipient_b_actor)
-    second_owner_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    second_owner_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     second_owner = BaseSelectorBootstrapAuthority.call(surface: :app, principal: second_owner_actor)
 
     assert_not PersonaMembership.exists?(persona_id: recipient_a.account.id, enterprise_id: @app.collective.id)
@@ -359,7 +383,10 @@ class AvatarAccessGrantsTest < ActiveSupport::TestCase
   end
 
   test "an Agent cannot receive a Grant for an Enterprise ownership period" do
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     org = BaseSelectorBootstrapAuthority.call(surface: :org, principal: operator)
 
     assert_raises(ArgumentError) do

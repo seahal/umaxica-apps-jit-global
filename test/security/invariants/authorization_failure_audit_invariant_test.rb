@@ -10,8 +10,11 @@ module Security
     class AuthorizationFailureAuditInvariantTest < ActionDispatch::IntegrationTest
       test "an operator refused by a staff policy is answered 403 and recorded as an authorization failure" do
         host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
-        operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-        token = OperatorToken.create!(staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+        operator = Operator.create!(
+          security_mode_id: SecurityModeConfigurable::ADVANCED,
+          status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+        )
+        token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
 
         headers = as_staff_headers(
           operator, host: host, session_public_id: token.public_id,
@@ -20,6 +23,7 @@ module Security
         rp_client = OidcClientRegistry.find!("base-org-ww")
         token.rotate_refresh_token! unless token.device_session.current_refresh_token_id
         rp_session = OpOrgGrant.create!(
+          authentication_epoch: 0,
           operator_token: token, oidc_client_id: rp_client.client_id,
           oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
           oidc_auth_time: Time.current, refresh_token_expires_at: 10.minutes.from_now,

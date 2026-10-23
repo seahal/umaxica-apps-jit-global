@@ -19,7 +19,7 @@ class SocialAuthSignupFinalizerFailureTest < ActiveSupport::TestCase
       verified_at: Time.current,
       verification_authority: "omniauth-google/1.0.0",
     )
-    invalid = Client.new
+    invalid = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     invalid.errors.add(:status_id, :blank)
     exploding = Object.new
     exploding.define_singleton_method(:ensure_active_status!) { raise ActiveRecord::RecordInvalid, invalid }

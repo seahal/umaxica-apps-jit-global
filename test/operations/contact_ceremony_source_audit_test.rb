@@ -670,6 +670,9 @@ class ContactCeremonySourceAuditTest < ActiveSupport::TestCase
 
   def create_test_actor(actor_class)
     # Distinct high IDs keep cross-database foreign keys away from committed test/dev credentials.
-    actor_class.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
+    actor_class.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
   end
 end

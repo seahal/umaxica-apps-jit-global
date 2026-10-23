@@ -13,15 +13,12 @@ class RedirectTargetUsageTest < ActiveSupport::TestCase
   # persisted and validated when its transaction was issued. None reads the target from a parameter.
   ALLOW_OTHER_HOST_ALLOWLIST = %w(
     app/controllers/auth/app/ceremony_bindings_controller.rb
-    app/controllers/auth/app/sign/in/challenge/passkeys_controller.rb
     app/controllers/auth/app/verification/cancellations_controller.rb
     app/controllers/auth/com/ceremony_bindings_controller.rb
-    app/controllers/auth/com/sign/in/challenge/passkeys_controller.rb
     app/controllers/auth/com/verification/cancellations_controller.rb
     app/controllers/auth/org/ceremony_bindings_controller.rb
     app/controllers/auth/org/verification/cancellations_controller.rb
     app/controllers/base/app/identity/totps_controller.rb
-    app/controllers/concerns/auth_local_result_handoff.rb
     app/controllers/concerns/auth_oidc_result_handoff.rb
     app/controllers/concerns/auth_step_up_result_handoff.rb
     app/controllers/concerns/base_ceremony_binding_confirmation.rb

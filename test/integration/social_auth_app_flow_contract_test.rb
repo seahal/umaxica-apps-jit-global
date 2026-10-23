@@ -2303,6 +2303,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   rr0_token.rotate_refresh_token! unless rr0_token.device_session_record.current_refresh_token_id
                   rr0_now = Time.current
                   rr0_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: rr0_token,
                     oidc_client_id: rr0_client.client_id,
                     oidc_scope: "openid profile",
@@ -2684,6 +2685,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   rr1_token.rotate_refresh_token! unless rr1_token.device_session_record.current_refresh_token_id
                   rr1_now = Time.current
                   rr1_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: rr1_token,
                     oidc_client_id: rr1_client.client_id,
                     oidc_scope: "openid profile",
@@ -3021,7 +3023,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
   test "Google settings link rejects a signed-in client without fresh social-link step-up" do
     user = create_social_client
-    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     assert_no_difference("ClientExternalIdentity.count") do
       http_headers_11 =
@@ -3063,6 +3065,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                   refresh_token_expires_at: f0_now + 10.minutes,
@@ -3112,7 +3115,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
   test "Apple settings link rejects a signed-in client without fresh social-link step-up" do
     user = create_social_client
-    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     assert_no_difference("ClientExternalIdentity.count") do
       http_headers_10 =
@@ -3154,6 +3157,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                   refresh_token_expires_at: f1_now + 10.minutes,
@@ -3243,6 +3247,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,
@@ -3338,6 +3343,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                 refresh_token_expires_at: f3_now + 10.minutes,
@@ -3404,7 +3410,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     begin
       fv5026 = user
       fv5024 = PROVIDERS.fetch(:google)
-      fv5025 = ClientToken.create!(user_id: fv5026.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+      fv5025 = ClientToken.create!(authentication_epoch: 0, user_id: fv5026.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       satisfy_user_verification(fv5025)
       mark_token_step_up_satisfied_for_test(fv5025, scope: "social_unlink")
 
@@ -3447,6 +3453,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 rr2_token.rotate_refresh_token! unless rr2_token.device_session_record.current_refresh_token_id
                 rr2_now = Time.current
                 rr2_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rr2_token,
                   oidc_client_id: rr2_client.client_id,
                   oidc_scope: "openid profile",
@@ -3518,7 +3525,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     begin
       fv5021 = user
       fv5019 = PROVIDERS.fetch(:apple)
-      fv5020 = ClientToken.create!(user_id: fv5021.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+      fv5020 = ClientToken.create!(authentication_epoch: 0, user_id: fv5021.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       satisfy_user_verification(fv5020)
       mark_token_step_up_satisfied_for_test(fv5020, scope: "social_unlink")
 
@@ -3561,6 +3568,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 rr3_token.rotate_refresh_token! unless rr3_token.device_session_record.current_refresh_token_id
                 rr3_now = Time.current
                 rr3_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rr3_token,
                   oidc_client_id: rr3_client.client_id,
                   oidc_scope: "openid profile",
@@ -3632,7 +3640,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     begin
       fv5016 = user
       fv5014 = PROVIDERS.fetch(:apple)
-      fv5015 = ClientToken.create!(user_id: fv5016.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+      fv5015 = ClientToken.create!(authentication_epoch: 0, user_id: fv5016.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       satisfy_user_verification(fv5015)
       mark_token_step_up_satisfied_for_test(fv5015, scope: "social_unlink")
 
@@ -3675,6 +3683,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 rr4_token.rotate_refresh_token! unless rr4_token.device_session_record.current_refresh_token_id
                 rr4_now = Time.current
                 rr4_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rr4_token,
                   oidc_client_id: rr4_client.client_id,
                   oidc_scope: "openid profile",
@@ -3773,6 +3782,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                 f4_now = Time.current
                 f4_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                   refresh_token_expires_at: f4_now + 10.minutes,
@@ -4106,6 +4116,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         cc0_user = ct0_user
         cc0_config = ct0_config
         cc0_token = ClientToken.create!(
+          authentication_epoch: 0,
           user_id: cc0_user.id,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         )
@@ -4157,6 +4168,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   cc0_f8_token.rotate_refresh_token! unless cc0_f8_token.device_session_record.current_refresh_token_id
                   cc0_f8_now = Time.current
                   cc0_f8_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: cc0_f8_token,
                     oidc_client_id: cc0_f8_client.client_id,
                     oidc_scope: "openid profile",
@@ -4230,6 +4242,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
         cc3_user = ct1_user
         cc3_config = ct1_config
         cc3_token = ClientToken.create!(
+          authentication_epoch: 0,
           user_id: cc3_user.id,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         )
@@ -4281,6 +4294,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                   cc3_f8_token.rotate_refresh_token! unless cc3_f8_token.device_session_record.current_refresh_token_id
                   cc3_f8_now = Time.current
                   cc3_f8_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: cc3_f8_token,
                     oidc_client_id: cc3_f8_client.client_id,
                     oidc_scope: "openid profile",
@@ -4349,7 +4363,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       fv5012.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5012.finalize_binding! unless fv5012.binding_effective?
     end
-    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     http_headers_4 =
       begin
@@ -4390,6 +4404,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                 refresh_token_expires_at: f5_now + 10.minutes,
@@ -4445,7 +4460,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
       fv5010.update!(user_email_status_id: ClientEmailStatus::VERIFIED)
       fv5010.finalize_binding! unless fv5010.binding_effective?
     end
-    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     http_headers_3 =
       begin
@@ -4486,6 +4501,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
               f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                 refresh_token_expires_at: f6_now + 10.minutes,
@@ -4534,7 +4550,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
   test "Google settings link rejects settings step-up scope" do
     user = create_social_client
-    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     mark_token_step_up_satisfied_for_test(token, scope: "settings_email")
 
     http_headers_2 =
@@ -4567,6 +4583,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -4626,7 +4643,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     begin
       fv5009 = user
       fv5007 = PROVIDERS.fetch(:google)
-      fv5008 = ClientToken.create!(user_id: fv5009.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+      fv5008 = ClientToken.create!(authentication_epoch: 0, user_id: fv5009.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       satisfy_user_verification(fv5008)
       mark_token_step_up_satisfied_for_test(fv5008, scope: "social_unlink")
 
@@ -4669,6 +4686,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 rr5_token.rotate_refresh_token! unless rr5_token.device_session_record.current_refresh_token_id
                 rr5_now = Time.current
                 rr5_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rr5_token,
                   oidc_client_id: rr5_client.client_id,
                   oidc_scope: "openid profile",
@@ -4741,7 +4759,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
     begin
       fv5004 = user
       fv5002 = PROVIDERS.fetch(:google)
-      fv5003 = ClientToken.create!(user_id: fv5004.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+      fv5003 = ClientToken.create!(authentication_epoch: 0, user_id: fv5004.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       satisfy_user_verification(fv5003)
       mark_token_step_up_satisfied_for_test(fv5003, scope: "social_unlink")
 
@@ -4784,6 +4802,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
                 rr6_token.rotate_refresh_token! unless rr6_token.device_session_record.current_refresh_token_id
                 rr6_now = Time.current
                 rr6_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rr6_token,
                   oidc_client_id: rr6_client.client_id,
                   oidc_scope: "openid profile",
@@ -4863,6 +4882,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
 
   def create_social_client
     user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
       public_id: PublicId.generate,
       birthdate: "2000-02-03",
@@ -4900,7 +4920,7 @@ class SocialAuthAppFlowContractTest < ActionDispatch::IntegrationTest
   end
 
   def token_bound_step_up_for_social_link(user)
-    token = ClientToken.create!(user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user_id: user.id, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     mark_token_step_up_satisfied_for_test(token, scope: SocialAuth::SOCIAL_LINK_SCOPE)
     token
   end
@@ -4970,7 +4990,6 @@ class SocialAuthAppFlowContractTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -5002,7 +5021,10 @@ class SocialAuthAppFlowContractTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -5226,7 +5248,6 @@ class SocialAuthAppFlowContractTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -5235,7 +5256,10 @@ class SocialAuthAppFlowContractTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

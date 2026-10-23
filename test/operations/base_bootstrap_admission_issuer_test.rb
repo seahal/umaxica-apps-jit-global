@@ -6,8 +6,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "Base bootstrap is registration-only and retains the original protected return and deadline" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
       phishing_resistant_required: false, user_verification_required: false,
@@ -75,9 +75,10 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
   { 1 => true, 0 => false, -1 => false }.each do |microseconds, admitted|
     test "bootstrap with #{format("%+d", microseconds)} microseconds of primary-authentication freshness left is " \
          "#{admitted ? "admitted" : "refused"}" do
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       now = ClientStepUpCeremonyTransaction.database_now
       token = ClientToken.create!(
+        authentication_epoch: 0,
         user: actor,
         root_login_established_at: now - SecurityTokenLifetimes::BOOTSTRAP_PRIMARY_AUTHENTICATION_FRESHNESS +
           Rational(microseconds, 1_000_000),
@@ -119,8 +120,11 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "bootstrap is refused for a session that records no root login" do
     # Keep this prerequisite independent of orphan credentials left by nontransactional cases.
-    actor = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: nil)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: nil)
 
     assert_equal [[], [], []],
                  [
@@ -154,8 +158,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "an ordinary step-up is not subject to the bootstrap freshness window" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: 3.hours.ago)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: 3.hours.ago)
 
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor,
@@ -176,9 +180,9 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "refreshing or using the session does not move the bootstrap freshness anchor" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     established = 11.minutes.ago.change(usec: 0)
-    token = ClientToken.create!(user: actor, root_login_established_at: established)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: established)
     token.rotate_refresh_token!
     token.update!(last_used_at: Time.current)
 
@@ -207,7 +211,7 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "verified Email is configured and unavailable Passkey or TOTP history requires recovery rather than bootstrap" do
     %i(verified_email revoked_passkey inactive_totp revoked_totp).each do |state|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       case state
       when :verified_email
         actor.client_emails.create!(
@@ -226,7 +230,7 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
             ClientTotpCredentialStatus::INACTIVE : ClientTotpCredentialStatus::REVOKED,
         )
       end
-      token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
       requirement = StepUpRequirement.new(
         step_up_required: false, scope: "settings_birthdate", purpose: "bootstrap",
         phishing_resistant_required: false, user_verification_required: false,
@@ -249,8 +253,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "email is a bootstrap method where the surface supports email and is refused where it does not" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE)
-    client_token = ClientToken.create!(user: client, root_login_established_at: Time.current)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    client_token = ClientToken.create!(authentication_epoch: 0, user: client, root_login_established_at: Time.current)
 
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: client,
@@ -272,8 +276,11 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
     assert_equal "bootstrap", issuance.transaction.purpose
     assert_nil client_token.reload.last_step_up_at
 
-    operator = Operator.create!
-    operator_token = OperatorToken.create!(staff: operator, root_login_established_at: Time.current)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    operator_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: operator,
+      root_login_established_at: Time.current,
+    )
 
     assert_no_difference("OperatorStepUpCeremonyTransaction.count") do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do
@@ -302,8 +309,8 @@ class BaseBootstrapAdmissionIssuerTest < ActiveSupport::TestCase
       { allowed_methods: [:secret_credential] }, { allowed_methods: %i(passkey secret_credential) },
       { allowed_methods: [] },
     ].each do |attributes|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
       if attributes.key?(:required_aal) || attributes[:allowed_methods] == []
         assert_raises(ArgumentError) do
           StepUpRequirement.new(

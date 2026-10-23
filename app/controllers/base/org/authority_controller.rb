@@ -7,6 +7,7 @@ module Base
     # deliberately separate from the self-RP application controller and never accept RP cookies as
     # authentication proof.
     class AuthorityController < ::ApplicationController
+      include ::OrgSecondPasskeyGate
       include ::FqdnAvailabilityGate
       include ::RateLimit
       include ::DefaultNoStore
@@ -62,6 +63,7 @@ module Base
       before_action :set_region
       before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor
+      before_action :enforce_second_passkey_gate!
       before_action :apply_localization_preferences
       before_action :set_locale
       before_action :set_timezone

@@ -22,7 +22,7 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
         when "com" then visitors(:reserved_visitor)
         when "org" then operators(:one)
         end
-      token = token_model.create!(owner_key => actor.id, kind_key => kind)
+      token = token_model.create!(:authentication_epoch => 0, owner_key => actor.id, kind_key => kind)
       # Base UI is a Browser RP of itself: only its RP credential makes the browser authenticated.
       begin
         rp_cookie_pairs =
@@ -55,6 +55,7 @@ class BaseDashboardAuthenticationGuidanceTest < ActionDispatch::IntegrationTest
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = rp_model.create!(
+                  :authentication_epoch => 0,
                   rp_token_key => rp_token,
                   :oidc_client_id => rp_client.client_id,
                   :oidc_scope => "openid profile",

@@ -28,8 +28,12 @@
 # Any libraries that use a connection pool or another resource pool should
 # be configured to provide at least as many connections as the number of
 # threads. This includes Active Record's `pool` parameter in `database.yml`.
-threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
+# D-120: more workers and threads, no concurrency cap on RP -> OP self-calls. Both values are
+# deployment settings with no code-side default (a sign-in callback can wait on the OP token and
+# JWKS endpoints of the same server, so the total slot count is a capacity decision, not a constant).
+threads_count = Integer(ENV.fetch("RAILS_MAX_THREADS"), 10)
 threads threads_count, threads_count
+workers Integer(ENV.fetch("WEB_CONCURRENCY"), 10)
 
 # Specifies the `port` that Puma will listen on to receive requests; default is 3000.
 # Bind the IPv4 wildcard. The Cloudflare Tunnel connector and the probe containers

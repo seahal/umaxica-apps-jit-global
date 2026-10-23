@@ -135,7 +135,7 @@ class IdentityTelephoneCeremonyFinalCommitterTest < ActiveSupport::TestCase
   end
 
   test "commits through the locked record and writes the app Source audit" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     contact = ClientTelephone.create!(user_id: actor.id, number: "+819012345682", confirm_policy: "1")
     now = ClientTelephoneCeremonyTransaction.database_now
     parent = ClientTelephoneCeremonyTransaction.create_transaction!(

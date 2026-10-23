@@ -13,12 +13,12 @@ class BaseSelectorBootstrapAuthorityConcurrencyTest < ActiveSupport::TestCase
   setup do
     VisitorStatus.ensure_defaults!
     VisitorVisibility.ensure_defaults!
-    VisitorMfaLevel.ensure_defaults!
     VisitorMfaStatus.ensure_defaults!
     VisitorIdentityState.ensure_defaults!
     IndividualMembershipKind.ensure_defaults!
     IndividualMembershipState.ensure_defaults!
     @visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,

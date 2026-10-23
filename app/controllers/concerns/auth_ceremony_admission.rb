@@ -99,9 +99,7 @@ module AuthCeremonyAdmission
       binding: binding,
       raw_auth_sid: raw_auth_sid,
     )
-    if BaseAuthAdmissionCoordinator.local_entry_purpose?(payload: payload, intent: expected_intent)
-      admit_local_entry_payload!(payload, binding: binding)
-    elsif BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
+    if BaseAuthAdmissionCoordinator::TICKET_CEREMONY_PURPOSES.include?(expected_intent.to_s)
       transaction = BaseAuthAdmissionCoordinator.resolve_step_up_admission!(
         payload: payload, surface: auth_ceremony_surface, expected_intent: expected_intent,
       )
@@ -132,21 +130,6 @@ module AuthCeremonyAdmission
     current_session&.admitted? && current_session.id == binding.admitted_auth_ceremony_session_id
   end
 
-  def admit_local_entry_payload!(payload, binding:)
-    model = BaseAuthAdmissionCoordinator::LOCAL_SIGN_IN_FLOW.fetch(auth_ceremony_surface)
-    model.connection_class_for_self.connected_to(role: :writing) do
-      flow = model.find_by!(public_id: payload.fetch("subject_ref"))
-      unless flow.sign_in_primary_pending? && !flow.expired?(model.database_now) && flow.principal_id.nil?
-        raise BaseAuthAdmissionCoordinator::Denied.new("local entry is not pending", code: "invalid_admission")
-      end
-
-      rotate_auth_ceremony_session!(
-        admission_purpose: payload.fetch("purpose"), local_sign_in_flow_ref: flow.public_id,
-        admission_binding: binding,
-      )
-    end
-  end
-
   def admit_oidc_payload!(payload, expected_intent:, binding:)
     transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
       surface: auth_ceremony_surface,
@@ -164,7 +147,13 @@ module AuthCeremonyAdmission
       )
     end
 
-    unless auth_ceremony_intent_matches?(transaction.intent, expected_intent)
+    actual_intent =
+      if binding.purpose == "authentication_handoff"
+        AuthEntryIntentResolver.call(prompt: transaction.oidc_prompt, entry_intent: binding.entry_intent)
+      else
+        transaction.intent
+      end
+    unless actual_intent == expected_intent.to_s
       raise BaseAuthAdmissionCoordinator::Denied.new(
         "authorization transaction intent mismatch",
         code: "invalid_admission",
@@ -178,7 +167,7 @@ module AuthCeremonyAdmission
     )
   end
 
-  def rotate_auth_ceremony_session!(admission_purpose:, authorization_transaction_ref: nil, local_sign_in_flow_ref: nil,
+  def rotate_auth_ceremony_session!(admission_purpose:, authorization_transaction_ref: nil,
                                     step_up_ceremony_transaction_ref: nil, admission_binding:)
     model = BaseAuthAdmissionCoordinator.ceremony_session_class(auth_ceremony_surface)
     raw_sid = read_auth_ceremony_sid_cookie
@@ -195,7 +184,6 @@ module AuthCeremonyAdmission
           admission_purpose: admission_purpose,
           previous_raw_sid: raw_sid,
           authorization_transaction_ref: authorization_transaction_ref,
-          local_sign_in_flow_ref: local_sign_in_flow_ref,
           step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
         )
         locked_binding.redeem!(auth_session: attached_session, admitted_auth_session: admitted)
@@ -292,10 +280,6 @@ module AuthCeremonyAdmission
 
     query = { ri: params[:ri], lx: normalized_locale(params[:lx]) }.compact
     path = (expected_intent.to_s == "sign_up") ? "sign_up" : "sign_in"
-    if expected_intent.to_s == "sign_in"
-      cycle = auth_ceremony_local_sign_in_flow
-      query.merge!(sign_in_flow_binding_params(cycle, phase: "PRIMARY_PENDING")) if cycle
-    end
     case auth_ceremony_surface
     when "app"
       (path == "sign_up") ? auth_app_sign_up_path(**query) : auth_app_sign_in_path(**query)
@@ -308,10 +292,5 @@ module AuthCeremonyAdmission
 
   def auth_step_up_ceremony_clean_url
     raise NotImplementedError, "#{self.class} must define #auth_step_up_ceremony_clean_url"
-  end
-
-  def auth_ceremony_intent_matches?(actual, expected)
-    actual.to_s == expected.to_s ||
-      (actual.to_s == "authentication" && %w(sign_in sign_up).include?(expected.to_s))
   end
 end

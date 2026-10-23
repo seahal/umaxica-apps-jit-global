@@ -248,9 +248,6 @@ class ClientSecretCredential < AppZenithRecord
   end
 
   def claim_ceremony_matches?(flow, ceremony)
-    if ceremony.admission_purpose == "local_sign_in"
-      return ceremony.local_sign_in_flow_ref == flow.public_id
-    end
     return false unless ceremony.admission_purpose == "authentication_handoff"
 
     transaction = ClientOidcAuthorizationTransaction.lock.find_by(
@@ -284,8 +281,6 @@ class ClientSecretCredential < AppZenithRecord
 
   def verify_cancellation_outcome!(flow)
     ceremony = ClientAuthCeremonySession.lock.find_by(id: claim_ceremony_session_id)
-    return if ceremony && ceremony.local_sign_in_flow_ref == flow.public_id && ceremony.cancelled_at
-
     if ceremony&.admitted? && ceremony.admission_purpose == "authentication_handoff"
       transaction = ClientOidcAuthorizationTransaction.find_by(
         secret_sign_in_flow_id: flow.id, transaction_id: ceremony.authorization_transaction_ref,

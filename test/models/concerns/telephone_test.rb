@@ -7,8 +7,8 @@ class TelephoneTest < ActiveSupport::TestCase
   fixtures :operators, :operator_statuses
 
   setup do
-    @actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    @token = OperatorToken.create!(staff: @actor)
+    @actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    @token = OperatorToken.create!(authentication_epoch: 0, staff: @actor)
     @token.rotate_refresh_token!
     @telephone = OperatorTelephone.create!(
       raw_number: "+1234567890", staff: @actor, confirm_policy: true, confirm_using_mfa: true,

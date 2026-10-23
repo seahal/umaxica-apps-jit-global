@@ -4,8 +4,8 @@ require "test_helper"
 
 class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
   test "app Telephone registration retries a transaction reference collision in a savepoint" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
     telephone = actor.client_telephones.create!(
       raw_number: "+12025550149", confirm_policy: true, confirm_using_mfa: true,
     )
@@ -38,8 +38,8 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
   end
 
   test "app Telephone registration retries a grant reference collision in a savepoint" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
     telephone = actor.client_telephones.create!(
       raw_number: "+12025550#{SecureRandom.random_number(100_000).to_s.rjust(5, "0")}",
       confirm_policy: true, confirm_using_mfa: true,
@@ -71,8 +71,8 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
   end
 
   test "org registration references an opaque candidate rather than a source database primary key" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    token = OperatorToken.create!(staff: actor, discard_at: 1.day.from_now)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, discard_at: 1.day.from_now)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550149", confirm_policy: true, confirm_using_mfa: true,
     )
@@ -98,13 +98,13 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       actor, token, telephone =
         case surface
         when "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner)
           candidate = owner.client_telephones.create!(raw_number: "+12025550145", confirm_policy: true)
           [owner, root, candidate]
         when "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner)
           candidate = owner.visitor_telephones.create!(raw_number: "+12025550146", confirm_policy: true)
           [owner, root, candidate]
         end
@@ -130,15 +130,15 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       actor, token, telephone, transaction_model =
         case surface
         when "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_telephones.create!(
             raw_number: "+12025550141", confirm_policy: true, otp_attempts_count: 2,
           )
           [owner, root, candidate, ClientTelephoneCeremonyTransaction]
         when "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
           candidate = owner.visitor_telephones.create!(
             raw_number: "+12025550142", confirm_policy: true, otp_attempts_count: 2,
           )
@@ -178,15 +178,15 @@ class TelephoneCredentialRegistrationOtpIssuerTest < ActiveSupport::TestCase
       actor, token, telephone =
         case surface
         when "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_telephones.create!(
             raw_number: "+12025550143", confirm_policy: true, otp_attempts_count: 2,
           )
           [owner, root, candidate]
         when "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
           candidate = owner.visitor_telephones.create!(
             raw_number: "+12025550144", confirm_policy: true, otp_attempts_count: 2,
           )

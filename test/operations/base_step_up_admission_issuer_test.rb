@@ -9,14 +9,14 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       actor, token =
         case surface
         when "app"
-          actor = Client.create!(id: actor_id, status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor)]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: actor_id, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor)]
         when "com"
-          actor = Visitor.create!(id: actor_id, status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor)]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: actor_id, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor)]
         when "org"
-          actor = Operator.create!(id: actor_id)
-          [actor, OperatorToken.create!(staff: actor)]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: actor_id)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor)]
         end
       requirement = StepUpRequirement.new(
         scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
@@ -53,14 +53,14 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       actor, token, model =
         case surface
         when "app"
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor), ClientStepUpCeremonyTransaction]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientStepUpCeremonyTransaction]
         when "com"
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor), VisitorStepUpCeremonyTransaction]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorStepUpCeremonyTransaction]
         when "org"
-          actor = Operator.create!
-          [actor, OperatorToken.create!(staff: actor), OperatorStepUpCeremonyTransaction]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorStepUpCeremonyTransaction]
         end
       attributes = {
         scope: "settings_passkey",
@@ -138,14 +138,14 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
         actor, token, model =
           case surface
           when "app"
-            actor = Client.create!(status_id: ClientStatus::ACTIVE)
-            [actor, ClientToken.create!(user: actor), ClientStepUpCeremonyTransaction]
+            actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+            [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientStepUpCeremonyTransaction]
           when "com"
-            actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-            [actor, VisitorToken.create!(visitor: actor), VisitorStepUpCeremonyTransaction]
+            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorStepUpCeremonyTransaction]
           when "org"
-            actor = Operator.create!
-            [actor, OperatorToken.create!(staff: actor), OperatorStepUpCeremonyTransaction]
+            actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+            [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorStepUpCeremonyTransaction]
           end
         device = token.device_session
         if condition == :revoked
@@ -178,14 +178,17 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       actor, token, other_token =
         case surface
         when "app"
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor), ClientToken.create!(user: actor)]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor),
+           ClientToken.create!(authentication_epoch: 0, user: actor),]
         when "com"
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor), VisitorToken.create!(visitor: actor)]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor),
+           VisitorToken.create!(authentication_epoch: 0, visitor: actor),]
         when "org"
-          actor = Operator.create!
-          [actor, OperatorToken.create!(staff: actor), OperatorToken.create!(staff: actor)]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor),
+           OperatorToken.create!(authentication_epoch: 0, staff: actor),]
         end
       requirement = StepUpRequirement.new(
         scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],
@@ -243,17 +246,17 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       case surface
       when :app
         actor = clients(:one)
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, user: actor)
         parents = ClientStepUpCeremonyTransaction
         sessions = ClientStepUpSession
       when :com
-        actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-        token = VisitorToken.create!(visitor: actor, skip_session_limit_check: true)
+        actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+        token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, skip_session_limit_check: true)
         parents = VisitorStepUpCeremonyTransaction
         sessions = VisitorStepUpSession
       when :org
-        actor = Operator.create!
-        token = OperatorToken.create!(staff: actor)
+        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+        token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
         parents = OperatorStepUpCeremonyTransaction
         sessions = OperatorStepUpSession
       end
@@ -291,14 +294,14 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
       actor, token, parents =
         case surface
         when :app
-          actor = Client.create!(id: 9_112_000_000_000)
-          [actor, ClientToken.create!(user: actor), ClientStepUpCeremonyTransaction]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_112_000_000_000)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), ClientStepUpCeremonyTransaction]
         when :com
-          actor = Visitor.create!(id: 9_112_000_000_000)
-          [actor, VisitorToken.create!(visitor: actor), VisitorStepUpCeremonyTransaction]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_112_000_000_000)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), VisitorStepUpCeremonyTransaction]
         when :org
-          actor = Operator.create!(id: 9_112_000_000_000)
-          [actor, OperatorToken.create!(staff: actor), OperatorStepUpCeremonyTransaction]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_112_000_000_000)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), OperatorStepUpCeremonyTransaction]
         end
       requirement = StepUpRequirement.new(
         step_up_required: false, scope: "settings_passkey", allowed_methods: [:passkey],
@@ -400,8 +403,8 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "APP TOTP registration accepts prior Email proof but rejects unrelated scopes and assurance claims" do
-    actor = Client.create!(id: 9_113_000_000_000)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_113_000_000_000)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     event = ClientStepUpCeremonyTransaction.database_now
     # Synthetic Base evidence tests purpose and method separation, not Email code verification.
     token.update!(
@@ -497,7 +500,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "a repeated Base start preserves the concrete transaction deadline and attempt count" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     requirement = StepUpRequirement.new(
       step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false,
@@ -556,7 +559,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "another scope cannot rewrite a pending transaction" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     first = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -593,7 +596,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   # contract test; here the previous transaction is clearly past it.
   test "a new admission after the previous transaction expired records that expiry and starts a new one" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     first = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -636,7 +639,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "a conflicting admission is refused with the conflict code and leaves the pending transaction open" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     first = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: StepUpRequirement.new(
@@ -675,7 +678,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "an explicit restart cancels a redeemed pending ceremony and starts a new parent" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     first_requirement = StepUpRequirement.new(
       step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false,
@@ -734,7 +737,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "explicit same-intent restart cancels a redeemed pending ceremony instead of reopening it" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     requirement = StepUpRequirement.new(
       step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false,
@@ -794,7 +797,7 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
 
   test "explicit restart replaces an expired unredeemed binding without extending its parent" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     requirement = StepUpRequirement.new(
       step_up_required: true, scope: "settings_birthdate", allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false,
@@ -822,8 +825,8 @@ class BaseStepUpAdmissionIssuerTest < ActiveSupport::TestCase
   end
 
   test "COM rejects TOTP and Base actor mismatch before creating a transaction" do
-    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-    token = VisitorToken.create!(visitor: actor, skip_session_limit_check: true)
+    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, skip_session_limit_check: true)
 
     assert_no_difference("VisitorStepUpCeremonyTransaction.count") do
       assert_raises(BaseAuthAdmissionCoordinator::Denied) do

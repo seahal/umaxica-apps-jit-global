@@ -136,12 +136,15 @@ class VisitorSignUpFlow < OpBaseComRecord
   }.freeze
 
   belongs_to :token, class_name: "VisitorToken"
+  belongs_to :auth_admission_binding, class_name: "VisitorAuthAdmissionBinding", optional: false
+  attr_readonly :auth_admission_binding_id
   belongs_to :principal, class_name: "Visitor", optional: true
   belongs_to :status, class_name: "VisitorSignUpFlowStatus"
   belongs_to :cleanup_status, class_name: "VisitorSignUpFlowCleanupStatus", optional: false
 
   # SignFlow disables required belongs_to validation, so status presence stays explicit.
   # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :auth_admission_binding, presence: true
   validates :status_id, presence: true,
                         inclusion: { in: ->(record) { record.class::STATUS_IDS } }
   # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
@@ -150,6 +153,7 @@ class VisitorSignUpFlow < OpBaseComRecord
   validate :legacy_state_matches_status
   validate :step_matches_status
   validate :completed_status_has_completed_at
+  validate :sign_up_admission_is_redeemed, on: :create
 
   validates :social_provider, absence: true
   validates :result_digest, length: { maximum: 64 }

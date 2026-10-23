@@ -29,12 +29,16 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
     test "#{surface} real and dummy code entry share microsecond expiry boundaries" do
       address = "expiry-real-#{SecureRandom.hex(8)}@example.test"
       if surface == "app"
-        owner = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
+        owner = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+        )
         owner.client_emails.create!(
           address: address, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
         ).finalize_binding!
       else
         owner = Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
           status_id: VisitorStatus::ACTIVE,
         )
@@ -57,7 +61,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
             "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
           }.fetch(admission_surface)
           admission_browser.host!(admission_host)
-          admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          admission_issuance = OidcTestEntry.issue!(
             surface: admission_surface, intent: admission_intent,
             base_browser_nonce: SecureRandom.hex(32), base_token: nil,
           )
@@ -96,9 +100,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
           assert_equal 303, admission_browser.response.status
         end
-        phase_binding = SignInFlowBindingCodec.encode(
-          flow: admission_issuance.transaction, surface: surface, phase: "PRIMARY_PENDING",
-        )
+        phase_binding = nil
         browser.post(
           "/sign/in/email", params: {
             :user_email => { address: destination }, "cf-turnstile-response" => "test", :fb => phase_binding,
@@ -133,6 +135,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
       case surface
       when "app"
         actor = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
         )
         contact = actor.client_emails.create!(
@@ -140,6 +143,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
         ).tap(&:finalize_binding!)
       when "com"
         actor = Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: VisitorStatus::ACTIVE,
         )
         contact = actor.visitor_emails.create!(
@@ -162,7 +166,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_surface)
         admission_browser.host!(admission_host)
-        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission_issuance = OidcTestEntry.issue!(
           surface: admission_surface, intent: admission_intent,
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
@@ -197,9 +201,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
         assert_equal 303, admission_browser.response.status
       end
-      real_phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: surface, phase: "PRIMARY_PENDING",
-      )
+      real_phase_binding = nil
       begin
         admission_browser = dummy
         admission_surface = surface
@@ -210,7 +212,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_surface)
         admission_browser.host!(admission_host)
-        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission_issuance = OidcTestEntry.issue!(
           surface: admission_surface, intent: admission_intent,
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
@@ -245,9 +247,7 @@ class EmailSignInEnumerationParityTest < ActionDispatch::IntegrationTest
 
         assert_equal 303, admission_browser.response.status
       end
-      dummy_phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: surface, phase: "PRIMARY_PENDING",
-      )
+      dummy_phase_binding = nil
       paths = []
       # Equal-length input isolates binding-existence leakage from the caller-known address length.
       [[real, address], [dummy, "parity-fake-#{SecureRandom.hex(8)}@example.test"]].each do |browser, destination|

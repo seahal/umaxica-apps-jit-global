@@ -12,7 +12,7 @@ class IdentityStepUpPasskeyVerificationCommitterTest < ActiveSupport::TestCase
     @actor = clients(:one)
     @fake = webauthn_fake_client
     @credential = @actor.client_passkeys.create!(fake_credential_record_attrs(@fake))
-    @token = ClientToken.create!(user: @actor)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     @transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: @actor.public_id, session_ref: @token.public_id,
       required_scope: "settings_birthdate", required_aal: "none", allowed_methods: ["passkey"],
@@ -93,7 +93,7 @@ class IdentityStepUpPasskeyVerificationCommitterTest < ActiveSupport::TestCase
   end
 
   test "a token belonging to another actor cannot advance the admitted transaction" do
-    @record.update!(user_token: ClientToken.create!(user: clients(:two)))
+    @record.update!(user_token: ClientToken.create!(authentication_epoch: 0, user: clients(:two)))
     assert_raises(IdentityStepUpCeremonyContract::Error) do
       IdentityStepUpPasskeyVerificationCommitter.call!(
         actor: @actor, transaction: @transaction, session_record: @record.reload, config: @config,

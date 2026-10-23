@@ -13,10 +13,12 @@ class EmailCredentialRegistrationOtpBootstrapDeliveryTest < ActiveSupport::TestC
             [Visitor, VisitorToken, VisitorEmail, VisitorAuthCeremonySession, :visitor_id]
           end
         actor = actor_model.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
           status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
         )
         token = token_model.create!(
+          :authentication_epoch => 0,
           owner_key => actor.id, :root_login_established_at => token_model.database_now, :discard_at => 1.day.from_now,
         )
         token.rotate_refresh_token!

@@ -9,9 +9,9 @@
 # - Per-cycle work runs entirely inside one `cycle.with_cycle_lock` so that
 #   concurrent callers (controller path + worker) cannot interleave the
 #   pending -> completed flip with dependent writes.
-# - Dependent updates are issued against the dependent's own DB connection
-#   (cross-DB, can't be atomic with the cycle lock); failures flip the cycle
-#   to `cleanup_status_id = FAILED` so the worker retries.
+# - The principal is locked after the Flow. Pending status is checked under that lock, and
+#   contact, Passkey, audit and actor changes share one principal transaction. The OP Flow and
+#   principal databases cannot commit atomically; a failure leaves retryable cleanup facts.
 #
 # The worker entry point (`cleanup_pending_for`) pops one row at a time with
 # FOR UPDATE SKIP LOCKED so concurrent worker shards make progress.
@@ -82,6 +82,7 @@ class SignUpArtifactCleanup
     cycle.with_cycle_lock do
       cycle.reload
       return cycle if cycle.cleanup_completed?
+      return cycle unless cycle.sign_up_terminal?
 
       begin
         attempt_attrs = increment_attempts_attrs
@@ -124,60 +125,69 @@ class SignUpArtifactCleanup
   end
 
   def schedule_dependent_retention!
-    dependent_records.each do |record|
-      next unless record
+    owner, actor_class =
+      case cycle
+      when ClientSignUpFlow then [AppZenithRecord, Client]
+      when VisitorSignUpFlow then [ComZenithRecord, Visitor]
+      else raise ArgumentError, "unsupported sign-up cleanup flow"
+      end
 
-      record.class.transaction do
-        record.lock!
+    owner.connected_to(role: :writing) do
+      # The decision and all dependent writes share one principal transaction. A failed actor
+      # retirement must roll back the contact, Passkey and audit facts so a retry sees pending data.
+      actor_class.transaction(requires_new: true) do
+        actor = actor_class.lock.find_by(id: cycle.principal_id)
+        dependent_records(actor).each do |record|
+          record.lock!
 
-        if record.is_a?(ClientExternalIdentity)
-          revoke_pending_apple_credential(record)
-          record.destroy!
-          next
-        end
+          if record.is_a?(ClientExternalIdentity)
+            revoke_pending_apple_credential(record)
+            record.destroy!
+            next
+          end
 
-        if record.is_a?(ClientPasskey) || record.is_a?(VisitorPasskey)
-          PasskeyAuditOutbox.record_for!(
-            passkey: record,
-            event_type: "passkey.registration_cancelled",
-            surface: record.is_a?(ClientPasskey) ? "app" : "com",
-            actor_ref: nil,
-            operation_ref: cycle.public_id,
-            occurred_at: record.class.database_now,
-            metadata: { reason: "sign_up_cancelled" },
-          )
-          record.destroy!
-          next
-        end
+          if record.is_a?(ClientPasskey) || record.is_a?(VisitorPasskey)
+            PasskeyAuditOutbox.record_for!(
+              passkey: record,
+              event_type: "passkey.registration_cancelled",
+              surface: record.is_a?(ClientPasskey) ? "app" : "com",
+              actor_ref: nil,
+              operation_ref: cycle.public_id,
+              occurred_at: record.class.database_now,
+              metadata: { reason: "sign_up_cancelled" },
+            )
+            record.destroy!
+            next
+          end
 
-        status_column = deleted_status_column(record)
-        deleted_id = deleted_status_id(record)
+          status_column = deleted_status_column(record)
+          deleted_id = deleted_status_id(record)
 
-        if record.respond_to?(:discard_now!)
-          record.discard_now!(purge_after: PHYSICAL_PURGE_DELAY, now: now)
-          record.update!(status_column => deleted_id) if status_column && deleted_id
-        else
-          attrs = retention_attrs(record)
-          attrs[status_column] = deleted_id if status_column && deleted_id
-          record.update!(attrs) if attrs.any?
+          if record.respond_to?(:discard_now!)
+            record.discard_now!(purge_after: PHYSICAL_PURGE_DELAY, now: now)
+            record.update!(status_column => deleted_id) if status_column && deleted_id
+          else
+            attrs = retention_attrs(record)
+            attrs[status_column] = deleted_id if status_column && deleted_id
+            record.update!(attrs) if attrs.any?
+          end
         end
       end
     end
   end
 
-  def dependent_records
+  def dependent_records(actor)
     case cycle
     when ClientSignUpFlow
-      client_dependent_records
+      client_dependent_records(actor)
     when VisitorSignUpFlow
-      visitor_dependent_records
+      visitor_dependent_records(actor)
     else
       []
     end
   end
 
-  def client_dependent_records
-    actor = Client.find_by(id: cycle.principal_id)
+  def client_dependent_records(actor)
     contact = client_pending_contact(actor)
     return [] unless actor&.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP && client_pending_contact?(contact)
 
@@ -226,8 +236,7 @@ class SignUpArtifactCleanup
     end
   end
 
-  def visitor_dependent_records
-    actor = Visitor.find_by(id: cycle.principal_id)
+  def visitor_dependent_records(actor)
     contact = visitor_pending_contact(actor)
     return [] unless visitor_pending_contact?(contact)
 

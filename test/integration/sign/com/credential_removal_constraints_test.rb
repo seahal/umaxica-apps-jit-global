@@ -43,6 +43,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx0_scope = "settings_email"
         fx0_host = @base_host
         fx0_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx0_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
         )
@@ -69,6 +70,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -136,6 +138,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                 refresh_token_expires_at: f0_now + 10.minutes,
@@ -197,6 +200,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx1_scope = "settings_telephone"
         fx1_host = @base_host
         fx1_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx1_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
         )
@@ -223,6 +227,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -290,6 +295,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                 refresh_token_expires_at: f1_now + 10.minutes,
@@ -352,6 +358,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx2_scope = "settings_passkey"
         fx2_host = @base_host
         fx2_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx2_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
         )
@@ -378,6 +385,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -445,6 +453,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,
@@ -505,6 +514,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx3_scope = "settings_secret_credential"
         fx3_host = @base_host
         fx3_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx3_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
         )
@@ -531,6 +541,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
                   f3_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                     refresh_token_expires_at: f3_now + 10.minutes,
@@ -598,6 +609,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                 refresh_token_expires_at: f3_now + 10.minutes,
@@ -670,6 +682,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx4_scope = "settings_email"
         fx4_host = @base_host
         fx4_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx4_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
         )
@@ -696,6 +709,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                   f4_now = Time.current
                   f4_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                     refresh_token_expires_at: f4_now + 10.minutes,
@@ -763,6 +777,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
               f4_now = Time.current
               f4_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                 refresh_token_expires_at: f4_now + 10.minutes,
@@ -817,6 +832,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx5_scope = "settings_passkey"
         fx5_host = @base_host
         fx5_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx5_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
         )
@@ -843,6 +859,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                   f5_now = Time.current
                   f5_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                     refresh_token_expires_at: f5_now + 10.minutes,
@@ -910,6 +927,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                 refresh_token_expires_at: f5_now + 10.minutes,
@@ -969,6 +987,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
         fx6_scope = "settings_secret_credential"
         fx6_host = @base_host
         fx6_token = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: fx6_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
         )
@@ -995,6 +1014,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
                   f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                   f6_now = Time.current
                   f6_session = OpComGrant.create!(
+                    authentication_epoch: 0,
                     visitor_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                     refresh_token_expires_at: f6_now + 10.minutes,
@@ -1062,6 +1082,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
               f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                 refresh_token_expires_at: f6_now + 10.minutes,
@@ -1125,6 +1146,7 @@ class SignComCredentialRemovalConstraintsTest < ActionDispatch::IntegrationTest
 
   def create_visitor
     Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
     )
@@ -1219,7 +1241,6 @@ class SignComCredentialRemovalConstraintsTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1251,7 +1272,10 @@ class SignComCredentialRemovalConstraintsTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -1535,7 +1559,6 @@ class SignComCredentialRemovalConstraintsTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1544,7 +1567,10 @@ class SignComCredentialRemovalConstraintsTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -42,7 +42,7 @@ class RuntimeRoleRouteGuardTest < ActionDispatch::IntegrationTest
 
       assert_response :not_found
 
-      post "/oidc/backchannel-logout", headers: { "Host" => host }
+      post "/oidc/closures", headers: { "Host" => host }
 
       assert_not_equal 404, response.status
     end

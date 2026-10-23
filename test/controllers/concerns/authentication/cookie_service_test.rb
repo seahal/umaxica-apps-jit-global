@@ -161,7 +161,7 @@ class AuthenticationCookieServiceTest < ActiveSupport::TestCase
       assert_equal "/", options[:path]
       assert_equal :strict, options[:same_site]
       assert options[:secure]
-      assert options[:partitioned]
+      assert_not options.key?(:partitioned)
       assert_not options.key?(:domain)
       assert_not options.key?(:httponly)
       assert_not options.key?(:expires)

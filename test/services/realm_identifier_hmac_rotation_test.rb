@@ -10,19 +10,27 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
         model, owner_attributes, identifier_attributes, digest_column, key_name =
           case [realm, channel]
           when ["app", "email"]
-            [ClientEmail, { user: Client.create!(status_id: ClientStatus::ACTIVE) },
+            [ClientEmail, { user: Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+            ) },
              { raw_address: "active-rotation-#{SecureRandom.hex(8)}@example.test" },
              :address_digest, "APP_EMAIL_ADDRESS_HMAC_KEY",]
           when ["com", "email"]
-            [VisitorEmail, { visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE) },
+            [VisitorEmail, { visitor: Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+            ) },
              { raw_address: "active-rotation-#{SecureRandom.hex(8)}@example.test" },
              :address_digest, "COM_EMAIL_ADDRESS_HMAC_KEY",]
           when ["app", "telephone"]
-            [ClientTelephone, { user: Client.create!(status_id: ClientStatus::ACTIVE) },
+            [ClientTelephone, { user: Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+            ) },
              { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
              :number_digest, "APP_TELEPHONE_NUMBER_HMAC_KEY",]
           when ["com", "telephone"]
-            [VisitorTelephone, { visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE) },
+            [VisitorTelephone, { visitor: Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+            ) },
              { raw_number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}", confirm_using_mfa: true },
              :number_digest, "COM_TELEPHONE_NUMBER_HMAC_KEY",]
           end
@@ -67,9 +75,9 @@ class RealmIdentifierHmacRotationTest < ActiveSupport::TestCase
   %w(app com org).each do |realm|
     %w(email telephone).each do |channel|
       test "#{realm} #{channel} emergency rotation changes only its explicitly selected identifier model" do
-        client = Client.create!(status_id: ClientStatus::ACTIVE)
-        visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-        operator = Operator.create!
+        client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+        visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+        operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
         records = [
           ["app", "email", ClientEmail.create!(
             user: client, raw_address: "rotation-app-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,

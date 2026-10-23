@@ -9,46 +9,35 @@ module AuthEmailOtpChallenge
     digest = IdentifierBlindIndex.bidx_for_email(destination, realm: email_otp_surface)
     raise ArgumentError, "email destination required" if digest.blank?
 
-    expired_local_parent = false
-    result =
-      with_email_otp_parent_lock do |parent, now|
-        if email_otp_context&.fetch("verified_at")
-          raise AuthCeremonySession::InvalidTransition, "email authentication proof is already verified"
-        end
-
-        with_email_otp_contact_lock(contact) do |locked|
-          now = self.class.database_now
-          if expire_email_otp_local_parent!(parent, now)
-            expired_local_parent = true
-            next nil
-          end
-          unless active?(now: now) && email_otp_parent_pending?(parent, now)
-            raise AuthCeremonySession::InvalidTransition, "email authentication ceremony unavailable"
-          end
-          if locked && (!locked.binding_effective? || locked.address_digest != digest ||
-              !email_otp_owner(locked).login_allowed?)
-            raise AuthCeremonySession::InvalidTransition, "email authentication binding unavailable"
-          end
-
-          code = SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")
-          context = email_otp_binding_context(locked, digest)
-          context.merge!(
-            "version" => 1, "generation" => SecureRandom.uuid, "issued_at" => now.utc.iso8601(6),
-            "expires_at" => [
-              now + EmailOtpPolicy::AUTHENTICATION_TTL, expires_at, email_otp_parent_deadline(parent),
-            ].min.utc.iso8601(6),
-            "verified_at" => nil, "result_expires_at" => nil, "cancelled_at" => nil,
-          )
-          context["code_digest"] = AuthEmailOtpCodeDigest.for(context: context, code: code)
-          update!(email_otp_context: context)
-          (locked && !locked.locked?) ? code : nil
-        end
+    with_email_otp_parent_lock do |parent, now|
+      if email_otp_context&.fetch("verified_at")
+        raise AuthCeremonySession::InvalidTransition, "email authentication proof is already verified"
       end
-    if expired_local_parent
-      raise AuthCeremonySession::InvalidTransition, "email authentication ceremony unavailable"
-    end
 
-    result
+      with_email_otp_contact_lock(contact) do |locked|
+        now = self.class.database_now
+        unless active?(now: now) && email_otp_parent_pending?(parent, now)
+          raise AuthCeremonySession::InvalidTransition, "email authentication ceremony unavailable"
+        end
+        if locked && (!locked.binding_effective? || locked.address_digest != digest ||
+            !email_otp_owner(locked).login_allowed?)
+          raise AuthCeremonySession::InvalidTransition, "email authentication binding unavailable"
+        end
+
+        code = SecureRandom.random_number(1_000_000).to_s.rjust(6, "0")
+        context = email_otp_binding_context(locked, digest)
+        context.merge!(
+          "version" => 1, "generation" => SecureRandom.uuid, "issued_at" => now.utc.iso8601(6),
+          "expires_at" => [
+            now + EmailOtpPolicy::AUTHENTICATION_TTL, expires_at, email_otp_parent_deadline(parent),
+          ].min.utc.iso8601(6),
+          "verified_at" => nil, "result_expires_at" => nil, "cancelled_at" => nil,
+        )
+        context["code_digest"] = AuthEmailOtpCodeDigest.for(context: context, code: code)
+        update!(email_otp_context: context)
+        (locked && !locked.locked?) ? code : nil
+      end
+    end
   end
 
   def verify_email_otp!(code:)
@@ -67,7 +56,6 @@ module AuthEmailOtpChallenge
 
       with_email_otp_contact_lock(contact) do |locked|
         now = self.class.database_now
-        return email_otp_refusal(:expired) if expire_email_otp_local_parent!(parent, now)
         return email_otp_refusal(:expired) unless active?(now: now) && email_otp_parent_pending?(parent, now)
         return email_otp_refusal(:binding_unavailable) unless email_otp_binding_current?(context, locked)
 
@@ -121,7 +109,6 @@ module AuthEmailOtpChallenge
 
       with_email_otp_contact_lock(contact) do |locked|
         now = self.class.database_now
-        return false if expire_email_otp_local_parent!(parent, now)
         return false unless active?(now: now) && email_otp_parent_pending?(parent, now)
         return false unless email_otp_binding_current?(context, locked) && !locked.locked?
         return false unless Time.iso8601(context.fetch("expires_at")) > now &&
@@ -171,8 +158,8 @@ module AuthEmailOtpChallenge
       "surface" => email_otp_surface,
       "purpose" => "authentication",
       "sid_digest" => sid_digest,
-      "parent_kind" => local_sign_in_flow_ref.present? ? "local_sign_in" : "oidc",
-      "parent_ref" => local_sign_in_flow_ref.presence || authorization_transaction_ref,
+      "parent_kind" => "oidc",
+      "parent_ref" => authorization_transaction_ref,
       "mode" => contact ? "real" : "fake",
       "contact_ref" => contact&.public_id,
       "owner_ref" => contact && email_otp_owner(contact).public_id,
@@ -194,13 +181,10 @@ module AuthEmailOtpChallenge
   def email_otp_scope_current?(context)
     context.fetch("surface") == email_otp_surface && context.fetch("purpose") == "authentication" &&
       context.fetch("sid_digest") == sid_digest &&
-      context.fetch("parent_kind") == (local_sign_in_flow_ref.present? ? "local_sign_in" : "oidc") &&
-      context.fetch("parent_ref") == (local_sign_in_flow_ref.presence || authorization_transaction_ref)
+      context.fetch("parent_kind") == "oidc" && context.fetch("parent_ref") == authorization_transaction_ref
   end
 
   def email_otp_parent_deadline(parent)
-    return parent.expires_at if local_sign_in_flow_ref.present?
-
     [parent.expires_at, parent.login_challenge_expires_at].min
   end
 
@@ -215,74 +199,46 @@ module AuthEmailOtpChallenge
   end
 
   def with_email_otp_parent_lock(refuse_unavailable: false)
-    expired_local_parent = false
-    result =
-      self.class.writing_connection do
-        parent = email_otp_parent
-        return false if parent.nil? && refuse_unavailable
+    self.class.writing_connection do
+      parent = email_otp_parent
+      return false if parent.nil? && refuse_unavailable
 
-        raise AuthCeremonySession::InvalidTransition, "email authentication parent missing" if parent.nil?
+      raise AuthCeremonySession::InvalidTransition, "email authentication parent missing" if parent.nil?
 
-        parent.with_lock do
-          with_lock do
-            now = self.class.database_now
-            if expire_email_otp_local_parent!(parent, now)
-              expired_local_parent = true
-              next false
-            end
-            unless active?(now: now) && admitted? && !authentication_evidence_recorded? && email_otp_parent_pending?(
-              parent, now,
-            )
-              return false if refuse_unavailable
+      parent.with_lock do
+        with_lock do
+          now = self.class.database_now
+          unless active?(now: now) && admitted? && !authentication_evidence_recorded? && email_otp_parent_pending?(
+            parent, now,
+          )
+            return false if refuse_unavailable
 
-              raise AuthCeremonySession::InvalidTransition, "email authentication ceremony unavailable"
-            end
-
-            yield(parent, now)
+            raise AuthCeremonySession::InvalidTransition, "email authentication ceremony unavailable"
           end
+
+          yield(parent, now)
         end
       end
-    if expired_local_parent && !refuse_unavailable
-      raise AuthCeremonySession::InvalidTransition, "email authentication ceremony unavailable"
     end
-
-    result
-  end
-
-  def expire_email_otp_local_parent!(parent, now)
-    return false unless local_sign_in_flow_ref.present? && parent.sign_in_primary_pending? && parent.expires_at <= now
-
-    parent.expire_sign_in!
-    true
   end
 
   def email_otp_parent
-    if local_sign_in_flow_ref.present?
-      case self
-      when ClientAuthCeremonySession then ClientSignInFlow.find_by(public_id: local_sign_in_flow_ref)
-      when VisitorAuthCeremonySession then VisitorSignInFlow.find_by(public_id: local_sign_in_flow_ref)
-      else raise ArgumentError, "unsupported email authentication surface"
-      end
-    elsif authorization_transaction_ref.present?
-      case self
-      when ClientAuthCeremonySession
-        ClientOidcAuthorizationTransaction.find_by(transaction_id: authorization_transaction_ref)
-      when VisitorAuthCeremonySession
-        VisitorOidcAuthorizationTransaction.find_by(transaction_id: authorization_transaction_ref)
-      else raise ArgumentError, "unsupported email authentication surface"
-      end
+    return if authorization_transaction_ref.blank?
+
+    case self
+    when ClientAuthCeremonySession
+      ClientOidcAuthorizationTransaction.find_by(transaction_id: authorization_transaction_ref)
+    when VisitorAuthCeremonySession
+      VisitorOidcAuthorizationTransaction.find_by(transaction_id: authorization_transaction_ref)
+    else raise ArgumentError, "unsupported email authentication surface"
     end
   end
 
   def email_otp_parent_pending?(parent, now)
     return false if parent.expires_at <= now
 
-    if local_sign_in_flow_ref.present?
-      admission_purpose == "local_sign_in" && parent.sign_in_primary_pending? && parent.principal_id.nil?
-    else
-      admission_purpose == "authentication_handoff" && parent.status == "pending" &&
-        !parent.login_challenge_expired?(now: now)
-    end
+    admission_purpose == "authentication_handoff" && parent.status == "pending" &&
+      !parent.login_challenge_expired?(now: now)
   end
 
   def email_otp_surface

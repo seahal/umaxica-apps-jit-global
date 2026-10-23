@@ -106,15 +106,18 @@ class Notify::OtpNotifiersTest < ActiveSupport::TestCase
   end
 
   test "purpose-specific delivery reaches the app mailer without exposing the otp" do
-    owner = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
     record = owner.client_emails.create!(
       address: "notifier-purpose@example.com", confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "local_sign_in", local_sign_in_flow_ref: issuance.transaction.public_id,
+      admission_purpose: "authentication_handoff", authorization_transaction_ref: issuance.transaction.transaction_id,
     )
     code = ceremony.issue_email_otp!(contact: record, destination: record.address)
 

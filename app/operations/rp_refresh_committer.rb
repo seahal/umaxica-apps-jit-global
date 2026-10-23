@@ -31,13 +31,12 @@ class RpRefreshCommitter
   DISPATCH_BUDGET = 4.0
   HMAC_PURPOSE = "rp_refresh_attempt_input"
 
-  def initialize(cell:, local_session_id:, refresh_token:, issuer:, contract_epoch:, jwks_client:, token_url:,
+  def initialize(cell:, local_session_id:, refresh_token:, issuer:, jwks_client:, token_url:,
                  query_url:)
     @cell = cell
     @local_session_id = local_session_id
     @refresh_token = refresh_token
     @issuer = issuer
-    @contract_epoch = contract_epoch
     @jwks_client = jwks_client
     @token_url = token_url
     @query_url = query_url
@@ -66,7 +65,7 @@ class RpRefreshCommitter
 
   private
 
-  attr_reader :cell, :local_session_id, :refresh_token, :issuer, :contract_epoch, :jwks_client, :token_url, :query_url
+  attr_reader :cell, :local_session_id, :refresh_token, :issuer, :jwks_client, :token_url, :query_url
 
   def reserve_attempt
     with_locked_session do |session, anchor|
@@ -152,7 +151,7 @@ class RpRefreshCommitter
   def verified_access_payload(token_response)
     verification = OidcOpAccessTokenVerifier.new(
       access_token: token_response[:access_token].to_s, client_id: cell.client_id, realm: cell.realm, issuer:,
-      audience: cell.client_id, contract_epoch:, jwks_client:,
+      audience: cell.client_id, jwks_client:,
     ).call
     verification.success? ? verification.payload : nil
   end
@@ -184,10 +183,9 @@ class RpRefreshCommitter
       anchor.identity_binding.principal.disabled_at.nil?
   end
 
-  def payload_matches?(session, anchor, payload)
+  def payload_matches?(_session, anchor, payload)
     identity = anchor.identity_binding
-    session.contract_epoch == payload.fetch("umx_contract_epoch") &&
-      anchor.sid == payload.fetch("sid") && anchor.issuer == payload.fetch("iss") &&
+    anchor.sid == payload.fetch("sid") && anchor.issuer == payload.fetch("iss") &&
       anchor.realm == cell.realm && anchor.client_id == cell.client_id &&
       identity.issuer == anchor.issuer && identity.realm == anchor.realm &&
       identity.client_id == anchor.client_id && identity.subject == payload.fetch("sub")

@@ -18,8 +18,9 @@ class Palm::App::Sign::Out::CompletionsControllerTest < ActionDispatch::Integrat
 
     client = clients(:one)
     oidc_client = OidcClientRegistry.find!("palm-app-jp")
-    root_token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    root_token = ClientToken.create!(authentication_epoch: 0, user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root_token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",

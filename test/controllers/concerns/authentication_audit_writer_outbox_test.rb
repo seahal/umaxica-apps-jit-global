@@ -12,7 +12,10 @@ class AuthenticationAuditWriterOutboxTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "an audit row is written against the association the audit class exposes" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
 
     assert_difference -> { ClientChronicle.count }, 1 do
       AuthenticationAuditWriter.write!(

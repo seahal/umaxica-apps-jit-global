@@ -9,7 +9,10 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
     %i(signup signed_in).each do |path|
-      actor = Client.create!(status_id: (path == :signup) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : ClientStatus::ACTIVE)
+      actor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: (path == :signup) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : ClientStatus::ACTIVE,
+      )
       if path == :signup
         telephone = actor.client_telephones.create!(
           raw_number: "+819012349876", confirm_policy: "1", confirm_using_mfa: "1",
@@ -19,6 +22,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
         nonce = SecureRandom.base58(32)
         now = ClientSignUpFlow.database_now
         flow = ClientSignUpFlow.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
           principal_id: actor.id, entry_method: "telephone", status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
           step: "checkpoint", issued_at: now, expires_at: now + 5.minutes,
           nonce_digest: ClientSignUpFlow.digest_nonce(nonce), pending_passkey_registration_id: passkey.id,
@@ -29,7 +33,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
           flow: flow, nonce: nonce, passkey: passkey, expires_after: 0.000001.seconds,
         )
       else
-        token = ClientToken.create!(user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, user: actor)
         token.update!(
           last_step_up_at: Client.database_now, last_step_up_scope: "settings_passkey",
           last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -69,11 +73,12 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
   end
 
   test "Ticket completion cannot activate a saved signup batch before source Client registration commits" do
-    actor = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     now = ClientSignUpFlow.database_now
     # A cross-DB interruption can leave these Ticket facts committed while the
     # source Client remains pending; the public activation operation must refuse.
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: actor.id, entry_method: "telephone", status_id: ClientSignUpFlowStatus::COMPLETED,
       step: "completed", issued_at: now - 1.minute, expires_at: now + 14.minutes,
       completed_at: now, nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.base58(32)),
@@ -109,7 +114,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
   end
 
   test "signup reservation requires its durable nonce and pending registration rather than signed-in bootstrap" do
-    actor = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     telephone = actor.client_telephones.create!(
       raw_number: "+819012349876", confirm_policy: "1", confirm_using_mfa: "1",
       user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
@@ -117,6 +122,7 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
     passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
     nonce = SecureRandom.base58(32)
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: actor.id, entry_method: "telephone", status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
       step: "checkpoint", issued_at: ClientSignUpFlow.database_now, expires_at: 5.minutes.from_now,
       nonce_digest: ClientSignUpFlow.digest_nonce(nonce), pending_passkey_registration_id: passkey.id,
@@ -191,8 +197,8 @@ class ClientSecretPasskeyReservationIssuerTest < ActiveSupport::TestCase
 
   test "Passkey registration reserves two one or zero from writer active count and retries keep its batch" do
     (0..20).each do |active_count|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       now = Client.database_now
       token.update!(
         last_step_up_at: now, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",

@@ -15,9 +15,9 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       [Visitor, VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com,
        { number: "+819012345687" },],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface, attributes|
-      owner = owner_class.create!
+      owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = contact_class.create!(attributes.merge(owner_key => owner.id, :confirm_policy => "1"))
-      token = token_class.create!(owner_key => owner.id)
+      token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
       token.update!(last_step_up_at: token_class.database_now, last_step_up_scope: "settings_email")
       previous = token.attributes.slice("last_step_up_at", "last_step_up_scope", "discard_at")
       contact_before = contact.attributes
@@ -42,7 +42,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       [Client, ClientEmail, ClientToken, ClientContactAuditOutbox, :user_id, :app],
       [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, :com],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, surface|
-      owner = owner_class.create!
+      owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       attributes = { owner_key => owner.id, :address => "rollback-release@example.test", :confirm_policy => "1" }
       if surface == :app
         attributes[:user_email_status_id] = ClientEmailStatus::VERIFIED
@@ -62,7 +62,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           uv_verified_at: Time.current,
         )
       end
-      token = token_class.create!(owner_key => owner.id)
+      token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
       token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_email")
       context = ActorValuesContext.empty.with(
         subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
@@ -84,11 +84,11 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   end
 
   test "Contact removal refuses missing anonymous foreign role and realm contexts before clearing authority" do
-    owner = Client.create!
-    foreign = Client.create!
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    foreign = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     contact = ClientEmail.create!(user_id: owner.id, address: "release-context@example.test", confirm_policy: "1")
     contact.finalize_binding!
-    token = ClientToken.create!(user: owner)
+    token = ClientToken.create!(authentication_epoch: 0, user: owner)
     token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_email")
     freshness = token.last_step_up_at
     valid = ActorValuesContext.empty.with(subject: owner, actor_type: :client, tld: :app, surface: :base)
@@ -114,7 +114,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       [Visitor, VisitorEmail, VisitorToken, VisitorContactAuditOutbox, :visitor_id, "email", :com],
       [Visitor, VisitorTelephone, VisitorToken, VisitorContactAuditOutbox, :visitor_id, "telephone", :com],
     ].each do |owner_class, contact_class, token_class, outbox_class, owner_key, kind, surface|
-      owner = owner_class.create!
+      owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       attributes = (kind == "email") ? { address: "release@example.test" } : { number: "+819012345686" }
       contact = contact_class.create!(attributes.merge(owner_key => owner.id, :confirm_policy => "1"))
       case contact
@@ -136,7 +136,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
           uv_verified_at: Time.current,
         )
       end
-      token = token_class.create!(owner_key => owner.id)
+      token = token_class.create!(:authentication_epoch => 0, owner_key => owner.id)
       context = ActorValuesContext.empty.with(
         subject: owner, actor_type: (surface == :app) ? :client : :visitor, tld: surface, surface: :base,
       )
@@ -165,7 +165,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     %i(app com).each do |surface|
       actor, token, passkey, email =
         if surface == :app
-          actor = Client.create!(id: 9_111_000_000_000)
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_111_000_000_000)
           email = actor.client_emails.create!(
             address: "locked-app-#{SecureRandom.hex(8)}@example.com",
             user_email_status_id: ClientEmailStatus::VERIFIED,
@@ -175,9 +175,9 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             webauthn_id: SecureRandom.uuid, public_key: "last-key",
             uv_verified_at: Time.current,
           )
-          [actor, ClientToken.create!(user: actor), passkey, email]
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), passkey, email]
         else
-          actor = Visitor.create!(id: 9_111_000_000_000)
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_111_000_000_000)
           email = actor.visitor_emails.create!(
             address: "locked-com-#{SecureRandom.hex(8)}@example.com",
             visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -187,7 +187,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             webauthn_id: SecureRandom.uuid, public_key: "last-key",
             uv_verified_at: Time.current,
           )
-          [actor, VisitorToken.create!(visitor: actor), passkey, email]
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), passkey, email]
         end
       token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
       event = token.last_step_up_at
@@ -207,7 +207,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       %i(passkey email).each_with_index do |fallback_kind, index|
         actor, token, target, fallback =
           if surface == :app
-            actor = Client.create!(id: 9_109_000_000_000 + index)
+            actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_109_000_000_000 + index)
             target = actor.client_passkeys.create!(
               webauthn_id: SecureRandom.uuid, public_key: "usable-key",
               uv_verified_at: Time.current,
@@ -224,9 +224,9 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
                   user_email_status_id: ClientEmailStatus::VERIFIED,
                 )
               end
-            [actor, ClientToken.create!(user: actor), target, fallback]
+            [actor, ClientToken.create!(authentication_epoch: 0, user: actor), target, fallback]
           else
-            actor = Visitor.create!(id: 9_109_000_000_000 + index)
+            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_109_000_000_000 + index)
             recovery = actor.visitor_emails.create!(
               address: "expired-com-#{SecureRandom.hex(8)}@example.com",
               visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -241,7 +241,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
                 public_key: "expired-key", uv_verified_at: Time.current,
               ) : recovery
             recovery.update!(discard_at: Visitor.database_now)
-            [actor, VisitorToken.create!(visitor: actor), target, fallback]
+            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), target, fallback]
           end
         fallback.update!(discard_at: actor.class.database_now)
         token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
@@ -262,7 +262,10 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
       actor, token, credential, terminal_status =
         case surface
         when :app, :totp
-          actor = Client.create!(id: 9_108_000_000_000 + SecureRandom.random_number(1_000_000_000))
+          actor = Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            id: 9_108_000_000_000 + SecureRandom.random_number(1_000_000_000),
+          )
 
           assert_equal 0, actor.client_passkeys.count
           actor.client_passkeys.create!(
@@ -278,10 +281,10 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
                 uv_verified_at: Time.current,
               )
             end
-          [actor, ClientToken.create!(user: actor), credential,
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), credential,
            (surface == :totp) ? ClientTotpCredentialStatus::DELETED : ClientPasskeyStatus::DELETED,]
         when :com
-          actor = Visitor.create!
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
           actor.visitor_emails.create!(
             address: "removal-#{SecureRandom.hex(8)}@example.com",
             visitor_email_status_id: VisitorEmailStatus::VERIFIED,
@@ -290,9 +293,9 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             webauthn_id: SecureRandom.uuid, public_key: "removed-key",
             uv_verified_at: Time.current,
           )
-          [actor, VisitorToken.create!(visitor: actor), credential, VisitorPasskeyStatus::DELETED]
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), credential, VisitorPasskeyStatus::DELETED]
         when :org
-          actor = Operator.create!
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
           actor.staff_passkeys.create!(
             webauthn_id: SecureRandom.uuid, public_key: "fallback-key",
             uv_verified_at: Time.current,
@@ -301,7 +304,7 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
             webauthn_id: SecureRandom.uuid, public_key: "removed-key",
             uv_verified_at: Time.current,
           )
-          [actor, OperatorToken.create!(staff: actor), credential, OperatorPasskeyStatus::REVOKED]
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), credential, OperatorPasskeyStatus::REVOKED]
         end
       evidence_ref =
         case credential
@@ -375,9 +378,9 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
   end
 
   test "the last ORG Passkey and a foreign actor credential are refused without changing authority" do
-    actor = Operator.create!
-    foreign_actor = Operator.create!
-    token = OperatorToken.create!(staff: actor)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    foreign_actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     token.update!(last_step_up_at: Time.current, last_step_up_scope: "settings_passkey")
     credential = actor.staff_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "last-key",
@@ -398,8 +401,8 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     assert_equal timestamp, token.reload.last_step_up_at
   end
   test "revoked session and ticket failure leave an owned credential active" do
-    actor = Operator.create!
-    token = OperatorToken.create!(staff: actor)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
     actor.staff_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "fallback-key",
       uv_verified_at: Time.current,
@@ -436,12 +439,12 @@ class IdentityCredentialRemovalCommitterTest < ActiveSupport::TestCase
     assert_equal OperatorPasskeyStatus::ACTIVE, credential.reload.status_id
   end
   test "missing bindings, another session owner and Emergency context cannot remove a credential" do
-    actor = Operator.create!
-    other = Operator.create!
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "owned-key")
-    token = OperatorToken.create!(staff: actor)
-    foreign_token = OperatorToken.create!(staff: other)
-    emergency = OperatorToken.create!(staff: actor, authentication_context: AuthenticationContextValue::STANDBY_KEY)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor)
+    foreign_token = OperatorToken.create!(authentication_epoch: 0, staff: other)
+    emergency = OperatorToken.create!(authentication_epoch: 0, staff: actor, authentication_context: AuthenticationContextValue::STANDBY_KEY)
 
     [[nil, credential, token], [actor, nil, token], [actor, credential, nil],
      [actor, credential, foreign_token], [actor, credential, emergency],].each do |owner, target, session|

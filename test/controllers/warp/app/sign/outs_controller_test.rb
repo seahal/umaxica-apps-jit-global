@@ -14,7 +14,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "get sign out renders confirmation without mutation" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     get edit_warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
 
@@ -27,7 +27,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "sign-out launch leaves the parent and RP session unchanged" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
@@ -40,7 +40,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "a write that creates the browser preference synchronizes the client preference mirror" do
     user = clients(:sample_user)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
     mirror = -> { AppZenithRecord.connected_to(role: :writing) { ClientPreference.find_by(user_id: user.id) } }
 
@@ -55,7 +55,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out redirects to the registered base authority" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
@@ -76,7 +76,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out accepts us region" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
@@ -94,7 +94,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out canonicalizes unsupported region to default" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "xx"), headers: app_session_headers(user, token)
@@ -110,7 +110,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "transaction issuance failure does not render success completion" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
     rejected = AcmeLogoutTransactionCoordinator::Result.new(
       transaction: nil,
@@ -132,7 +132,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out does not route through Auth" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
 
     post warp_app_sign_out_url(ri: "jp"), headers: app_session_headers(user, token)
@@ -150,6 +150,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
   def authenticate_rp!(user, token)
     oidc_client = OidcClientRegistry.find!("warp-app-jp")
     @rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -224,7 +225,6 @@ class Warp::App::Sign::OutsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -256,7 +256,10 @@ class Warp::App::Sign::OutsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -542,7 +545,6 @@ class Warp::App::Sign::OutsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -551,7 +553,10 @@ class Warp::App::Sign::OutsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

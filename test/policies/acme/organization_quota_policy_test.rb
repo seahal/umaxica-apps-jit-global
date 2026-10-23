@@ -41,7 +41,10 @@ class Acme::OrganizationQuotaPolicyTest < ActiveSupport::TestCase
 
   test "counts only resources owned by the principal when no scope is supplied" do
     create_enterprises(1)
-    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     other_enterprise = Enterprise.create!(name: "Other", title: "Other")
     EnterpriseOwnership.create!(enterprise: other_enterprise, client: other_client)
     EnterpriseLifecycle.create!(
@@ -99,7 +102,10 @@ class Acme::OrganizationQuotaPolicyTest < ActiveSupport::TestCase
   private
 
   def client
-    @client ||= Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client ||= Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
   end
 
   def create_enterprises(count)

@@ -139,7 +139,7 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
 
   test "reference binding mismatch does not consume the admission" do
     @store.issue!(
-      purpose: :local_sign_in,
+      purpose: :authentication_handoff,
       actor_type: "client",
       surface: "app",
       reference: "entry-1",
@@ -148,7 +148,7 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
     rejected = @store.consume_reference!(
       reference: "entry-1",
       expected: { actor_type: "visitor", surface: "com" },
-      purposes: ["local_sign_in"],
+      purposes: ["authentication_handoff"],
     )
 
     assert_predicate rejected, :binding_mismatch?
@@ -156,7 +156,7 @@ class ValkeyAuthStateOpaqueAdmissionStoreTest < ActiveSupport::TestCase
     accepted = @store.consume_reference!(
       reference: "entry-1",
       expected: { actor_type: "client", surface: "app" },
-      purposes: ["local_sign_in"],
+      purposes: ["authentication_handoff"],
     )
 
     assert_predicate accepted, :success?

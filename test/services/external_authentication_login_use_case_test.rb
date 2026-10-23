@@ -9,6 +9,7 @@ class ExternalAuthenticationLoginUseCaseTest < ActiveSupport::TestCase
 
   test "returns an authenticated typed result for an existing identity" do
     client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::ACTIVE,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",
@@ -91,8 +92,14 @@ class ExternalAuthenticationLoginUseCaseTest < ActiveSupport::TestCase
   end
 
   test "a login callback begun before release cannot authenticate a later subject owner" do
-    original = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
-    successor = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    original = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
+    successor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     subject = SecureRandom.uuid
     identity = create_active_external_identity(client: original, provider: "google", subject: subject)
     original.client_emails.create!(

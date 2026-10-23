@@ -224,4 +224,32 @@ class AuthCeremonySessionTest < ActiveSupport::TestCase
       assert_raises(AuthCeremonySession::InvalidTransition) { record.revoke! }
     end
   end
+
+  # D-60 (WU-01): the Local Sign-in Flow purposes are retired; neither the model nor the database
+  # maps them onto a surviving purpose.
+  CASES.each do |model|
+    %w(local_sign_in local_sign_up).each do |purpose|
+      test "#{model.name} refuses the retired #{purpose} admission purpose" do
+        _previous, previous_sid = model.issue!
+
+        assert_no_difference -> { model.count } do
+          assert_raises(AuthCeremonySession::InvalidTransition) do
+            model.rotate_and_admit!(admission_purpose: purpose, previous_raw_sid: previous_sid)
+          end
+        end
+        record, = model.issue!
+
+        assert_raises(AuthCeremonySession::InvalidTransition) { record.admit!(admission_purpose: purpose) }
+        error =
+          assert_raises(ActiveRecord::StatementInvalid) do
+            model.transaction(requires_new: true) do
+              # Bypasses the model guard on purpose to check the database constraint itself.
+              record.update_columns(admission_purpose: purpose, admitted_at: record.created_at)
+            end
+          end
+
+        assert_includes error.message, "_auth_admission_purpose_valid"
+      end
+    end
+  end
 end

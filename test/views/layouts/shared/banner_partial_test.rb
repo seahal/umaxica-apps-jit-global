@@ -6,7 +6,7 @@ require "test_helper"
 
 class BannerPartialTest < ActionView::TestCase
   fixtures :client_banners, :visitor_banners, :clients, :client_statuses, :visitors, :visitor_statuses,
-           :visitor_visibilities, :visitor_mfa_levels, :visitor_mfa_statuses
+           :visitor_visibilities, :visitor_security_modes, :visitor_mfa_statuses
 
   test "renders title and body when title is present" do
     render partial: "layouts/shared/banner", locals: { banner: client_banners(:current_user_banner) }

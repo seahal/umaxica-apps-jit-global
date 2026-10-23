@@ -6,7 +6,10 @@ require "test_helper"
 class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
   setup do
     @user = clients(:one)
-    @user_session_token = ClientToken.create!(user: @user, authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
+    @user_session_token = ClientToken.create!(
+      authentication_epoch: 0, user: @user,
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    )
     @code_verifier = SecureRandom.urlsafe_base64(32)
     @code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(@code_verifier), padding: false)
     @client = OidcClientRegistry.find("core-app-jp")

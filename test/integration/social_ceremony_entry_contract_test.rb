@@ -99,6 +99,7 @@ class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
     end
 
     test "#{provider} sign-up entry hands the POST to the OmniAuth request phase with a 307" do
+      switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
       post public_send(:"auth_app_social_#{provider}_registration_path", ri: "jp"),
            headers: { "Host" => @host }
 
@@ -130,7 +131,7 @@ class SocialCeremonyEntryContractTest < ActionDispatch::IntegrationTest
           response_type: "code",
           client_id: "core-app-jp",
           redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
-          code_challenge: "challenge",
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           state: "state",
           nonce: "nonce",

@@ -12,6 +12,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     @operator = operators(:one)
     @granter = operators(:two)
     @operator_token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -79,6 +80,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -157,6 +159,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -226,6 +229,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -306,6 +310,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -384,6 +389,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -460,6 +466,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -539,6 +546,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -617,6 +625,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -699,6 +708,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -780,6 +790,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -851,7 +862,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
-    token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     operation_id = SecureRandom.uuid
 
     http_headers_10 =
@@ -884,6 +895,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -961,6 +973,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1023,7 +1036,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
-    before = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    before = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     http_headers_8 =
       begin
@@ -1055,6 +1068,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1088,7 +1102,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     post base_org_support_client_revocations_url(@client.public_id, host: @host),
          params: { reason_code: "support_request", operation_id: SecureRandom.uuid },
          headers: http_headers_8
-    after = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    after = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     assert_predicate before.reload, :revoked?
     assert_not_predicate after.reload, :revoked?
@@ -1151,6 +1165,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1223,7 +1238,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
-    token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     headers =
       begin
         rp_headers = as_staff_headers(@operator, host: @host, session_public_id: @operator_token.public_id)
@@ -1254,6 +1269,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1353,6 +1369,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1417,7 +1434,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
-    token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     http_headers_7 =
       begin
@@ -1449,6 +1466,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1537,6 +1555,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1588,6 +1607,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
     end
     OperatorToken.where(staff_id: @operator.id).destroy_all
     emergency_token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -1595,7 +1615,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
       authentication_context: AuthenticationContextValue::STANDBY_KEY,
     )
-    token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     http_headers_5 =
       begin
@@ -1627,6 +1647,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1689,7 +1710,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_purpose: "step_up",
       last_step_up_audience: "step_up:org",
     )
-    token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     chronicle_down = ->(**) { raise ActiveRecord::ConnectionNotEstablished, "chronicle unavailable" }
 
     ChronicleIntentWriter.stub(:call, chronicle_down) do
@@ -1725,6 +1746,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -1825,6 +1847,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -1894,6 +1917,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1985,6 +2009,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -2049,6 +2074,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -2103,7 +2129,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
       last_step_up_session_public_id: @operator_token.public_id,
       last_step_up_purpose: "step_up", last_step_up_audience: "step_up:org",
     )
-    token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     original = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
 
@@ -2140,6 +2166,7 @@ class Base::Org::Support::SessionRevocationsTest < ActionDispatch::IntegrationTe
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

@@ -6,7 +6,10 @@ require "test_helper"
 class VisitorSecretCredentialsCreateTest < ActiveSupport::TestCase
   setup do
     ensure_visitor_reference_records!
-    @visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    @visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor: @visitor,
       address: "visitor-#{SecureRandom.hex(4)}@example.com",

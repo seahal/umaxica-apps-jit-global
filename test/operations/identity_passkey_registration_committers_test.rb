@@ -11,8 +11,8 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
   fixtures :client_statuses
 
   setup do
-    @actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    @token = ClientToken.create!(user: @actor, root_login_established_at: Time.current)
+    @actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @actor, root_login_established_at: Time.current)
     @requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false, allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false,
@@ -107,8 +107,8 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
   end
 
   test "a registration challenge cannot be issued for an ordinary step-up transaction" do
-    stranger = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: stranger)
+    stranger = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: stranger)
     transaction = BaseStepUpAdmissionIssuer.call!(
       actor: stranger, token: token,
       requirement: StepUpRequirement.new(
@@ -179,7 +179,7 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: @transaction.reload, ceremony_session_ref: @ceremony.id.to_s,
     )
-    other = Client.create!(status_id: ClientStatus::ACTIVE)
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     other.client_passkeys.create!(
       webauthn_id: attestation.fetch("id"), public_key: "other-owner-key", description: "Other", sign_count: 0,
     )
@@ -200,7 +200,7 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
 
   test "Auth refuses an attestation whose credential is already registered" do
     attestation = @fake.create(challenge: @challenge, user_verified: true)
-    other = Client.create!(status_id: ClientStatus::ACTIVE)
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     other.client_passkeys.create!(
       webauthn_id: attestation.fetch("id"), public_key: "other-owner-key", description: "Other", sign_count: 0,
     )
@@ -249,7 +249,7 @@ class IdentityPasskeyRegistrationCommittersTest < ActiveSupport::TestCase
     result = BaseAuthAdmissionCoordinator.issue_result!(
       transaction: @transaction.reload, ceremony_session_ref: @ceremony.id.to_s,
     )
-    other_token = ClientToken.create!(user: @actor, root_login_established_at: Time.current)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: @actor, root_login_established_at: Time.current)
 
     assert_no_difference -> { ClientPasskey.count } do
       assert_raises(IdentityPasskeyCeremonyContract::Error) do

@@ -42,7 +42,10 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
   end
 
   test "revokes every session except the current one for an operator" do
-    operator = Operator.create!(status_id: OperatorStatus.find_or_create_by!(id: OperatorStatus::ACTIVE).id)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus.find_or_create_by!(id: OperatorStatus::ACTIVE).id,
+    )
     current = create_operator_token(operator)
     other = create_operator_token(operator)
 
@@ -118,6 +121,7 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
 
   def create_client_token(client)
     ClientToken.create!(
+      authentication_epoch: 0,
       user: client,
       user_token_status_id: ClientTokenStatus::NOTHING,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -128,6 +132,7 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
 
   def create_operator_token(operator)
     OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
@@ -139,18 +144,18 @@ class AuthenticationOtherSessionsRevokerTest < ActiveSupport::TestCase
   def create_visitor
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     Visitor.create!(
       status_id: VisitorStatus::NOTHING,
       visibility_id: VisitorVisibility::VISITOR,
-      mfa_level_id: VisitorMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
     )
   end
 
   def create_visitor_token(visitor)
     VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_status_id: VisitorTokenStatus::NOTHING,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,

@@ -8,8 +8,9 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
   setup do
     @base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     @auth_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
-    @staff = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    @token = OperatorToken.create!(staff: @staff, authentication_context: AuthenticationContextValue::NORMAL_KEY)
+    @staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(@staff)
+    @token = OperatorToken.create!(authentication_epoch: 0, staff: @staff, authentication_context: AuthenticationContextValue::NORMAL_KEY)
     @token.rotate_refresh_token!
     @staff.staff_passkeys.create!(
       webauthn_id: SecureRandom.urlsafe_base64(32), external_id: SecureRandom.uuid,
@@ -27,6 +28,7 @@ class SignOrgVerificationBaseDirectCoverageTest < ActionDispatch::IntegrationTes
     @base_headers = as_staff_headers(@staff, host: @base_host, session_public_id: @token.public_id)
     client = OidcClientRegistry.find!("base-org-ww")
     rp = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: @token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,

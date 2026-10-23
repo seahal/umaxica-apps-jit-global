@@ -5,7 +5,10 @@ require "test_helper"
 
 class AvatarGroupPolicyTest < ActiveSupport::TestCase
   setup do
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     install_selected_app_context
   end
@@ -29,7 +32,7 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
 
     Actor.install_context!(tld: :com)
 
-    assert_not AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new).index?
+    assert_not AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).index?
   end
 
   test "selected account and owner can show and mutate an active app group" do
@@ -103,7 +106,7 @@ class AvatarGroupPolicyTest < ActiveSupport::TestCase
   test "relation scope is empty for non-owner actor or missing selected context" do
     group = create_group
 
-    assert_empty AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new).apply_scope(
+    assert_empty AvatarGroupPolicy.new(AvatarGroup, user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)).apply_scope(
       AvatarGroup.all,
       type: :active_record_relation,
     )

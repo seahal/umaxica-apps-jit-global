@@ -87,6 +87,7 @@ class AuthSignUpCheckpointCancellationTest < ActionDispatch::IntegrationTest
         host!(current_host)
         get target.request_uri, params: { ri: "jp" }
       end
+      switch_browser_to_sign_up!(integration_session, surface: surface)
     end
   end
 

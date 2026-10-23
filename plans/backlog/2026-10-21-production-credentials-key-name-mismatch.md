@@ -7,7 +7,7 @@ later. Nothing has been deployed, so no live system is affected yet.
 
 ## Problem
 
-The encrypted credentials hold JWT and OIDC client keys under old names (Acme, Sign, Apex …),
+The encrypted credentials hold JWT and OIDC client keys under old names (Acme, Sign and older family names),
 while the code reads the current names (Base, Auth, Warp, Palm …). In development and test this is
 invisible, because `JitSecurityJwtLocalKeysetInstaller` generates every key at boot and writes it to
 `ENV`, and `ENV` wins over credentials. In production the installer does not run, so the keys the

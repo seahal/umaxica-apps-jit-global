@@ -24,8 +24,9 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
           contact_model, status_key, owner_key, verified_status, parameter_scope =
           case [surface, channel]
           when ["app", "email"], ["app", "telephone"]
-            principal = Client.create!(status_id: ClientStatus::ACTIVE)
+            principal = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
             root = ClientToken.create!(
+              authentication_epoch: 0,
               user: principal, established_authentication_method: "passkey",
               root_login_established_at: ClientToken.database_now, discard_at: 1.day.from_now,
             )
@@ -36,8 +37,9 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
              (channel == "email") ? ClientEmailStatus::VERIFIED : ClientTelephoneStatus::VERIFIED,
              (channel == "email") ? :client_email : :user_telephone,]
           when ["com", "email"], ["com", "telephone"]
-            principal = Visitor.create!
+            principal = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
             root = VisitorToken.create!(
+              authentication_epoch: 0,
               visitor: principal, established_authentication_method: "passkey",
               root_login_established_at: VisitorToken.database_now, discard_at: 1.day.from_now,
             )
@@ -66,7 +68,11 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
             "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
         )
         old_contact.finalize_binding!
-        other_actor = (surface == "app") ? Client.create!(status_id: ClientStatus::ACTIVE) : Visitor.create!
+        other_actor =
+          (surface == "app") ? Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: ClientStatus::ACTIVE,
+          ) : Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
         other_contact = contact_model.create!(
           owner_key => other_actor.id, status_key => verified_status, :confirm_policy => "1",
           (channel == "email") ? :raw_address : :raw_number => (channel == "email") ?
@@ -80,9 +86,8 @@ class ContactSettingsOtpAtomicCommitTest < ActionDispatch::IntegrationTest
         token.rotate_refresh_token!
         client = OidcClientRegistry.find!(client_id)
         rp = rp_model.create!(
+          :authentication_epoch => 0,
           rp_token_key => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
-          :contract_epoch => { OpAppGrant => OpAppProtocolEpoch,
-                               OpComGrant => OpComProtocolEpoch, }.fetch(rp_model).current_contract_epoch,
           :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => Time.current,
           :refresh_token_expires_at => 10.minutes.from_now,
         )

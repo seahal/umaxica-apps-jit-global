@@ -33,7 +33,6 @@ module Sign
         consume_passkey_challenge_with_actor!
         discard_passkey_challenge
         webauthn_credential_ids
-        passkey_resource_display_name
       ).each do |method_name|
         assert_includes @controller.private_methods, method_name
         assert_not_includes @controller.public_methods, method_name

@@ -9,7 +9,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
   setup do
     ClientStatus.ensure_defaults!
-    ClientMfaLevel.ensure_defaults!
     ClientMfaStatus.ensure_defaults!
     ClientVisibility.ensure_defaults!
     ClientSignUpFlowStatus.ensure_defaults!
@@ -19,7 +18,6 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     ClientPasskeyStatus.ensure_defaults!
 
     VisitorStatus.ensure_defaults!
-    VisitorMfaLevel.ensure_defaults!
     VisitorMfaStatus.ensure_defaults!
     VisitorVisibility.ensure_defaults!
     VisitorSignUpFlowStatus.ensure_defaults!
@@ -59,7 +57,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     now = Time.current.change(usec: 0)
 
     %w(google apple).each do |provider|
-      user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+      user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
       identity = create_active_external_identity(
         client: user, provider: provider,
         subject: "cleanup-#{provider}-#{SecureRandom.hex(4)}",
@@ -84,7 +82,10 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
   test "schedules visitor email cleanup and actor retention" do
     now = Time.current.change(usec: 0)
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     email = VisitorEmail.create!(
       visitor: visitor,
       address: "cleanup-#{SecureRandom.hex(4)}@example.com",
@@ -108,17 +109,23 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
     assert_operator visitor.reload.discard_at, :>=, now
   end
 
-  test "cleanup_pending_for claims one eligible cycle and skips missing statuses" do
-    claimed_cycle = FakeCleanupCycle.new(cleanup_attempts_count: 9)
-    cycle_class = FakeCleanupCycleClass.new(claimed_cycle)
+  test "cleanup worker claims a real terminal flow and completes its tenth attempt" do
     now = Time.current.change(usec: 0)
+    # A fake cleanup row has no main-flow terminal state; use the real admission boundary.
+    claimed_cycle = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+      principal_id: 0, entry_method: "email", nonce_digest: ClientSignUpFlow.digest_nonce("worker-browser"),
+      status_id: ClientSignUpFlowStatus::CANCELLED, step: "cancelled",
+      issued_at: now, expires_at: now + 15.minutes, cleanup_attempts_count: 9,
+      cleanup_status_id: ClientSignUpFlowCleanupStatus::PENDING,
+    )
 
-    SignUpArtifactCleanup.cleanup_pending_for(cycle_class, now: now, batch_size: 2)
+    SignUpArtifactCleanup.cleanup_pending_for(ClientSignUpFlow, now: now, batch_size: 1)
 
-    assert_operator cycle_class.where_calls.size, :>=, 2
-    assert_operator claimed_cycle.updates.size, :>=, 2
+    claimed_cycle.reload
+
     assert_equal 10, claimed_cycle.cleanup_attempts_count
-    assert_equal "completed_cleanup", claimed_cycle.cleanup_status_id
+    assert_equal ClientSignUpFlowCleanupStatus::COMPLETED, claimed_cycle.cleanup_status_id
     assert_equal now, claimed_cycle.cleanup_completed_at
     assert_nil claimed_cycle.cleanup_error_code
   end
@@ -143,7 +150,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
   test "client pending telephone cleanup updates the phone and pending passkey" do
     now = Time.current.change(usec: 0)
-    user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     telephone = ClientTelephone.create!(
       user: user,
       raw_number: "+12345670001",
@@ -181,7 +188,10 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
 
   test "visitor pending telephone cleanup updates the phone and pending passkey" do
     now = Time.current.change(usec: 0)
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     telephone = VisitorTelephone.create!(
       visitor: visitor,
       raw_number: "+12345670002",
@@ -228,7 +238,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
         issued_at: Time.current,
         expires_at: 15.minutes.from_now,
         entry_method: "google",
-      }.merge(attrs),
+      }.merge(attrs).merge(auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)),
     )
   end
 
@@ -242,7 +252,7 @@ class SignUpArtifactCleanupTest < ActiveSupport::TestCase
         issued_at: Time.current,
         expires_at: 15.minutes.from_now,
         entry_method: "email",
-      }.merge(attrs),
+      }.merge(attrs).merge(auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow)),
     )
   end
 

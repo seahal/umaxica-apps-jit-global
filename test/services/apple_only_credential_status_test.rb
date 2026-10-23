@@ -9,14 +9,20 @@ class AppleOnlyCredentialStatusTest < ActiveSupport::TestCase
   fixtures :client_statuses
 
   test "identifies an active Apple identity as the only AAL1 credential" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     create_active_external_identity(client: client, provider: "apple")
 
     assert AppleOnlyCredentialStatus.call(client)
   end
 
   test "Google replaces a released Apple binding and two effective social bindings are rejected" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     apple = create_active_external_identity(client: client, provider: "apple")
     assert_raises(ActiveRecord::RecordNotUnique) do
       ClientExternalIdentity.transaction(requires_new: true) do

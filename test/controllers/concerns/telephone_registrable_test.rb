@@ -26,7 +26,7 @@ class TelephoneRegistrableTest < ActiveSupport::TestCase
   end
 
   test "registration form denies a missing candidate or transaction rather than reconstructing Source proof" do
-    actor = Client.new
+    actor = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     token = ClientToken.new
     nonce = SecureRandom.urlsafe_base64(32)
 

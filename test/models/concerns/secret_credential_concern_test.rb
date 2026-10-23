@@ -17,7 +17,7 @@ class SecretCredentialConcernTest < ActiveSupport::TestCase
   end
 
   setup do
-    @visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    @visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
     VisitorSecretCredentialStatus::DEFAULTS.each do |id|
       VisitorSecretCredentialStatus.find_or_create_by!(id: id)
     end

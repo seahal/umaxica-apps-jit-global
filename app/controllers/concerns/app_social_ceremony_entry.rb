@@ -98,6 +98,7 @@ module AppSocialCeremonyEntry
     cycle =
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.create!(
+          auth_admission_binding: auth_sign_up_admission_binding!,
           principal_id: nil,
           status_id: ClientSignUpFlowStatus::STARTED,
           step: "start",

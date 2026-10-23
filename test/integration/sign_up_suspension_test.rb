@@ -962,7 +962,7 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1032,7 +1032,7 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1066,9 +1066,7 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: "app", phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     post auth_app_social_google_session_path(fb: phase_binding)
@@ -1098,11 +1096,12 @@ class SignUpSuspensionRequestTest < ActionDispatch::IntegrationTest
           response_type: "code",
           client_id: client_id,
           redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris.first,
-          code_challenge: "challenge",
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           state: SecureRandom.urlsafe_base64(16),
           nonce: SecureRandom.urlsafe_base64(16),
           scope: "openid profile",
+          prompt: (intent == "sign_up") ? "create" : nil,
         },
       )
     handoff = BaseAuthAdmissionCoordinator.issue_handoff!(

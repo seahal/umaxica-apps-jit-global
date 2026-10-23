@@ -118,17 +118,22 @@ class CoreBrowserOriginBoundaryTest < ActionDispatch::IntegrationTest
       rp =
         case setting
         when "PUBLIC_CORE_SERVICE_URL"
-          OpAppGrant.create!(client_token: client_tokens(:one), oidc_client_id: "core-app-jp", **attributes)
+          OpAppGrant.create!(
+            authentication_epoch: 0, client_token: client_tokens(:one), oidc_client_id: "core-app-jp",
+            **attributes,
+          )
         when "PUBLIC_CORE_CORPORATE_URL"
           visitor = Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
             id: 9_117_000_000_000 + SecureRandom.random_number(1_000_000),
             status_id: VisitorStatus::ACTIVE,
             birthdate: "2000-01-01",
           )
-          token = VisitorToken.create!(visitor: visitor, discard_at: expiry)
-          OpComGrant.create!(visitor_token: token, oidc_client_id: "core-com-jp", **attributes)
+          token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, discard_at: expiry)
+          OpComGrant.create!(authentication_epoch: 0, visitor_token: token, oidc_client_id: "core-com-jp", **attributes)
         when "PUBLIC_CORE_STAFF_URL"
           OpOrgGrant.create!(
+            authentication_epoch: 0,
             operator_token: operator_tokens(:one), oidc_client_id: "core-org-jp",
             **attributes,
           )

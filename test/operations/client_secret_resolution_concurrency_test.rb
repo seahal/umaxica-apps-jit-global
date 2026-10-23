@@ -7,14 +7,14 @@ require "timeout"
 class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = %w(
-    client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
   %i(cancellation expiration).each do |terminal|
     test "a separately connected selection blocked behind #{terminal} cannot revoke a session" do
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       now = ClientSignInFlow.database_now
       flow = ClientSignInFlow.create!(
         principal_id: actor.id, authentication_method: "secret", authentication_event_at: now,
@@ -23,7 +23,8 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
       )
       authorization = ClientOidcAuthorizationTransaction.create_transaction!(
         surface: "app", intent: "sign_in", client_id: "core-app-jp", redirect_uri: "https://example.com/callback",
-        response_type: "code", scope: "openid", state: "state", nonce: "nonce", code_challenge: "challenge",
+        response_type: "code", scope: "openid", state: "state", nonce: "nonce",
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256", login_challenge: SecureRandom.base58(32),
         login_challenge_expires_at: now + 1.minute, expires_at: now + 1.minute,
       )
@@ -125,8 +126,8 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
   end
 
   test "selection holds cancellation out until its selected-session mutation finishes" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     now = ClientSignInFlow.database_now
     flow = ClientSignInFlow.create!(
       principal_id: actor.id, authentication_method: "secret", authentication_event_at: now,
@@ -135,7 +136,8 @@ class ClientSecretResolutionConcurrencyTest < ActiveSupport::TestCase
     )
     authorization = ClientOidcAuthorizationTransaction.create_transaction!(
       surface: "app", intent: "sign_in", client_id: "core-app-jp", redirect_uri: "https://example.com/callback",
-      response_type: "code", scope: "openid", state: "state", nonce: "nonce", code_challenge: "challenge",
+      response_type: "code", scope: "openid", state: "state", nonce: "nonce",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256", login_challenge: SecureRandom.base58(32),
       login_challenge_expires_at: now + 1.minute, expires_at: now + 1.minute,
     )

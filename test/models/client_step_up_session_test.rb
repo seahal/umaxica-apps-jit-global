@@ -30,11 +30,14 @@
 require "test_helper"
 
 class ClientStepUpSessionTest < ActiveSupport::TestCase
-  fixtures :client_statuses, :client_visibilities, :client_mfa_levels, :client_mfa_statuses
+  fixtures :client_statuses, :client_visibilities, :client_security_modes, :client_mfa_statuses
 
   setup do
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
-    @user_token = ClientToken.create!(user: @user)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
+    @user_token = ClientToken.create!(authentication_epoch: 0, user: @user)
     @valid_params = {
       user_token: @user_token,
       scope: "account_update",
@@ -119,7 +122,7 @@ class ClientStepUpSessionTest < ActiveSupport::TestCase
   end
 
   test "same actor can have independent token-bound tickets" do
-    other_token = ClientToken.create!(user: @user)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: @user)
     first = ClientStepUpSession.create!(@valid_params)
     second = ClientStepUpSession.create!(@valid_params.merge(user_token: other_token, return_to: "/other"))
 

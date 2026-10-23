@@ -51,7 +51,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -85,9 +85,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (BURST_ALLOWANCE + 1).times do
@@ -112,7 +110,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -146,9 +144,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (BURST_ALLOWANCE + 1).times do
@@ -172,7 +168,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -206,9 +202,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (BURST_ALLOWANCE + 1).times do
@@ -232,7 +226,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -266,9 +260,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (BURST_ALLOWANCE + 1).times do
@@ -292,7 +284,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -349,7 +341,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -406,7 +398,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -463,7 +455,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -520,7 +512,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -577,7 +569,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -611,9 +603,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (BURST_ALLOWANCE + 1).times do
@@ -637,7 +627,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -671,9 +661,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (BURST_ALLOWANCE + 1).times do
@@ -709,7 +697,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_surface)
         admission_browser.host!(admission_host)
-        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission_issuance = OidcTestEntry.issue!(
           surface: admission_surface, intent: admission_intent,
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
@@ -743,9 +731,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         )
 
         assert_equal 303, admission_browser.response.status
-        phase_binding = SignInFlowBindingCodec.encode(
-          flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-        )
+        phase_binding = nil
       end
 
       (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
@@ -778,7 +764,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -812,9 +798,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     # Four bursts of five, each after the one-minute burst window has rolled
@@ -852,7 +836,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -886,9 +870,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
@@ -922,7 +904,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -989,7 +971,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1023,9 +1005,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
@@ -1059,7 +1039,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1093,9 +1073,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (SUSTAINED_ALLOWANCE / BURST_ALLOWANCE).times do |burst|
@@ -1129,7 +1107,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1203,7 +1181,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_surface)
         admission_browser.host!(admission_host)
-        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission_issuance = OidcTestEntry.issue!(
           surface: admission_surface, intent: admission_intent,
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
@@ -1274,7 +1252,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1343,7 +1321,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1377,9 +1355,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
 
     (BURST_ALLOWANCE + 1).times do
@@ -1404,7 +1380,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -1438,9 +1414,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
       )
 
       assert_equal 303, admission_browser.response.status
-      phase_binding = SignInFlowBindingCodec.encode(
-        flow: admission_issuance.transaction, surface: admission_surface, phase: "PRIMARY_PENDING",
-      )
+      phase_binding = nil
     end
     params = { client_email: { pass_code: "000000" } }
 
@@ -1485,7 +1459,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_surface)
         admission_browser.host!(admission_host)
-        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission_issuance = OidcTestEntry.issue!(
           surface: admission_surface, intent: admission_intent,
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )
@@ -1549,7 +1523,7 @@ class AuthEndpointBurstRateLimitTest < ActionDispatch::IntegrationTest
           "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
         }.fetch(admission_surface)
         admission_browser.host!(admission_host)
-        admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission_issuance = OidcTestEntry.issue!(
           surface: admission_surface, intent: admission_intent,
           base_browser_nonce: SecureRandom.hex(32), base_token: nil,
         )

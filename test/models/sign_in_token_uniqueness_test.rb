@@ -11,9 +11,12 @@ class SignInTokenUniquenessTest < ActiveSupport::TestCase
 
   CELLS.each do |principal_class, status, visibility, root_class, root_owner_key, flow_class|
     test "#{flow_class.name} preserves nil parents raw uniqueness and unchanged-key query budget" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
-      first_root = root_class.create!(root_owner_key => actor)
-      second_root = root_class.create!(root_owner_key => actor)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
+      first_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
+      second_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
       now = flow_class.database_now
       metadata = { principal_id: actor.id,
                    state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
@@ -57,8 +60,11 @@ class SignInTokenUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{flow_class.name} refuses duplicate roots before a new flow is persisted" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
-      root = root_class.create!(root_owner_key => actor)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
+      root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
       now = flow_class.database_now
       metadata = { principal_id: actor.id,
                    state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
@@ -75,9 +81,12 @@ class SignInTokenUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{flow_class.name} validates token attachment to a reused flow" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
-      first_root = root_class.create!(root_owner_key => actor)
-      second_root = root_class.create!(root_owner_key => actor)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
+      first_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
+      second_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
       now = flow_class.database_now
       metadata = { principal_id: actor.id,
                    state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),

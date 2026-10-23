@@ -16,12 +16,18 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
         address = "flow-isolation-#{SecureRandom.hex(10)}@example.test"
         actor, contact =
           if surface == "app"
-            actor = Client.create!(id: SecureRandom.random_number(1 << 60), status_id: ClientStatus::ACTIVE)
+            actor = Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
+              id: SecureRandom.random_number(1 << 60), status_id: ClientStatus::ACTIVE,
+            )
             [actor, actor.client_emails.create!(
               address:, confirm_policy: "1", user_email_status_id: ClientEmailStatus::VERIFIED,
             ).tap(&:finalize_binding!),]
           else
-            actor = Visitor.create!(id: SecureRandom.random_number(1 << 60), status_id: VisitorStatus::ACTIVE)
+            actor = Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
+              id: SecureRandom.random_number(1 << 60), status_id: VisitorStatus::ACTIVE,
+            )
             [actor, actor.visitor_emails.create!(
               address:, confirm_policy: "1", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
             ).tap(&:finalize_binding!),]
@@ -43,7 +49,7 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
                 "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
               }.fetch(admission_surface)
               admission_browser.host!(admission_host)
-              admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+              admission_issuance = OidcTestEntry.issue!(
                 surface: admission_surface, intent: admission_intent,
                 base_browser_nonce: SecureRandom.hex(32), base_token: nil,
               )
@@ -93,12 +99,8 @@ class EmailSignInFlowIsolationTest < ActionDispatch::IntegrationTest
           end
 
         assert_not_equal ceremonies.first.id, ceremonies.last.id
-        flow_bindings =
-          ceremonies.map do |ceremony|
-            flow_class = (surface == "app") ? ClientSignInFlow : VisitorSignInFlow
-            flow = flow_class.find_by!(public_id: ceremony.reload.local_sign_in_flow_ref)
-            SignInFlowBindingCodec.encode(flow:, surface:, phase: "PRIMARY_PENDING")
-          end
+        # An OIDC-parent primary phase has no sign-in flow, so neither browser sends a phase binding.
+        flow_bindings = [nil, nil]
         host = (surface == "app") ? ENV.fetch("PUBLIC_AUTH_SERVICE_URL") : ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         headers = { "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin" }
         codes = []

@@ -7,6 +7,7 @@ class CoverageThresholdStateMachineEdgesTest < ActiveSupport::TestCase
   test "state machine rejects unknown events and malformed payloads" do
     now = ClientSignUpFlow.database_now
     ticket = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
       issued_at: now, expires_at: now + 15.minutes,
     )

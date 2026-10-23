@@ -5,7 +5,10 @@ require "test_helper"
 
 class GroupManagementTest < ActiveSupport::TestCase
   test "creates an account scoped active group" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
     group = GroupManagement::Create.call(
       account_surface: "app",
@@ -27,7 +30,10 @@ class GroupManagementTest < ActiveSupport::TestCase
   end
 
   test "post-cutover group creation and management keep account context separate from concrete ownership" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
 
     AvatarRecord.transaction(joinable: false) do
@@ -174,7 +180,10 @@ class GroupManagementTest < ActiveSupport::TestCase
   end
 
   test "principal completed by sign-up as VERIFIED_WITH_SIGN_UP can create a Group" do
-    actor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
 
     group = GroupManagement::Create.call(
@@ -216,7 +225,10 @@ class GroupManagementTest < ActiveSupport::TestCase
 
   test "administratively locked principal cannot create a Group" do
     context = owned_group_context(name: "Locked owner source")
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     client = context.fetch(:actor)
     client.update!(
       access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED,
@@ -246,7 +258,10 @@ class GroupManagementTest < ActiveSupport::TestCase
   private
 
   def owned_group_context(name:)
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
     group = AvatarGroup.create!(
       account_surface: "app", account_public_id: bootstrap.account.public_id,

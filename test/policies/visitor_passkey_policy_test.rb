@@ -15,20 +15,29 @@ class VisitorPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_allowed_for_authenticated_user
-    policy = VisitorPasskeyPolicy.new(VisitorPasskey.new, user: Visitor.new(id: 1))
+    policy = VisitorPasskeyPolicy.new(
+      VisitorPasskey.new,
+      user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1),
+    )
 
     assert_predicate policy, :index?
   end
 
   def test_show_denied_by_default
-    policy = VisitorPasskeyPolicy.new(VisitorPasskey.new, user: Visitor.new(id: 1))
+    policy = VisitorPasskeyPolicy.new(
+      VisitorPasskey.new,
+      user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1),
+    )
 
     assert_not policy.show?
   end
 
   # create? gates registration (fresh record) to any authenticated visitor.
   def test_create_allowed_for_authenticated_user
-    policy = VisitorPasskeyPolicy.new(VisitorPasskey.new, user: Visitor.new(id: 1))
+    policy = VisitorPasskeyPolicy.new(
+      VisitorPasskey.new,
+      user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1),
+    )
 
     assert_predicate policy, :create?
     assert_predicate policy, :new?
@@ -40,7 +49,7 @@ class VisitorPasskeyPolicyTest < ActiveSupport::TestCase
 
   # show?/update?/destroy? require ownership (record.visitor_id == visitor.id).
   def test_per_record_rules_allow_owner
-    owner = Visitor.new(id: 1)
+    owner = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     record = VisitorPasskey.new(visitor_id: 1)
 
     assert_predicate VisitorPasskeyPolicy.new(record, user: owner), :show?
@@ -50,7 +59,7 @@ class VisitorPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_per_record_rules_deny_non_owner
-    owner = Visitor.new(id: 1)
+    owner = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     record = VisitorPasskey.new(visitor_id: 2)
 
     assert_not VisitorPasskeyPolicy.new(record, user: owner).show?

@@ -108,10 +108,6 @@ module BaseCeremonyBindingConfirmation
       now = transaction.class.database_now
       raise BaseAuthAdmissionCoordinator::Denied.new("authorization is unavailable", code: "invalid_admission") if
         transaction.expired?(now: now) || transaction.login_challenge_expired?(now: now) || transaction.consumed?
-    when :sign_in_flow
-      flow = auth_binding_parent_record(binding)
-      raise BaseAuthAdmissionCoordinator::Denied.new("local entry is unavailable", code: "invalid_admission") unless
-        flow.sign_in_primary_pending? && !flow.expired?(flow.class.database_now) && flow.principal_id.nil?
     else
       raise BaseAuthAdmissionCoordinator::Denied.new("binding parent is unavailable", code: "invalid_admission")
     end
@@ -134,30 +130,24 @@ module BaseCeremonyBindingConfirmation
     when ClientAuthAdmissionBinding
       auth_binding_parent_record_for_surface(
         binding.parent_kind,
-        sign_in_flow_id: binding.sign_in_flow_id,
         authorization_transaction_id: binding.authorization_transaction_id,
         step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
-        sign_in_flow_class: ClientSignInFlow,
         authorization_transaction_class: ClientOidcAuthorizationTransaction,
         step_up_ceremony_transaction_class: ClientStepUpCeremonyTransaction,
       )
     when VisitorAuthAdmissionBinding
       auth_binding_parent_record_for_surface(
         binding.parent_kind,
-        sign_in_flow_id: binding.sign_in_flow_id,
         authorization_transaction_id: binding.authorization_transaction_id,
         step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
-        sign_in_flow_class: VisitorSignInFlow,
         authorization_transaction_class: VisitorOidcAuthorizationTransaction,
         step_up_ceremony_transaction_class: VisitorStepUpCeremonyTransaction,
       )
     when OperatorAuthAdmissionBinding
       auth_binding_parent_record_for_surface(
         binding.parent_kind,
-        sign_in_flow_id: binding.sign_in_flow_id,
         authorization_transaction_id: binding.authorization_transaction_id,
         step_up_ceremony_transaction_id: binding.step_up_ceremony_transaction_id,
-        sign_in_flow_class: OperatorSignInFlow,
         authorization_transaction_class: OperatorOidcAuthorizationTransaction,
         step_up_ceremony_transaction_class: OperatorStepUpCeremonyTransaction,
       )
@@ -168,15 +158,12 @@ module BaseCeremonyBindingConfirmation
 
   def auth_binding_parent_record_for_surface(
     parent_kind,
-    sign_in_flow_id:,
     authorization_transaction_id:,
     step_up_ceremony_transaction_id:,
-    sign_in_flow_class:,
     authorization_transaction_class:,
     step_up_ceremony_transaction_class:
   )
     case parent_kind
-    when :sign_in_flow then sign_in_flow_class.find_by(id: sign_in_flow_id)
     when :authorization_transaction then authorization_transaction_class.find_by(id: authorization_transaction_id)
     when :step_up_ceremony_transaction
       step_up_ceremony_transaction_class.find_by(id: step_up_ceremony_transaction_id)
@@ -201,7 +188,7 @@ module BaseCeremonyBindingConfirmation
 
   def app_auth_binding_entry_url(binding, **query)
     case binding.purpose
-    when "authentication_handoff", "local_sign_in", "local_sign_up"
+    when "authentication_handoff"
       signup_binding?(binding) ? auth_app_sign_up_url(**query) : auth_app_sign_in_url(**query)
     when "bootstrap_handoff"
       new_auth_app_verification_setup_url(**query)
@@ -221,7 +208,7 @@ module BaseCeremonyBindingConfirmation
 
   def com_auth_binding_entry_url(binding, **query)
     case binding.purpose
-    when "authentication_handoff", "local_sign_in", "local_sign_up"
+    when "authentication_handoff"
       signup_binding?(binding) ? auth_com_sign_up_url(**query) : auth_com_sign_in_url(**query)
     when "bootstrap_handoff"
       new_auth_com_verification_setup_url(**query)
@@ -237,7 +224,7 @@ module BaseCeremonyBindingConfirmation
 
   def org_auth_binding_entry_url(binding, **query)
     case binding.purpose
-    when "authentication_handoff", "local_sign_in"
+    when "authentication_handoff"
       raise ArgumentError, "operator signup is unavailable" if signup_binding?(binding)
 
       auth_org_sign_in_url(**query)
@@ -254,15 +241,12 @@ module BaseCeremonyBindingConfirmation
   end
 
   def signup_binding?(binding)
-    return true if binding.purpose == "local_sign_up"
-    return false unless binding.parent_kind == :authorization_transaction
-    # A Switch admission names its flow; the parent keeps its neutral intent.
-    return binding.entry_intent == "sign_up" if binding.entry_intent.present?
+    return false unless binding.parent_kind == :authorization_transaction && binding.purpose == "authentication_handoff"
 
     parent = auth_binding_parent_record(binding)
     case parent
     when ClientOidcAuthorizationTransaction, VisitorOidcAuthorizationTransaction, OperatorOidcAuthorizationTransaction
-      parent.intent == "sign_up"
+      AuthEntryIntentResolver.call(prompt: parent.oidc_prompt, entry_intent: binding.entry_intent) == "sign_up"
     else
       false
     end

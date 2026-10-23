@@ -5,7 +5,7 @@ require "test_helper"
 
 class ClientTotpCredentialPublicIdCollisionTest < ActiveSupport::TestCase
   setup do
-    @user = Client.create!(status_id: ClientStatus::NOTHING)
+    @user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     ClientTotpCredentialStatus.find_or_create_by!(id: ClientTotpCredentialStatus::NOTHING)
     @existing = ClientTotpCredential.create!(user: @user, public_id: "existingtotpid1234567")
   end

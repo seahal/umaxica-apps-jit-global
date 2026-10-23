@@ -6,8 +6,11 @@ require "test_helper"
 
 class SignInFlowPolicyTest < ActiveSupport::TestCase
   setup do
-    @client = Client.create!(public_id: "c#{SecureRandom.hex(10)}", status_id: ClientStatus::ACTIVE)
-    @token = ClientToken.create!(user: @client)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: "c#{SecureRandom.hex(10)}",
+      status_id: ClientStatus::ACTIVE,
+    )
+    @token = ClientToken.create!(authentication_epoch: 0, user: @client)
   end
 
   teardown do
@@ -50,7 +53,7 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
 
     expectations.each do |status_name, allowed_method|
       # One flow binds at most one session (unique token_id), so each state gets its own session.
-      token = ClientToken.create!(user: @client, user_token_status_id: ClientTokenStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_status_id: ClientTokenStatus::ACTIVE)
       cycle = create_cycle(status_name, principal_id: @client.id, token: token)
       Actor.install_context!(authn: Actor::Authentication.new(login_public_id: token.public_id))
       policy = ClientSignInFlowPolicy.new(cycle, user: @client)
@@ -138,7 +141,10 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
   end
 
   test "surface actor class must match cycle class" do
-    visitor = Visitor.create!(public_id: "v#{SecureRandom.hex(10)}", status_id: VisitorStatus::ACTIVE)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      public_id: "v#{SecureRandom.hex(10)}", status_id: VisitorStatus::ACTIVE,
+    )
     cycle = create_cycle("MFA_PENDING", principal_id: @client.id)
 
     assert_not_predicate ClientSignInFlowPolicy.new(cycle, user: visitor), :show_mfa?
@@ -147,7 +153,10 @@ class SignInFlowPolicyTest < ActiveSupport::TestCase
   private
 
   def create_client
-    Client.create!(public_id: "c#{SecureRandom.hex(10)}", status_id: ClientStatus::ACTIVE)
+    Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: "c#{SecureRandom.hex(10)}",
+      status_id: ClientStatus::ACTIVE,
+    )
   end
 
   def create_cycle(status_name, nonce: "nonce", **overrides)

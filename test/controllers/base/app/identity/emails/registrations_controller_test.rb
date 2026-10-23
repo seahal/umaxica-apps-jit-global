@@ -17,6 +17,7 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     host! @host
     @user = clients(:one)
     @token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -39,6 +40,7 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -121,6 +123,7 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -164,7 +167,7 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
 
   test "unavailable credential history cannot authorize initial-contact registration" do
     %i(revoked_passkey inactive_totp revoked_totp).each do |state|
-      actor = Client.create!
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
       case state
       when :revoked_passkey
         actor.client_passkeys.create!(
@@ -178,7 +181,7 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
             ClientTotpCredentialStatus::INACTIVE : ClientTotpCredentialStatus::REVOKED,
         )
       end
-      token = ClientToken.create!(user: actor)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
       BaseSelectorAuthority.prepare(surface: :app, principal: actor, session: token)
       browser = open_session
@@ -201,6 +204,7 @@ class Base::App::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,

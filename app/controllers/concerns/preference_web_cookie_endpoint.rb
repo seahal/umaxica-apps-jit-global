@@ -51,18 +51,7 @@ module PreferenceWebCookieEndpoint
     Rails.logger.warn("[PreferenceWebCookieEndpoint] buffer sync skipped: #{e.class}")
   end
 
-  # The `/edge/v0/cookie` entry point: reads the request leniently (a missing decision is a no-op,
-  # an unreadable boolean is a 400) and applies it.
-  def apply_consented_update_from_request!
-    requested = requested_cookie_consent_attrs
-    return false if requested.blank?
-
-    apply_cookie_consent_update!(requested)
-    true
-  end
-
-  # `requested` is an already read consent decision (`cookie_consent_request` or
-  # `requested_cookie_consent_attrs`).
+  # `requested` is an already read consent decision (`cookie_consent_request`).
   def apply_cookie_consent_update!(requested)
     ensure_preference_access_token_audience_for_write!
 
@@ -137,42 +126,6 @@ module PreferenceWebCookieEndpoint
 
   def refresh_token_value
     cookies[refresh_token_cookie_name]
-  end
-
-  def requested_cookie_consent_attrs
-    if params.key?(:consented)
-      consented = cast_cookie_boolean(params[:consented])
-      return default_cookie_consent_attrs(consented)
-    end
-
-    cookie_params = params[:cookie]
-    return nil unless cookie_params.is_a?(ActionController::Parameters) || cookie_params.is_a?(Hash)
-
-    # Both branches read the same fixed set of keys and ignore the rest. The Hash branch
-    # already narrowed first; the Parameters branch did not, so anything else the payload
-    # carried read as unpermitted rather than as simply not ours.
-    consent_keys = %i(consented functional performant targetable)
-    cookie_params =
-      if cookie_params.is_a?(ActionController::Parameters)
-        cookie_params.slice(*consent_keys).permit(*consent_keys).to_h
-      else
-        cookie_params.to_h.slice(*consent_keys)
-      end.with_indifferent_access
-    return nil unless cookie_params.key?(:consented)
-
-    consented = cast_cookie_boolean(cookie_params[:consented])
-    default_cookie_consent_attrs(consented).merge(
-      cookie_params.slice(:functional, :performant, :targetable).transform_values do |value|
-        cast_cookie_boolean(value)
-      end,
-    )
-  end
-
-  def cast_cookie_boolean(value)
-    cast = cookie_boolean(value)
-    raise ActionController::BadRequest, "invalid_cookie_consent" if cast.nil?
-
-    cast
   end
 
   # true or false for an accepted spelling, nil for anything else (including nil itself).

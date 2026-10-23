@@ -9,7 +9,7 @@ class VisitorPreferenceAdultContentGateTest < ActiveSupport::TestCase
   end
 
   test "set_option_id defaults to NOTHING when option_id is nil" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
     preference = VisitorPreference.create!(visitor: visitor)
     gate = VisitorPreferenceAdultContentGate.new(preference: preference, option_id: nil)
 

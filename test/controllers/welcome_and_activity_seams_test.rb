@@ -16,12 +16,13 @@ class WelcomeAndActivitySeamsTest < ActionController::TestCase
           [operators(:one), OperatorToken, OpOrgGrant, :operator_token, "operator",
            ENV.fetch("PUBLIC_BASE_STAFF_URL"),]
         end
-      token = token_model.create!(((surface == :com) ? :visitor : :staff) => actor)
+      token = token_model.create!(:authentication_epoch => 0, ((surface == :com) ? :visitor : :staff) => actor)
       token.rotate_refresh_token!
       BaseSelectorBootstrapAuthority.call(surface: surface, principal: actor)
       client = OidcClientRegistry.find!("base-#{surface}-ww")
       now = rp_model.database_now
       rp = rp_model.create!(
+        :authentication_epoch => 0,
         root_association => token, :oidc_client_id => client.client_id, :oidc_scope => "openid profile",
         :oidc_jti => SecureRandom.uuid, :oidc_nonce => SecureRandom.hex(16), :oidc_auth_time => now,
         :refresh_token_expires_at => now + 10.minutes,

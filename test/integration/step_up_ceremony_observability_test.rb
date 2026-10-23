@@ -20,12 +20,12 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
   test "admission, acceptance and cancellation of one ceremony share a keyed reference and log no identifier" do
     actor, token =
       begin
-        fv5401 = Client.create!(status_id: ClientStatus::ACTIVE)
+        fv5401 = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
         ClientTotpCredential.create_for_user!(
           user: fv5401, private_key: ROTP::Base32.random_base32,
           user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         )
-        [fv5401, ClientToken.create!(user: fv5401)]
+        [fv5401, ClientToken.create!(authentication_epoch: 0, user: fv5401)]
       end
     base, auth, transaction =
       begin
@@ -49,6 +49,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             )
             fv5399 = OidcClientRegistry.find!("base-app-ww")
             fv5397 = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: fv5394,
               oidc_client_id: fv5399.client_id,
               oidc_scope: "openid profile",
@@ -581,12 +582,12 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
   test "an exact Base cancellation retry answers the same redirect and changes nothing" do
     actor, token =
       begin
-        fv5287 = Client.create!(status_id: ClientStatus::ACTIVE)
+        fv5287 = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
         ClientTotpCredential.create_for_user!(
           user: fv5287, private_key: ROTP::Base32.random_base32,
           user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         )
-        [fv5287, ClientToken.create!(user: fv5287)]
+        [fv5287, ClientToken.create!(authentication_epoch: 0, user: fv5287)]
       end
     base, auth, transaction =
       begin
@@ -610,6 +611,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             )
             fv5285 = OidcClientRegistry.find!("base-app-ww")
             fv5283 = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: fv5280,
               oidc_client_id: fv5285.client_id,
               oidc_scope: "openid profile",
@@ -1110,12 +1112,12 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
   test "a second cancellation after the ceremony ended is refused and logged without changing the terminal state" do
     actor, token =
       begin
-        fv5176 = Client.create!(status_id: ClientStatus::ACTIVE)
+        fv5176 = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
         ClientTotpCredential.create_for_user!(
           user: fv5176, private_key: ROTP::Base32.random_base32,
           user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         )
-        [fv5176, ClientToken.create!(user: fv5176)]
+        [fv5176, ClientToken.create!(authentication_epoch: 0, user: fv5176)]
       end
     base, auth, transaction =
       begin
@@ -1139,6 +1141,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
             )
             fv5174 = OidcClientRegistry.find!("base-app-ww")
             fv5172 = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: fv5169,
               oidc_client_id: fv5174.client_id,
               oidc_scope: "openid profile",
@@ -1635,12 +1638,12 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
   end
 
   test "reading an expired ceremony is refused without rewriting its stored status" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     ClientTotpCredential.create_for_user!(
       user: actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
       requirement: begin
@@ -1942,8 +1945,9 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
   end
 
   test "a Base completion without the browser transaction marker is refused as return_binding_mismatch" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor, user_token_kind_id: ClientTokenKind::BROWSER_WEB, user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
@@ -1951,6 +1955,7 @@ class StepUpCeremonyObservabilityTest < ActionDispatch::IntegrationTest
     # chain. Both references are well-formed; only the browser marker is absent.
     oidc_client = OidcClientRegistry.find!("base-app-ww")
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token, oidc_client_id: oidc_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_auth_time: 1.minute.ago, refresh_token_expires_at: 10.minutes.from_now,
     )

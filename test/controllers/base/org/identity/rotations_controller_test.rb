@@ -7,7 +7,8 @@ class Base::Org::Identity::RotationsControllerTest < ActionDispatch::Integration
   setup do
     @host = configured_host(:base_staff)
     ensure_operator_reference_records!
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    @operator = OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator)
     @secret = create_active_secret_credential(@operator)
   end
 
@@ -42,6 +43,7 @@ class Base::Org::Identity::RotationsControllerTest < ActionDispatch::Integration
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -80,7 +82,7 @@ class Base::Org::Identity::RotationsControllerTest < ActionDispatch::Integration
   end
 
   test "a credential owned by another operator is not found" do
-    other = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     other_secret = create_active_secret_credential(other)
 
     http_headers_0 =
@@ -113,6 +115,7 @@ class Base::Org::Identity::RotationsControllerTest < ActionDispatch::Integration
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

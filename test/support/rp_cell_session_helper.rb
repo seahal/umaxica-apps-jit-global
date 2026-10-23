@@ -9,12 +9,11 @@ module RpCellSessionHelper
   # The process role and its deployed contract epoch are process configuration.
   def as_rp_cell(client_id)
     cell = RpCellBinding.for_client(client_id)
-    names = %w(UMAXICA_RUNTIME_ROLE UMAXICA_RP_CONTRACT_EPOCH UMAXICA_RP_BROWSER_ADMISSION)
+    names = %w(UMAXICA_RUNTIME_ROLE UMAXICA_RP_BROWSER_ADMISSION)
     previous = names.index_with { |name| ENV[name] }
     ENV["UMAXICA_RUNTIME_ROLE"] = "#{cell.connection.tr("_", "-")}-#{cell.region}"
-    ENV["UMAXICA_RP_CONTRACT_EPOCH"] = rp_cell_test_epoch_model(cell.realm).current_contract_epoch.to_s
     ENV["UMAXICA_RP_BROWSER_ADMISSION"] = "open"
-    RpCellLocalSession::JWKS_CLIENTS.clear
+    OidcOpJwksClient::CLIENTS.clear
     yield
   ensure
     previous&.each { |name, value| value.nil? ? ENV.delete(name) : ENV[name] = value }
@@ -27,7 +26,7 @@ module RpCellSessionHelper
     payload, = JWT.decode(token_response.fetch(:id_token), nil, false)
     enrollment = RpCallbackCommitter.call(
       cell:, issuer: payload.fetch("iss"), subject: payload.fetch("sub"), sid: payload.fetch("sid"),
-      absolute_expires_at: 1.hour.from_now, contract_epoch: payload.fetch("umx_contract_epoch", 1),
+      absolute_expires_at: 1.hour.from_now,
     )
     raise ArgumentError, "cell enrollment failed: #{enrollment.outcome}" unless enrollment.success?
 
@@ -69,9 +68,5 @@ module RpCellSessionHelper
     raise ArgumentError, "OP code exchange failed: #{result.inspect}" unless result.success?
 
     result.token_response
-  end
-
-  def rp_cell_test_epoch_model(realm)
-    { "app" => OpAppProtocolEpoch, "com" => OpComProtocolEpoch, "org" => OpOrgProtocolEpoch }.fetch(realm)
   end
 end

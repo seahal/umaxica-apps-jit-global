@@ -2524,7 +2524,7 @@ module Auth
           response_type: "code",
           client_id: "core-app-jp",
           redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
-          code_challenge: "challenge",
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           state: SecureRandom.urlsafe_base64(16),
           nonce: SecureRandom.urlsafe_base64(16),

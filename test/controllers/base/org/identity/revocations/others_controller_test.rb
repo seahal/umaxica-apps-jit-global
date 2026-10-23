@@ -16,7 +16,8 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
     OperatorTokenStatus.find_or_create_by!(id: OperatorTokenStatus::NOTHING)
     OperatorTokenBindingMethod.ensure_defaults!
     OperatorTokenDbscStatus.find_or_create_by!(id: OperatorTokenDbscStatus::NOTHING)
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator)
   end
 
   test "destroy revokes every other staff session and keeps the current one" do
@@ -50,6 +51,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -83,6 +85,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
     current = authentication_harness_latest_token(@operator)
     mark_step_up_satisfied!(current)
     other = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @operator,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
@@ -130,6 +133,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -162,6 +166,7 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
       end
     current = authentication_harness_latest_token(@operator)
     other = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @operator,
       staff_token_status_id: OperatorTokenStatus::NOTHING,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
@@ -171,12 +176,8 @@ class Base::Org::Identity::Revocations::OthersControllerTest < ActionDispatch::I
 
     delete base_org_identity_other_sessions_url(ri: "jp", host: @host), headers: headers
 
-    assert_response :see_other
-    gateway = URI.parse(response.location)
-
-    assert_equal @host, gateway.host
-    assert_equal "/verification/setup", gateway.path
-    assert_predicate Rack::Utils.parse_nested_query(gateway.query)["pt"], :present?
+    # D-132: the Operator holds Passkeys, so the missing Step-Up is refused instead of routed to setup.
+    assert_response :unauthorized
     assert_predicate current.reload, :currently_usable?
     assert_predicate other.reload, :currently_usable?
   end

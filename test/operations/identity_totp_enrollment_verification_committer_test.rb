@@ -9,8 +9,11 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
 
   test "first code accepts six digits and refuses five seven embedded letters and NUL" do
     %i(five six seven letter nul).each_with_index do |format, index|
-      actor = Client.create!(id: 9_105_000_000_000 + index, status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_105_000_000_000 + index,
+        status_id: ClientStatus::ACTIVE,
+      )
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
         required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -52,7 +55,7 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
 
   test "initial code confirms the encrypted candidate once without credential creation or freshness" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -117,7 +120,7 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
 
   test "the fourth and fifth failed confirmations persist and subsequent attempts are rejected" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -151,8 +154,8 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
 
   test "title length below at and above 32 preserves enrollment authorization" do
     [31, 32, 33].each do |length|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
         required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -181,8 +184,8 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
 
   test "missing empty zero NUL and non-string codes consume a failure without confirming the candidate" do
     [nil, "", 0, "\0", ["123456"]].each do |code|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
         required_scope: "settings_totp", required_aal: "none", step_up_required: false,
@@ -208,8 +211,8 @@ class IdentityTotpEnrollmentVerificationCommitterTest < ActiveSupport::TestCase
 
   test "cancellation logout and refresh end enrollment without transferring its candidate" do
     %i(cancel logout refresh).each do |transition|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
         actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
         required_scope: "settings_totp", required_aal: "none", step_up_required: false,

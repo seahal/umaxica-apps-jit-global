@@ -32,7 +32,10 @@ require "test_helper"
 
 class ClientTotpCredentialTest < ActiveSupport::TestCase
   def setup
-    @user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::NOTHING)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::NOTHING,
+    )
     ClientTotpCredentialStatus.find_or_create_by!(id: ClientTotpCredentialStatus::NOTHING)
     @status = ClientTotpCredentialStatus.find(ClientTotpCredentialStatus::ACTIVE)
 
@@ -157,6 +160,7 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
 
   test "enforces the maximum number of slot-consuming totp credentials" do
     new_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::NOTHING,
     )
     status = ClientTotpCredentialStatus.find(ClientTotpCredentialStatus::ACTIVE)
@@ -181,7 +185,7 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
   end
 
   test "revoked, deleted, and nothing credentials do not consume slots" do
-    new_user = Client.create!(status_id: ClientStatus::NOTHING)
+    new_user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
 
     [ClientTotpCredentialStatus::REVOKED, ClientTotpCredentialStatus::DELETED,
      ClientTotpCredentialStatus::NOTHING,].each do |status_id|
@@ -204,7 +208,7 @@ class ClientTotpCredentialTest < ActiveSupport::TestCase
   end
 
   test "active and inactive credentials together consume both slots" do
-    new_user = Client.create!(status_id: ClientStatus::NOTHING)
+    new_user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     [ClientTotpCredentialStatus::ACTIVE, ClientTotpCredentialStatus::INACTIVE].each do |status_id|
       ClientTotpCredential.create_for_user!(
         user: new_user,

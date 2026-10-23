@@ -51,26 +51,29 @@ class SignOutInertiaHistoryClearTest < ActionDispatch::IntegrationTest
       when "client"
         actor = clients(:one)
         root = ClientToken.create!(
+          authentication_epoch: 0,
           user: actor, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
         )
-        rp_session = OpAppGrant.create!(client_token: root, **grant_attributes)
+        rp_session = OpAppGrant.create!(authentication_epoch: 0, client_token: root, **grant_attributes)
       when "visitor"
         actor = visitors(:reserved_visitor)
         root = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           visitor_token_status_id: VisitorTokenStatus::ACTIVE,
         )
-        rp_session = OpComGrant.create!(visitor_token: root, **grant_attributes)
+        rp_session = OpComGrant.create!(authentication_epoch: 0, visitor_token: root, **grant_attributes)
       when "operator"
         actor = operators(:one)
         # Operators allow two concurrent sessions; start from no live session.
         AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
         root = OperatorToken.create!(
+          authentication_epoch: 0,
           staff: actor, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
           staff_token_status_id: OperatorTokenStatus::ACTIVE,
         )
-        rp_session = OpOrgGrant.create!(operator_token: root, **grant_attributes)
+        rp_session = OpOrgGrant.create!(authentication_epoch: 0, operator_token: root, **grant_attributes)
       end
 
       host!(origin_host)
@@ -188,26 +191,29 @@ class SignOutInertiaHistoryClearTest < ActionDispatch::IntegrationTest
       when "client"
         actor = clients(:one)
         root = ClientToken.create!(
+          authentication_epoch: 0,
           user: actor, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
         )
-        rp_session = OpAppGrant.create!(client_token: root, **grant_attributes)
+        rp_session = OpAppGrant.create!(authentication_epoch: 0, client_token: root, **grant_attributes)
       when "visitor"
         actor = visitors(:reserved_visitor)
         root = VisitorToken.create!(
+          authentication_epoch: 0,
           visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
           visitor_token_status_id: VisitorTokenStatus::ACTIVE,
         )
-        rp_session = OpComGrant.create!(visitor_token: root, **grant_attributes)
+        rp_session = OpComGrant.create!(authentication_epoch: 0, visitor_token: root, **grant_attributes)
       when "operator"
         actor = operators(:one)
         # Operators allow two concurrent sessions; start from no live session.
         AuthenticationSessionRevoker.tokens_for(actor).find_each(&:revoke!)
         root = OperatorToken.create!(
+          authentication_epoch: 0,
           staff: actor, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
           staff_token_status_id: OperatorTokenStatus::ACTIVE,
         )
-        rp_session = OpOrgGrant.create!(operator_token: root, **grant_attributes)
+        rp_session = OpOrgGrant.create!(authentication_epoch: 0, operator_token: root, **grant_attributes)
       end
 
       host!(base_host)

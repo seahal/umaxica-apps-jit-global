@@ -84,7 +84,10 @@ class RpCellLocalSessionReadinessTest < ActionDispatch::IntegrationTest
     actor =
       case RpCellBinding.for_client(client_id).realm
       when "app" then clients(:one)
-      when "com" then Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+      when "com" then Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR,
+      )
       else operators(:one)
       end
     grant_tech_access(actor) if client_id == "tech-org-ww"

@@ -44,7 +44,8 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
 
       browser.get("/oidc/callback")
 
-      assert_equal 422, browser.response.status
+      # D-153: a callback without state lands on the interruption page.
+      assert_equal 303, browser.response.status
 
       resource_type = surface.fetch(:resource_type)
       user, token = actor_and_token_for(resource_type)
@@ -80,10 +81,8 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
       else [OpAppGrant, :client_token]
       end
     rp_session = session_class.create!(
+      :authentication_epoch => 0,
       association => token,
-      :contract_epoch => { OpAppGrant => OpAppProtocolEpoch,
-                           OpComGrant => OpComProtocolEpoch,
-                           OpOrgGrant => OpOrgProtocolEpoch, }.fetch(session_class).current_contract_epoch,
       :oidc_client_id => client.client_id,
       :oidc_scope => "openid profile",
       :oidc_jti => SecureRandom.uuid,
@@ -119,18 +118,21 @@ class CoreBffSurfaceSmokeTest < ActionDispatch::IntegrationTest
         "discard_at > ?",
         Time.current,
       ).order(created_at: :desc).first ||
-        OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+        OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
       [staff, token]
     when "visitor"
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
-      visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+      visitor = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+        visibility_id: VisitorVisibility::VISITOR,
+      )
+      token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
       [visitor, token]
     else
       user = clients(:one)
       token = ClientToken.where(user: user).where("discard_at > ?", Time.current).order(created_at: :desc).first ||
-        ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+        ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       [user, token]
     end
   end

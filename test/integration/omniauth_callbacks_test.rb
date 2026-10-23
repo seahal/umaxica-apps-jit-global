@@ -756,7 +756,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
   end
 
   test "apple social login with MFA enabled enters the ordinary MFA challenge" do
-    user = Client.create!(birthdate: "2000-02-03", mfa_level_enabled: true)
+    user = Client.create!(birthdate: "2000-02-03", security_mode_id: SecurityModeConfigurable::ADVANCED)
     ClientTotpCredential.create!(
       user: user,
       private_key: ROTP::Base32.random_base32,
@@ -946,7 +946,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
   end
 
   test "should sign in with existing Google user" do
-    user = Client.create!(birthdate: "2000-02-03")
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, birthdate: "2000-02-03")
     ClientGoogleIdentity.create!(
       user: user,
       uid: "existing_uid",
@@ -1321,7 +1321,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
   end
 
   test "existing Google identity without birthdate stays on login side" do
-    user = Client.create!
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     ClientGoogleIdentity.create!(
       user: user,
       uid: "existing_missing_birthdate_uid",
@@ -1500,8 +1500,8 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
   end
 
   test "social login with MFA enabled enters the ordinary MFA challenge" do
-    user = Client.create!(birthdate: "2000-02-03")
-    user.update!(mfa_level_enabled: true)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, birthdate: "2000-02-03")
+    user.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     ClientTotpCredential.create!(
       user: user,
       private_key: ROTP::Base32.random_base32,
@@ -1865,7 +1865,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
 
   test "google login with session limit exceeded redirects to session management" do
     # Create an existing user with Google social identity
-    user = Client.create!(birthdate: "2000-02-03")
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, birthdate: "2000-02-03")
     ClientGoogleIdentity.create!(
       user: user,
       uid: "session_limit_uid",
@@ -2073,7 +2073,7 @@ class OmniauthCallbacksTest < ActionDispatch::IntegrationTest
   end
 
   def create_rotated_active_user_session(user, rotations:)
-    token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
     refresh = token.rotate_refresh_token!
 
     rotations.times do
@@ -2122,7 +2122,6 @@ class OmniauthCallbacksTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -2154,7 +2153,10 @@ class OmniauthCallbacksTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -2413,7 +2415,6 @@ class OmniauthCallbacksTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -2422,7 +2423,10 @@ class OmniauthCallbacksTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -8,7 +8,7 @@ class OperatorTelephonePublicIdBackfillOperationTest < ActiveSupport::TestCase
   # The final NOT NULL contract makes those legacy rows unconstructable in the current schema;
   # these tests protect the post-cutover no-op and idempotency behavior of the retained operation.
   test "post-cutover backfill is a no-op and preserves source and ceremony facts" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550171", confirm_policy: true, confirm_using_mfa: true,
     )
@@ -38,7 +38,7 @@ class OperatorTelephonePublicIdBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "dry run reports no missing identities without generating or persisting one" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550174", confirm_policy: true, confirm_using_mfa: true,
     )
@@ -64,7 +64,7 @@ class OperatorTelephonePublicIdBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "post-cutover apply never regenerates an existing public identity" do
-    actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     telephone = actor.staff_telephones.create!(
       raw_number: "+12025550175", confirm_policy: true, confirm_using_mfa: true,
     )

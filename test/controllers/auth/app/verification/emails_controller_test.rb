@@ -11,12 +11,12 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
   fixtures :client_statuses
 
   test "the delivered code records email evidence and hands off without granting freshness" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     email = actor.client_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -93,12 +93,12 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
   # Partitions of the submitted code: a wrong six-digit code, and codes that are not six digits
   # (missing, empty, zero, five digits, seven digits, NUL-bearing).
   test "a wrong or malformed code re-renders the entry page and keeps the ceremony pending" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     email = actor.client_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -172,12 +172,12 @@ class Auth::App::Verification::EmailsControllerTest < ActionDispatch::Integratio
   end
 
   test "the email endpoints are refused when Base did not admit email for the ceremony" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     email = actor.client_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(

@@ -37,7 +37,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
     states.each do |state, predicate|
       assert_predicate ClientSessionLimitResolutionTransaction.new(state_id: state), predicate
     end
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = ClientSignInFlow.database_now
     flow = ClientSignInFlow.create!(
       principal_id: actor.id,
@@ -46,7 +46,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
       issued_at: now,
       expires_at: now + 5.minutes,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     digest = ClientSessionLimitResolutionTransaction.digest_challenge(SecureRandom.urlsafe_base64(32))
     issuance = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: flow,
@@ -71,7 +71,7 @@ class TargetedModelLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "session limit issuance refreshes an existing active transaction" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = ClientSignInFlow.database_now
     flow = ClientSignInFlow.create!(
       principal_id: actor.id,

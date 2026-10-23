@@ -28,7 +28,7 @@ class TechOrgSignInTest < ActionDispatch::IntegrationTest
     assert_predicate authorize_params.fetch("state"), :present?
     assert_predicate authorize_params.fetch("nonce"), :present?
     assert_equal @host, URI.parse(authorize_params.fetch("redirect_uri")).host
-    flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(authorize_params.fetch("state"))
+    flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(OidcStateTestSupport.jti(authorize_params.fetch("state")))
 
     assert_not_equal flow.fetch("code_verifier"), authorize_params.fetch("code_challenge")
   end
@@ -36,7 +36,7 @@ class TechOrgSignInTest < ActionDispatch::IntegrationTest
   test "an external or protocol-relative return target is never carried into the flow" do
     %w(https://attacker.invalid/steal //attacker.invalid/steal).each do |target|
       authorize_params = start_sign_in(pt: target)
-      flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(authorize_params.fetch("state"))
+      flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(OidcStateTestSupport.jti(authorize_params.fetch("state")))
 
       assert_not_includes flow.to_json, "attacker.invalid"
       assert_not_includes response.location, "attacker.invalid"
@@ -72,7 +72,7 @@ class TechOrgSignInTest < ActionDispatch::IntegrationTest
     original_logger = Rails.logger
     Rails.logger = ActiveSupport::Logger.new(output)
     authorize_params = start_sign_in(pt: "/dashboard")
-    flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(authorize_params.fetch("state"))
+    flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(OidcStateTestSupport.jti(authorize_params.fetch("state")))
 
     assert_not_includes output.string, flow.fetch("code_verifier")
     assert_not_includes output.string, authorize_params.fetch("nonce")
@@ -87,7 +87,7 @@ class TechOrgSignInTest < ActionDispatch::IntegrationTest
     csrf_token = css_select('input[name="authenticity_token"]').first["value"]
     post(
       tech_org_sign_create_path(ri: "jp"),
-      params: { authenticity_token: csrf_token, pt: pt },
+      params: { authenticity_token: csrf_token, target_link_uri: pt },
       headers: { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }.merge(headers),
     )
 

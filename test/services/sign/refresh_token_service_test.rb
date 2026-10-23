@@ -23,6 +23,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "rotation increments generation counter" do
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: create_verified_user_with_email(email_address: "refresh-rotate-#{SecureRandom.hex(4)}@example.com"),
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
@@ -42,6 +43,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "rotation preserves device_session and advances current refresh token pointer" do
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: create_verified_user_with_email(email_address: "refresh-device-session-#{SecureRandom.hex(4)}@example.com"),
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
@@ -61,6 +63,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
   test "rotation preserves DPoP JKT binding" do
     jkt = "dpop-jkt-#{SecureRandom.hex(8)}"
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: create_verified_user_with_email(email_address: "refresh-dpop-#{SecureRandom.hex(4)}@example.com"),
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
@@ -76,7 +79,10 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "reuse detection revokes all actor tokens" do
     user = create_verified_user_with_email(email_address: "refresh-reuse-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     initial_refresh = token.rotate_refresh_token!
     rotated = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
     rotated_refresh = rotated[:refresh_token]
@@ -119,7 +125,10 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "reuse detection revokes the token family while the request is readonly" do
     user = create_verified_user_with_email(email_address: "refresh-reuse-readonly-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     initial_refresh = token.rotate_refresh_token!
 
     rotated = SignRefreshTokenIssuer.call(refresh_token: initial_refresh)
@@ -137,6 +146,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "revoked tokens stay invalid without marking compromise" do
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: create_verified_user_with_email(email_address: "refresh-revoked-#{SecureRandom.hex(4)}@example.com"),
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
@@ -155,7 +165,10 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "invalid verifier for known public id does not revoke actor tokens" do
     user = create_verified_user_with_email(email_address: "refresh-invalid-digest-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = ClientToken.create!(
+      authentication_epoch: 0, user: user, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     refresh = token.rotate_refresh_token!
     public_id, = ClientToken.parse_refresh_token(refresh)
     forged_refresh = ClientToken.build_refresh_token(public_id, "wrong-verifier")
@@ -172,6 +185,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
   test "scheduled revoked tokens are invalid after discard_at passes" do
     database_time = ClientToken.database_now
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: create_verified_user_with_email(email_address: "refresh-scheduled-#{SecureRandom.hex(4)}@example.com"),
       discard_at: database_time + 5.minutes,
       purge_eligible_at: database_time + 1.day,
@@ -198,6 +212,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     end
 
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: create_verified_user_with_email(email_address: "refresh-writing-#{SecureRandom.hex(4)}@example.com"),
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
@@ -218,6 +233,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     # This test verifies that refresh operations do not trigger ReadOnlyError
     # even when using SELECT ... FOR UPDATE
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: create_verified_user_with_email(email_address: "refresh-readonly-#{SecureRandom.hex(4)}@example.com"),
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
@@ -235,6 +251,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
   test "rotation supports visitor refresh tokens" do
     visitor = create_refresh_visitor
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       discard_at: 1.day.from_now,
       purge_eligible_at: 2.days.from_now,
@@ -252,7 +269,10 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
 
   test "visitor refresh reuse revokes all visitor tokens" do
     visitor = create_refresh_visitor
-    token = VisitorToken.create!(visitor: visitor, discard_at: 1.day.from_now, purge_eligible_at: 2.days.from_now)
+    token = VisitorToken.create!(
+      authentication_epoch: 0, visitor: visitor, discard_at: 1.day.from_now,
+      purge_eligible_at: 2.days.from_now,
+    )
     first_refresh = token.rotate_refresh_token!
     rotated = SignRefreshTokenIssuer.call(refresh_token: first_refresh)
 
@@ -279,6 +299,7 @@ class SignRefreshTokenIssuerTest < ActiveSupport::TestCase
     VisitorTokenStatus.ensure_defaults!
 
     Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
     )
@@ -325,7 +346,6 @@ class SignRefreshTokenIssuerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -357,7 +377,10 @@ class SignRefreshTokenIssuerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -604,7 +627,6 @@ class SignRefreshTokenIssuerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -613,7 +635,10 @@ class SignRefreshTokenIssuerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

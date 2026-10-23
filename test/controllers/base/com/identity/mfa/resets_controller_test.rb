@@ -10,7 +10,7 @@ class Base::Com::Identity::Mfa::ResetsControllerTest < ActionDispatch::Integrati
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! @host
     @visitor = visitors(:reserved_visitor)
-    @visitor.update!(mfa_level_id: VisitorMfaLevel::FULL, mfa_level_enabled: true)
+    @visitor.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     @headers =
       begin
         rp_headers = as_visitor_headers(@visitor, host: @host)
@@ -41,6 +41,7 @@ class Base::Com::Identity::Mfa::ResetsControllerTest < ActionDispatch::Integrati
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpComGrant.create!(
+              authentication_epoch: 0,
               visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

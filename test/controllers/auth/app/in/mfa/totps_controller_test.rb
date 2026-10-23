@@ -17,7 +17,7 @@ module Auth::App::In
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
 
-      @user = Client.create!(mfa_level_enabled: true)
+      @user = Client.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
       @email = "mfa_totp_#{SecureRandom.hex(4)}@example.com".freeze
       @email_record = @user.client_emails.create!(address: @email, user_email_status_id: ClientEmailStatus::VERIFIED)
       @email_record.finalize_binding!
@@ -27,7 +27,7 @@ module Auth::App::In
         user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
         title: "totp",
       )
-      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission = OidcTestEntry.issue!(
         surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
       get auth_app_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -42,12 +42,7 @@ module Auth::App::In
       post auth_app_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
 
       assert_response :see_other
-      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-        flow: ClientSignInFlow.find_by!(
-          public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-        ),
-        surface: "app", phase: "PRIMARY_PENDING",
-      )
+      @primary_sign_in_binding = nil
     end
 
     teardown do
@@ -59,277 +54,23 @@ module Auth::App::In
       Prosopite.pause { yield }
     end
 
-    test "new renders form with stealth when pending_mfa exists" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
+    # adr/authentication-security-mode.md C1: only ADVANCED reaches the second step, and TOTP does not
+    # satisfy it. The endpoint refuses every request, even with a pending ADVANCED sign-in and an
+    # active TOTP credential, and records nothing.
+    test "TOTP cannot complete an ADVANCED sign-in second step" do
+      travel(31.seconds) { establish_pending_mfa_via_email! }
+      flow_before = ClientSignInFlow.where(principal_id: @user.id).order(:id).last&.attributes
 
-      with_prosopite_paused do
-        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
-      end
-
-      assert_response :success
-      assert_equal "auth/app/sign/in/challenge/totps/new", inertia_component
-
-      form = inertia_props.fetch("form")
-      token_field = form.fetch("token_field")
-
-      # The stealth challenge runs invisibly; the widget writes the same field the server verifies.
-      assert_equal "execute", inertia_props.fetch("turnstile").fetch("mode")
-      assert_equal I18n.t("sign.app.in.mfa.totp.title"), inertia_props.fetch("title")
-      assert_equal I18n.t("sign.app.in.mfa.totp.token_label"), token_field.fetch("label")
-      assert_equal I18n.t("sign.app.in.mfa.totp.token_placeholder"), token_field.fetch("placeholder")
-      assert_equal "totp_challenge_form[token]", token_field.fetch("name")
-      # A time-based code is not a delivered one-time code, so the field offers no autocomplete.
-      assert_not token_field.key?("autocomplete")
-      assert_equal I18n.t("sign.app.in.mfa.totp.submit"), form.fetch("submit_label")
-      assert_includes inertia_props.fetch("description"), "認証アプリ"
-      assert_equal I18n.t("sign.app.in.mfa.totp.help"), token_field.fetch("help")
-      assert_not_includes response.body, "届きます"
-      assert_not_includes response.body, "送信され"
-    end
-
-    test "new exposes an actor-scoped selector when two active authenticators exist" do
-      second = ClientTotpCredential.create!(
-        user: @user,
-        private_key: ROTP::Base32.random_base32,
-        user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
-        title: "second authenticator",
-      )
-      with_prosopite_paused { establish_pending_mfa_via_email! }
-
-      with_prosopite_paused do
-        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
-      end
-
-      selector = inertia_props.fetch("form").fetch("credential_selector")
-
-      assert_equal "totp_challenge_form[credential_public_id]", selector.fetch("name")
-      assert_equal [@totp.public_id, second.public_id].sort,
-                   selector.fetch("options").map { |option| option.fetch("value") }.sort
-      assert selector.fetch("options").all? { |option| option.fetch("label").present? }
-      assert selector.fetch("options").none? { |option| option.key?("id") }
-    end
-
-    test "new refuses an unbound request when pending_mfa is missing" do
-      with_prosopite_paused do
-        get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
-      end
+      get sign_in_mfa_path(:new_auth_app_sign_in_challenge_totp_path, ri: "jp")
 
       assert_response :conflict
-      assert_equal "戻るはだめです", response.body
-    end
-
-    test "create with valid TOTP code advances Auth evidence without issuing Root credentials" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      # Verify pending_mfa was set
-      assert_predicate session[:pending_mfa], :present?, "pending_mfa should be set after email sign-in"
-      user_id = session[:pending_mfa]["user_id"]
-      user = Client.find(user_id)
-
-      # Verify user's OTPs are accessible
-      otps = user.client_totp_credentials
-        .where(user_identity_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE)
-
-      assert_not_empty otps,
-                       "Client should have active OTPs. All OTPs: #{ClientTotpCredential.where(user_id: user.id).pluck(
-                         :id,
-                         :user_identity_totp_credential_status_id,
-                       ).inspect}"
-
-      # TOTP codes are only valid for a 30-second window, so generation and the
-      # verifying request are pinned to the same instant -- otherwise a slow run can
-      # straddle a window boundary and turn a valid code invalid before it arrives.
-      assert_no_difference -> { ClientToken.where(user_id: @user.id).count } do
-        freeze_time do
-          totp_code = ROTP::TOTP.new(@totp.private_key).now
-
-          with_prosopite_paused do
-            post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
-              totp_challenge_form: { token: totp_code },
-            }
-          end
-        end
-      end
-
-      assert_response :found
-      uri = URI.parse(response.location)
-
-      assert_includes [configured_host(:sign_service), ENV.fetch("PUBLIC_AUTH_SERVICE_URL")], uri.host
-      assert_equal auth_app_sign_in_check_path, uri.path
-      assert_nil session[:pending_mfa]
-      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-      assert_nil cookies[AuthenticationBase::REFRESH_COOKIE_KEY]
-      flow = ClientSignInFlow.where(principal_id: @user.id).order(:id).last
-
-      assert_predicate flow, :sign_in_checkpoint_pending?
-      assert_equal "email", flow.authentication_method
-    end
-
-    test "a correct TOTP code submitted after the pending sign-in expired does not sign in" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      expires_at = session[:pending_mfa]["expires_at"]
-
-      travel_to Time.zone.at(expires_at) + 1.second do
-        totp_code = ROTP::TOTP.new(@totp.private_key).now
-
-        with_prosopite_paused do
-          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
-            totp_challenge_form: { token: totp_code },
-          }
-        end
-      end
-
-      assert_includes [302, 303], response.status
-      assert_equal auth_app_sign_in_path, URI.parse(response.location).path
-      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-    end
-
-    test "create with invalid TOTP code renders form with error" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      with_prosopite_paused do
-        post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
-          totp_challenge_form: { token: "000000" },
-        }
-      end
-
-      assert_response :unprocessable_content
-      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-    end
-
-    test "create with valid TOTP code and stealth failure renders form with error" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      TurnstileVerifierStub.challenge_response = { "success" => false }
-
-      freeze_time do
-        totp_code = ROTP::TOTP.new(@totp.private_key).now
-
-        with_prosopite_paused do
-          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
-            totp_challenge_form: { token: totp_code },
-          }
-        end
-      end
-
-      assert_response :unprocessable_content
-      assert_includes inertia_props.fetch("form_errors"), I18n.t("session_limit.turnstile_failed")
-      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-    end
-
-    # Regression guard for FINDING-06: same TOTP window must not be accepted twice.
-    # Simulates a concurrent request that already consumed the current window by
-    # pre-setting last_otp_at to the window timestamp before the request arrives.
-    test "create rejects TOTP code whose window has already been consumed" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      # The window computed here must be the window the request verifies against, so
-      # generation, the pre-consume write, and the request all share one instant.
-      freeze_time do
-        totp_code = ROTP::TOTP.new(@totp.private_key).now
-        otp_window_at = ROTP::TOTP.new(@totp.private_key).verify(totp_code.to_s)
-
-        # Pre-consume the window -- simulates a concurrent request that beat this one
-        @totp.update!(last_otp_at: Time.zone.at(otp_window_at))
-
-        with_prosopite_paused do
-          post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
-            totp_challenge_form: { token: totp_code },
-          }
-        end
-      end
-
-      assert_response :unprocessable_content
-      assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-    end
-
-    # The Valkey-backed rate_limit rules fail open when the store is unreachable. The PostgreSQL
-    # credential counter must still permanently revoke only the credential being guessed.
-    test "create permanently revokes the credential even when the rate-limit store is unreachable" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      freeze_time do
-        rate_limit_store.with(unreachable_rate_limit_store) do
-          ClientTotpCredential::MAX_CONSECUTIVE_FAILURES.times do
-            post_totp(wrong_totp_code)
-
-            assert_response :unprocessable_content
-          end
-
-          post_totp(ROTP::TOTP.new(@totp.private_key).now)
-        end
-
-        assert_response :unprocessable_content
-        assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-        assert_equal ClientTotpCredential::MAX_CONSECUTIVE_FAILURES, @totp.reload.otp_attempts_count
-        assert_equal ClientTotpCredentialStatus::REVOKED,
-                     @totp.user_identity_totp_credential_status_id
-      end
-    end
-
-    test "the PostgreSQL terminal revocation survives a rate-limit store flush" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      freeze_time do
-        rate_limit_store.with(unreachable_rate_limit_store) do
-          ClientTotpCredential::MAX_CONSECUTIVE_FAILURES.times { post_totp(wrong_totp_code) }
-        end
-
-        # A recovered-but-empty store: every Valkey counter is gone.
-        rate_limit_store.with(ActiveSupport::Cache::MemoryStore.new) do
-          post_totp(ROTP::TOTP.new(@totp.private_key).now)
-        end
-
-        assert_response :unprocessable_content
-        assert_nil cookies[AuthenticationBase::ACCESS_COOKIE_KEY]
-      end
-    end
-
-    test "a successful TOTP verification clears the recorded failures" do
-      with_prosopite_paused do
-        establish_pending_mfa_via_email!
-      end
-
-      freeze_time do
-        rate_limit_store.with(ActiveSupport::Cache::MemoryStore.new) do
-          2.times { post_totp(wrong_totp_code) }
-
-          assert_equal 2, @totp.reload.otp_attempts_count
-
-          post_totp(ROTP::TOTP.new(@totp.private_key).now)
-        end
-      end
-
-      assert_response :redirect
-      assert_equal 0, @totp.reload.otp_attempts_count
-    end
-
-    test "create refuses an unbound request without pending_mfa" do
-      with_prosopite_paused do
-        post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
-          totp_challenge_form: { token: "123456" },
-        }
-      end
+      post sign_in_mfa_path(:auth_app_sign_in_challenge_totp_path, ri: "jp"), params: {
+        totp_challenge_form: { token: ROTP::TOTP.new(@totp.private_key).now },
+      }
 
       assert_response :conflict
-      assert_equal "戻るはだめです", response.body
+      assert_equal flow_before, ClientSignInFlow.where(principal_id: @user.id).order(:id).last&.attributes
+      assert_equal 0, ClientToken.where(user_id: @user.id).count
     end
 
     private
@@ -403,7 +144,6 @@ class Auth::App::In::MfaTotpsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -428,7 +168,10 @@ class Auth::App::In::MfaTotpsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -679,7 +422,6 @@ class Auth::App::In::MfaTotpsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -695,7 +437,10 @@ class Auth::App::In::MfaTotpsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

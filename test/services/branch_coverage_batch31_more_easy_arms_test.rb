@@ -24,7 +24,7 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
   end
 
   test "OidcIdTokenIssuer blank nonce and inverted times" do
-    resource = Client.new
+    resource = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     client = Struct.new(:client_id).new("base-rails-rp")
     assert_raises(ArgumentError) do
       OidcIdTokenIssuer.new(
@@ -78,6 +78,7 @@ class BranchCoverageBatch31MoreEasyArmsTest < ActiveSupport::TestCase
     now = ClientSignUpFlow.database_now
     nonce = "branch-coverage-original-browser"
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: telephone.user_id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
       nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,

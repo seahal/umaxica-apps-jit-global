@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# POST /oidc/backchannel-logout on one RP cell (R5-WU10, one.md sections 6.4/7.6).
+# POST /oidc/closures on one RP (D-31, D-118) (R5-WU10, one.md sections 6.4/7.6).
 #
 # Server-to-server: no browser session, cookie or CSRF token takes part; authenticity is the OP's
 # signature on the Logout Token, checked against the realm OP's public JWKS from fixed
@@ -14,13 +14,19 @@ module RpBackchannelLogoutEndpoint
 
   def create
     cell = RpCellBinding.fetch(self.class.const_get(:RP_CELL_CONNECTION, false))
+    # D-118: only the RP's own registered host serves its receiver.
+    registered_host = URI.parse(OidcClientStoresStaticClientStore.backchannel_logout_uri(cell.client_id)).host
+    return head(:not_found) unless request.host == registered_host
+
     resource_type = { "app" => "client", "com" => "visitor", "org" => "operator" }.fetch(cell.realm)
     issuer = OidcIssuer.for_resource_type(resource_type)
     verification = OidcOpLogoutTokenVerifier.new(
       logout_token: params[:logout_token].to_s, client_id: cell.client_id, issuer:,
-      jwks_client: OidcOpJwksClient.new(jwks_uri: "#{issuer}/.well-known/jwks.json"),
+      jwks_client: OidcOpJwksClient.for_resource_type(resource_type),
     ).call
     response.headers["Cache-Control"] = "no-store"
+    # BX-7: a key that cannot be obtained is transient (503), never a permanent 400.
+    return head(:service_unavailable) if verification.key_unavailable?
     return head(:bad_request) unless verification.success?
 
     RpCellSessionRevoker.call(cell:, payload: verification.payload)

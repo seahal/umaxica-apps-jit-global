@@ -113,7 +113,11 @@ Undecided; none of these may be implemented from earlier drafts:
 - Leaving `ADVANCED` and returning to `NORMAL` after losing every passkey.
 - Recovery conditions depending on Secret, Recovery Key and Email OTP availability.
 - The boundary between Operator approval and owner-held Identity management.
-- Handling of an `ADVANCED` actor found with fewer than two active passkeys.
+- Handling of an `ADVANCED` actor found with fewer than two active passkeys. *(Decided 2026-10-23 for
+  ORG, D-92/D-132: every Operator becomes `ADVANCED`; one with a single active passkey keeps signing
+  in and is restricted to registering a second passkey and signing out until it exists; zero
+  passkeys cannot complete ordinary sign-in. APP/COM all start at `NORMAL` and enter `ADVANCED` only
+  by the owner's action.)*
 - ORG sign-up: state machine, invitation acceptance, Recovery Key, and Entra completion conditions.
 
 Recovery proposals discussed earlier (24 hours with a Recovery Key, 72 hours without one) are not

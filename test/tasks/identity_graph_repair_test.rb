@@ -14,9 +14,9 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
     @previous_surface = ENV["SURFACE"]
     @previous_dry_run = ENV["DRY_RUN"]
     [
-      ClientStatus, ClientVisibility, ClientMfaLevel, ClientMfaStatus,
-      VisitorStatus, VisitorVisibility, VisitorMfaLevel, VisitorMfaStatus,
-      OperatorStatus, OperatorVisibility, OperatorMfaLevel, OperatorMfaStatus,
+      ClientStatus, ClientVisibility, ClientMfaStatus,
+      VisitorStatus, VisitorVisibility, VisitorMfaStatus,
+      OperatorStatus, OperatorVisibility, OperatorMfaStatus,
       ClientIdentityState, VisitorIdentityState, OperatorIdentityState,
       PersonaMembershipKind, PersonaMembershipState,
       IndividualMembershipKind, IndividualMembershipState,
@@ -31,7 +31,10 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
   end
 
   test "repairs missing app graphs" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     ENV["SURFACE"] = "app"
     ENV["DRY_RUN"] = "false"
 
@@ -47,7 +50,10 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
   end
 
   test "does not duplicate an already provisioned app graph" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     IdentityGraphProvisioner.call!(surface: :app, principal: user)
     ENV["SURFACE"] = "app"
     ENV["DRY_RUN"] = "false"
@@ -62,7 +68,10 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
   end
 
   test "dry run reports a missing app graph without changing records" do
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     ENV["SURFACE"] = "app"
     ENV["DRY_RUN"] = "true"
 
@@ -76,8 +85,14 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
   end
 
   test "continues after an app graph failure and repairs later principals" do
-    first = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    second = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    second = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     ENV["SURFACE"] = "app"
     ENV["DRY_RUN"] = "false"
 
@@ -100,10 +115,19 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
   end
 
   test "skips login-blocked and admin-locked app principals as ineligible without provisioning them" do
-    reserved = Client.create!(status_id: ClientStatus::RESERVED, visibility_id: ClientVisibility::USER)
-    locked = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    reserved = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::RESERVED,
+      visibility_id: ClientVisibility::USER,
+    )
+    locked = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     locked.update_columns(access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED)
-    eligible = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+    eligible = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+    )
     ENV["SURFACE"] = "app"
     ENV["DRY_RUN"] = "false"
 
@@ -118,7 +142,10 @@ class IdentityGraphRepairTest < ActiveSupport::TestCase
   end
 
   test "org selector-ready graph does not require an Avatar" do
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     bootstrap = IdentityGraphProvisioner.call!(surface: :org, principal: operator)
 
     assert IdentityGraphRepair.selector_ready_graph?(AcmeSelector.config_for(:org), operator)

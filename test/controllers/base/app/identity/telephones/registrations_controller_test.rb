@@ -19,6 +19,7 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
     host! @host
     @user = clients(:one)
     @token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -43,6 +44,7 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -109,6 +111,7 @@ class Base::App::Identity::Telephones::RegistrationsControllerTest < ActionDispa
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

@@ -12,10 +12,14 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
       actor, email_model, telephone_model, owner_key, email_history, telephone_history =
         case realm
         when "app"
-          [Client.create!(status_id: ClientStatus::ACTIVE), ClientEmail, ClientTelephone, :user_id,
+          [Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+          ), ClientEmail, ClientTelephone, :user_id,
            ClientEmailHistory, ClientTelephoneHistory,]
         when "com"
-          [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorTelephone, :visitor_id,
+          [Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+          ), VisitorEmail, VisitorTelephone, :visitor_id,
            VisitorEmailHistory, VisitorTelephoneHistory,]
         end
       now = actor.class.database_now
@@ -67,9 +71,11 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
       actor, email_model, telephone_model, owner_key =
         case realm
         when "app"
-          [Client.create!(status_id: ClientStatus::ACTIVE), ClientEmail, ClientTelephone, :user_id]
+          [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
+           ClientEmail, ClientTelephone, :user_id,]
         when "com"
-          [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorTelephone, :visitor_id]
+          [Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE),
+           VisitorEmail, VisitorTelephone, :visitor_id,]
         end
       now = actor.class.database_now
       actor.update!(withdrawn_at: now, terminated_at: now, discard_at: now, purge_eligible_at: now + 1.day)
@@ -93,10 +99,16 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
       actor, email_model, telephone_model, owner_key =
         case realm
         when "app"
-          [Client.create!(created_at: 4.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago),
+          [Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 4.days.ago, discard_at: 2.days.ago,
+            purge_eligible_at: 1.day.ago,
+          ),
            ClientEmail, ClientTelephone, :user_id,]
         when "com"
-          [Visitor.create!(created_at: 4.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago),
+          [Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 4.days.ago, discard_at: 2.days.ago,
+            purge_eligible_at: 1.day.ago,
+          ),
            VisitorEmail, VisitorTelephone, :visitor_id,]
         end
       email = email_model.create!(
@@ -121,9 +133,11 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
       actor, email_model, telephone_model, owner_key =
         case realm
         when "app"
-          [Client.create!(status_id: ClientStatus::ACTIVE), ClientEmail, ClientTelephone, :user_id]
+          [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
+           ClientEmail, ClientTelephone, :user_id,]
         when "com"
-          [Visitor.create!(status_id: VisitorStatus::ACTIVE), VisitorEmail, VisitorTelephone, :visitor_id]
+          [Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE),
+           VisitorEmail, VisitorTelephone, :visitor_id,]
         end
       now = actor.class.database_now
       deadline = now + 5.minutes
@@ -147,7 +161,7 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
 
   test "retires persisted client credentials while retaining original identifiers and Secret terminal audit" do
     now = Client.database_now
-    client = Client.create!(status_id: ClientStatus::ACTIVE)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     email = ClientEmail.create!(
       user: client, address: "withdrawal-#{SecureRandom.hex(8)}@example.com",
     )
@@ -215,7 +229,7 @@ class WithdrawalPersonalDataAnonymizerTest < ActiveSupport::TestCase
   end
 
   test "retires persisted visitor credentials without fabricating dead identifier history" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
     now = Visitor.database_now
     email = VisitorEmail.create!(
       visitor: visitor, raw_address: "retired-visitor-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,

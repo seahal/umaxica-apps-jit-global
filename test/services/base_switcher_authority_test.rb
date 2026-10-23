@@ -4,7 +4,10 @@ require "test_helper"
 
 class BaseSwitcherAuthorityTest < ActiveSupport::TestCase
   test "post-cutover candidate resolution uses concrete Avatar ownership" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
 
     AvatarRecord.transaction(joinable: false) do

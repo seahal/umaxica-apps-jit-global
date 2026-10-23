@@ -75,6 +75,7 @@
 #  fk_user_tokens_on_user_token_dbsc_status_id     (user_token_dbsc_status_id => client_token_dbsc_statuses.id)
 #
 one:
+  authentication_epoch: 0
   public_id: "651xxxxxxxxxxxxxxxxxx" # was one_user_token_000001
   user: one
   device_session_id: <%= ActiveRecord::FixtureSet.identify(:one) %>
@@ -87,6 +88,7 @@ one:
   created_at: <%= Time.current %>
   updated_at: <%= Time.current %>
 two:
+  authentication_epoch: 0
   public_id: "615xxxxxxxxxxxxxxxxxx" # was two_user_token_000001
   user: two
   device_session_id: <%= ActiveRecord::FixtureSet.identify(:two) %>

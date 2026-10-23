@@ -8,6 +8,7 @@ class SignUpExpiryRaceTest < ActiveSupport::TestCase
 
   setup do
     @flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: nil,
       status_id: ClientSignUpFlowStatus::FINALIZING,
       step: "finalizing",

@@ -46,9 +46,6 @@ class ClientSecretSignInReceipt < OpBaseAppRecord
 
   def matching_ceremony?(ceremony, flow)
     now = ClientSignInFlow.database_now
-    if ceremony.admission_purpose == "local_sign_in"
-      return ceremony.local_sign_in_flow_ref == flow.public_id && ceremony.active?(now: now)
-    end
     return false unless ceremony.admission_purpose == "authentication_handoff" && ceremony.completed? &&
       ceremony.admitted? && ceremony.revoked_at.nil? && ceremony.cancelled_at.nil? && ceremony.expires_at > now
 

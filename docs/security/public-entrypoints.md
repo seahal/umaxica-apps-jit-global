@@ -83,12 +83,6 @@ transaction, and registration evidence cannot satisfy ordinary step-up freshness
 ceremony for a pending OIDC parent, are CSRF-protected, and hand an encrypted single-use request to
 Base, which commits it only through a same-origin POST from the browser that started the parent.
 
-`PUBLIC_SIGN_IN_UP` also covers Auth app/com/org `GET` and `POST /sign/handoff` and Base app/com/org
-`POST /sign/completion`. Auth requires a matching admitted local flow and only returns its
-credential evidence. Base requires the issuing browser's flow binding and the exact Auth origin
-before consuming the short-lived opaque result through its existing session issuance boundary.
-Public reachability of these transport endpoints grants no session authority.
-
 Routes not covered above must require authentication or fail closed. In code, that means the route
 must resolve to `:private` or `:deny_all`, and its concrete controller/action must declare that
 classification locally.

@@ -56,7 +56,10 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
     params = fake_attestation(@client, challenge: challenge, user_verified: false)
 
     assert_raises(WebAuthn::UserVerifiedVerificationError) do
-      Webauthn::RegistrationVerifier.verify!(credential_params: params, challenge: challenge, config: @config)
+      Webauthn::RegistrationVerifier.verify!(
+        credential_params: params, challenge: challenge, config: @config,
+        surface: :app,
+      )
     end
   end
 
@@ -66,6 +69,7 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
 
     context = Webauthn::RegistrationVerifier.verify!(
       credential_params: params, challenge: challenge, config: @config,
+      surface: :app,
     )
 
     assert_predicate context, :user_verified
@@ -97,7 +101,10 @@ class WebauthnVerifierUvPolicyTest < ActiveSupport::TestCase
     params.fetch("response")["clientDataJSON"] = "!"
 
     assert_raises(Webauthn::RegistrationVerifier::VerificationError) do
-      Webauthn::RegistrationVerifier.verify!(credential_params: params, challenge: challenge, config: @config)
+      Webauthn::RegistrationVerifier.verify!(
+        credential_params: params, challenge: challenge, config: @config,
+        surface: :app,
+      )
     end
   end
 

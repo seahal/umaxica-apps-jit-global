@@ -111,13 +111,13 @@ class FilterParameterLoggingTest < ActiveSupport::TestCase
       assert_raises(ActiveModel::UnknownAttributeError) { ClientExternalIdentity.new(refresh_token: provider_refresh) }
     end
     ClientExternalIdentity.create!(
-      client: Client.create!(status_id: ClientStatus::ACTIVE),
+      client: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
       provider: "google", issuer: "https://accounts.google.com", subject: google_uid,
       audience: "google-client-id", verification_authority: "omniauth-google-oauth2/1.2.1",
       verified_at: ClientExternalIdentity.database_now,
     )
     ClientExternalIdentity.create!(
-      client: Client.create!(status_id: ClientStatus::ACTIVE),
+      client: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
       provider: "apple", issuer: "https://appleid.apple.com", subject: apple_uid,
       audience: "apple-client-id", verification_authority: "omniauth-apple/1.4.0",
       verified_at: ClientExternalIdentity.database_now,

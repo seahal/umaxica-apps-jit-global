@@ -273,7 +273,7 @@ module Auth
 
     test "checkpoint continuation uses db-backed sign-in cycle when locator is present" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -291,7 +291,7 @@ module Auth
 
     test "checkpoint continuation advances db-backed cycle while request is readonly" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -306,7 +306,7 @@ module Auth
 
     test "checkpoint continuation can carry dashboard as pt" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       cycle.update!(return_to: "/?ri=jp")
       harness = db_sequence_harness(user, token)
@@ -324,7 +324,7 @@ module Auth
 
     test "checkpoint continuation keeps blocking db-backed cycle at checkpoint" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       harness.checkpoint_participant = BlockingParticipant.new(cycle)
@@ -339,7 +339,7 @@ module Auth
 
     test "completed continuation redirects through the stored return path without rewriting it" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
       cycle.update!(return_to: "/after")
       before = cycle.reload.attributes
@@ -355,7 +355,7 @@ module Auth
 
     test "selector continuation redirects without issuing or binding a Root session" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = ClientSignInFlow.create!(
         principal_id: user.id,
         state_id: ClientSignInFlow.state_id_for("SELECTOR_PENDING"),
@@ -378,7 +378,7 @@ module Auth
 
     test "dashboard continuation falls back when persisted return path points to dashboard" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
       cycle.update!(return_to: "/?ri=jp")
       before = cycle.reload.attributes
@@ -394,7 +394,7 @@ module Auth
 
     test "completed continuation preserves a validated stored welcome return path" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "COMPLETED")
       cycle.update!(return_to: "/welcome?ri=jp")
       before = cycle.reload.attributes
@@ -410,7 +410,7 @@ module Auth
 
     test "dashboard continuation redirects checkpoint-pending cycle back to checkpoint" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -427,7 +427,7 @@ module Auth
 
     test "checkpoint continuation requires checkpoint policy before advancing" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "CHECKPOINT_PENDING")
       harness = db_sequence_harness(user, token)
       harness.allowed_policy = { show_checkpoint?: false }
@@ -443,7 +443,7 @@ module Auth
 
     test "db-backed sequence rejects wrong participant without advancing" do
       user = create_db_sequence_client
-      token = ClientToken.create!(user: user)
+      token = ClientToken.create!(authentication_epoch: 0, user: user)
       cycle = db_sign_in_flow(user, token, status_name: "SELECTOR_PENDING")
       harness = db_sequence_harness(user, token)
       SignInCycleLocator.new(harness.session, surface: :app, actor: user, token: token).issue!(cycle, nonce: "nonce")
@@ -585,7 +585,6 @@ module Auth
     def create_db_sequence_client
       ClientStatus.ensure_defaults!
       ClientVisibility.ensure_defaults!
-      ClientMfaLevel.ensure_defaults!
       ClientMfaStatus.ensure_defaults!
       ClientTokenBindingMethod.ensure_defaults!
       ClientTokenDbscStatus.ensure_defaults!
@@ -596,7 +595,7 @@ module Auth
         public_id: PublicId.generate,
         status_id: ClientStatus::ACTIVE,
         visibility_id: ClientVisibility::USER,
-        mfa_level_id: ClientMfaLevel::NOTHING,
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         mfa_status_id: ClientMfaStatus::UNCONFIGURED,
       )
     end

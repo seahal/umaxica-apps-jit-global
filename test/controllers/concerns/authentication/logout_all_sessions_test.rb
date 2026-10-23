@@ -17,7 +17,7 @@ class AuthenticationLogoutAllSessionsTest < ActiveSupport::TestCase
 
   test "propagates a token revocation failure instead of reporting batch success" do
     user = clients(:one)
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     AuthenticationLogoutCurrentSession.stub(
       :call,

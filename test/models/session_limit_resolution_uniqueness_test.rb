@@ -13,7 +13,10 @@ class SessionLimitResolutionUniquenessTest < ActiveSupport::TestCase
 
   SURFACES.each do |principal_class, status, visibility, flow_class, resolution_class|
     test "#{resolution_class.name} retains issue replay refusal raw uniqueness and terminal history" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
       now = flow_class.database_now
       flow = flow_class.create!(
         principal_id: actor.id, state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
@@ -49,7 +52,10 @@ class SessionLimitResolutionUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{resolution_class.name} preflights both exact partial keys on creation" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
       now = flow_class.database_now
       flow = flow_class.create!(
         principal_id: actor.id, state_id: flow_class.state_id_for("SESSION_ISSUANCE_PENDING"),
@@ -65,7 +71,10 @@ class SessionLimitResolutionUniquenessTest < ActiveSupport::TestCase
       assert duplicate.errors.of_kind?(:sign_in_flow_id, :taken)
       assert duplicate.errors.of_kind?(:actor_ref, :taken)
       assert_raises(ActiveRecord::RecordInvalid) { duplicate.save! }
-      other_actor = principal_class.create!(status_id: status, visibility_id: visibility)
+      other_actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
       same_parent = resolution_class.new(
         attributes.merge(
           actor_ref: other_actor.public_id,

@@ -5,7 +5,7 @@ require "test_helper"
 
 class AuthMethodGuardCoverageTest < ActiveSupport::TestCase
   test "public removal guards preserve real sign-in and step-up capabilities with exclusions" do
-    actor = Client.create!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     email = actor.client_emails.create!(
       address: "removal-#{SecureRandom.hex(8)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,

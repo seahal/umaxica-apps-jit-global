@@ -10,7 +10,7 @@ module Edit
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
         before_action :reject_authenticated_rp_start!
-        helper_method :neutral_sign_form_url
+        helper_method :neutral_sign_form_url, :neutral_sign_target_link_uri
       end
     end
   end

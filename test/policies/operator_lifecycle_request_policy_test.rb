@@ -11,7 +11,12 @@ class OperatorLifecycleRequestPolicyTest < ActiveSupport::TestCase
       status: OperatorLifecycleRequest::STATUS_PENDING,
       requested_by_operator_id: 999,
     )
-    policy = OperatorLifecycleRequestPolicy.new(record, user: Operator.new(id: 1))
+    policy = OperatorLifecycleRequestPolicy.new(
+      record,
+      user: Operator.new(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1,
+      ),
+    )
 
     %i(index? show? create? approve? reject? execute?).each do |rule|
       assert_not policy.public_send(rule), "expected #{rule} to deny"
@@ -23,7 +28,12 @@ class OperatorLifecycleRequestPolicyTest < ActiveSupport::TestCase
       status: OperatorLifecycleRequest::STATUS_APPROVED,
       requested_by_operator_id: 999,
     )
-    policy = OperatorLifecycleRequestPolicy.new(record, user: Operator.new(id: 1))
+    policy = OperatorLifecycleRequestPolicy.new(
+      record,
+      user: Operator.new(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1,
+      ),
+    )
 
     assert_not policy.execute?
   end

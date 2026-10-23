@@ -13,12 +13,13 @@ module Sign
       setup do
         @ceremonies = {}
         %i(app com).each do |surface|
-          admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          admission = OidcTestEntry.issue!(
             surface:, intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
           )
           model = (surface == :app) ? ClientAuthCeremonySession : VisitorAuthCeremonySession
           @ceremonies[surface] = model.rotate_and_admit!(
-            admission_purpose: "local_sign_in", local_sign_in_flow_ref: admission.transaction.public_id,
+            admission_purpose: "authentication_handoff",
+            authorization_transaction_ref: admission.transaction.transaction_id,
           ).first
         end
       end
@@ -29,12 +30,12 @@ module Sign
           address = "resend-candidates-#{SecureRandom.hex(8)}@example.test"
           candidates =
             2.times.map do
-              owner = owner_class.create!
+              owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
               contact = model.create!(owner_key => owner.id, :address => address, :confirm_policy => "1")
               contact
             end
           snapshots = candidates.map { |contact| contact.reload.attributes }
-          owner = owner_class.create!
+          owner = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
           effective = model.create!(owner_key => owner.id, :address => address, :confirm_policy => "1")
           effective.finalize_binding!
           ceremony = @ceremonies.fetch(surface)
@@ -137,7 +138,7 @@ module Sign
 
       test "real and dummy resend proof fields have equal encrypted state length for the same destination" do
         address = "length-parity-#{SecureRandom.hex(8)}@example.test"
-        owner = Client.create!
+        owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
         email = owner.client_emails.create!(address: address, confirm_policy: "1").tap(&:finalize_binding!)
         real = SignInOtpResendState.issue(
           kind: :email, target: address, surface: :app, browser_binding: "b" * 64, contact: email,
@@ -382,7 +383,7 @@ module Sign
         VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
         address = "corporate-resend-#{SecureRandom.hex(4)}@example.test"
         email = VisitorEmail.create!(
-          visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE),
+          visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE),
           address: address,
           address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,

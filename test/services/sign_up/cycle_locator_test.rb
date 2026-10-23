@@ -2,11 +2,10 @@
 # frozen_string_literal: true
 
 require "test_helper"
-# require "helpers/global_test_support"
 
 module SignUp
   class CycleLocatorTest < ActiveSupport::TestCase
-    test "issue stores a session locator and current resolves the cycle" do
+    test "issue stores a session locator and current resolves the cycle of the admitted owner" do
       session = {}
       cycle = create_cycle(nonce: "old-nonce")
       locator = SignUpCycleLocator.new(session, surface: :app)
@@ -15,12 +14,12 @@ module SignUp
 
       assert_equal cycle.public_id, session.dig(:app_sign_up_flow_locator, "public_id")
       assert_equal "fresh-nonce", session.dig(:app_sign_up_flow_locator, "nonce")
-      assert_equal cycle, locator.current
+      assert_equal cycle, current_for(locator, cycle)
       assert cycle.reload.nonce_matches?("fresh-nonce")
       assert_not cycle.nonce_matches?("old-nonce")
     end
 
-    test "bad nonce rejects without mutating cycle state" do
+    test "bad nonce is an ownership mismatch and leaves the cycle state unchanged" do
       session = {}
       cycle = create_cycle(nonce: "correct-nonce")
       locator = SignUpCycleLocator.new(session, surface: :app)
@@ -28,17 +27,17 @@ module SignUp
 
       session[:app_sign_up_flow_locator]["nonce"] = "bad-nonce"
 
-      assert_nil locator.current
+      assert_raises(SignUpCycleLocator::OwnershipMismatch) { current_for(locator, cycle) }
       assert_equal ClientSignUpFlowStatus::STARTED, cycle.reload.status_id
     end
 
-    test "expired and terminal cycles reject" do
+    test "a hint naming an expired cycle is a mismatch and one naming its own ended attempt resolves nothing" do
       session = {}
-      expired = create_cycle(nonce: "expired", issued_at: 2.minutes.ago, expires_at: 1.minute.ago)
       locator = SignUpCycleLocator.new(session, surface: :app)
+      expired = create_cycle(nonce: "expired", issued_at: 2.minutes.ago, expires_at: 1.minute.ago)
       locator.issue!(expired, nonce: "expired")
 
-      assert_nil locator.current
+      assert_raises(SignUpCycleLocator::OwnershipMismatch) { current_for(locator, expired) }
 
       completed = create_cycle(
         nonce: "completed",
@@ -48,23 +47,31 @@ module SignUp
       )
       locator.issue!(completed, nonce: "completed")
 
-      assert_nil locator.current
+      assert_nil current_for(locator, completed)
+      session[:app_sign_up_flow_locator]["nonce"] = "other-browser"
+
+      assert_raises(SignUpCycleLocator::OwnershipMismatch) { current_for(locator, completed) }
     end
 
-    test "surface-specific locator does not read another surface key" do
-      session = {}
+    test "a locator of another surface refuses this surface's admission" do
       cycle = create_cycle(nonce: "nonce")
-      SignUpCycleLocator.new(session, surface: :app).issue!(cycle, nonce: "nonce")
+      locator = SignUpCycleLocator.new({}, surface: :com)
 
-      assert_nil SignUpCycleLocator.new(session, surface: :com).current
+      assert_raises(SignUpCycleLocator::OwnershipMismatch) { current_for(locator, cycle) }
     end
 
     private
 
+    def current_for(locator, cycle)
+      binding = cycle.class.find(cycle.id).association(:auth_admission_binding).scope.take
+      ceremony = binding.class.auth_admission_session_class.find(binding.admitted_auth_ceremony_session_id)
+      locator.current(admission_binding: binding, ceremony_session: ceremony)
+    end
+
     def create_cycle(nonce:, **overrides)
       ClientSignUpFlow.create!(
         {
-          principal_id: nil,
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
           status_id: ClientSignUpFlowStatus::STARTED,
           step: "start",
           nonce_digest: ClientSignUpFlow.digest_nonce(nonce),

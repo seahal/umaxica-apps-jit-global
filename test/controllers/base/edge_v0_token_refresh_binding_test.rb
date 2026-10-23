@@ -16,7 +16,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a session idle beyond the client window can no longer refresh" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(last_used_at: SecurityTokenLifetimes::CLIENT_IDLE_TTL.ago - 1.minute)
 
@@ -33,7 +33,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a session used within the client window refreshes" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(last_used_at: SecurityTokenLifetimes::CLIENT_IDLE_TTL.ago + 5.minutes)
 
@@ -50,7 +50,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   test "an operator session is held to the tighter operator idle window" do
     org_host = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
     host! org_host
-    token = OperatorToken.create!(staff: operators(:one))
+    token = OperatorToken.create!(authentication_epoch: 0, staff: operators(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(last_used_at: SecurityTokenLifetimes::OPERATOR_IDLE_TTL.ago - 1.minute)
 
@@ -70,7 +70,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
 
   test "a DPoP-bound refresh without a proof is denied and recorded" do
     key = OpenSSL::PKey::EC.generate("prime256v1")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(dpop_jkt: JitSecurityJwtThumbprintCalculator.calculate(JWT::JWK.new(key).export))
 
@@ -93,7 +93,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   test "a DPoP-bound refresh with a proof from another key is denied as a thumbprint mismatch" do
     bound_key = OpenSSL::PKey::EC.generate("prime256v1")
     other_key = OpenSSL::PKey::EC.generate("prime256v1")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(dpop_jkt: JitSecurityJwtThumbprintCalculator.calculate(JWT::JWK.new(bound_key).export))
     proof = JWT.encode(
@@ -121,7 +121,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
 
   test "a DPoP-bound refresh with a proof from the bound key refreshes" do
     key = OpenSSL::PKey::EC.generate("prime256v1")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(dpop_jkt: JitSecurityJwtThumbprintCalculator.calculate(JWT::JWK.new(key).export))
     proof = JWT.encode(
@@ -144,10 +144,11 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a refresh on a DBSC-bound device session without a DBSC proof revokes the device session" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
-    sibling = ClientToken.create!(user: clients(:one), device_session: token.device_session)
+    sibling = ClientToken.create!(authentication_epoch: 0, user: clients(:one), device_session: token.device_session)
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -174,7 +175,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a DBSC proof for another device session is denied as a session id mismatch" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.device_session.bind_dbsc!(session_id: "dbsc-session-id", public_key_thumbprint: "thumbprint")
 
@@ -195,7 +196,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "an unverifiable DBSC proof for the bound device session is denied and revokes it" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.device_session.bind_dbsc!(session_id: "dbsc-session-id", public_key_thumbprint: "thumbprint")
 
@@ -217,7 +218,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a refresh on a revoked device session is denied" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.device_session.revoke!(reason: "manual_review")
 
@@ -233,7 +234,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a DBSC-bound token without its bound cookie is denied" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(
       user_token_binding_method_id: ClientTokenBindingMethod::DBSC,
@@ -256,7 +257,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a DBSC-bound token whose lifecycle is not active is denied" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(
       user_token_binding_method_id: ClientTokenBindingMethod::DBSC,
@@ -275,7 +276,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a legacy token that claims a failed DBSC lifecycle fails closed" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
@@ -296,7 +297,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a legacy token whose DBSC registration offer expired refreshes and is downgraded to no binding" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
@@ -316,7 +317,7 @@ class Base::EdgeV0TokenRefreshBindingTest < ActionDispatch::IntegrationTest
   end
 
   test "a legacy token still inside its DBSC registration window refreshes and stays pending" do
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(
       user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,

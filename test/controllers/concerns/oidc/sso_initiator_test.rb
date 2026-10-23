@@ -14,19 +14,19 @@ class OidcSsoInitiatorTestController < ApplicationController
 
   def fresh
     redirect_to_oidc_authorization_url(
-      initiate_oidc_session!(pt: params[:pt].presence || "/fresh", prompt: "login", max_age: 60),
+      initiate_oidc_session!(target_link_uri: params[:pt].presence || "/fresh", prompt: "login", max_age: 60),
     )
   end
 
   def hinted
     redirect_to_oidc_authorization_url(
-      initiate_oidc_session!(pt: "/hinted"),
+      initiate_oidc_session!(target_link_uri: "/hinted"),
     )
   end
 
   def burst
     params.fetch(:count, "1").to_i.times do |index|
-      initiate_oidc_session!(pt: "/burst-#{index}")
+      initiate_oidc_session!(target_link_uri: "/burst-#{index}")
     end
     head :no_content
   end
@@ -101,20 +101,22 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
     assert_equal configured_host(:sign_service), location.host
     assert_equal "/sign", location.path
-    assert_equal "/oidc/sso", Rack::Utils.parse_nested_query(location.query).fetch("pt")
+    # D-151: a path under /oidc is never a return target, so none is carried.
+    assert_not Rack::Utils.parse_nested_query(location.query).key?("target_link_uri")
     assert_nil session["oidc_pending_flows"]
     assert_nil session[:oidc_code_verifier]
     assert_not_includes io.string, "oidc.sso.redirect_policy"
   end
 
-  test "authenticate! preserves the protected request query in the sign entry return path" do
+  # D-151: the target is path only and never under /oidc; the request query is not carried.
+  test "authenticate! carries neither the query nor an /oidc path in the sign entry" do
     get "/oidc/sso", params: { ri: "jp" },
                      headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
     assert_response :redirect
     query = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
 
-    assert_equal "/oidc/sso?ri=jp", query.fetch("pt")
+    assert_not query.key?("target_link_uri")
     assert_equal "jp", query.fetch("ri")
     assert_nil session["oidc_pending_flows"]
   end
@@ -130,7 +132,9 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
     assert_equal "login", query.fetch("prompt")
     assert_equal "60", query.fetch("max_age")
-    assert_equal 60, session.fetch("oidc_pending_flows").fetch(query.fetch("state")).fetch("max_age")
+    flow = session.fetch("oidc_pending_flows").fetch(OidcStateTestSupport.jti(query.fetch("state")))
+
+    assert_equal 60, flow.fetch("max_age")
   end
 
   test "normal flow does not emit screen hint or move PKCE state into scalar session keys" do
@@ -142,9 +146,9 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     query = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query)
 
     assert_nil query["screen_hint"]
-    flow = session.fetch("oidc_pending_flows").fetch(query.fetch("state"))
+    flow = session.fetch("oidc_pending_flows").fetch(OidcStateTestSupport.jti(query.fetch("state")))
 
-    assert_equal "/hinted", flow.fetch("pt")
+    assert_equal "/hinted", OidcStateTestSupport.target_link_uri(query.fetch("state"))
     assert_predicate flow.fetch("code_verifier"), :present?
     assert_predicate flow.fetch("nonce"), :present?
     assert_nil session[:oidc_code_verifier]
@@ -153,7 +157,8 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     assert_nil session[:oidc_pt]
   end
 
-  test "pending flows remain independent and are bounded to two entries" do
+  # D-155: one sign-in per browser and RP; the last start replaces any earlier pending entry.
+  test "the last start replaces every earlier pending entry" do
     get "/oidc/sso/burst", params: { count: 3 },
                            headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
@@ -161,10 +166,9 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
     flows = session.fetch("oidc_pending_flows")
 
-    assert_equal 2, flows.size
-    assert_equal ["/burst-1", "/burst-2"], flows.values.map { |flow| flow.fetch("pt") }
-    assert_not_equal flows.values[0].fetch("code_verifier"), flows.values[1].fetch("code_verifier")
-    assert_not_equal flows.values[0].fetch("nonce"), flows.values[1].fetch("nonce")
+    assert_equal 1, flows.size
+    assert_predicate flows.values.first.fetch("code_verifier"), :present?
+    assert_not flows.values.first.key?("pt")
   end
 
   test "unsafe return targets are reduced to the local root" do
@@ -176,6 +180,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
       "/dashboard\u0000",
     ].each do |target|
       get "/oidc/sso/fresh", params: { pt: target },
+
                              headers: { "Host" => configured_host(:sign_service), "HTTPS" => "on" }
 
       assert_response :redirect
@@ -183,7 +188,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
       payload, = JWT.decode(Rack::Utils.parse_nested_query(gateway.query).fetch("rt"), nil, false)
       state = Rack::Utils.parse_nested_query(URI.parse(payload.fetch("url")).query).fetch("state")
 
-      assert_equal "/", session.fetch("oidc_pending_flows").fetch(state).fetch("pt"), target
+      assert_nil OidcStateTestSupport.target_link_uri(state), target
     end
   end
 
@@ -309,7 +314,6 @@ class OidcSsoInitiatorTestController
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -321,7 +325,6 @@ class OidcSsoInitiatorTestController
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -370,14 +373,20 @@ class OidcSsoInitiatorTestController
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     insert_verified_visitor_email!(visitor_id: visitor.id, address: email_address)
     visitor.refresh_mfa_status! if visitor.respond_to?(:refresh_mfa_status!)
     visitor.reload
@@ -693,7 +702,6 @@ class OidcSsoInitiatorTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -705,7 +713,6 @@ class OidcSsoInitiatorTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -735,7 +742,10 @@ class OidcSsoInitiatorTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -30,7 +30,7 @@ module Auth::App::Up
       TurnstileVerifierStub.challenge_enabled = true
       TurnstileVerifierStub.challenge_response = { "success" => true }
       https!
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
       )
       binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
@@ -178,8 +178,12 @@ module Auth::App::Up
     end
 
     test "new keeps an admitted ceremony independent of a presented root token" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       token = ClientToken.create!(
+        authentication_epoch: 0,
         user: visitor, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
         user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
@@ -203,8 +207,12 @@ module Auth::App::Up
     end
 
     test "create keeps an admitted ceremony independent of a presented root token" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       token = ClientToken.create!(
+        authentication_epoch: 0,
         user: visitor, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
         user_token_binding_method_id: ClientTokenBindingMethod::LEGACY,
@@ -325,7 +333,7 @@ module Auth::App::Up
     end
 
     test "create beside an effective telephone issues only an independent pending candidate" do
-      user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+      user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
       existing = ClientTelephone.create!(
         user: user, number: "+1234567898", user_telephone_status_id: ClientTelephoneStatus::VERIFIED,
         confirm_policy: "1", confirm_using_mfa: "1", binding_finalized_at: ClientTelephone.database_now,
@@ -387,7 +395,10 @@ module Auth::App::Up
     end
 
     test "a verified telephone candidate lock cannot mutate an independent signup candidate" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       existing = ClientTelephone.create!(
         user: visitor, raw_number: "+819012377901",
         confirm_policy: true, confirm_using_mfa: true,
@@ -425,7 +436,10 @@ module Auth::App::Up
     end
 
     test "a pending sign-up telephone candidate lock cannot mutate an independent signup candidate" do
-      visitor = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       existing = ClientTelephone.create!(
         user: visitor, raw_number: "+819012377902",
         confirm_policy: true, confirm_using_mfa: true,
@@ -493,7 +507,7 @@ module Auth::App::Up
     end
 
     test "create shows identical user-facing response for existing and new telephones" do
-      user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+      user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
       existing_telephone = ClientTelephone.create!(
         user: user,
         number: "+819012345678",
@@ -879,7 +893,7 @@ module Auth::App::Up
       browser = open_session
       browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
       browser.https!
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      issuance = OidcTestEntry.issue!(
         surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
       )
       binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
@@ -1190,7 +1204,10 @@ module Auth::App::Up
     end
 
     test "fresh sessions cannot distinguish pending and registered telephone sign-up" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       existing = ClientTelephone.create!(
         user: visitor, raw_number: "+819012300006", confirm_policy: true,
         confirm_using_mfa: true,
@@ -1209,7 +1226,7 @@ module Auth::App::Up
           browser = open_session
           browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
           browser.https!
-          issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          issuance = OidcTestEntry.issue!(
             surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
           )
           binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
@@ -1566,7 +1583,10 @@ module Auth::App::Up
     end
 
     test "sign-up beside an effective telephone creates only its own pending candidate" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       existing = visitor.client_telephones.create!(
         raw_number: "+819012377001",
         confirm_policy: true,
@@ -1606,7 +1626,10 @@ module Auth::App::Up
     end
 
     test "resending the code for an already verified telephone answers without creating records" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       existing = visitor.client_telephones.create!(
         raw_number: "+819012377801",
         confirm_policy: true,
@@ -1650,7 +1673,10 @@ module Auth::App::Up
     end
 
     test "the code page for an already verified telephone stops answering once the window closes" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       existing = visitor.client_telephones.create!(
         raw_number: "+819012377802",
         confirm_policy: true,
@@ -1691,7 +1717,10 @@ module Auth::App::Up
     end
 
     test "a code submitted against an already verified telephone never starts an account" do
-      visitor = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER)
+      visitor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::VERIFIED_WITH_SIGN_UP, visibility_id: ClientVisibility::USER,
+      )
       existing = visitor.client_telephones.create!(
         raw_number: "+819012377002",
         confirm_policy: true,
@@ -1818,7 +1847,6 @@ class Auth::App::Up::TelephonesControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1843,7 +1871,10 @@ class Auth::App::Up::TelephonesControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -2094,7 +2125,6 @@ class Auth::App::Up::TelephonesControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -2110,7 +2140,10 @@ class Auth::App::Up::TelephonesControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

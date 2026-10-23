@@ -10,13 +10,19 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
      [Visitor, VisitorPasskey, VisitorToken, OpComGrant, :visitor_id, :visitor_token, "com", "visitor"],
      [Operator, OperatorPasskey, OperatorToken, OpOrgGrant, :staff_id, :operator_token,
       "org", "operator",],].each do |actor_class, key_class, token_class, rp_class, owner_key, root_key, surface, type|
-      actor = actor_class.create!
-      token = token_class.create!(owner_key => actor.id, :root_login_established_at => Time.current)
-      metadata = (key_class == OperatorPasskey) ? {} : { uv_verified_at: Time.current }
-      key_class.create!(
-        owner_key => actor.id, :webauthn_id => SecureRandom.uuid,
-        :public_key => "surviving-key", **metadata,
+      actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
+      token = token_class.create!(
+        :authentication_epoch => 0, owner_key => actor.id,
+        :root_login_established_at => Time.current,
       )
+      metadata = (key_class == OperatorPasskey) ? {} : { uv_verified_at: Time.current }
+      # D-132: ADVANCED Operators keep two active Passkeys after the removal.
+      ((key_class == OperatorPasskey) ? 2 : 1).times do
+        key_class.create!(
+          owner_key => actor.id, :webauthn_id => SecureRandom.uuid,
+          :public_key => "surviving-key", **metadata,
+        )
+      end
       target = key_class.create!(
         owner_key => actor.id, :webauthn_id => SecureRandom.uuid,
         :public_key => "target-key", :description => "Original", **metadata,
@@ -24,6 +30,7 @@ class BasePasskeyMutationStepUpTest < ActionDispatch::IntegrationTest
       client = OidcClientRegistry.find!("base-#{surface}-ww")
       host = URI.parse(client.redirect_uris.first).host
       rp = rp_class.create!(
+        :authentication_epoch => 0,
         root_key => token, :oidc_client_id => client.client_id,
         :oidc_scope => "openid profile", :oidc_jti => SecureRandom.uuid,
         :oidc_auth_time => Time.current, :refresh_token_expires_at => 10.minutes.from_now,

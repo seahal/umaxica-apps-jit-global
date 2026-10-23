@@ -107,6 +107,7 @@ Rails.application.configure do
     Rails.env,
     ENV["RATE_LIMIT_NAMESPACE_SUFFIX"].presence,
   ].compact.join(":")
+  config.x.rate_limit.namespace = rate_limit_namespace
   config.x.rate_limit.store =
     ActiveSupport::Cache::RedisCacheStore.new(
       url: valkey.rate_limit.url,

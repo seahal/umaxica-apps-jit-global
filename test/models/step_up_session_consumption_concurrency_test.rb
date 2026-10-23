@@ -9,8 +9,11 @@ class StepUpSessionConsumptionConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
   setup do
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
-    @token = ClientToken.create!(user: @user)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
+    @token = ClientToken.create!(authentication_epoch: 0, user: @user)
     @step_up_session = ClientStepUpSession.create!(
       user_token: @token,
       scope: "account_update",

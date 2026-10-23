@@ -17,7 +17,6 @@
 #  early_termination_available_at :datetime
 #  discard_at                :datetime         default(Infinity), not null
 #  lock_version                :integer          default(0), not null
-#  mfa_level_enabled           :boolean          default(FALSE), not null
 #  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
@@ -28,7 +27,7 @@
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  admin_locked_by_operator_id :bigint
-#  mfa_level_id                :bigint           default(0), not null
+#  security_mode_id            :bigint           not null
 #  mfa_status_id               :bigint           default(5), not null
 #  public_id                   :string           default(""), not null
 #  status_id                   :bigint           default(2), not null
@@ -40,7 +39,7 @@
 #  index_visitors_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_visitors_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
 #  index_visitors_on_discard_at           (discard_at)
-#  index_visitors_on_mfa_level_id           (mfa_level_id)
+#  index_visitors_on_security_mode_id       (security_mode_id)
 #  index_visitors_on_mfa_status_id          (mfa_status_id)
 #  index_visitors_on_public_id              (public_id) UNIQUE
 #  index_visitors_on_purge_eligible_at              (purge_eligible_at)
@@ -54,7 +53,7 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (mfa_level_id => visitor_mfa_levels.id)
+#  fk_rails_...  (security_mode_id => visitor_security_modes.id)
 #  fk_rails_...  (mfa_status_id => visitor_mfa_statuses.id)
 #  fk_rails_...  (status_id => visitor_statuses.id)
 #  fk_rails_...  (visibility_id => visitor_visibilities.id)
@@ -69,7 +68,7 @@ class Visitor < ComPrincipalRecord
   include ::Identity
   include AuthenticationCredentialInventoryOwner
   include WebauthnUserHandleOwner
-  include MfaLevelConfigurable
+  include SecurityModeConfigurable
   include MfaStatusTrackable
   include ActorLifecycleConsistency
   include AdministrativeAccessLockable
@@ -95,8 +94,8 @@ class Visitor < ComPrincipalRecord
              class_name: "VisitorStatus",
              foreign_key: :status_id,
              inverse_of: :visitors
-  belongs_to :mfa_level,
-             class_name: "VisitorMfaLevel",
+  belongs_to :security_mode,
+             class_name: "VisitorSecurityMode",
              inverse_of: :visitors
   belongs_to :mfa_status,
              class_name: "VisitorMfaStatus",
@@ -176,7 +175,6 @@ class Visitor < ComPrincipalRecord
           inverse_of: :visitor
 
   validates :status_id, numericality: { only_integer: true }
-  mfa_level_reference VisitorMfaLevel
   mfa_status_reference VisitorMfaStatus
 
   before_destroy :admit_identifier_history_erasure, prepend: true

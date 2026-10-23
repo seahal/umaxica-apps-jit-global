@@ -8,7 +8,8 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     https!
     @host = configured_host(:base_staff)
     ensure_operator_reference_records!
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    @operator = OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator)
     @step_up_passkey = @operator.operator_passkeys.create!(
       webauthn_id: "org-removal-step-up-#{SecureRandom.hex(8)}",
       external_id: SecureRandom.uuid, public_key: "public_key_#{SecureRandom.hex(8)}",
@@ -45,6 +46,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -96,6 +98,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -178,6 +181,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                 f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                   refresh_token_expires_at: f0_now + 10.minutes,
@@ -272,6 +276,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                  rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                  rp_now = Time.current
                  rp_session = OpOrgGrant.create!(
+                   authentication_epoch: 0,
                    operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                    oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                    refresh_token_expires_at: rp_now + 10.minutes,
@@ -347,6 +352,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                 f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                   refresh_token_expires_at: f1_now + 10.minutes,
@@ -406,7 +412,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
   end
 
   test "a credential owned by another operator is not found" do
-    other = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     other_secret = create_active_secret_credential(other)
     create_active_secret_credential(other)
 
@@ -446,6 +452,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                 f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                 f2_now = Time.current
                 f2_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                   refresh_token_expires_at: f2_now + 10.minutes,
@@ -537,6 +544,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
                rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                rp_now = Time.current
                rp_session = OpOrgGrant.create!(
+                 authentication_epoch: 0,
                  operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                  oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                  refresh_token_expires_at: rp_now + 10.minutes,
@@ -577,6 +585,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
     target = create_active_secret_credential(@operator)
     create_active_secret_credential(@operator)
     emergency_token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 30.days.from_now,
       staff_token_binding_method_id: OperatorTokenBindingMethod::LEGACY,
@@ -613,6 +622,7 @@ class Base::Org::Identity::RemovalsControllerTest < ActionDispatch::IntegrationT
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

@@ -10,12 +10,14 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   test "a well-formed client Access JWT for an active Base Browser Session authenticates" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
-    user = Client.create!(status_id: ClientStatus::ACTIVE)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     root = ClientToken.create!(
+      authentication_epoch: 0,
       user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
     )
@@ -40,12 +42,14 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   test "a well-formed client Access JWT authenticates without an RP Session lookup" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
-    user = Client.create!(status_id: ClientStatus::ACTIVE)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     root = ClientToken.create!(
+      authentication_epoch: 0,
       user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
     )
@@ -74,9 +78,13 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
       actor_class, token_class, session_class, actor_key, root_key = spec
       client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
         .find { _1 && OidcIssuer.resource_type_for_client(_1) == type }
-      actor = actor_class.create!(status_id: "#{actor_class.name}Status".constantize::ACTIVE)
-      root = token_class.create!(actor_key => actor)
+      actor = actor_class.create!(
+        security_mode_id: SecurityModeTestDefault.id_for(actor_class),
+        status_id: "#{actor_class.name}Status".constantize::ACTIVE,
+      )
+      root = token_class.create!(:authentication_epoch => 0, actor_key => actor)
       session = session_class.create!(
+        :authentication_epoch => 0,
         root_key => root, :oidc_client_id => client.client_id, :oidc_scope => "openid",
         :oidc_jti => SecureRandom.uuid, :refresh_token_expires_at => 1.hour.from_now,
       )
@@ -101,9 +109,10 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   test "a token presented under the wrong scheme or with an unrequested proof is refused" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
-    user = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: user)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: user)
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
     )
@@ -133,9 +142,10 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   test "a DPoP-bound token is refused as a plain bearer token" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
-    user = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: user)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: user)
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
     )
@@ -186,9 +196,13 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
     }
 
     cases.each do |label, change|
-      user = Client.create!({ status_id: ClientStatus::ACTIVE }.merge(change.fetch(:user_attrs, {})))
-      root = ClientToken.create!(user: user, user_token_status_id: change.fetch(:root_status, ClientTokenStatus::ACTIVE))
+      user = Client.create!(
+        { security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE }
+          .merge(change.fetch(:user_attrs, {})),
+      )
+      root = ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: change.fetch(:root_status, ClientTokenStatus::ACTIVE))
       session = OpAppGrant.create!(
+        authentication_epoch: 0,
         client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
         oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
       )
@@ -219,9 +233,10 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   test "OIDC Access requires an explicit known context claim matching the current root" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
-    user = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
     )
@@ -267,9 +282,10 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
 
     operator_client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "operator" }
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    operator_root = OperatorToken.create!(staff: operator, authentication_context: AuthenticationContextValue::STANDBY_KEY)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    operator_root = OperatorToken.create!(authentication_epoch: 0, staff: operator, authentication_context: AuthenticationContextValue::STANDBY_KEY)
     operator_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: operator_root, oidc_client_id: operator_client.client_id, oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
     )
@@ -329,10 +345,11 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
   test "an Access JWT cannot use a Base Session belonging to another actor" do
     client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
       .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
-    first_user = Client.create!(status_id: ClientStatus::ACTIVE)
-    second_user = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: first_user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    first_user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    second_user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: first_user, user_token_status_id: ClientTokenStatus::ACTIVE)
     session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
       oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
     )
@@ -366,5 +383,47 @@ class OidcAccessTokenAuthenticatorTest < ActiveSupport::TestCase
 
     assert_not result.success?
     assert_equal "invalid_token", result.error
+  end
+
+  # D-165 / A44-3: an identity stop advances the actor's epoch; an Access JWT under a root of the
+  # older epoch is refused even before the OP-side invalidation ran, and stays refused after the
+  # account is restored to active.
+  test "an Access JWT of a root issued before an identity stop is refused, also after restore" do
+    client = OidcClientRegistry.client_ids.map { OidcClientRegistry.find(_1) }
+      .find { _1 && OidcIssuer.resource_type_for_client(_1) == "client" }
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(
+      authentication_epoch: 0,
+      user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB, user_token_status_id: ClientTokenStatus::ACTIVE,
+    )
+    grant = OpAppGrant.create!(
+      authentication_epoch: 0,
+      client_token: root, oidc_client_id: client.client_id, oidc_scope: "openid",
+      oidc_jti: SecureRandom.uuid, refresh_token_expires_at: 1.hour.from_now,
+    )
+    token = AuthenticationTokenService.encode(
+      user, host: OidcIssuer.host_for_resource_type("client"), resource_type: "client",
+            session_public_id: root.public_id, base_session_public_id: root.public_id,
+            oidc_sid: grant.public_id, oidc_jti: grant.oidc_jti,
+            expires_at: 5.minutes.from_now, scopes: %w(openid), issuer: OidcIssuer.for_resource_type("client"),
+            audiences: [client.aud], subject: OidcSubject.for(user, resource_type: "client"),
+            jwt_issuer_id: OidcIssuer.jwt_issuer_id_for_resource_type("client"), client_id: client.client_id,
+    )
+    authenticate =
+      lambda do
+        OidcAccessTokenAuthenticator.call(
+          access_token: token, resource_type: "client", host: OidcIssuer.host_for_resource_type("client"),
+        )
+      end
+
+    assert_predicate authenticate.call, :success?
+    Client.transaction do
+      user.lock!
+      IdentityAuthenticationStopRecorder.call(actor: user, reason: "access_lock")
+    end
+
+    assert_equal "invalid_token", authenticate.call.error
+    assert_predicate user.reload, :active?, "the account itself is active (restored)"
+    assert_equal "invalid_token", authenticate.call.error
   end
 end

@@ -9,16 +9,16 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   test "expired binding restart preserves its live parent and browser ownership in every realm" do
     %w(app com org).each do |surface|
       browser_nonce = SecureRandom.urlsafe_base64(32)
-      first = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      first = OidcTestEntry.issue!(
         surface: surface, intent: "sign_in", base_browser_nonce: browser_nonce, base_token: nil,
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: surface, reference: first.reference)
       parent_deadline = first.transaction.expires_at
       # Move only the admission deadline; the original parent retains its authorized lifetime.
       binding.update_columns(expires_at: binding.class.database_now - 1.second)
-      successor = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface: surface, intent: "sign_in", restart_of: first.reference,
-        base_browser_nonce: browser_nonce, base_token: nil,
+      successor = BaseAuthAdmissionCoordinator.issue_handoff!(
+        transaction: first.transaction, base_browser_nonce: browser_nonce, base_token: nil,
+        restart_of: first.reference,
       )
 
       assert_equal first.transaction.id, successor.transaction.id
@@ -45,7 +45,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
           response_type: "code",
           client_id: client_id,
           redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
-          code_challenge: "a" * 43,
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           scope: "openid",
           state: SecureRandom.urlsafe_base64(32),
@@ -127,8 +127,6 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       )
 
       assert_equal transaction.transaction_id, ceremony.step_up_ceremony_transaction_ref
-      assert_nil ceremony.local_sign_in_flow_ref
-      assert_nil ceremony.local_sign_up_flow_ref
     end
   end
 
@@ -288,12 +286,6 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_nil token.reload.last_step_up_at
   end
 
-  test "step-up admission is not classified as a local sign-in entry" do
-    assert_not BaseAuthAdmissionCoordinator.local_entry_purpose?(
-      payload: { "purpose" => "step_up_handoff" }, intent: "step_up",
-    )
-  end
-
   test "step-up result reads its concrete ticket without resolving an OIDC transaction" do
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: "actor", session_ref: "session", required_scope: "settings_birthdate",
@@ -319,45 +311,6 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
         expected_intent: "sign_in",
       )
     end
-  end
-
-  test "local admission names an existing pending flow without issuing a session" do
-    nonce_digest = ClientSignInFlow.digest_nonce("base-browser-nonce")
-    issuance = nil
-    assert_no_difference("ClientToken.count") do
-      issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-        surface: "app", intent: "sign_in", nonce_digest: nonce_digest,
-        base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
-      )
-    end
-    assert_instance_of ClientSignInFlow, issuance.transaction
-    assert_match(AuthAdmissionBinding::REFERENCE_PATTERN, issuance.reference)
-    assert_equal nonce_digest, issuance.transaction.nonce_digest
-    assert_nil issuance.transaction.principal_id
-    assert_nil issuance.transaction.token_id
-    assert_predicate issuance.transaction, :sign_in_primary_pending?
-  end
-
-  test "an explicit local restart retires the old binding and preserves the pending flow" do
-    first = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", nonce_digest: ClientSignInFlow.digest_nonce("entry-nonce"),
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
-    )
-
-    second = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app", intent: "sign_in", restart_of: first.reference,
-      nonce_digest: first.transaction.nonce_digest,
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn", base_token: nil,
-    )
-
-    assert_not_equal first.reference, second.reference
-    assert_equal first.transaction.id, second.transaction.id
-    assert_predicate BaseAuthAdmissionCoordinator.find_admission_binding!(
-      surface: "app", reference: first.reference,
-    ), :retired?
-    assert_predicate BaseAuthAdmissionCoordinator.find_admission_binding!(
-      surface: "app", reference: second.reference,
-    ), :live?
   end
 
   test "handoff consume is one-shot and bound to surface" do
@@ -442,8 +395,8 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_nil binding.reload.redeemed_at
   end
 
-  test "local entry consume returns the payload once for the issuing surface" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+  test "entry consume returns the payload once for the issuing surface" do
+    issuance = OidcTestEntry.issue!(
       surface: "com",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -474,7 +427,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       binding:, raw_auth_sid: raw_sid,
     )
 
-    assert_equal issuance.transaction.public_id, payload.fetch("subject_ref")
+    assert_equal issuance.transaction.transaction_id, payload.fetch("subject_ref")
     assert_equal "visitor", payload.fetch("actor_type")
     assert_raises(BaseAuthAdmissionCoordinator::Denied) do
       BaseAuthAdmissionCoordinator.consume_entry_reference!(
@@ -485,7 +438,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "local entry consume denies a code issued for another surface" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "com",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -520,7 +473,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "local entry consume denies a code issued for another intent" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "com",
       intent: "sign_up",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -564,7 +517,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
   end
 
   test "local entry consume rejects an unsupported intent" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "com",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -700,7 +653,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
         response_type: "code",
         client_id: "core-app-jp",
         redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
-        code_challenge: "challenge",
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256",
         state: SecureRandom.urlsafe_base64(16),
         nonce: SecureRandom.urlsafe_base64(16),
@@ -741,7 +694,7 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
 
   test "social signup acceptance requires the redeemed browser parent and exact provider evidence" do
     nonce = SecureRandom.urlsafe_base64(32)
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "app", intent: "sign_up", base_browser_nonce: nonce, base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
@@ -755,8 +708,8 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       reference: binding.entry_ref, surface: "app", expected_intent: "sign_up", binding:, raw_auth_sid: raw_sid,
     )
     admitted, = ClientAuthCeremonySession.rotate_and_admit!(
-      admission_purpose: "local_sign_up", previous_raw_sid: raw_sid,
-      local_sign_in_flow_ref: issuance.transaction.public_id,
+      admission_purpose: "authentication_handoff", previous_raw_sid: raw_sid,
+      authorization_transaction_ref: issuance.transaction.transaction_id,
     )
     binding.redeem!(auth_session: pending, admitted_auth_session: admitted)
     record = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)

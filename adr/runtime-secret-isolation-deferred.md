@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted (2026-10-18). User decision in conversation on the same day. This is a scope decision: the
+Accepted (2026-10-18); **amended 2026-10-23** (one credentials set in every environment, AWS KMS
+direction; see the last section). User decision in conversation on the same day. This is a scope decision: the
 problem is acknowledged and will be solved in a later cycle; this cycle implements no further part
 of it. It changes no code, credential, database login or deployment.
 
@@ -93,3 +94,26 @@ database-login parts of R5-WU03A for development and test.
   branches. Production keeps its environment-supplied connections and credentials, and decision 3
   above still holds for deployed environments: the pod and secret-store design in the follow-up plan
   remains the way to isolate secrets there.
+
+## Amendment (2026-10-23): one credentials set in every environment; signing keys in AWS KMS
+
+Owner decisions of the 2026-10 authentication cycle (D-15, D-17, D-19, D-20). They override decision
+3 above and the production direction of the follow-up plan.
+
+- **One credentials set per Rails environment, production included.** Development, test and
+  production each use exactly one `config/credentials/<env>.yml.enc` with its key, shared unchanged by
+  every process, role and surface. No per-role, per-surface or per-cell credentials bundle or
+  secret-store split is planned. Reason given: per-role credentials caused a regression earlier.
+- **One process, accepted consequence.** One Puma serves every FQDN (D-19); the process-level OP/RP
+  separation is withdrawn (D-20). An RP compromise is therefore equivalent to an OP compromise;
+  surface boundaries are enforced by code discipline inside the one process. Production "remains an
+  open defect" is replaced by this accepted consequence.
+- **OP signing keys move to AWS KMS (direction; implementation timing undecided).** Production runs
+  on AWS. OP signing uses KMS asymmetric keys (`ECC_NIST_P384`, `ECDSA_SHA_384`, consistent with
+  ES384 only); the private key never leaves KMS; `kms:Sign` is granted only to the OP workload's IAM
+  role; AWS credentials able to sign are never placed in Rails credentials. This replaces the Google
+  Cloud Secret Manager / Cloud KMS example above. **Pending:** how to treat the `global` pod
+  co-locating the realm OP signers with the worldwide RPs (accept in an ADR, or split a `global-op`
+  pod).
+- Known operational gap, tracked separately: production credential key names do not match the code
+  (`plans/backlog/2026-10-21-production-credentials-key-name-mismatch.md`).

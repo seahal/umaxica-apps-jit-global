@@ -4,6 +4,7 @@ import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Page from "@/components/ui/Page";
 import TextField from "@/components/ui/TextField";
+import TurnstileWidget, { type TurnstileWidgetProps } from "@/features/turnstile/TurnstileWidget";
 
 // The email re-entry screen shared by the withdrawal ceremony and the enforcement recovery
 // ceremony: one form asks for the address, and the code form appears only once the server says a
@@ -16,6 +17,7 @@ export type ReentryAddressForm = {
   label: string;
   value: string;
   submit_label: string;
+  turnstile?: TurnstileWidgetProps | null;
 };
 
 export type ReentryPassCodeForm = {
@@ -30,6 +32,7 @@ export type OtpReentryNewProps = {
   description?: string;
   generic_message?: string;
   address_form: ReentryAddressForm;
+  errors?: string[];
   pass_code_form: ReentryPassCodeForm | null;
 };
 
@@ -38,8 +41,10 @@ export default function OtpReentryNew({
   description,
   generic_message: genericMessage,
   address_form: addressForm,
+  errors = [],
   pass_code_form: passCodeForm,
 }: OtpReentryNewProps) {
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [address, setAddress] = useState(addressForm.value);
   const [passCode, setPassCode] = useState("");
   const [processing, setProcessing] = useState(false);
@@ -50,7 +55,12 @@ export default function OtpReentryNew({
     event.preventDefault();
     router.post(
       addressForm.url,
-      { [addressForm.scope]: { [addressForm.field]: address } },
+      addressForm.turnstile
+        ? {
+            [addressForm.scope]: { [addressForm.field]: address },
+            "cf-turnstile-response": turnstileToken,
+          }
+        : { [addressForm.scope]: { [addressForm.field]: address } },
       { onStart: () => setProcessing(true), onFinish: () => setProcessing(false) },
     );
   };
@@ -74,6 +84,17 @@ export default function OtpReentryNew({
       {...(message ? { description: message } : {})}
       width="narrow"
     >
+      {errors.length > 0 ? (
+        <ul
+          role="alert"
+          className="flex flex-col gap-1 text-base text-error"
+        >
+          {errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      ) : null}
+
       <form
         onSubmit={submitAddress}
         className="flex flex-col gap-4"
@@ -87,6 +108,13 @@ export default function OtpReentryNew({
           value={address}
           onChange={setAddress}
         />
+        {addressForm.turnstile ? (
+          <TurnstileWidget
+            key={addressForm.turnstile.challenge_id ?? "reentry"}
+            {...addressForm.turnstile}
+            onToken={setTurnstileToken}
+          />
+        ) : null}
         <Button
           type="submit"
           isDisabled={processing}

@@ -217,6 +217,7 @@ class OperatorBulletinTest < ActiveSupport::TestCase
 
   test "dependent behavior on staff destroy" do
     staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: OperatorStatus::ACTIVE,
     )
     bulletin = OperatorBulletin.create!(

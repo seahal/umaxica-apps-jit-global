@@ -32,12 +32,12 @@ class RpLiveSessionUniquenessTest < ActiveSupport::TestCase
       now = session_class.database_now
       expired = session_class.create!(
         op_session_binding: anchor, absolute_expires_at: now - 1,
-        contract_epoch: 1, installed_generation: 0,
+        installed_generation: 0,
       )
       2.times do
         history = session_class.create!(
           op_session_binding: anchor, absolute_expires_at: now + 3600,
-          contract_epoch: 1, installed_generation: 0, revoked_at: now,
+          installed_generation: 0, revoked_at: now,
         )
 
         assert_not history.active?(now: now)
@@ -48,7 +48,7 @@ class RpLiveSessionUniquenessTest < ActiveSupport::TestCase
       )
       other = session_class.create!(
         op_session_binding: other_anchor, absolute_expires_at: now + 3600,
-        contract_epoch: 1, installed_generation: 0,
+        installed_generation: 0,
       )
 
       assert_predicate other, :persisted?
@@ -58,7 +58,7 @@ class RpLiveSessionUniquenessTest < ActiveSupport::TestCase
           session_class.transaction(requires_new: true) do
             session_class.new(
               op_session_binding: anchor, absolute_expires_at: now + 3600,
-              contract_epoch: 1, installed_generation: 0,
+              installed_generation: 0,
             ).save!(validate: false)
           end
         end
@@ -66,7 +66,7 @@ class RpLiveSessionUniquenessTest < ActiveSupport::TestCase
       expired.update!(revoked_at: now)
       replacement = session_class.create!(
         op_session_binding: anchor, absolute_expires_at: now + 3600,
-        contract_epoch: 1, installed_generation: 0,
+        installed_generation: 0,
       )
 
       assert_predicate replacement, :persisted?
@@ -85,11 +85,11 @@ class RpLiveSessionUniquenessTest < ActiveSupport::TestCase
       now = session_class.database_now
       session_class.create!(
         op_session_binding: anchor, absolute_expires_at: now - 1,
-        contract_epoch: 1, installed_generation: 0,
+        installed_generation: 0,
       )
       candidate = session_class.new(
         op_session_binding: anchor, absolute_expires_at: now + 3600,
-        contract_epoch: 1, installed_generation: 0,
+        installed_generation: 0,
       )
 
       assert_not candidate.valid?

@@ -15,7 +15,10 @@ class AvatarOwnershipTransitionInventoryQueryTest < ActiveSupport::TestCase
   end
 
   test "classifies a legacy and concrete ownership chain with matching facts as ready" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     avatar = BaseSelectorBootstrapAuthority.call(surface: :app, principal: client).avatar
     legacy = avatar.avatar_ownership_periods.order(:id).last
     concrete = avatar.enterprise_ownership_periods.order(:id).last

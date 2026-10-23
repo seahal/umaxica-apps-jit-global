@@ -12,7 +12,10 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "applies a complete reviewed family atomically and replays idempotently" do
-    first_owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     first_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "family-backfill-first",
@@ -25,7 +28,10 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
         ClientPersona.create!(client_identity: first_identity, title: "First")
       end
 
-    second_owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    second_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     second_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "family-backfill-second",
@@ -74,7 +80,10 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rolls back every family row when a later reviewed row is rejected" do
-    first_owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     first_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "family-backfill-rollback-first",
@@ -87,7 +96,10 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
         ClientPersona.create!(client_identity: first_identity, title: "First")
       end
 
-    second_owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    second_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     second_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "family-backfill-rollback-second",
@@ -129,7 +141,10 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rejects duplicate resources before applying any reviewed mapping" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "family-backfill-duplicate",
@@ -157,7 +172,10 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rejects a partial family mapping before applying any reviewed row" do
-    first_owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     first_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "family-backfill-partial-first",
@@ -170,7 +188,10 @@ class AuthorityOwnerFamilyBackfillOperationTest < ActiveSupport::TestCase
         ClientPersona.create!(client_identity: first_identity, title: "First")
       end
 
-    second_owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    second_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     second_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "family-backfill-partial-second",

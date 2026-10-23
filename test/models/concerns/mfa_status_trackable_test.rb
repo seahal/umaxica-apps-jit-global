@@ -22,9 +22,9 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "new actors default status to unconfigured" do
-    assert_equal ClientMfaStatus::UNCONFIGURED, Client.new.mfa_status_id
-    assert_equal OperatorMfaStatus::UNCONFIGURED, Operator.new.mfa_status_id
-    assert_equal VisitorMfaStatus::UNCONFIGURED, Visitor.new.mfa_status_id
+    assert_equal ClientMfaStatus::UNCONFIGURED, Client.new(security_mode_id: SecurityModeConfigurable::NORMAL).mfa_status_id
+    assert_equal OperatorMfaStatus::UNCONFIGURED, Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED).mfa_status_id
+    assert_equal VisitorMfaStatus::UNCONFIGURED, Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL).mfa_status_id
   end
 
   test "user refreshes to unconfigured without app step up methods" do
@@ -113,7 +113,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "operator refreshes to active with passkey" do
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
 
     OperatorPasskey.create!(
       staff: operator,
@@ -127,7 +127,7 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
   end
 
   test "visitor refreshes to active with verified email" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     VisitorEmail.create!(
       visitor: visitor,
@@ -143,6 +143,9 @@ class MfaStatusTrackableTest < ActiveSupport::TestCase
 
   def create_client!
     # Keep this owner outside committed test/dev credential rows keyed by fixture-range IDs.
-    Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
+    Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
   end
 end

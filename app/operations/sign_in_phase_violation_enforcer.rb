@@ -38,7 +38,8 @@ class SignInPhaseViolationEnforcer
       decision = {
         halted: flow.sign_in_halted?,
         expected_phase: current_phase,
-        subject: flow.principal,
+        # Flows are strict-loading; the halt audit reads its subject explicitly.
+        subject: flow.association(:principal).scope.take,
       }
     end
 

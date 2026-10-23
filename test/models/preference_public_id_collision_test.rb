@@ -5,9 +5,9 @@ require "test_helper"
 
 class PreferencePublicIdCollisionTest < ActiveSupport::TestCase
   REALM_CASES = [
-    [ClientPreference, :user, -> { Client.create! }],
-    [VisitorPreference, :visitor, -> { Visitor.create! }],
-    [OperatorPreference, :staff, -> { Operator.create! }],
+    [ClientPreference, :user, -> { Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL) }],
+    [VisitorPreference, :visitor, -> { Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL) }],
+    [OperatorPreference, :staff, -> { Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED) }],
   ].freeze
 
   test "retries a generated public_id collision for each realm preference" do

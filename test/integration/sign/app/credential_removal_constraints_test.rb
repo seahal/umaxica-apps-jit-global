@@ -24,7 +24,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "email removal may leave a usable passkey-only identity" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     email = create_verified_email(client, "app-removal-contact-email@example.com")
     create_active_passkey(client)
 
@@ -34,6 +34,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx0_scope = "settings_email"
         fx0_host = @base_host
         fx0_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx0_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -64,6 +65,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -131,6 +133,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                 refresh_token_expires_at: f0_now + 10.minutes,
@@ -176,7 +179,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "telephone removal may leave a usable passkey-only identity" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     telephone = create_verified_telephone(client, "+819011110001")
     create_active_passkey(client)
 
@@ -186,6 +189,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx1_scope = "settings_telephone"
         fx1_host = @base_host
         fx1_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx1_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -216,6 +220,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -283,6 +288,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                 refresh_token_expires_at: f1_now + 10.minutes,
@@ -328,7 +334,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "passkey removal is blocked when it would remove the last usable step-up capability" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110002")
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
@@ -349,6 +355,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx2_scope = "settings_passkey"
         fx2_host = @base_host
         fx2_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx2_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -379,6 +386,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -446,6 +454,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,
@@ -490,7 +499,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "totp removal is blocked when it would remove the last usable step-up capability" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110003")
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
@@ -511,6 +520,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx3_scope = "settings_totp"
         fx3_host = @base_host
         fx3_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx3_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -541,6 +551,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                   f3_now = Time.current
                   f3_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                     refresh_token_expires_at: f3_now + 10.minutes,
@@ -608,6 +619,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                 refresh_token_expires_at: f3_now + 10.minutes,
@@ -652,7 +664,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "totp removal is allowed when another usable step-up capability remains" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     create_verified_telephone(client, "+819011110004")
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
@@ -674,6 +686,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx4_scope = "settings_totp"
         fx4_host = @base_host
         fx4_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx4_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -704,6 +717,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                   f4_now = Time.current
                   f4_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                     refresh_token_expires_at: f4_now + 10.minutes,
@@ -771,6 +785,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
               f4_now = Time.current
               f4_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                 refresh_token_expires_at: f4_now + 10.minutes,
@@ -815,7 +830,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "email removal is allowed when sign-in, step-up and contact capabilities remain" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     email = create_verified_email(client, "app-removal-email-allowed@example.com")
     create_verified_telephone(client, "+819011110006")
     create_active_passkey(client)
@@ -826,6 +841,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx5_scope = "settings_email"
         fx5_host = @base_host
         fx5_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx5_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -856,6 +872,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                   f5_now = Time.current
                   f5_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                     refresh_token_expires_at: f5_now + 10.minutes,
@@ -923,6 +940,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                 refresh_token_expires_at: f5_now + 10.minutes,
@@ -968,7 +986,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "telephone removal is allowed when another contact capability remains" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     telephone = create_verified_telephone(client, "+819011110007")
     create_verified_email(client, "app-removal-telephone-allowed@example.com")
 
@@ -978,6 +996,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx6_scope = "settings_telephone"
         fx6_host = @base_host
         fx6_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx6_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1008,6 +1027,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                   f6_now = Time.current
                   f6_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                     refresh_token_expires_at: f6_now + 10.minutes,
@@ -1075,6 +1095,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                 refresh_token_expires_at: f6_now + 10.minutes,
@@ -1120,7 +1141,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   end
 
   test "passkey removal is allowed when another usable step-up capability remains" do
-    client = Client.create!(status_id: ClientStatus::NOTHING)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING)
     create_verified_email(client, "app-removal-passkey-allowed@example.com")
     passkey = create_active_passkey(client)
 
@@ -1130,6 +1151,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
         fx7_scope = "settings_passkey"
         fx7_host = @base_host
         fx7_token = ClientToken.new(
+          authentication_epoch: 0,
           user: fx7_client,
           user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1160,6 +1182,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
                   f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                   f7_now = Time.current
                   f7_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                     refresh_token_expires_at: f7_now + 10.minutes,
@@ -1227,6 +1250,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
               f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
               f7_now = Time.current
               f7_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                 refresh_token_expires_at: f7_now + 10.minutes,
@@ -1273,7 +1297,7 @@ class Auth::App::CredentialRemovalConstraintsTest < ActionDispatch::IntegrationT
   private
 
   def client_browser_headers(client, scope:, host: @host)
-    token = ClientToken.create!(user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(token)
     mark_token_step_up_satisfied_for_test(token, scope: scope)
 
@@ -1390,7 +1414,6 @@ class Auth::App::CredentialRemovalConstraintsTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1422,7 +1445,10 @@ class Auth::App::CredentialRemovalConstraintsTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -1709,7 +1735,6 @@ class Auth::App::CredentialRemovalConstraintsTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1718,7 +1743,10 @@ class Auth::App::CredentialRemovalConstraintsTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -7,13 +7,13 @@ require "timeout"
 class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
   self.fixture_table_names = %w(
-    client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_token_statuses client_token_kinds client_token_binding_methods client_token_dbsc_statuses
   )
 
   setup do
-    @actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    @token = ClientToken.create!(user: @actor)
+    @actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     @token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: @token.public_id,
@@ -30,7 +30,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     ClientSecretStorageConfirmationCommitter.call!(actor_context: context, token: @token, issuance: @issuance)
     @browsers =
       Array.new(2) do
-        admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        admission = OidcTestEntry.issue!(
           surface: "app",
           intent: "sign_in",
           base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -55,15 +55,19 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
             )
             [admission_session, admission_raw_sid]
           end
-        payload = BaseAuthAdmissionCoordinator.consume_entry_reference!(
+        BaseAuthAdmissionCoordinator.consume_entry_reference!(
           reference: admission.reference, surface: "app", expected_intent: "sign_in",
           binding:, raw_auth_sid: raw_sid,
         )
-        flow = ClientSignInFlow.find_by!(public_id: payload.fetch("subject_ref"))
         ceremony, = ClientAuthCeremonySession.rotate_and_admit!(
-          admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
+          admission_purpose: "authentication_handoff",
+          authorization_transaction_ref: admission.transaction.transaction_id,
         )
-        [flow, ceremony]
+        # Binding the OIDC flow selects nothing on the source; only the claim below spends the Secret.
+        flow = ClientSecretClaimCommitter.bind_oidc_flow!(
+          client: @actor, secret: @raw, transaction: admission.transaction, ceremony:,
+        )
+        [flow, ceremony, admission.transaction]
       end
   end
 
@@ -83,7 +87,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
                 release.pop
                 ClientSecretClaimCommitter.call!(
                   client: @actor, secret: @raw, flow: flow,
-                  ceremony: ceremony,
+                  ceremony: ceremony, authorization_transaction: transaction_for(flow),
                 )&.public_id
               end
             end
@@ -112,7 +116,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     winner = @browsers.find { |flow, _| flow.public_id == credential.claim_sign_in_flow_ref }
 
-    assert_equal winner.last.id, credential.claim_ceremony_session_id
+    assert_equal winner[1].id, credential.claim_ceremony_session_id
     assert_equal @actor.id, winner.first.reload.principal_id
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
     assert_equal 1, ClientToken.where(user_id: @actor.id).count
@@ -123,7 +127,10 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
 
   test "withdrawal revokes a claimed Secret without collecting its live continuation proof" do
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(
+      client: @actor, secret: @raw, flow: flow, ceremony: ceremony,
+      authorization_transaction: transaction_for(flow),
+    )
     operation_id = credential.claim_operation_id
     now = Client.database_now
     @actor.update!(withdrawn_at: now, terminated_at: now)
@@ -146,13 +153,17 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
   test "source claim survives Ticket rollback and terminal reconciliation retires the unbound flow" do
     flow, ceremony = @browsers.first
     OpBaseAppRecord.transaction do
-      assert ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
+      assert ClientSecretClaimCommitter.call!(
+        client: @actor, secret: @raw, flow: flow, ceremony: ceremony,
+        authorization_transaction: transaction_for(flow),
+      )
       raise ActiveRecord::Rollback
     end
     credential = ClientSecretCredential.find_by!(issuance_id: @issuance.id)
 
     assert credential.claimed_at
-    assert_nil flow.reload.principal_id
+    # The OIDC binding names the principal before the claim; the rollback leaves that binding intact.
+    assert_equal @actor.id, flow.reload.principal_id
     assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_equal :pending, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.minute)
     flow.with_lock { flow.halt_sign_in! }
@@ -168,13 +179,16 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_equal 1, ClientToken.where(user_id: @actor.id).count
     assert_nil ClientSecretClaimCommitter.call!(
       client: @actor, secret: @raw, flow: @browsers.last.first,
-      ceremony: @browsers.last.last,
+      ceremony: @browsers.last[1], authorization_transaction: @browsers.last.last,
     )
   end
 
   test "expiry refuses a live flow and reconciliation retains its reason after Ticket terminalization" do
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(
+      client: @actor, secret: @raw, flow: flow, ceremony: ceremony,
+      authorization_transaction: transaction_for(flow),
+    )
     assert_raises(FlowInvalidTransition) { flow.expire_sign_in! }
     assert_predicate flow.reload, :sign_in_primary_pending?
     now = ClientSignInFlow.database_now
@@ -193,11 +207,14 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
 
   test "missing durable Ticket proof leaves the source claim unknown and permanently unusable" do
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(
+      client: @actor, secret: @raw, flow: flow, ceremony: ceremony,
+      authorization_transaction: transaction_for(flow),
+    )
     # Simulate loss of the independent Ticket evidence, without mocking a login
     # result. Source claim persistence must not infer success or safe retirement.
     ceremony.destroy!
-    ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
+    transaction_for(flow).update_columns(secret_sign_in_flow_id: nil)
     flow.destroy!
 
     assert_equal :unknown, ClientSecretClaimFinalizer.call!(credential: credential, purge_after: 1.minute)
@@ -208,7 +225,7 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     assert_nil ClientSecretLookupQuery.call(client: @actor, secret: @raw)
     assert_nil ClientSecretClaimCommitter.call!(
       client: @actor, secret: @raw, flow: @browsers.last.first,
-      ceremony: @browsers.last.last,
+      ceremony: @browsers.last[1], authorization_transaction: @browsers.last.last,
     )
     assert_equal 0, ClientSecretSignInReceipt.where(credential_ref: credential.public_id).count
     assert_equal 1, ClientToken.where(user_id: @actor.id).count
@@ -226,17 +243,23 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "604800"
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "2592000"
     unless ChronicleRetentionPolicy.exists?(code: "security")
-      @retention_policy = ChronicleRetentionPolicy.create!(
+      # Kept after the test like the other on-demand creators: the policy is shared reference data
+      # that no migration seeds (plans/backlog/2026-10-20-reference-data-outside-migrations.md).
+      ChronicleRetentionPolicy.create!(
         code: "security", name: "Security", duration_days: 365, permanent: false,
       )
     end
     flow, ceremony = @browsers.first
-    credential = ClientSecretClaimCommitter.call!(client: @actor, secret: @raw, flow: flow, ceremony: ceremony)
+    credential = ClientSecretClaimCommitter.call!(
+      client: @actor, secret: @raw, flow: flow, ceremony: ceremony,
+      authorization_transaction: transaction_for(flow),
+    )
     now = ClientSignInFlow.database_now
     flow.update!(discard_at: now, purge_eligible_at: now)
     unrelated = @browsers.last.first
-    @browsers.last.last.destroy!
-    ClientAuthAdmissionBinding.where(sign_in_flow_id: unrelated.id).delete_all
+    @browsers.last[1].destroy!
+    # The unrelated flow is purgeable only once its OIDC transaction no longer references it.
+    @browsers.last.last.update_columns(secret_sign_in_flow_id: nil)
     unrelated.update!(discard_at: now, purge_eligible_at: now)
 
     RetentionPurgeJob.perform_now(batch_size: 1)
@@ -253,8 +276,8 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
   end
 
   teardown do
-    @browsers&.each do |flow, ceremony|
-      ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all if flow&.id
+    @browsers&.each do |flow, ceremony, transaction|
+      transaction&.update_columns(secret_sign_in_flow_id: nil) if transaction&.persisted?
       ceremony.destroy! if ceremony&.persisted?
       flow.destroy! if flow&.persisted?
     end
@@ -268,8 +291,9 @@ class ClientSecretClaimConcurrencyTest < ActiveSupport::TestCase
       @actor.reload.update!(discard_at: @actor.created_at, purge_eligible_at: @actor.created_at)
       destroy_test_client_after_cross_database_cleanup!(@actor)
     end
-    if @retention_policy && !Chronicle.exists?(chronicle_retention_policy_id: @retention_policy.id)
-      @retention_policy.destroy!
-    end
   end
+
+  private
+
+  def transaction_for(flow) = @browsers.find { |candidate, _| candidate.id == flow.id }.last
 end

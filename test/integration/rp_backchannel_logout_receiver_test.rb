@@ -10,8 +10,9 @@ class RpBackchannelLogoutReceiverTest < ActionDispatch::IntegrationTest
   setup do
     https!
     host! URI.parse(ENV.fetch("PUBLIC_CORE_SERVICE_URL")).host || ENV.fetch("PUBLIC_CORE_SERVICE_URL")
-    root = ClientToken.create!(user: clients(:one))
+    root = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     @grant = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, client_device_session: root.device_session, device_session_id: root.device_session_id,
       oidc_client_id: "core-app-jp", oidc_scope: "openid", oidc_jti: SecureRandom.uuid, last_used_at: Time.current,
       refresh_token_expires_at: 1.day.from_now,
@@ -20,12 +21,12 @@ class RpBackchannelLogoutReceiverTest < ActionDispatch::IntegrationTest
     @participant = OpAppLogoutFlowParticipant.sole
     @local = RpCallbackCommitter.call(
       cell: RpCellBinding.fetch("rp_core_app"), issuer: @participant.issuer, subject: "subject-a",
-      sid: @participant.sid, absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      sid: @participant.sid, absolute_expires_at: 1.hour.from_now,
     ).session
   end
 
   test "a signed OP Logout Token tombstones the sid and revokes the local session, then answers 200" do
-    post "/oidc/backchannel-logout", params: { logout_token: OpLogoutTokenIssuer.call(participant: @participant) }
+    post "/oidc/closures", params: { logout_token: OpLogoutTokenIssuer.call(participant: @participant) }
 
     assert_response :ok
     assert_not_nil RpCoreAppOpSessionBinding.find_by!(sid: @grant.public_id).revoked_at
@@ -35,7 +36,7 @@ class RpBackchannelLogoutReceiverTest < ActionDispatch::IntegrationTest
   test "a redelivered token for a committed event still answers 200" do
     token = OpLogoutTokenIssuer.call(participant: @participant)
     2.times do
-      post "/oidc/backchannel-logout", params: { logout_token: token }
+      post "/oidc/closures", params: { logout_token: token }
 
       assert_response :ok
     end
@@ -43,11 +44,11 @@ class RpBackchannelLogoutReceiverTest < ActionDispatch::IntegrationTest
   end
 
   test "an unsigned or foreign-audience token is refused with 400 and changes nothing" do
-    post "/oidc/backchannel-logout", params: { logout_token: "not-a-jwt" }
+    post "/oidc/closures", params: { logout_token: "not-a-jwt" }
 
     assert_response :bad_request
     @participant.update_columns(client_id: "warp-app-jp")
-    post "/oidc/backchannel-logout", params: { logout_token: OpLogoutTokenIssuer.call(participant: @participant) }
+    post "/oidc/closures", params: { logout_token: OpLogoutTokenIssuer.call(participant: @participant) }
 
     assert_response :bad_request
     assert_nil @local.reload.revoked_at

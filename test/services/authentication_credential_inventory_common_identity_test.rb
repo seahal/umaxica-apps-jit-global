@@ -7,7 +7,13 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
 
   test "locked Email remains configured but cannot protect Passkey removal before its writer deadline" do
     %i(app com).each do |surface|
-      actor = (surface == :app) ? Client.create!(id: 9_110_000_000_000) : Visitor.create!(id: 9_110_000_000_000)
+      actor =
+        (surface == :app) ? Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
+          id: 9_110_000_000_000,
+        ) : Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_110_000_000_000,
+        )
       deadline = actor.class.database_now
       attributes = { address: "lock-boundary-#{SecureRandom.hex(8)}@example.com", step_up_otp_locked_until: deadline }
       email, passkey =
@@ -52,9 +58,11 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
       %i(passkey email telephone).each_with_index do |kind, kind_index|
         actor, model =
           if surface == :app
-            [Client.create!(id: 9_108_000_000_000 + kind_index), Client]
+            [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_108_000_000_000 + kind_index),
+             Client,]
           else
-            [Visitor.create!(id: 9_108_000_000_000 + kind_index), Visitor]
+            [Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_108_000_000_000 + kind_index),
+             Visitor,]
           end
         deadline = model.database_now
         attributes = { created_at: deadline - 1.minute, discard_at: deadline, purge_eligible_at: deadline + 1.hour }
@@ -119,7 +127,10 @@ class AuthenticationCredentialInventoryCommonIdentityTest < ActiveSupport::TestC
   end
 
   test "uses active common social identities after the repository cutover" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     ClientExternalIdentity.create!(
       client: client,
       provider: "apple",

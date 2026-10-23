@@ -25,7 +25,7 @@ class VisitorNotificationRecordTest < ActiveSupport::TestCase
   end
 
   test "belongs to visitor" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     notification = VisitorNotificationRecord.create!(visitor: visitor)
 
     assert_equal visitor, notification.visitor

@@ -7,14 +7,21 @@ require "webauthn/fake_client"
 class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
-    @client_token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    @client_token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     BaseSelectorAuthority.prepare(surface: :app, principal: @client, session: @client_token)
 
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    @operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    @operator = OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator)
     @target = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
-    @operator_token = OperatorToken.create!(staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    @operator_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @operator_token)
   end
 
@@ -74,7 +81,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_response :success
     recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
-    other_operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other_operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     other_target = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
     grant_step_up!("avatar_transfer_request")
 
@@ -98,9 +108,12 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_response :success
     recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
-    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
-    other_token = ClientToken.create!(user: other_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: other_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     BaseSelectorAuthority.prepare(surface: :app, principal: other_client, session: other_token)
     grant_step_up!("avatar_transfer_request", token: other_token)
 
@@ -323,6 +336,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -454,6 +468,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -530,6 +545,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -613,7 +629,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "a client cannot accept a transfer addressed to another enterprise" do
-    destination_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    destination_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     destination = BaseSelectorBootstrapAuthority.call(surface: :app, principal: destination_client)
     transfer = AvatarOwnershipTransfers::RequestOperation.call(
       actor: @client,
@@ -636,6 +655,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
   test "destination-side app authority cannot cancel an org-originated transfer" do
     source_operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE,
       visibility_id: OperatorVisibility::STAFF,
     )
@@ -763,6 +783,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -895,6 +916,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1028,6 +1050,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1155,6 +1178,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1283,6 +1307,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1329,7 +1354,10 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       target_surface: "org",
       target_collective_public_id: @target.collective.public_id,
     )
-    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     other = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
     other_persona = other.account
     PersonaMembership.create!(
@@ -1341,7 +1369,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       primary: false,
       metadata: {},
     )
-    other_token = ClientToken.create!(user: other_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: other_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     BaseSwitcherAuthority.switch(
       surface: :app,
       principal: other_client,
@@ -1457,6 +1485,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1588,6 +1617,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1725,6 +1755,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1857,6 +1888,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1991,6 +2023,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -2125,6 +2158,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -2206,6 +2240,7 @@ class Base::App::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
     rp_now = Time.current
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: rp_token,
       oidc_client_id: rp_client.client_id,
       oidc_scope: "openid profile",

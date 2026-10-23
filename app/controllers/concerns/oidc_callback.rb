@@ -16,7 +16,8 @@ module OidcCallback
       end
     end
   OIDC_PENDING_FLOWS_SESSION_KEY = "oidc_pending_flows"
-  OIDC_PENDING_FLOW_TTL = 10.minutes
+  # D-150: the pending entry lives as long as the `state` JWS (30 minutes from POST /sign).
+  OIDC_PENDING_FLOW_TTL = OidcStateJwt::TTL
 
   # The callback is intentionally kept as one linear public boundary so the
   # verification order remains visible beside the D-59 contract.
@@ -32,6 +33,9 @@ module OidcCallback
       return render_callback_failure(e.reason)
     end
 
+    # D-80 / D-110: `login_required` starts a new interactive authorization from the RP entry.
+    return redirect_to(oidc_rp_sign_entry_path, status: :see_other) if params[:error].to_s == "login_required"
+    # D-152 / D-153: Cancel (`access_denied`) and every other OP error end on the interruption page.
     return render_callback_failure("authorization_error") if params[:error].present?
     return render_callback_failure("authorization_error") if params[:code].blank?
 
@@ -114,16 +118,17 @@ module OidcCallback
 
   private
 
+  # D-149: the signed `state` is verified first; then this browser's pending entry for its `jti`
+  # must exist (a foreign browser, a replaced tab or an expired entry has none) and is consumed.
   def validate_state!
-    actual = params[:state].to_s
-    @current_oidc_flow, @current_oidc_flow_expired = consume_oidc_pending_flow(actual)
-    raise InvalidCallbackState.new("OIDC state expired", reason: "state_invalid") if @current_oidc_flow_expired
+    verification = OidcStateJwt.verify(client_id: oidc_client_id, token: params[:state].to_s)
+    raise InvalidCallbackState.new("OIDC state invalid", reason: "state_invalid") unless verification.valid?
 
-    expected = @current_oidc_flow.present? ? actual : nil
-    unless expected.present? && actual.present? && expected.bytesize == actual.bytesize &&
-        ActiveSupport::SecurityUtils.secure_compare(expected, actual)
-      raise InvalidCallbackState.new("OIDC state mismatch", reason: "state_invalid")
-    end
+    @current_oidc_flow, @current_oidc_flow_expired = consume_oidc_pending_flow(verification.jti)
+    raise InvalidCallbackState.new("OIDC state expired", reason: "state_invalid") if @current_oidc_flow_expired
+    raise InvalidCallbackState.new("OIDC state mismatch", reason: "state_invalid") if @current_oidc_flow.blank?
+
+    @current_oidc_target_link_uri = RpTargetLinkUri.normalize(verification.target_link_uri)
   end
 
   def exchange_code!
@@ -211,7 +216,7 @@ module OidcCallback
 
     store_oidc_rp_credentials!(token_response)
     redirect_to(consume_oidc_pt, allow_other_host: false)
-  rescue KeyError, ArgumentError, ContractEpochValue::Invalid
+  rescue KeyError, ArgumentError
     render_callback_failure("identity_resolution_failed")
   rescue ActiveRecord::ActiveRecordError
     render_callback_failure("dependency_unavailable", status: :service_unavailable)
@@ -281,13 +286,13 @@ module OidcCallback
     nil
   end
 
+  # The target restored once after a successful callback (D-151); otherwise the RP default page.
   def consume_oidc_pt
-    pending_pt = oidc_flow_value("pt").presence
-    pending_pt || "/"
+    @current_oidc_target_link_uri || "/"
   end
 
   def session_limit_gate_pt
-    oidc_flow_value("pt").presence ||
+    @current_oidc_target_link_uri ||
       (defined?(super) ? super : request&.fullpath.presence || request&.path.presence || "/")
   rescue StandardError
     "/"
@@ -305,11 +310,22 @@ module OidcCallback
            status: login_result[:http_status].presence || :forbidden
   end
 
+  # D-153: expected abnormal endings land on GET /sign/interruption after cleanup; the reason is a
+  # server-side reason code only. Dependency failures stay a 503 response.
   def render_callback_failure(reason, status: :unprocessable_content)
     log_callback_failure(reason: reason, status: status)
     clear_oidc_session_state!
-    render plain: I18n.t("errors.messages.login_required"), content_type: "text/plain", status: status
+    @current_oidc_target_link_uri = nil
+    if status == :service_unavailable
+      return render plain: I18n.t("errors.messages.login_required"), content_type: "text/plain", status: status
+    end
+
+    redirect_to(oidc_rp_sign_interruption_path, status: :see_other)
   end
+
+  def oidc_rp_sign_entry_path = "/sign?#{{ ri: RequestContextContract.normalize_region(params[:ri]) }.compact.to_query}"
+
+  def oidc_rp_sign_interruption_path = "/sign/interruption"
 
   def render_token_exchange_failure(result)
     if result.error == "access_denied" && oidc_client_id == "tech-org-ww"

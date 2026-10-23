@@ -71,6 +71,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       tokens =
         ClientToken::MAX_SESSIONS_PER_USER.times.map do
           ClientToken.create!(
+            authentication_epoch: 0,
             user: user,
             user_token_kind_id: ClientTokenKind::BROWSER_WEB,
             user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -211,12 +212,14 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       IdentityGraphProvisioner.call!(surface: :app, principal: user)
 
       first_active = ClientToken.create!(
+        authentication_epoch: 0,
         user: user,
         user_token_status_id: ClientTokenStatus::ACTIVE,
         authentication_event_at: Time.current,
       )
       first_active.rotate_refresh_token!
       second_active = ClientToken.create!(
+        authentication_epoch: 0,
         user: user,
         user_token_status_id: ClientTokenStatus::ACTIVE,
         authentication_event_at: Time.current,
@@ -446,6 +449,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       core_client = OidcClientRegistry.find!("core-app-jp")
       rp_root_token = ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).order(created_at: :desc).first
       rp_session = OpAppGrant.create!(
+        authentication_epoch: 0,
         client_token: rp_root_token,
         oidc_client_id: core_client.client_id,
         oidc_scope: "openid profile",
@@ -536,11 +540,13 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     other = clients(:two)
     ClientToken.where(user_id: [user.id, other.id]).delete_all
     own_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       authentication_event_at: Time.current,
     )
     other_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: other,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       authentication_event_at: Time.current,
@@ -635,11 +641,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       authentication_event_at: Time.current,
     )
-    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: user) }
+    Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: user) }
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
     host!(acme_host)
     get("/sign", params: { ri: "jp" })
@@ -734,6 +741,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       authentication_event_at: Time.current,
@@ -757,7 +765,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
-    token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
     social_token = Rails.application.message_verifier(:social_session_limit_limitation).generate(
       { "actor_ref" => user.public_id, "expires_at" => 15.minutes.from_now.iso8601 },
     )
@@ -1066,12 +1074,11 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   def create_visitor!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::NOTHING)
     VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
     VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
     VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    Visitor.create!
+    Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
   end
 
   def issue_authenticated_app_oidc_transaction(user, auth_method:, code_verifier: nil)
@@ -1202,7 +1209,6 @@ class OidcRpBrowserFlowTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1234,7 +1240,10 @@ class OidcRpBrowserFlowTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -1520,7 +1529,6 @@ class OidcRpBrowserFlowTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1529,7 +1537,10 @@ class OidcRpBrowserFlowTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -7,10 +7,11 @@ class BranchCoverageBatch6OtpAndOpsTest < ActiveSupport::TestCase
   test "typed signup Email refuses missing candidate mismatched binding cooldown lock and absent code" do
     ClientSignUpFlowStatus::DEFAULTS.each { |id| ClientSignUpFlowStatus.find_or_create_by!(id: id) }
     ClientSignUpFlowCleanupStatus::DEFAULTS.each { |id| ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id) }
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "batch6-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("batch6-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: nil,

@@ -94,6 +94,7 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
 
   %w(google apple).each do |provider|
     test "#{provider} sign-up entry issues a sign-up flow" do
+      switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
       assert_difference("ClientSignUpFlow.count", 1) do
         post public_send(:"auth_app_social_#{provider}_registration_path", provider: provider, ri: "jp")
       end

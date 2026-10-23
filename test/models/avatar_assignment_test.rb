@@ -227,6 +227,7 @@ class AvatarAssignmentTest < ActiveSupport::TestCase
 
   def create_user
     Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::USER,
       public_id: SecureRandom.alphanumeric(21),

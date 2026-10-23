@@ -17,7 +17,7 @@ The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SC
 | idp-client-step-up-ceremony | 6 | 15 | pending | revoked, consumed, canceled | None | None | 1 | verified |
 | idp-client-oidc-authorization | 3 | 5 | pending | consumed | None | None | 2 | authenticated, consumed |
 | idp-client-oauth-callback | 2 | 1 | unconsumed | consumed | None | None | 0 | None |
-| idp-client-local-result-delivery | 4 | 4 | empty | finalized | None | None | 1 | delivery |
+| idp-client-sign-in-flow-evidence | 2 | 1 | empty | evidence | None | None | 0 | None |
 | idp-client-token | 6 | 17 | ACTIVE, RESTRICTED | None | EXPIRED, NOTHING | rotated | 1 | ACTIVE, RESTRICTED, REVOKED |
 | idp-client-dbsc | 5 | 9 | NOTHING, PENDING | None | FAILED, REVOKE | None | 1 | ACTIVE |
 | idp-client-device-session | 2 | 4 | ACTIVE | REVOKED | None | None | 2 | ACTIVE, REVOKED |
@@ -33,7 +33,7 @@ The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SC
 | idp-visitor-secret-credential-ceremony | 2 | 1 | pending | consumed | None | None | 0 | None |
 | idp-visitor-step-up-ceremony | 6 | 15 | pending | revoked, consumed, canceled | None | None | 1 | verified |
 | idp-visitor-oidc-authorization | 3 | 5 | pending | consumed | None | None | 2 | authenticated, consumed |
-| idp-visitor-local-result-delivery | 4 | 4 | empty | finalized | None | None | 1 | delivery |
+| idp-visitor-sign-in-flow-evidence | 2 | 1 | empty | evidence | None | None | 0 | None |
 | idp-visitor-token | 6 | 17 | ACTIVE, RESTRICTED | None | EXPIRED, NOTHING | rotated | 1 | ACTIVE, RESTRICTED, REVOKED |
 | idp-visitor-dbsc | 5 | 9 | NOTHING, PENDING | None | FAILED, REVOKE | None | 1 | ACTIVE |
 | idp-visitor-device-session | 2 | 4 | ACTIVE | REVOKED | None | None | 2 | ACTIVE, REVOKED |
@@ -50,7 +50,7 @@ The detailed per-axis results (no-inbound/no-outbound nodes, reachable nodes, SC
 | idp-operator-step-up-ceremony | 6 | 15 | pending | revoked, consumed, canceled | None | None | 1 | verified |
 | idp-operator-oidc-authorization | 3 | 5 | pending | consumed | None | None | 2 | authenticated, consumed |
 | idp-operator-oauth-callback | 2 | 1 | unconsumed | consumed | None | None | 0 | None |
-| idp-operator-local-result-delivery | 4 | 4 | empty | finalized | None | None | 1 | delivery |
+| idp-operator-sign-in-flow-evidence | 2 | 1 | empty | evidence | None | None | 0 | None |
 | idp-operator-token | 6 | 17 | ACTIVE, RESTRICTED | None | EXPIRED, NOTHING | rotated | 1 | ACTIVE, RESTRICTED, REVOKED |
 | idp-operator-dbsc | 5 | 9 | NOTHING, PENDING | None | FAILED, REVOKE | None | 1 | ACTIVE |
 | idp-operator-device-session | 2 | 4 | ACTIVE | REVOKED | None | None | 2 | ACTIVE, REVOKED |

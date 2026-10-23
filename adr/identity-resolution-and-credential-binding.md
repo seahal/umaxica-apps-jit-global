@@ -8,8 +8,9 @@ Amended (2026-10-21) by [Passkey Identifier-First Sign-In](passkey-identifier-fi
 APP/COM Passkey sign-in selects an Identity through its effective Email or Telephone binding before
 challenge issuance and verifies credential ownership against that server-fixed Identity. Contact
 lifecycle, immutable ownership and handle contracts remain accepted. The successor also expressly
-restores the four-slot target below over the ten-credential decision of 2026-10-19; enforcement and
-existing-data transition remain unverified. This amendment records design, not implementation.
+restored a four-slot target over the ten-credential decision of 2026-10-19; that capacity is
+superseded again on 2026-10-23 by [Passkey authenticator account label](passkey-authenticator-account-label.md): ten Passkeys per Identity. Enforcement remains
+unverified. This amendment records design, not implementation.
 
 ## Context
 
@@ -25,7 +26,8 @@ released. Database constraints enforce both cardinality directions under owner-l
 email and telephone have one effective Identity per normalized destination and one destination per
 Identity; app social has one effective subject per Client and one effective social binding per
 Client across Google and Apple; app Secrets have zero to twenty effective unused credentials per
-Client; passkeys have four slots per Identity. Pending candidates and OTP evidence remain outside
+Client; passkeys have at most ten per Identity (capacity restored 2026-10-23; the earlier four-slot
+wording is superseded). Pending candidates and OTP evidence remain outside
 the effective unique predicates.
 
 Email and telephone finalization rechecks candidate, proof, expiry, cancellation, Identity state,

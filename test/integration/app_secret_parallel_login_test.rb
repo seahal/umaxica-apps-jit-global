@@ -22,9 +22,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
     if @actor
       @flows&.each do |flow|
         ClientSecretSignInReceipt.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
-        ClientAuthCeremonySession.where(local_sign_in_flow_ref: flow.public_id).find_each(&:destroy!)
         ClientSessionLimitResolutionTransaction.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
-        ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).find_each(&:destroy!)
         ClientAuthAdmissionBinding.where(
           authorization_transaction_id: ClientOidcAuthorizationTransaction.where(
             secret_sign_in_flow_id: flow.id,
@@ -46,12 +44,12 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
   setup do
     auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    @actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     @identifier = "parallel-secret-#{SecureRandom.hex(4)}@example.com"
     @actor.client_emails.create!(
       address: @identifier, user_email_status_id: ClientEmailStatus::VERIFIED,
     ).finalize_binding!
-    token = ClientToken.create!(user: @actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -485,7 +483,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
   end
 
   test "session limit cancellation retires the claim and rejects a callback with the old valid browser locator" do
-    (ClientToken::MAX_SESSIONS_PER_USER - 1).times { ClientToken.create!(user: @actor) }
+    (ClientToken::MAX_SESSIONS_PER_USER - 1).times { ClientToken.create!(authentication_epoch: 0, user: @actor) }
     begin
       fv5004 = @base
       fv5004.post(
@@ -587,7 +585,7 @@ class AppSecretParallelLoginTest < ActionDispatch::IntegrationTest
   end
 
   test "partial session revocation keeps the claim pending and sufficient capacity permits its one root login" do
-    (ClientToken::MAX_SESSIONS_PER_USER - 1).times { ClientToken.create!(user: @actor) }
+    (ClientToken::MAX_SESSIONS_PER_USER - 1).times { ClientToken.create!(authentication_epoch: 0, user: @actor) }
     begin
       fv5000 = @base
       fv5000.post(

@@ -7,7 +7,7 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
 
   setup do
     @actor = clients(:one)
-    @token = ClientToken.create!(user: @actor)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     @requirement = StepUpRequirement.new(
       scope: "settings_birthdate", step_up_required: true, allowed_methods: [:passkey],
       phishing_resistant_required: false, user_verification_required: false,
@@ -117,7 +117,7 @@ class IdentityStepUpCeremonyCancellationCommitterTest < ActiveSupport::TestCase
   end
 
   test "another browser session cannot cancel and a finalized result cannot be canceled" do
-    other_token = ClientToken.create!(user: @actor)
+    other_token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     assert_raises(IdentityStepUpCeremonyContract::Error) do
       IdentityStepUpCeremonyCancellationCommitter.call!(actor: @actor, token: other_token, transaction: @transaction)
     end

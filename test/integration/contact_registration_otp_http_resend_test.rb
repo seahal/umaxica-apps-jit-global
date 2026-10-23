@@ -21,8 +21,9 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
       TurnstileVerifierStub.challenge_response = { "success" => true }
       base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
       auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(
+        authentication_epoch: 0,
         user: actor, established_authentication_method: "passkey", root_login_established_at: ClientToken.database_now,
         discard_at: 1.day.from_now,
       )
@@ -45,7 +46,7 @@ class ContactRegistrationOtpHttpResendTest < ActionDispatch::IntegrationTest
       token.rotate_refresh_token!
       client = OidcClientRegistry.find!("base-app-ww")
       rp = OpAppGrant.create!(
-        contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+        authentication_epoch: 0,
         client_token: token, oidc_client_id: client.client_id, oidc_scope: "openid profile",
         oidc_jti: SecureRandom.uuid,
         oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current, refresh_token_expires_at: 10.minutes.from_now,

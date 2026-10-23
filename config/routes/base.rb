@@ -15,9 +15,8 @@ scope(module: :base, as: :base) do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
-      end
-      namespace :sign do
-        resource :completion, only: %i(show create)
+        # D-153: one generic landing for expected abnormal endings of the sign flow.
+        resource :interruption, only: :show, module: :sign
       end
       get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
                                                          as: :ceremony_binding_confirmation
@@ -191,7 +190,7 @@ scope(module: :base, as: :base) do
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resource(:backchannel_logout, only: :create, path: "backchannel-logout")
+        resources(:closures, only: :create)
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -217,7 +216,6 @@ scope(module: :base, as: :base) do
       # `adr/rails-routing-resourceful-policy.md`, Exception ledger.
       namespace :edge do
         namespace :v0 do
-          resource :cookie, only: %i(show update)
           namespace :token do
             resource :status, only: :show, path: "check", controller: :checks, as: :check
             resource :dbsc, only: :create
@@ -358,9 +356,10 @@ scope(module: :base, as: :base) do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
+        # D-153: one generic landing for expected abnormal endings of the sign flow.
+        resource :interruption, only: :show, module: :sign
       end
       namespace :sign do
-        resource :completion, only: %i(show create)
         namespace :in do
           resource :limitation, only: %i(show update destroy), controller: :limitations
           post "limitation", to: "limitations#update", as: :limitation_continue
@@ -502,7 +501,7 @@ scope(module: :base, as: :base) do
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resource(:backchannel_logout, only: :create, path: "backchannel-logout")
+        resources(:closures, only: :create)
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -524,7 +523,6 @@ scope(module: :base, as: :base) do
       # Edge compatibility API: token lifecycle management.
       namespace :edge do
         namespace :v0 do
-          resource :cookie, only: %i(show update)
           namespace :token do
             resource :status, only: :show, path: "check", controller: :checks, as: :check
             resource :dbsc, only: :create
@@ -609,9 +607,10 @@ scope(module: :base, as: :base) do
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
+        # D-153: one generic landing for expected abnormal endings of the sign flow.
+        resource :interruption, only: :show, module: :sign
       end
       namespace :sign do
-        resource :completion, only: %i(show create)
         namespace :in do
           resource :limitation, only: %i(show update destroy), controller: :limitations
           post "limitation", to: "limitations#update", as: :limitation_continue
@@ -865,7 +864,7 @@ scope(module: :base, as: :base) do
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resource(:backchannel_logout, only: :create, path: "backchannel-logout")
+        resources(:closures, only: :create)
         resource(:logout, only: %i(show create), controller: :logouts)
       end
 
@@ -887,7 +886,6 @@ scope(module: :base, as: :base) do
       # Edge compatibility API: token lifecycle management.
       namespace :edge do
         namespace :v0 do
-          resource :cookie, only: %i(show update)
           namespace :token do
             resource :status, only: :show, path: "check", controller: :checks, as: :check
             resource :dbsc, only: :create

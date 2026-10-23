@@ -65,17 +65,16 @@ module Auth
         def sign_entry_exit_switch_path = auth_com_sign_switch_path(ri: params[:ri])
 
         def sign_in_method_links(pt)
-          binding = sign_in_flow_binding_params(auth_ceremony_local_sign_in_flow, phase: "PRIMARY_PENDING")
           [
             {
               key: "email",
               label: t("sign.com.authentication.new.links.email"),
-              href: new_auth_com_sign_in_email_path(ri: params[:ri], pt: pt, **binding),
+              href: new_auth_com_sign_in_email_path(ri: params[:ri], pt: pt),
             },
             {
               key: "passkey",
               label: t("sign.com.authentication.new.links.passkey"),
-              href: new_auth_com_sign_in_passkey_path(ri: params[:ri], pt: pt, **binding),
+              href: new_auth_com_sign_in_passkey_path(ri: params[:ri], pt: pt),
             },
           ]
         end

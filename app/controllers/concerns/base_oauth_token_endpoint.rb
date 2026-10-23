@@ -4,11 +4,7 @@
 module BaseOauthTokenEndpoint
   extend ActiveSupport::Concern
 
-  include OpClientAdmissionGate
-
   def create
-    return render_client_not_admitted unless op_client_admitted?(params[:client_id].to_s)
-
     result = ::OidcTokenExchangeCoordinator.call(**token_exchange_arguments)
 
     if result.success?

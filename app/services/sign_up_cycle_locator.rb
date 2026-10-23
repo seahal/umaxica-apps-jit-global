@@ -2,6 +2,9 @@
 # frozen_string_literal: true
 
 class SignUpCycleLocator
+  class OwnershipMismatch < StandardError; end
+
+  BINDING_CLASSES = { app: ClientAuthAdmissionBinding, com: VisitorAuthAdmissionBinding }.freeze
   SESSION_KEYS = {
     app: :app_sign_up_flow_locator,
     com: :com_sign_up_flow_locator,
@@ -20,18 +23,26 @@ class SignUpCycleLocator
     @cycle_class = cycle_class || CYCLE_CLASSES.fetch(@surface)
   end
 
-  def current
-    payload = current_payload
-    return nil unless payload
+  def current(admission_binding:, ceremony_session:, public_id: nil)
+    binding_class = BINDING_CLASSES.fetch(surface)
+    binding_class.connection_owner.connected_to(role: :writing) do
+      binding = admitted_owner!(binding_class, admission_binding, ceremony_session)
+      owned = cycle_class.current.where(auth_admission_binding_id: binding.id).to_a
+      cycle = owned.find { |candidate| !terminal?(candidate) }
+      payload = current_payload
+      # A hint naming this Binding's own ended attempt is not a mismatch: the attempt is over and
+      # its terminal state decides the response.
+      return nil if payload && !cycle && ended_own_attempt?(owned, payload)
+      if payload && (!cycle || payload["public_id"] != cycle.public_id ||
+          !cycle.nonce_matches?(payload["nonce"]))
+        raise OwnershipMismatch, "sign-up admission ownership mismatch"
+      end
+      if public_id.present? && (!cycle || public_id != cycle.public_id)
+        raise OwnershipMismatch, "sign-up admission ownership mismatch"
+      end
 
-    cycle = cycle_class.current.find_by(public_id: payload.fetch("public_id"))
-    return nil unless cycle
-    return nil unless cycle.nonce_matches?(payload.fetch("nonce"))
-    return nil if terminal?(cycle)
-
-    cycle
-  rescue KeyError
-    nil
+      cycle
+    end
   end
 
   def issue!(cycle, nonce: new_nonce)
@@ -54,11 +65,40 @@ class SignUpCycleLocator
 
   attr_reader :session, :surface, :cycle_class
 
+  def admitted_owner!(binding_class, admission_binding, ceremony_session)
+    unless admission_binding.is_a?(binding_class) &&
+        ceremony_session.is_a?(binding_class.auth_admission_session_class)
+      raise OwnershipMismatch, "sign-up admission ownership mismatch"
+    end
+
+    binding = binding_class.find_by(id: admission_binding.id)
+    ceremony = binding_class.auth_admission_session_class.find_by(id: ceremony_session.id)
+    # Bindings are strict-loading; the parent is read explicitly by its id.
+    parent = binding && binding.association(:authorization_transaction).scope.take
+    unless binding&.redeemed? && !binding.retired? && binding.purpose == "authentication_handoff" &&
+        binding.entry_intent == "sign_up" && binding.admitted_auth_ceremony_session_id == ceremony&.id &&
+        ceremony&.active? && ceremony.admitted? && ceremony.admission_purpose == binding.purpose &&
+        parent && parent.surface == surface.to_s && parent.status == "pending" &&
+        parent.expires_at > binding_class.database_now &&
+        ceremony.authorization_transaction_ref == parent.transaction_id
+      raise OwnershipMismatch, "sign-up admission ownership mismatch"
+    end
+
+    binding
+  end
+
   def current_payload
     payload = session[session_key]
+    return nil if payload.nil?
     return payload.stringify_keys if payload.is_a?(Hash)
 
-    nil
+    raise OwnershipMismatch, "sign-up admission ownership mismatch"
+  end
+
+  def ended_own_attempt?(owned, payload)
+    owned.any? do |candidate|
+      terminal?(candidate) && candidate.public_id == payload["public_id"] && candidate.nonce_matches?(payload["nonce"])
+    end
   end
 
   def terminal?(cycle)

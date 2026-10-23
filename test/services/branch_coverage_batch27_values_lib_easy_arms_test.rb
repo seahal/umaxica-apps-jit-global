@@ -103,8 +103,14 @@ class BranchCoverageBatch27ValuesLibEasyArmsTest < ActiveSupport::TestCase
       expires_at: 1.hour.from_now.iso8601,
     )
 
-    assert_not seq.valid_for?(surface: "com", actor: Client.new, participant: "guardrail")
-    assert_not seq.valid_for?(surface: "app", actor: Client.new, participant: "checkpoint")
+    assert_not seq.valid_for?(
+      surface: "com", actor: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL),
+      participant: "guardrail",
+    )
+    assert_not seq.valid_for?(
+      surface: "app", actor: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL),
+      participant: "checkpoint",
+    )
     assert_not seq.actor_matches?(nil)
     assert_not seq.actor_matches?(Object.new)
   end

@@ -110,10 +110,6 @@ module AuthenticationSequenceGate
         return
       end
 
-      if local_authentication_ceremony?
-        return redirect_local_checkpoint_result!(cycle)
-      end
-
       if oidc_authorization_login_challenge.present?
         redirect_to_surface_url(after_login_path)
         return
@@ -134,22 +130,18 @@ module AuthenticationSequenceGate
     redirect_after_checkpoint_sequence!(pt: signed_pt_param)
   end
 
-  def redirect_local_checkpoint_result!(cycle)
-    outcome =
-      with_sign_in_flow_writing(cycle) do
-        SignInSelectorParticipant.new(cycle: cycle, actor: sign_in_flow_actor(cycle)).auto_commit_single!
-      end
-    return reject_invalid_sign_in_sequence! if outcome.is_a?(FlowTransitionResult)
-
-    redirect_to(after_login_path, status: :see_other)
-  end
-
   # OIDC credentials are established by Auth's ceremony, not by an Auth root
   # session. Resolve the actor from the DB-backed sign-in cycle when the
   # transaction challenge is present; a browser credential is only a normal
   # fallback for non-OIDC checkpoint entry.
   def authenticate_sign_in_sequence_actor!
-    return authenticate! unless oidc_authorization_login_challenge_present? || local_authentication_ceremony?
+    unless oidc_authorization_login_challenge_present?
+      # An Auth ceremony has no root session to fall back on; without an OIDC parent there is no
+      # actor to resolve, so the request is refused rather than sent to sign in again.
+      return reject_invalid_sign_in_sequence! if auth_credential_ceremony?
+
+      return authenticate!
+    end
 
     cycle = current_db_sign_in_flow_for_sequence
     actor = cycle && sign_in_flow_actor(cycle)
@@ -233,33 +225,6 @@ module AuthenticationSequenceGate
   end
 
   alias continue_dashboard_sequence_without_content! continue_welcome_sequence_without_content!
-
-  def continue_selector_sequence!
-    cycle = current_db_sign_in_flow_for_sequence
-    return reject_invalid_sign_in_sequence! unless cycle
-    return reject_invalid_sign_in_sequence! unless cycle.sign_in_selector_pending?
-    return reject_invalid_sign_in_sequence! unless allowed_to?(:show_selector?, cycle)
-
-    outcome =
-      with_sign_in_flow_writing(cycle) do
-        SignInSelectorParticipant.new(
-          cycle: cycle,
-          actor: sign_in_flow_actor(cycle),
-          authn_public_id: Actor.authn.login_public_id,
-        ).auto_commit_single!
-      end
-
-    return reject_invalid_sign_in_sequence! if outcome.is_a?(FlowTransitionResult)
-
-    result = issue_active_session_for_selector!(cycle.reload)
-    return reject_invalid_sign_in_sequence! unless result[:status] == :success
-
-    redirect_to_surface_url(
-      issue_welcome_gate_and_path(pt: cycle.reload.return_to, sequence_id: cycle.public_id, cycle: cycle.reload),
-    )
-  rescue SignInSelectorParticipant::Error
-    reject_invalid_sign_in_sequence!
-  end
 
   def enforce_sign_in_selector_gate!
     return unless logged_in?
@@ -357,8 +322,6 @@ module AuthenticationSequenceGate
   end
 
   def current_db_sign_in_flow_for_sequence
-    return auth_ceremony_local_sign_in_flow if local_authentication_ceremony?
-
     resolution = session_limit_resolution
     if resolution
       flow_class = resolution.class.resolution_sign_in_flow_class
@@ -410,25 +373,6 @@ module AuthenticationSequenceGate
   def start_sign_in_flow_for!(resource, pt:, authentication_method: nil)
     if resource.is_a?(Client) && authentication_method == "secret" && oidc_authentication_ceremony?
       return with_claimed_oidc_secret_flow(resource) { |flow, _ceremony| flow }
-    end
-
-    if local_authentication_ceremony?
-      cycle = auth_ceremony_local_sign_in_flow
-      raise AuthCeremonySession::InvalidTransition, "local authentication admission is missing" unless cycle
-      unless cycle.is_a?(sign_in_flow_class_for(resource))
-        raise AuthCeremonySession::InvalidTransition, "local authentication surface mismatch"
-      end
-
-      with_sign_in_flow_writing(cycle) do
-        cycle.with_lock do
-          unless cycle.sign_in_primary_pending? && (cycle.principal_id.nil? || cycle.principal_id == resource.id)
-            raise AuthCeremonySession::InvalidTransition, "local authentication flow is already bound"
-          end
-
-          cycle.update!(principal_id: resource.id)
-        end
-      end
-      return cycle
     end
 
     cycle_class = sign_in_flow_class_for(resource)
@@ -487,7 +431,7 @@ module AuthenticationSequenceGate
     when :session_limit_pending, :session_limit_conflict
       # Both leave the flow resumable: a pending resolution, or a temporary failure that issued
       # nothing. Neither is terminal.
-      sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
+      sign_in_flow_locator_for(actor: resource).issue!(cycle)
     when :success, :authentication_evidence_recorded
       outcome =
         cycle.with_cycle_lock do
@@ -499,7 +443,7 @@ module AuthenticationSequenceGate
         end
       return { status: :invalid_request, reason: :flow_expired } if outcome.is_a?(FlowTransitionResult)
 
-      sign_in_flow_locator_for(actor: resource).issue!(cycle.reload) unless local_authentication_ceremony?
+      sign_in_flow_locator_for(actor: resource).issue!(cycle.reload)
     else
       cycle.halt_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed? || cycle.sign_in_expired? ||
         cycle.sign_in_cancelled? || cycle.sign_in_halted?
@@ -534,21 +478,6 @@ module AuthenticationSequenceGate
     resolution_binding ||= session_limit_resolution_binding
     return { status: :invalid_request } if resolution_challenge.blank? || resolution_binding.blank?
 
-    local_locator = local_sign_in_locator_for_pending_resume(cycle)
-    if local_locator
-      result = LocalAuthenticationSessionCommitter.resume_pending!(
-        controller: self, flow: cycle, actor: actor, nonce: local_locator.fetch(:nonce),
-        session_limit_resolution: resolution,
-        session_limit_resolution_challenge: resolution_challenge,
-        session_limit_resolution_binding: resolution_binding,
-      )
-      return result unless result[:status] == :success
-
-      session[local_locator.fetch(:session_key)] = local_locator.fetch(:value)
-      reset_current_db_sign_in_flow_for_sequence!
-      return { status: :success }
-    end
-
     authentication_event_at = cycle.authentication_event_at
     return { status: :invalid_request } if authentication_event_at.blank?
 
@@ -579,20 +508,6 @@ module AuthenticationSequenceGate
     return unless gate.is_a?(Hash)
 
     gate["resolution_challenge"].presence
-  end
-
-  def local_sign_in_locator_for_pending_resume(cycle)
-    session_key =
-      case cycle
-      when ClientSignInFlow then SignInCycleLocator::SESSION_KEYS.fetch(:app)
-      when VisitorSignInFlow then SignInCycleLocator::SESSION_KEYS.fetch(:com)
-      when OperatorSignInFlow then SignInCycleLocator::SESSION_KEYS.fetch(:org)
-      else return nil
-      end
-    value = session[session_key]
-    return unless value.is_a?(Hash) && value["public_id"].to_s == cycle.public_id.to_s
-
-    { session_key: session_key, value: value, nonce: value.fetch("nonce") }
   end
 
   # Selector completion issues the root login for a flow that has not issued
@@ -637,13 +552,6 @@ module AuthenticationSequenceGate
   end
 
   def pending_mfa_sign_in_flow_for(resource)
-    if local_authentication_ceremony?
-      cycle = auth_ceremony_local_sign_in_flow
-      return cycle if cycle&.principal_id == resource.id
-
-      return nil
-    end
-
     sign_in_flow_locator_for(actor: resource).current
   end
 
@@ -690,7 +598,7 @@ module AuthenticationSequenceGate
     )
   end
 
-  private :redirect_local_checkpoint_result!, :reject_invalid_sign_in_sequence_path,
+  private :reject_invalid_sign_in_sequence_path,
           :authenticate_sign_in_sequence_actor!, :authenticate_oidc_result_actor!,
           :oidc_authorization_login_challenge_present?
 end

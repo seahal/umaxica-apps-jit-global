@@ -24,7 +24,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
         response_type: "code",
         client_id:,
         redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
-        code_challenge: "a" * 43,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256",
         scope: "openid",
         state: SecureRandom.urlsafe_base64(32),
@@ -95,7 +95,10 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
       assert_withheld { binding.reload.redeemed? }
       # Real public proof issuance isolates receiver CSRF from credential verification;
       # neither admission nor opaque result verification/finalization is mocked.
-      actor = actor_model.create!(id: SecureRandom.random_number(1 << 60))
+      actor = actor_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: SecureRandom.random_number(1 << 60),
+      )
       result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
         surface:, login_challenge: parent.login_challenge, actor:, session_ref: "ceremony-result",
         auth_method: "passkey", authentication_event_at: parent.class.database_now,

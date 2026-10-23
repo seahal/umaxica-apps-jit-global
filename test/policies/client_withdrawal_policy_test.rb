@@ -7,7 +7,7 @@ require "test_helper"
 # The withdrawal flow is owner-self only: a client may drive their own withdrawal, never another's.
 class ClientWithdrawalPolicyTest < ActiveSupport::TestCase
   def test_allows_owner_client_for_all_rules
-    owner = Client.new(id: 1)
+    owner = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     policy = ClientWithdrawalPolicy.new(owner, user: owner)
 
     assert_predicate policy, :new?
@@ -18,8 +18,8 @@ class ClientWithdrawalPolicyTest < ActiveSupport::TestCase
   end
 
   def test_denies_different_client
-    owner = Client.new(id: 1)
-    other = Client.new(id: 2)
+    owner = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
+    other = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 2)
     policy = ClientWithdrawalPolicy.new(owner, user: other)
 
     assert_not policy.create?
@@ -28,7 +28,10 @@ class ClientWithdrawalPolicyTest < ActiveSupport::TestCase
   end
 
   def test_denies_nil_user
-    policy = ClientWithdrawalPolicy.new(Client.new(id: 1), user: nil)
+    policy = ClientWithdrawalPolicy.new(
+      Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1),
+      user: nil,
+    )
 
     assert_not policy.create?
     assert_not policy.update?

@@ -244,12 +244,11 @@ reference. The existing intent, provider, TTL, callback-state, authorization and
 remain authoritative. The public SocialAuth link integration boundary covers the NanoID-21 format in
 [`test/integration/social_auth_link_test.rb`](../../test/integration/social_auth_link_test.rb).
 
-The `SocialCeremonyResultAdapter` reference and the `LocalAuthenticationResultCoordinator` reference
-are short-lived Valkey receiver capabilities, not durable resource identities. They carry no raw
-result code and are looked up only through their purpose-, surface-, flow- and generation-bound
-stores. Their current browser receivers share the strict UUID-v4 admission transport pattern, so
-existing UUID references remain readable and new format changes require a consumer-specific
-transport decision. They must not be treated as public resource IDs, substituted for the
+The `SocialCeremonyResultAdapter` reference is a short-lived Valkey receiver capability, not a
+durable resource identity. It carries no raw result code and is looked up only through its
+purpose-, surface-, flow- and generation-bound store. Its browser receiver shares the strict UUID-v4
+admission transport pattern, so existing UUID references remain readable and new format changes
+require a consumer-specific transport decision. It must not be treated as public resource IDs, substituted for the
 signed/result evidence, or resolved through a cross-surface fallback. A future bounded format
 transition would need to update the matching receiver validation and its exact legacy reader
 together; the standard NanoID rule alone is not authority to reformat these capability values.

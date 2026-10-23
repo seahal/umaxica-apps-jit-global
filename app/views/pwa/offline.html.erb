@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="<%= I18n.locale %>">
 <head>
-  <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (#{brand_tld})", title: "ネットワークに接続できません", separator: "—", reverse: true %>
+  <%= display_meta_tags site: "#{ENV.fetch("BRAND_NAME").upcase} (#{brand_tld})", title: t("pwa.offline.title"), separator: "—", reverse: true %>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
@@ -37,10 +37,10 @@
 </head>
 <body>
   <main>
-    <h1>ネットワークに接続できません</h1>
-    <p>サーバーに接続できませんでした。インターネット接続を確認して、もう一度お試しください。</p>
-    <form method="get" aria-label="このページを再読み込みする">
-      <button type="submit">再試行</button>
+    <h1><%= t("pwa.offline.title") %></h1>
+    <p><%= t("pwa.offline.description") %></p>
+    <form method="get" aria-label="<%= t("pwa.offline.reload") %>">
+      <button type="submit"><%= t("pwa.offline.retry") %></button>
     </form>
   </main>
 </body>

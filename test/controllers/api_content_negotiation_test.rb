@@ -140,7 +140,7 @@ class ApiContentNegotiationTest < ActionDispatch::IntegrationTest
 
   def oidc_refresh_token_for_client
     session = OpAppGrant.create!(
-      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       client_token: client_tokens(:one),
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",

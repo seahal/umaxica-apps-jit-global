@@ -37,12 +37,14 @@ scope module: :edit, as: :edit do
         # Authorization-code callback (redirect_uri); see AuthBoundaryAuthorityMap::CANONICAL_RP_CALLBACK_PATH.
         resource :callback, only: :show
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
-        resource :backchannel_logout, only: :create, path: "backchannel-logout"
+        resources :closures, only: :create
       end
 
       scope path: "sign", as: :sign do
         get "", to: "sign/entries#show", as: :show
         post "", to: "sign/entries#create", as: :create
+        # D-153: one generic landing for expected abnormal endings of the sign flow.
+        resource :interruption, only: :show, module: :sign
       end
 
       namespace :sign do

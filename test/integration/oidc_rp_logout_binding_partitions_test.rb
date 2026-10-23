@@ -14,6 +14,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
     https!
     @user = clients(:one)
     @root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -56,6 +57,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
   test "an IdP session on another device of the same actor revokes neither parent" do
     challenge, origin_cookie = start_sign_out
     other_device_root = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -71,6 +73,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
   test "a substituted session identifier never selects another session" do
     challenge, origin_cookie = start_sign_out
     other_root = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -194,6 +197,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
   test "an intent of another RP session or another browser is never reused" do
     first_challenge, = start_sign_out
     other_root = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,

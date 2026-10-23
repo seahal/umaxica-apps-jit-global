@@ -81,7 +81,7 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
     RpCoreAppRecord.connected_to(role: :reading) do
       result = RpCallbackCommitter.call(
         cell: @cell, issuer: ISSUER, subject: "writer-subject", sid: "writer-sid",
-        absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+        absolute_expires_at: 1.hour.from_now,
       )
 
       assert_predicate result, :success?
@@ -92,12 +92,12 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
   test "callback refuses enrollment for an existing disabled principal" do
     first = RpCallbackCommitter.call(
       cell: @cell, issuer: ISSUER, subject: "disabled-subject", sid: "old-sid",
-      absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      absolute_expires_at: 1.hour.from_now,
     )
     first.principal.update!(disabled_at: Time.current)
     result = RpCallbackCommitter.call(
       cell: @cell, issuer: ISSUER, subject: "disabled-subject", sid: "new-sid",
-      absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      absolute_expires_at: 1.hour.from_now,
     )
 
     assert_equal :revoked, result.outcome
@@ -118,7 +118,7 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
       RpCoreAppRecord.stub(:database_now, clock) do
         result = RpCallbackCommitter.call(
           cell: @cell, issuer: ISSUER, subject: "expiry-subject", sid: "expiry-#{index}",
-          absolute_expires_at: base + 5 + offset, contract_epoch: 1,
+          absolute_expires_at: base + 5 + offset,
         )
 
         assert_equal offset.positive? ? :committed : :revoked, result.outcome
@@ -132,7 +132,7 @@ class RpCallbackCommitterTest < ActiveSupport::TestCase
 
   def commit(subject:, sid:, issuer: ISSUER)
     RpCallbackCommitter.call(
-      cell: @cell, issuer:, subject:, sid:, absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      cell: @cell, issuer:, subject:, sid:, absolute_expires_at: 1.hour.from_now,
     )
   end
 end

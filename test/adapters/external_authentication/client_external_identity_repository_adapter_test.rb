@@ -6,7 +6,10 @@ class ClientExternalIdentityRepositoryAdapterTest < ActiveSupport::TestCase
   fixtures :client_statuses
 
   test "persists only Apple binding metadata" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     principal = ExternalAuthentication::VerifiedPrincipal.new(
       provider: "apple",
       subject: "repository-apple-subject",
@@ -32,7 +35,10 @@ class ClientExternalIdentityRepositoryAdapterTest < ActiveSupport::TestCase
   end
 
   test "refreshes Apple verification metadata without a provider credential" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     principal = ExternalAuthentication::VerifiedPrincipal.new(
       provider: "apple",
       subject: "repository-apple-refresh",
@@ -63,7 +69,10 @@ class ClientExternalIdentityRepositoryAdapterTest < ActiveSupport::TestCase
   end
 
   test "keeps Google without a durable provider credential" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, public_id: PublicId.generate)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      public_id: PublicId.generate,
+    )
     principal = ExternalAuthentication::VerifiedPrincipal.new(
       provider: "google",
       subject: "repository-google-subject",

@@ -583,9 +583,10 @@ en:
               accepted: You must check this box.
   activerecord:
     attributes:
+      client_sign_up_flow:
+        auth_admission_binding: Admission binding
       op_app_client_activation:
         client_id: Client ID
-        contract_epoch: Contract epoch
         enabled: Enabled
         changed_at: Changed at
         actor_ref: Changed by
@@ -593,7 +594,6 @@ en:
         source_manifest_digest: Source manifest digest
       op_com_client_activation:
         client_id: Client ID
-        contract_epoch: Contract epoch
         enabled: Enabled
         changed_at: Changed at
         actor_ref: Changed by
@@ -601,7 +601,6 @@ en:
         source_manifest_digest: Source manifest digest
       op_org_client_activation:
         client_id: Client ID
-        contract_epoch: Contract epoch
         enabled: Enabled
         changed_at: Changed at
         actor_ref: Changed by
@@ -631,7 +630,7 @@ en:
       bureau:
         title: Title
       client:
-        mfa_level: MFA level
+        security_mode: Security mode
         mfa_status: MFA status
         user_status: Status
         visibility: Visibility
@@ -685,6 +684,8 @@ en:
         title: Title
       individual_assignment:
         assigned_at: Assigned at
+      operator:
+        security_mode: Security mode
       operator_identity:
         source_record_id: Source record ID
       operator_step_up_session:
@@ -725,6 +726,8 @@ en:
         created_at: Created
         last_otp_at: Last used
         title: Name
+      visitor:
+        security_mode: Security mode
       visitor_contact_audit_outbox:
         acknowledged_at: Acknowledged at
         actor_ref: Actor reference
@@ -742,6 +745,8 @@ en:
         otp_private_key: OTP private key
       visitor_identity:
         source_record_id: Source record ID
+      visitor_sign_up_flow:
+        auth_admission_binding: Admission binding
       visitor_step_up_session:
         visitor_token_id: Visitor token ID
       visitor_telephone:
@@ -2399,6 +2404,12 @@ en:
           greeting: Hello,
           intro: Use the link below to manage staff email preferences.
           subject: Update your staff email preferences
+  oidc_rp:
+    interruption:
+      title: Sign-in could not be completed
+      body: Sign-in could not be completed. Please sign in again.
+      sign_in: Sign in
+      top: Top page
   errors:
     format: "%{attribute} %{message}"
     fqdn_availability:
@@ -2992,6 +3003,12 @@ en:
         message: We use cookies to improve your experience.
   preferences:
     title: Preferences
+  pwa:
+    offline:
+      description: Unable to connect to the server. Check your internet connection and try again.
+      reload: Reload this page
+      retry: Retry
+      title: Unable to connect to the network
   reproduce_issue:
     check_positions: |2-
 
@@ -4047,6 +4064,8 @@ en:
           new:
             description: Use your device's security features for a faster and safer login.
             page_title: Sign in with a passkey
+            pii_label: "Email or telephone"
+            pii_placeholder: "user@example.com or +81 90 1234 5678"
             submit: Sign in using passkey
       in:
         bulletins:

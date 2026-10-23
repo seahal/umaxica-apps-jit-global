@@ -320,13 +320,6 @@ class RetentionPurgeJob < ApplicationJob
         batch.lock.to_a.each do |flow|
           next if klass == ClientSignInFlow &&
             ClientOidcAuthorizationTransaction.exists?(secret_sign_in_flow_id: flow.id)
-          next unless AuthAdmissionBindingPurger.purge_for_parent!(
-            # The flow itself is selected only after its model-owned retention
-            # deadline. Admission terminal facts need only cross the same
-            # already-established boundary before the restrictive parent FK
-            # can be removed.
-            parent: flow, now:, retention_period: 1.second,
-          )
 
           klass.where(id: flow.id).delete_all
         end

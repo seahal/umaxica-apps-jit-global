@@ -69,8 +69,8 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
         "com" => [OpComGrant, Visitor, VisitorToken, :visitor, :visitor_token, "visitor"],
         "org" => [OpOrgGrant, Operator, OperatorToken, :staff, :operator_token, "operator"],
       }.fetch(surface)
-      actor = owner_class.create!
-      root = root_class.create!(owner_key => actor)
+      actor = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
+      root = root_class.create!(:authentication_epoch => 0, owner_key => actor)
       rp_client_id =
         case family
         when "base" then "base-#{surface}-ww"
@@ -80,6 +80,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
         end
       registered = OidcClientRegistry.find!(rp_client_id)
       rp_session = model.create!(
+        :authentication_epoch => 0,
         root_key => root, :oidc_client_id => registered.client_id, :oidc_scope => "openid profile",
         :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
         :refresh_token_expires_at => 10.minutes.from_now,
@@ -207,7 +208,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       host!(host)
 
       post(
-        "/sign", params: { pt: "/" }, headers: host_headers(host).merge(
+        "/sign", params: { target_link_uri: "/" }, headers: host_headers(host).merge(
           "Accept" => "text/html",
           "Origin" => "https://attacker.example",
           "Sec-Fetch-Site" => "cross-site",
@@ -237,7 +238,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       Rails.logger.stub(:info, ->(message = nil, &block) { logged << (message.nil? ? block&.call : message).to_s }) do
         post(
           "/sign", params: {
-            pt: "/dashboard",
+            target_link_uri: "/dashboard",
             ri: "jp",
             authenticity_token: csrf_token,
           }, headers: host_headers(host),
@@ -262,9 +263,9 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       assert_equal "S256", authorize_query["code_challenge_method"]
       assert_equal "/oidc/callback", URI.parse(authorize_query.fetch("redirect_uri")).path
 
-      pending_flow = session.fetch("oidc_pending_flows").fetch(authorize_query.fetch("state"))
+      pending_flow = session.fetch("oidc_pending_flows").fetch(OidcStateTestSupport.jti(authorize_query.fetch("state")))
 
-      assert_equal "/dashboard", pending_flow.fetch("pt")
+      assert_equal "/dashboard", OidcStateTestSupport.target_link_uri(authorize_query.fetch("state"))
       assert_equal authorize_query.fetch("nonce"), pending_flow.fetch("nonce")
       assert_predicate pending_flow.fetch("code_verifier"), :present?
       assert_nil session[:oidc_state]
@@ -309,6 +310,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -351,7 +353,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     authenticated_headers["Cookie"] = "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{access_token}"
     authenticated_headers["HTTP_COOKIE"] = authenticated_headers["Cookie"]
 
-    post "/sign", params: { pt: "/" }, headers: authenticated_headers
+    post "/sign", params: { target_link_uri: "/" }, headers: authenticated_headers
 
     assert_response :redirect
     assert_predicate session.fetch("oidc_pending_flows"), :present?
@@ -369,6 +371,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       ClientTokenDbscStatus.find_or_create_by!(id: ClientTokenDbscStatus::NOTHING)
     end
     root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: client,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -377,6 +380,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
       authentication_event_at: Time.current,
     )
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root_token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -402,7 +406,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     )
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
 
-    post "/sign", params: { pt: "/" }, headers: host_headers(host)
+    post "/sign", params: { target_link_uri: "/" }, headers: host_headers(host)
 
     assert_response :forbidden
     assert_equal I18n.t("errors.messages.operation_not_permitted"), response.body
@@ -434,7 +438,7 @@ class NeutralRpEntryContractTest < ActionDispatch::IntegrationTest
     )
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = access_token
 
-    post "/sign", params: { pt: "/" }, headers: host_headers(host)
+    post "/sign", params: { target_link_uri: "/" }, headers: host_headers(host)
 
     assert_response :redirect
     assert_predicate session.fetch("oidc_pending_flows"), :present?

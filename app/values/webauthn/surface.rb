@@ -10,10 +10,12 @@ module Webauthn
     class UnknownSurfaceError < StandardError; end
 
     attr_reader :key, :env_prefix, :passkey_class_name, :passkey_status_class_name,
-                :ceremony_transaction_class_name, :actor_foreign_key, :actor_association_name
+                :ceremony_transaction_class_name, :actor_foreign_key, :actor_association_name,
+                :account_label
 
     def initialize(key, env_prefix:, passkey_class_name:, passkey_status_class_name:,
-                   ceremony_transaction_class_name:, actor_foreign_key:, actor_association_name:)
+                   ceremony_transaction_class_name:, actor_foreign_key:, actor_association_name:,
+                   account_label:)
       @key = key
       @env_prefix = env_prefix
       @passkey_class_name = passkey_class_name
@@ -21,6 +23,9 @@ module Webauthn
       @ceremony_transaction_class_name = ceremony_transaction_class_name
       @actor_foreign_key = actor_foreign_key
       @actor_association_name = actor_association_name
+      # adr/passkey-authenticator-account-label.md: the authenticator stores this fixed,
+      # non-identifying label as user.name and user.displayName; it never selects an Identity.
+      @account_label = account_label
       freeze
     end
 
@@ -41,6 +46,7 @@ module Webauthn
         ceremony_transaction_class_name: "ClientPasskeyCeremonyTransaction",
         actor_foreign_key: "user_id",
         actor_association_name: :user,
+        account_label: "umaxica.app",
       ),
       com: new(
         :com,
@@ -50,6 +56,7 @@ module Webauthn
         ceremony_transaction_class_name: "VisitorPasskeyCeremonyTransaction",
         actor_foreign_key: "visitor_id",
         actor_association_name: :visitor,
+        account_label: "umaxica.com",
       ),
       org: new(
         :org,
@@ -59,6 +66,7 @@ module Webauthn
         ceremony_transaction_class_name: "OperatorPasskeyCeremonyTransaction",
         actor_foreign_key: "staff_id",
         actor_association_name: :staff,
+        account_label: "umaxica.org",
       ),
     }.freeze
 

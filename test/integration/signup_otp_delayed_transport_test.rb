@@ -21,6 +21,7 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
     %w(current reissued consumed expired).each do |state|
       test "#{surface} #{channel} delayed signup checks #{state} evidence" do
         owner = owner_model.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
         )
         destination =
@@ -40,6 +41,7 @@ class SignupOtpDelayedTransportTest < ActiveSupport::TestCase
         now = flow_model.database_now
         nonce = SecureRandom.urlsafe_base64(32)
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now,
           expires_at: now + 15.minutes, entry_method: channel.to_s,

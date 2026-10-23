@@ -1,6 +1,10 @@
 # Pre-stop JWT accepted after operator restore while invalidation is pending
 
-Status: Deferred; recorded at the user's request on 2026-10-22. No implementation change is
+Status: **Narrowed 2026-10-23** (authentication cycle D-165): `OidcAccessTokenAuthenticator` and the
+browser root resolution now compare the root's epoch with the actor's current epoch (equality, read on
+the writer), so the reproduced path is refused; see
+`evidence/2026-10-23-wu44-root-issuance-epoch-E4R4.md`. Remaining: other root-authentication paths not
+yet reviewed. Originally deferred; recorded at the user's request on 2026-10-22. No implementation change is
 authorized by this entry. Stored in `docs/backlog/` at the user's explicit request.
 
 ## Problem

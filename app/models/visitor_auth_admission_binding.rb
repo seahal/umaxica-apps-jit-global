@@ -4,7 +4,6 @@
 class VisitorAuthAdmissionBinding < OpBaseComRecord
   include AuthAdmissionBinding
 
-  belongs_to :sign_in_flow, class_name: "VisitorSignInFlow", optional: true
   belongs_to :authorization_transaction, class_name: "VisitorOidcAuthorizationTransaction", optional: true
   belongs_to :step_up_ceremony_transaction, class_name: "VisitorStepUpCeremonyTransaction", optional: true
   belongs_to :base_token, class_name: "VisitorToken", optional: true
@@ -14,7 +13,8 @@ class VisitorAuthAdmissionBinding < OpBaseComRecord
   validates :entry_ref, presence: true, uniqueness: true
   validates :purpose, presence: true
   validates :base_browser_digest, presence: true, length: { is: 64 }
-  validates :expires_at, :created_at, :updated_at, presence: true
+  validates :expires_at, :curfew_at, :entry_intent, :created_at, :updated_at, presence: true
+  validate :validate_entry_intent
   validate :validate_parent_shape
   validate :validate_purpose_parent
   validate :validate_base_token_requirement

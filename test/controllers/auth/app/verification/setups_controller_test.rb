@@ -9,8 +9,8 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   fixtures :client_statuses
 
   test "an admitted bootstrap shows the registration methods and cancellation, never a back link" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -99,8 +99,8 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   end
 
   test "a step-up admission is not accepted by the setup entry" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -159,8 +159,8 @@ class Auth::App::Verification::SetupsControllerTest < ActionDispatch::Integratio
   end
 
   test "the admitted bootstrap opens the Auth passkey registration ceremony" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(

@@ -226,18 +226,7 @@ module Auth
                   pt: result[:redirect_path],
                 )
               when :invalid_request
-                if local_authentication_ceremony?
-                  clear_auth_ceremony_context!
-                  redirect_to(
-                    base_app_sign_show_url(
-                      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), protocol: "https",
-                      ri: RequestContextContract.normalize_region(params[:ri]),
-                    ),
-                    status: :see_other, allow_other_host: true,
-                  )
-                else
-                  redirect_to(auth_app_sign_in_path(ri: params[:ri]), status: :see_other)
-                end
+                redirect_to(auth_app_sign_in_path(ri: params[:ri]), status: :see_other)
               else
                 redirect_to(
                   auth_app_sign_in_path,

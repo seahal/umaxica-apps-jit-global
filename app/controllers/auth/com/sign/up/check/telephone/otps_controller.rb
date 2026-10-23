@@ -50,6 +50,7 @@ module Auth
 
                 @visitor_telephone = current_registration_telephone
                 return render_telephone_session_expired unless valid_telephone_session?
+                return unless verify_otp_turnstile!
 
                 submitted_code = submitted_pass_code
                 return render_code_required if submitted_code.blank?
@@ -82,6 +83,19 @@ module Auth
               def sign_up_family = "telephone"
 
               def sign_up_step = :otp
+
+              # Visible Turnstile runs before the code is read, so a refusal consumes no OTP attempt and
+              # advances nothing (D-66, D-67; same order as the email OTP check).
+              def verify_otp_turnstile!
+                return true if cloudflare_turnstile_validation["success"]
+
+                @visitor_telephone.errors.add(
+                  :base,
+                  t("sign.com.registration.telephone.create.turnstile_validation_failed"),
+                )
+                render_sign_up_telephone_edit(status: :unprocessable_content)
+                false
+              end
 
               def issue_otp_ceremony!
                 TelephoneSignUpOtpDeliveryIssuer.call(

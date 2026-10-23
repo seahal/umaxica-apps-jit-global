@@ -10,11 +10,13 @@ class Auth::Com::Verification::SetupsControllerTest < ActionDispatch::Integratio
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     actor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: VisitorStatus::NOTHING,
       visibility_id: VisitorVisibility::VISITOR,
     )
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       root_login_established_at: Time.current,
     )

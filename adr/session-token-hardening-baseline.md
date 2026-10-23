@@ -35,7 +35,7 @@ end-state and records where the build deliberately diverges from the raw checkli
 ### Cookie hardening (point 1)
 
 Production auth cookies use `__Host-` prefix + host-only (no `Domain`) + `Secure` + `HttpOnly` +
-**`SameSite=Strict`** + `Partitioned`. `SameSite=Strict` is implemented in
+**`SameSite=Strict`** + `Partitioned`. *(Superseded 2026-10-23, D-115: no cookie carries `Partitioned` or `Domain`; every cookie is host-only.)* `SameSite=Strict` is implemented in
 `Authentication::CookieService` (`auth_cookie_options` and `auth_cookie_deletion_options`); it
 applies to the auth cookies (access / refresh / DBSC) in all environments.
 

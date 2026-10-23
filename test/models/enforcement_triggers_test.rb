@@ -156,6 +156,7 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
 
   test "raw SQL DELETE on clients raises when an in-force principal_hard_delete_blocked Principal Effect exists" do
     client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate,
       status_id: ClientStatus::ACTIVE,
     )
@@ -194,6 +195,7 @@ class EnforcementTriggersTest < ActiveSupport::TestCase
 
   test "a client with no in-force principal_hard_delete_blocked effect deletes normally via raw SQL" do
     client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate,
       status_id: ClientStatus::ACTIVE,
     )

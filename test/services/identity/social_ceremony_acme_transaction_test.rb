@@ -77,6 +77,7 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
   test "signup result commits a new client even when another provider shares the same email" do
     travel_to @now do
       existing_user = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
         visibility_id: ClientVisibility::USER,
         birthdate: "2000-01-01",
@@ -142,6 +143,7 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
   test "signup result rejects a provider uid already linked to another client" do
     travel_to @now do
       owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
         visibility_id: ClientVisibility::USER,
         birthdate: "2000-01-01",
@@ -435,6 +437,7 @@ class IdentitySocialCeremonyAcmeTransactionTest < ActiveSupport::TestCase
 
   def issue_signup_grant(provider: "google")
     @signup_flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: provider, social_provider: provider, step: "start", issued_at: ClientSignUpFlow.database_now,
       expires_at: ClientSignUpFlow.database_now + 15.minutes,
       nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(16)),

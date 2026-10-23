@@ -18,6 +18,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     host! host
     client = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -41,7 +42,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
-                contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -91,6 +92,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     host! host
     client = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -114,7 +116,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
-                contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -165,6 +167,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     host! host
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -188,7 +191,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
-                contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -238,6 +241,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     host! host
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -261,7 +265,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
-                contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -310,6 +314,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
     host! host
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       authentication_context: AuthenticationContextValue::STANDBY_KEY,
@@ -334,7 +339,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
-                contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -384,8 +389,12 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
   test "an app JSON request from a client with no step-up method asks to register one" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! host
-    client = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
     )
@@ -409,7 +418,7 @@ class StepUpRequiredResponseShapeTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
-                contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

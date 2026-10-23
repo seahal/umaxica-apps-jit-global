@@ -55,6 +55,7 @@ module PasskeyRegistrationFlow
       credential_params: passkey_registration_credential_params.to_h,
       challenge: challenge,
       config: webauthn_relying_party_config,
+      surface: webauthn_surface.key,
     )
 
     metadata = Webauthn::AuthenticatorMetadata.attributes_from(context)
@@ -98,6 +99,7 @@ module PasskeyRegistrationFlow
       credential_params: credential_params.to_h,
       challenge: challenge,
       config: webauthn_relying_party_config,
+      surface: webauthn_surface.key,
     )
 
     passkey = commit_passkey_ceremony!(context, challenge_id)

@@ -13,16 +13,16 @@ class ContactRegistrationOtpNoticedTransportTest < ActiveSupport::TestCase
         actor, token, contact, flow_model, notifier, notifier_name =
           case surface
           when :app
-            owner = Client.create!(status_id: ClientStatus::ACTIVE)
-            root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+            owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+            root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
             candidate = owner.client_emails.create!(
               raw_address: "noticed-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
             )
             [owner, root, candidate, ClientEmailCeremonyTransaction, Notify::App::OtpNotifier,
              "Notify::App::OtpNotifier::Notification",]
           when :com
-            owner = Visitor.create!
-            root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
             candidate = owner.visitor_emails.create!(
               raw_address: "noticed-#{SecureRandom.hex(8)}@example.test", confirm_policy: "1",
             )

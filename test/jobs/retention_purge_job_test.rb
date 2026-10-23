@@ -124,10 +124,14 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
 
   test "anonymizes account records where purge_eligible_at is in the past" do
     user_to_purge = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate, status_id: ClientStatus::ACTIVE,
       created_at: 2.hours.ago,
     )
-    user_to_keep = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+    user_to_keep = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::ACTIVE,
+    )
 
     user_to_purge.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
     user_to_keep.update_columns(discard_at: Retainable::SENTINEL, purge_eligible_at: Retainable::SENTINEL)
@@ -150,11 +154,12 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   # `purge_operators`) would silently corrupt one actor type's lifecycle.
   test "purge physically removes due operators but anonymizes due users in place" do
     user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate, status_id: ClientStatus::ACTIVE,
       created_at: 2.hours.ago,
     )
-    operator_due = Operator.create!
-    operator_pending = Operator.create!
+    operator_due = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    operator_pending = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
 
     user.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
     operator_due.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
@@ -181,10 +186,11 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   # `where(terminated_at: nil)` and already-deleted operators are simply absent.
   test "purge is idempotent across repeated runs" do
     user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate, status_id: ClientStatus::ACTIVE,
       created_at: 2.hours.ago,
     )
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     user.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
     operator.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
@@ -223,7 +229,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
     ClientSignUpFlowCleanupStatus::DEFAULTS.each do |id|
       ClientSignUpFlowCleanupStatus.find_or_create_by!(id: id)
     end
-    user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = ClientEmail.create!(
       user: user,
       raw_address: "retention-cleanup-#{SecureRandom.hex(6)}@example.com",
@@ -231,6 +237,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
       user_email_status_id: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
     )
     cycle = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: user.id,
       status_id: ClientSignUpFlowStatus::CANCELLED,
       step: "cancelled",
@@ -285,7 +292,10 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   end
 
   test "purge skips a client blocked by an in-force principal_hard_delete_blocked Principal Effect" do
-    client = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      status_id: ClientStatus::ACTIVE,
+    )
     operator = operators(:one)
     client.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
@@ -319,7 +329,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
 
   test "purge excludes an operator blocked by an in-force withdrawal_purge_blocked Principal Effect from the " \
        "batch delete" do
-    blocked_operator = Operator.create!
+    blocked_operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     applying_operator = operators(:one)
     blocked_operator.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
@@ -357,8 +367,8 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   # unsuspended run completes the deletion.
   test "a suspended purge deletes nothing and is not an error" do
     Flipper.enable(RetentionPurgeJob::FEATURE_NAME)
-    user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
-    operator_due = Operator.create!
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+    operator_due = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     user.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
     operator_due.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
@@ -373,7 +383,7 @@ class RetentionPurgeJobTest < ActiveJob::TestCase
   end
 
   test "the next unsuspended run catches up on work skipped while suspended" do
-    operator_due = Operator.create!
+    operator_due = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     operator_due.update_columns(discard_at: 1.hour.ago, purge_eligible_at: 1.hour.ago)
 
     Flipper.enable(RetentionPurgeJob::FEATURE_NAME)

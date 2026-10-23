@@ -19,7 +19,6 @@ module Auth
 
           def show
             @mfa_user = pending_mfa_user
-            @can_use_totp = @mfa_user&.totp_enabled?
             @can_use_passkey = @mfa_user&.client_passkeys&.exists?(status_id: ClientPasskeyStatus::ACTIVE)
 
             render inertia: true, props: mfa_challenge_props
@@ -35,7 +34,7 @@ module Auth
 
           def mfa_challenge_props
             scope = "sign.app.in.mfa"
-            any_method = @can_use_totp || @can_use_passkey
+            any_method = @can_use_passkey
 
             {
               title: page_t("#{scope}.title"),
@@ -48,13 +47,8 @@ module Auth
 
           def mfa_challenge_methods(scope)
             methods = []
-            if @can_use_totp
-              methods << {
-                key: "totp",
-                label: page_t("#{scope}.methods.totp"),
-                href: new_auth_app_sign_in_challenge_totp_path(**sign_in_mfa_binding_params),
-              }
-            end
+            # adr/authentication-security-mode.md C1: the ADVANCED second step is a Passkey; TOTP does not
+            # satisfy it.
             if @can_use_passkey
               methods << {
                 key: "passkey",

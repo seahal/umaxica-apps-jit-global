@@ -22,7 +22,7 @@ module Security
         "client_assertion_type" => "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         "client_secret" => "client-secret-value",
         "code_verifier" => "pkce-verifier",
-        "code_challenge" => "pkce-challenge",
+        "code_challenge" => "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         "nonce" => "nonce-value",
         "state" => "state-value",
         "private_key_pem" => "-----BEGIN PRIVATE KEY-----",

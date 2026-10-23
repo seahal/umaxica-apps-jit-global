@@ -21,7 +21,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction,
            :visitor_id, VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "signup-collision-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true,
@@ -29,6 +29,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "signup-collision-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -69,7 +70,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction,
            :visitor_id, VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "signup-grant-collision-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true,
@@ -77,6 +78,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "signup-grant-collision-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -121,7 +123,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       connection = Umaxica::Valkey::Connection.new(namespace: namespace)
       budget = EmailOtpVerificationFailureBudget.new(connection: connection)
       [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
-        owner = owner_model.create!(status_id: status)
+        owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         email = email_model.create!(
           owner_key => owner.id, :raw_address => "receipt-guess-#{SecureRandom.hex(8)}@example.test",
           :confirm_policy => true,
@@ -129,6 +131,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         now = flow_model.database_now
         nonce = "retained-email-receipt-browser"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -175,7 +178,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
           when "app" then [Client, ClientEmail, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
           when "com" then [Visitor, VisitorEmail, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
           end
-        owner = owner_model.create!(status_id: status)
+        owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         email = email_model.create!(
           owner_key => owner.id, :raw_address => "signup-rollback-#{SecureRandom.hex(8)}@example.test",
           :confirm_policy => true, :otp_attempts_count => 2,
@@ -183,6 +186,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         now = flow_model.database_now
         nonce = "signup-rollback-browser"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -235,7 +239,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app" then [Client, ClientEmail, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
         when "com" then [Visitor, VisitorEmail, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "signup-delivery-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true, :otp_attempts_count => 1,
@@ -243,6 +247,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "signup-delivery-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -283,7 +288,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction, :visitor_id,
            VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "owned-signup-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true, :otp_attempts_count => 1,
@@ -291,6 +296,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "owned-signup-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -370,7 +376,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorEmail, VisitorSignUpFlow, VisitorEmailCeremonyTransaction, :visitor_id,
            VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "signup-verify-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true, :otp_attempts_count => 1,
@@ -378,6 +384,7 @@ class EmailSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "signup-verify-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,

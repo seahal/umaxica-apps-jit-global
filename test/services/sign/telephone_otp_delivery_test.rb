@@ -23,6 +23,7 @@ module Sign
         now = flow_model.database_now
         nonce = "typed-delivery-original-browser"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: candidate.id,
@@ -65,6 +66,7 @@ module Sign
         now = flow_model.database_now
         nonce = "replacement-original-browser"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: candidate.id,
@@ -143,18 +145,18 @@ module Sign
         actor, token, telephone, transaction_model =
           case surface
           when "app"
-            owner = Client.create!(status_id: ClientStatus::ACTIVE)
-            root = ClientToken.create!(user: owner)
+            owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+            root = ClientToken.create!(authentication_epoch: 0, user: owner)
             candidate = owner.client_telephones.create!(raw_number: "+12025550167", confirm_policy: true)
             [owner, root, candidate, ClientTelephoneCeremonyTransaction]
           when "com"
-            owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-            root = VisitorToken.create!(visitor: owner)
+            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner)
             candidate = owner.visitor_telephones.create!(raw_number: "+12025550167", confirm_policy: true)
             [owner, root, candidate, VisitorTelephoneCeremonyTransaction]
           when "org"
-            owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-            root = OperatorToken.create!(staff: owner)
+            owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+            root = OperatorToken.create!(authentication_epoch: 0, staff: owner)
             candidate = owner.operator_telephones.create!(raw_number: "+12025550167")
             [owner, root, candidate, OperatorTelephoneCeremonyTransaction]
           end

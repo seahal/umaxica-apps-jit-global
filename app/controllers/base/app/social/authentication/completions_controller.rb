@@ -133,27 +133,21 @@ module Base
 
             flow = ClientSignUpFlow.find_by!(public_id: commit.result["actor_ref"])
             reference = flow.completed_requirements.fetch("social_signup").fetch("completion_ref")
-            destination =
-              if binding.parent_kind == :authorization_transaction
-                raise IdentitySocialCeremonyContract::Error, "social completion reference is invalid" unless
-                  reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
+            raise IdentitySocialCeremonyContract::Error, "social completion parent is invalid" unless
+              binding.parent_kind == :authorization_transaction
+            raise IdentitySocialCeremonyContract::Error, "social completion reference is invalid" unless
+              reference.is_a?(String) && reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN)
 
-                base_app_oauth_authorization_path(
-                  result_ref: reference,
-                  transaction_ref: ClientOidcAuthorizationTransaction.find(
-                    binding.authorization_transaction_id,
-                  ).transaction_id,
-                  ri: params[:ri],
-                )
-              else
-                parent = ClientSignInFlow.find(binding.sign_in_flow_id)
-                raise IdentitySocialCeremonyContract::Error, "social completion parent is invalid" unless
-                  reference.is_a?(String) && reference == parent.public_id
-
-                parent.sign_in_session_issuance_pending? ? social_session_limitation_path :
-                  base_app_dashboard_path(ri: params[:ri])
-              end
-            redirect_to(destination, status: :see_other)
+            redirect_to(
+              base_app_oauth_authorization_path(
+                result_ref: reference,
+                transaction_ref: ClientOidcAuthorizationTransaction.find(
+                  binding.authorization_transaction_id,
+                ).transaction_id,
+                ri: params[:ri],
+              ),
+              status: :see_other,
+            )
           end
 
           def record_social_signup_completion!(commit, reference)
@@ -173,11 +167,13 @@ module Base
           def complete_admitted_social_signup!(commit, provider, binding)
             normalized_provider = SocialIdentifiable.normalize_provider(provider)
             ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
-            if binding.parent_kind == :authorization_transaction
-              return handoff_social_signup_oidc!(commit, normalized_provider, binding, ceremony)
+            # Only an OIDC authorization parent continues a social sign-up; Base issues the root login
+            # when that authorization resumes.
+            unless binding.parent_kind == :authorization_transaction
+              raise IdentitySocialCeremonyContract::Error, "social sign-up parent is invalid"
             end
 
-            complete_social_signup_local_login!(commit, normalized_provider, binding, ceremony)
+            handoff_social_signup_oidc!(commit, normalized_provider, binding, ceremony)
           end
 
           def handoff_social_signup_oidc!(commit, normalized_provider, binding, ceremony)
@@ -199,53 +195,6 @@ module Base
                 result_ref: issuance.reference, transaction_ref: issuance.transaction.transaction_id, ri: params[:ri],
               ), status: :see_other,
             )
-          end
-
-          def complete_social_signup_local_login!(commit, normalized_provider, binding, ceremony)
-            flow = ClientSignInFlow.find(binding.sign_in_flow_id)
-            bind_social_signup_local_parent!(commit.user, flow, normalized_provider, ceremony)
-            result = log_in(
-              commit.user, establishment: :root_login, sign_in_flow: flow,
-                           established_authentication_method: normalized_provider,
-                           authentication_event_at: ceremony.authentication_event_at,
-                           audit_context: { auth_method: "social", provider: normalized_provider },
-            )
-            sign_in_result = sign_in_result_from_session_result(result, actor: commit.user)
-            unless sign_in_result.success? || sign_in_result.session_limit_pending?
-              return handle_social_login_failure!(sign_in_result)
-            end
-
-            record_social_signup_completion!(commit, flow.public_id)
-            ceremony.complete! unless ceremony.completed?
-            destination =
-              sign_in_result.session_limit_pending? ? social_session_limitation_path :
-                           base_app_dashboard_path(ri: params[:ri])
-            redirect_to(destination, status: :see_other)
-          end
-
-          def bind_social_signup_local_parent!(user, flow, provider, ceremony)
-            user.with_lock do
-              OpBaseAppRecord.connected_to(role: :writing) do
-                flow.with_lock do
-                  if flow.principal_id == user.id &&
-                      (flow.sign_in_primary_pending? || flow.sign_in_session_issuance_pending?) &&
-                      flow.authentication_method == provider &&
-                      flow.authentication_event_at == ceremony.authentication_event_at
-                    return
-                  end
-
-                  unless flow.sign_in_primary_pending? && flow.principal_id.nil? &&
-                      !flow.expired?(flow.class.database_now)
-                    raise IdentitySocialCeremonyContract::Error, "social sign-in parent is unavailable"
-                  end
-
-                  flow.update!(principal_id: user.id)
-                  flow.record_local_authentication_evidence!(
-                    method: provider, authenticated_at: ceremony.authentication_event_at,
-                  )
-                end
-              end
-            end
           end
 
           def base_social_login_redirect_to(sign_in_result)

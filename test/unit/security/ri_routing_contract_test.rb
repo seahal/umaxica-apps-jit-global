@@ -75,27 +75,36 @@ class RiRoutingContractTest < ActiveSupport::TestCase
     app/controllers/auth/org/edge/v0/token/checks_controller.rb
     app/controllers/auth/org/edge/v0/token/dbsc_controller.rb
     app/controllers/auth/org/omniauth/omniauth_callbacks_controller.rb
-    app/controllers/base/app/edge/v0/cookies_controller.rb
     app/controllers/base/app/oauth/authorizations_controller.rb
     app/controllers/base/app/oidc/callbacks_controller.rb
-    app/controllers/base/com/edge/v0/cookies_controller.rb
+    app/controllers/base/app/sign/interruptions_controller.rb
     app/controllers/base/com/oauth/authorizations_controller.rb
     app/controllers/base/com/oidc/callbacks_controller.rb
-    app/controllers/base/org/edge/v0/cookies_controller.rb
+    app/controllers/base/com/sign/interruptions_controller.rb
     app/controllers/base/org/oauth/authorizations_controller.rb
     app/controllers/base/org/oidc/callbacks_controller.rb
+    app/controllers/base/org/sign/interruptions_controller.rb
     app/controllers/core/app/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/app/oidc/callbacks_controller.rb
+    app/controllers/core/app/sign/interruptions_controller.rb
     app/controllers/core/com/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/com/oidc/callbacks_controller.rb
+    app/controllers/core/com/sign/interruptions_controller.rb
     app/controllers/core/org/api/v0/preferences/dbsc_controller.rb
     app/controllers/core/org/oidc/callbacks_controller.rb
+    app/controllers/core/org/sign/interruptions_controller.rb
     app/controllers/edit/org/oidc/callbacks_controller.rb
+    app/controllers/edit/org/sign/interruptions_controller.rb
     app/controllers/palm/app/oidc/callbacks_controller.rb
+    app/controllers/palm/app/sign/interruptions_controller.rb
     app/controllers/tech/org/oidc/callbacks_controller.rb
+    app/controllers/tech/org/sign/interruptions_controller.rb
     app/controllers/warp/app/oidc/callbacks_controller.rb
+    app/controllers/warp/app/sign/interruptions_controller.rb
     app/controllers/warp/com/oidc/callbacks_controller.rb
+    app/controllers/warp/com/sign/interruptions_controller.rb
     app/controllers/warp/org/oidc/callbacks_controller.rb
+    app/controllers/warp/org/sign/interruptions_controller.rb
   ).freeze
 
   # Controllers that render HTML on a participating target and still run without region

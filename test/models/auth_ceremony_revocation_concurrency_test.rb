@@ -7,17 +7,17 @@ require "timeout"
 class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
   self.fixture_table_names = []
   self.use_transactional_tests = false
-  fixtures :client_statuses, :client_visibilities, :client_mfa_levels, :client_mfa_statuses
-  fixtures :visitor_statuses, :visitor_visibilities, :visitor_mfa_levels, :visitor_mfa_statuses
-  fixtures :operator_statuses, :operator_visibilities, :operator_mfa_levels, :operator_mfa_statuses
+  fixtures :client_statuses, :client_visibilities, :client_security_modes, :client_mfa_statuses
+  fixtures :visitor_statuses, :visitor_visibilities, :visitor_security_modes, :visitor_mfa_statuses
+  fixtures :operator_statuses, :operator_visibilities, :operator_security_modes, :operator_mfa_statuses
 
-  test "credential changes racing local authentication evidence leave no usable unfinished admission" do
+  test "credential changes racing authentication evidence leave no usable unfinished sign-in flow" do
     %i(app com org).each do |surface|
-      actor = token = flow = ceremony = threads = nil
+      actor = token = flow = threads = nil
       ready = Queue.new
       release = Queue.new
       begin
-        actors, tokens, flows, ceremonies, tickets, token_key =
+        actors, tokens, flows, _, tickets, token_key =
           case surface
           when :app then [Client, ClientToken, ClientSignInFlow, ClientAuthCeremonySession, OpBaseAppRecord, :user_id]
           when :com then [Visitor, VisitorToken, VisitorSignInFlow, VisitorAuthCeremonySession, OpBaseComRecord,
@@ -25,18 +25,9 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           when :org then [Operator, OperatorToken, OperatorSignInFlow, OperatorAuthCeremonySession, OpBaseOrgRecord,
                           :staff_id,]
           end
-        actor = (surface == :com) ? create_unique_visitor! : actors.create!
-        token = tokens.create!(token_key => actor.id, :id => 9_920_000_000_010)
-        flow = BaseAuthAdmissionCoordinator.issue_local_entry!(
-          surface: surface.to_s,
-          intent: "sign_in",
-          base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          base_token: nil,
-        ).transaction
-        flow.update!(principal_id: actor.id)
-        ceremony, = ceremonies.rotate_and_admit!(
-          admission_purpose: "local_sign_in", local_sign_in_flow_ref: flow.public_id,
-        )
+        actor = (surface == :com) ? create_unique_visitor! : actors.create!(security_mode_id: SecurityModeTestDefault.id_for(actors))
+        token = tokens.create!(:authentication_epoch => 0, token_key => actor.id, :id => 9_920_000_000_010)
+        flow = SignInFlowTestFactory.create!(surface:, principal_id: actor.id)
         ActiveRecord::Base.connection_handler.clear_active_connections!
         threads =
           Array.new(2) do |index|
@@ -48,7 +39,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
                   if index.zero?
                     begin
                       # Synthetic evidence isolates the DB race; crypto is covered by HTTP tests.
-                      flows.find(flow.id).record_local_authentication_evidence!(method: "passkey")
+                      flows.find(flow.id).record_authentication_evidence!(method: "passkey")
                       :recorded
                     rescue AuthCeremonySession::InvalidTransition
                       :refused
@@ -77,25 +68,16 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         assert_includes [:recorded, :refused], results.first
         assert_equal :revoked, results.last
         assert_predicate flow.reload, :sign_in_halted?
-        assert_not_nil ceremony.reload.revoked_at
         assert_nil flow.result_digest
         assert_nil flow.base_finalized_at
         assert_predicate token.reload, :currently_usable?
         assert_raises(AuthCeremonySession::InvalidTransition) do
-          flow.record_local_authentication_evidence!(method: "passkey")
+          flow.record_authentication_evidence!(method: "passkey")
         end
       ensure
         if threads
           2.times { release << true }
           threads.each { |thread| thread.kill unless thread.join(10) }
-        end
-        ceremonies.where(id: ceremony.id).delete_all if ceremony
-        if flow
-          case surface
-          when :app then ClientAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
-          when :com then VisitorAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
-          when :org then OperatorAuthAdmissionBinding.where(sign_in_flow_id: flow.id).delete_all
-          end
         end
         flows.where(id: flow.id).delete_all if flow
         delete_admission_bindings_for(token) if token
@@ -127,10 +109,13 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       begin
         actor, model, owner_key, token_model, token_key =
           case surface
-          when :app then [Client.create!, ClientPasskey, :user_id, ClientToken, :user_id]
-          when :totp then [Client.create!, ClientTotpCredential, :user_id, ClientToken, :user_id]
+          when :app then [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL), ClientPasskey, :user_id,
+                          ClientToken, :user_id,]
+          when :totp then [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL), ClientTotpCredential,
+                           :user_id, ClientToken, :user_id,]
           when :com then [create_unique_visitor!, VisitorPasskey, :visitor_id, VisitorToken, :visitor_id]
-          when :org then [Operator.create!, OperatorPasskey, :staff_id, OperatorToken, :staff_id]
+          when :org then [Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED), OperatorPasskey,
+                          :staff_id, OperatorToken, :staff_id,]
           end
         if surface == :com
           contact = actor.visitor_emails.create!(
@@ -158,7 +143,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
         end
         # COM provisioning requires contact, but unverified contact is not a compatible fallback.
         contact&.reload&.update!(visitor_email_status_id: VisitorEmailStatus::UNVERIFIED)
-        token = token_model.create!(token_key => actor.id, :id => 9_920_000_000_011)
+        token = token_model.create!(:authentication_epoch => 0, token_key => actor.id, :id => 9_920_000_000_011)
         unless surface == :totp
           evidence_ref = (surface == :org) ? credentials.first.external_id : credentials.first.public_id
           token.update!(
@@ -248,9 +233,11 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       begin
         actor, model, owner_key, writer =
           case surface
-          when :app then [Client.create!, ClientPasskey, :user_id, AppPrincipalRecord]
+          when :app then [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL), ClientPasskey, :user_id,
+                          AppPrincipalRecord,]
           when :com then [create_unique_visitor!, VisitorPasskey, :visitor_id, ComPrincipalRecord]
-          when :org then [Operator.create!, OperatorPasskey, :staff_id, OrgPrincipalRecord]
+          when :org then [Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED), OperatorPasskey,
+                          :staff_id, OrgPrincipalRecord,]
           end
         if surface == :com
           contact = actor.visitor_emails.create!(
@@ -320,12 +307,15 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
   end
 
   test "APP competing Email OTP verification consumes one code and records one verification event" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::BOTH,
+    )
     credential = actor.client_emails.create!(
       address: "otp-race-#{SecureRandom.hex(8)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-    token = ClientToken.create!(id: 9_920_000_000_012, user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, id: 9_920_000_000_012, user: actor)
     parent = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, required_scope: "settings_email",
       required_aal: "none", allowed_methods: ["email_otp"], return_to: "/identity/emails",
@@ -406,7 +396,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
       address: "otp-race-#{SecureRandom.hex(8)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     ).tap(&:finalize_binding!)
-    token = VisitorToken.create!(id: 9_920_000_000_012, visitor: actor)
+    token = VisitorToken.create!(authentication_epoch: 0, id: 9_920_000_000_012, visitor: actor)
     parent = VisitorStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, required_scope: "settings_email",
       required_aal: "none", allowed_methods: ["email_otp"], return_to: "/identity/emails",
@@ -492,9 +482,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     test "#{surface} logout racing Base finalization leaves no usable authority or reusable result" do
       case surface
       when :app
-        actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
+        actor = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+          visibility_id: ClientVisibility::BOTH,
+        )
         credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(id: 9_920_000_000_001, user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, id: 9_920_000_000_001, user: actor)
         credential_ref = credential.public_id
       when :com
         actor = create_unique_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
@@ -503,12 +496,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         )
         credential = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = VisitorToken.create!(id: 9_920_000_000_001, visitor: actor)
+        token = VisitorToken.create!(authentication_epoch: 0, id: 9_920_000_000_001, visitor: actor)
         credential_ref = credential.public_id
       when :org
-        actor = Operator.create!
+        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
         credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(id: 9_920_000_000_001, staff: actor)
+        token = OperatorToken.create!(authentication_epoch: 0, id: 9_920_000_000_001, staff: actor)
         credential_ref = credential.external_id
       end
       requirement = StepUpRequirement.new(
@@ -627,9 +620,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     test "#{surface} credential revocation racing Base finalization clears authority and rejects result reuse" do
       case surface
       when :app
-        actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
+        actor = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+          visibility_id: ClientVisibility::BOTH,
+        )
         credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(id: 9_920_000_000_002, user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, id: 9_920_000_000_002, user: actor)
         credential_ref = credential.public_id
       when :com
         actor = create_unique_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
@@ -638,12 +634,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         )
         credential = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = VisitorToken.create!(id: 9_920_000_000_002, visitor: actor)
+        token = VisitorToken.create!(authentication_epoch: 0, id: 9_920_000_000_002, visitor: actor)
         credential_ref = credential.public_id
       when :org
-        actor = Operator.create!
+        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
         credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(id: 9_920_000_000_002, staff: actor)
+        token = OperatorToken.create!(authentication_epoch: 0, id: 9_920_000_000_002, staff: actor)
         credential_ref = credential.external_id
       end
       requirement = StepUpRequirement.new(
@@ -783,9 +779,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
     test "#{surface} cancellation racing Base finalization retains exactly one coherent terminal outcome" do
       case surface
       when :app
-        actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::BOTH)
+        actor = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+          visibility_id: ClientVisibility::BOTH,
+        )
         credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = ClientToken.create!(id: 9_920_000_000_003, user: actor)
+        token = ClientToken.create!(authentication_epoch: 0, id: 9_920_000_000_003, user: actor)
         credential_ref = credential.public_id
       when :com
         actor = create_unique_visitor!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::BOTH)
@@ -794,12 +793,12 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
           visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         )
         credential = actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = VisitorToken.create!(id: 9_920_000_000_003, visitor: actor)
+        token = VisitorToken.create!(authentication_epoch: 0, id: 9_920_000_000_003, visitor: actor)
         credential_ref = credential.public_id
       when :org
-        actor = Operator.create!
+        actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
         credential = actor.staff_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-        token = OperatorToken.create!(id: 9_920_000_000_003, staff: actor)
+        token = OperatorToken.create!(authentication_epoch: 0, id: 9_920_000_000_003, staff: actor)
         credential_ref = credential.external_id
       end
       requirement = StepUpRequirement.new(
@@ -1084,6 +1083,7 @@ class AuthCeremonyRevocationConcurrencyTest < ActiveSupport::TestCase
 
   def create_unique_visitor!(**attributes)
     Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       **attributes,
     )

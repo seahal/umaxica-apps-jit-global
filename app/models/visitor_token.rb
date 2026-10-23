@@ -106,8 +106,6 @@ class VisitorToken < OpBaseComRecord
   MAX_TOTAL_SESSIONS_PER_VISITOR = 2
   session_oidc_connection_config actor_name: :visitor, connection_class: VisitorOidcConnection
 
-  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
-
   attribute :visitor_token_status_id, default: VisitorTokenStatus::ACTIVE
   attribute :visitor_token_kind_id, default: VisitorTokenKind::BROWSER_WEB
   attribute :visitor_token_binding_method_id, default: VisitorTokenBindingMethod::NOTHING
@@ -133,6 +131,8 @@ class VisitorToken < OpBaseComRecord
           dependent: :destroy
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
+  # WU-17: written at issuance from the actor (roots) or the root (grants); never defaulted.
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   validate :enforce_concurrent_session_limit, on: :create
   validates :device_session_id, :visitor_id, exclusion: { in: [nil] }

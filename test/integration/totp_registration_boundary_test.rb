@@ -29,8 +29,8 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
     get new_auth_app_verification_setup_path(ri: "jp")
 
     assert_response :bad_request
-    actor = Client.create!(id: 9_106_000_000_000, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_106_000_000_000, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor,
       token: token,
@@ -61,8 +61,8 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
 
   test "setup admission refuses a cross-site POST before consuming its reference" do
     original_protection = Auth::App::Verification::SetupsController.allow_forgery_protection
-    actor = Client.create!(id: 9_106_000_000_001, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_106_000_000_001, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor,
       token: token,
@@ -142,8 +142,8 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
 
   # The candidate, registration proof and Base credential must remain distinct across requests.
   test "admitted bootstrap confirms a DB TOTP candidate without Auth root credentials or freshness" do
-    actor = Client.create!(id: 9_106_000_000_002, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_106_000_000_002, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor,
       token: token,
@@ -263,10 +263,11 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
       case surface
       when "com"
         actor = Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL,
           id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
           status_id: VisitorStatus::ACTIVE,
         )
-        token = VisitorToken.create!(visitor: actor, root_login_established_at: Time.current)
+        token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, root_login_established_at: Time.current)
         auth_host = ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
         display_path = new_auth_com_verification_setup_path(ri: "jp")
         create_path = auth_com_verification_setup_path(ri: "jp")
@@ -274,10 +275,11 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
         base_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
       when "org"
         actor = Operator.create!(
+          security_mode_id: SecurityModeConfigurable::ADVANCED,
           id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
           status_id: OperatorStatus::ACTIVE,
         )
-        token = OperatorToken.create!(staff: actor, root_login_established_at: Time.current)
+        token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
         auth_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
         display_path = new_auth_org_verification_setup_path(ri: "jp")
         create_path = auth_org_verification_setup_path(ri: "jp")
@@ -384,8 +386,8 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   end
   # A failure and redisplay must retain the same candidate and the same authority deadline.
   test "GET and repeated start preserve enrollment deadline and failures while cancel closes the permission" do
-    actor = Client.create!(id: 9_106_000_000_003, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_106_000_000_003, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor,
       token: token,
@@ -507,18 +509,19 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
   # the root-login integration boundary; this case focuses on bootstrap admission and completion.
   # rubocop:disable Minitest/MultipleAssertions
   test "Base begins bootstrap from its own root session and returns TOTP registration without freshness" do
-    actor = Client.create!(id: 9_106_000_000_004, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_106_000_000_004, status_id: ClientStatus::ACTIVE)
     actor.client_emails.create!(address: "bootstrap-http@example.com")
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     base_client = OidcClientRegistry.find!("base-app-ww")
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor, established_authentication_method: "email",
       root_login_established_at: ClientToken.database_now,
     )
     rp_session = OpAppGrant.create!(
-      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       client_token: token, oidc_client_id: base_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16),
       oidc_auth_time: token.root_login_established_at, refresh_token_expires_at: 10.minutes.from_now,
@@ -565,7 +568,7 @@ class TotpRegistrationBoundaryTest < ActionDispatch::IntegrationTest
           rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
           rp_now = Time.current
           rp_session = OpAppGrant.create!(
-            contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+            authentication_epoch: 0,
             client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
             oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
             refresh_token_expires_at: rp_now + 10.minutes,

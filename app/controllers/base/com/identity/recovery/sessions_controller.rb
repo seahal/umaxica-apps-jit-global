@@ -38,7 +38,9 @@ module Base
                 label: "Email address",
                 value: @email_record&.address.to_s,
                 submit_label: "Send verification code",
+                turnstile: recovery_address_turnstile_props,
               },
+              errors: @recovery_errors || [],
               pass_code_form: pass_code_form_props,
             }
           end

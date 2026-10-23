@@ -40,7 +40,10 @@ class Auth::App::Sign::In::GuardsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "blocked guard state returns generic forbidden without mutating cycle" do
-    blocked_user = Client.create!(status_id: ClientStatus::RESERVED, public_id: PublicId.generate)
+    blocked_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::RESERVED, public_id: PublicId.generate,
+    )
     cycle = create_cycle(actor: blocked_user, status: "GUARDRAIL_PENDING")
     before_attrs = guarded_cycle_attrs(cycle.reload)
     controller = build_controller(cycle: cycle, actor: blocked_user)

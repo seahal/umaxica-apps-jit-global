@@ -12,8 +12,12 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
   setup do
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @root = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -22,6 +26,7 @@ class SignOutRefreshRaceTest < ActiveSupport::TestCase
     )
     @root.rotate_refresh_token!
     @session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @root,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",

@@ -148,12 +148,18 @@ Current visible placement policy:
 | ------- | ------------------------------------------- | ------------------------------ | ---------------- |
 | app     | `/sign/up/email/new`                        | `POST /sign/up/email`          | visible required |
 | app     | `/sign/up/telephone/new`                    | `POST /sign/up/telephone`      | visible required |
+| app     | `/sign/up/check/email/otp`                  | `PATCH /sign/up/check/email/otp` | visible required |
+| app     | `/sign/up/check/telephone/otp`              | `PATCH /sign/up/check/telephone/otp` | visible required |
 | app     | `/sign/in/email/new`, `/sign/in/email/edit` | `POST/PATCH /sign/in/email`    | visible required |
 | app     | `/preference/email/:id/edit`                | `DELETE /preference/email/:id` | visible required |
+| app     | `/identity/recovery/session/new` (Base)     | `POST /identity/recovery/session` (send branch only; the `pass_code` verify branch is exempt) | visible required |
 | com     | `/sign/up/email/new`                        | `POST /sign/up/email`          | visible required |
 | com     | `/sign/up/telephone/new`                    | `POST /sign/up/telephone`      | visible required |
+| com     | `/sign/up/check/email/otp`                  | `PATCH /sign/up/check/email/otp` | visible required |
+| com     | `/sign/up/check/telephone/otp`              | `PATCH /sign/up/check/telephone/otp` | visible required |
 | com     | `/sign/in/email/new`, `/sign/in/email/edit` | `POST/PATCH /sign/in/email`    | visible required |
 | com     | `/preference/email/:id/edit`                | `DELETE /preference/email/:id` | visible required |
+| com     | `/identity/recovery/session/new` (Base)     | `POST /identity/recovery/session` (send branch only; the `pass_code` verify branch is exempt) | visible required |
 | org     | `/sign/up/invitations/new`                  | `POST /sign/up/invitations`    | visible required |
 | org     | `/preference/email/:id/edit`                | `DELETE /preference/email/:id` | visible required |
 

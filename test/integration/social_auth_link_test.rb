@@ -97,6 +97,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                 f0_now = Time.current
                 f0_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                   refresh_token_expires_at: f0_now + 10.minutes,
@@ -257,6 +258,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                 f1_now = Time.current
                 f1_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                   refresh_token_expires_at: f1_now + 10.minutes,
@@ -396,6 +398,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -473,6 +476,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -550,6 +554,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                 f2_now = Time.current
                 f2_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                   refresh_token_expires_at: f2_now + 10.minutes,
@@ -633,6 +638,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -719,6 +725,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
                 f3_now = Time.current
                 f3_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                   refresh_token_expires_at: f3_now + 10.minutes,
@@ -921,6 +928,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
                 f4_now = Time.current
                 f4_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                   refresh_token_expires_at: f4_now + 10.minutes,
@@ -1066,6 +1074,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
                 f5_now = Time.current
                 f5_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                   refresh_token_expires_at: f5_now + 10.minutes,
@@ -1158,6 +1167,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
                 f6_now = Time.current
                 f6_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                   refresh_token_expires_at: f6_now + 10.minutes,
@@ -1291,6 +1301,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1361,6 +1372,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1463,6 +1475,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
                 f7_now = Time.current
                 f7_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                   refresh_token_expires_at: f7_now + 10.minutes,
@@ -1600,6 +1613,7 @@ class SocialAuthLinkTest < ActionDispatch::IntegrationTest
                 f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
                 f8_now = Time.current
                 f8_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
                   refresh_token_expires_at: f8_now + 10.minutes,
@@ -1770,7 +1784,6 @@ class SocialAuthLinkTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1802,7 +1815,10 @@ class SocialAuthLinkTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -2107,7 +2123,6 @@ class SocialAuthLinkTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -2116,7 +2131,10 @@ class SocialAuthLinkTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

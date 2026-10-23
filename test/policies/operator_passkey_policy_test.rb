@@ -15,20 +15,29 @@ class OperatorPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_allowed_for_authenticated_user
-    policy = OperatorPasskeyPolicy.new(OperatorPasskey.new, user: Operator.new(id: 1))
+    policy = OperatorPasskeyPolicy.new(
+      OperatorPasskey.new,
+      user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1),
+    )
 
     assert_predicate policy, :index?
   end
 
   def test_show_denied_by_default
-    policy = OperatorPasskeyPolicy.new(OperatorPasskey.new, user: Operator.new(id: 1))
+    policy = OperatorPasskeyPolicy.new(
+      OperatorPasskey.new,
+      user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1),
+    )
 
     assert_not policy.show?
   end
 
   # create? gates registration (fresh record) to any authenticated operator.
   def test_create_allowed_for_authenticated_user
-    policy = OperatorPasskeyPolicy.new(OperatorPasskey.new, user: Operator.new(id: 1))
+    policy = OperatorPasskeyPolicy.new(
+      OperatorPasskey.new,
+      user: Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1),
+    )
 
     assert_predicate policy, :create?
     assert_predicate policy, :new?
@@ -40,7 +49,7 @@ class OperatorPasskeyPolicyTest < ActiveSupport::TestCase
 
   # show?/update?/destroy? require ownership (record.staff_id == operator.id).
   def test_per_record_rules_allow_owner
-    owner = Operator.new(id: 1)
+    owner = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1)
     record = OperatorPasskey.new(staff_id: 1)
 
     assert_predicate OperatorPasskeyPolicy.new(record, user: owner), :show?
@@ -50,7 +59,7 @@ class OperatorPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_per_record_rules_deny_non_owner
-    owner = Operator.new(id: 1)
+    owner = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1)
     record = OperatorPasskey.new(staff_id: 2)
 
     assert_not OperatorPasskeyPolicy.new(record, user: owner).show?
@@ -77,7 +86,7 @@ class OperatorPasskeyPolicyTest < ActiveSupport::TestCase
       end
     end.new
 
-    user = Operator.new(id: 1)
+    user = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: 1)
 
     assert_equal :where_scope, OperatorPasskeyPolicy.new(OperatorPasskey.new, user: user).apply_scope(
       relation,

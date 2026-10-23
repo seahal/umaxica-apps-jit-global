@@ -521,14 +521,13 @@ describe("recovery interaction", () => {
     setInput("#recovery_reentry_address", "someone@example.com");
     submitForm(0);
     expect(post).toHaveBeenCalledWith("/identity/recovery/session", {
-      data: { recovery_reentry: { address: "someone@example.com" } },
+      recovery_reentry: { address: "someone@example.com" },
+      "cf-turnstile-response": "",
     });
 
     setInput("#recovery_pass_code", "123456");
     submitForm(1);
-    expect(post).toHaveBeenCalledWith("/identity/recovery/session", {
-      data: { pass_code: "123456" },
-    });
+    expect(post).toHaveBeenCalledWith("/identity/recovery/session", { pass_code: "123456" });
   });
 });
 

@@ -46,32 +46,22 @@ class Auth::App::Sign::In::SecretsController < Auth::App::ApplicationController
   end
 
   def create
-    flow = auth_ceremony_local_sign_in_flow
     transaction = auth_ceremony_authorization_transaction
     ceremony = admitted_auth_ceremony_session
-    unless @resolved_client && (flow || transaction) && ceremony
+    unless @resolved_client && transaction && ceremony
       return render_form(status: :unprocessable_content, error: t("sign.app.authentication.secret.invalid"))
     end
 
-    claim =
-      if transaction
-        ClientSecretClaimCommitter.call_for_oidc!(
-          client: @resolved_client, secret: secret_params[:secret],
-          transaction: transaction, ceremony: ceremony,
-        )
-      else
-        ClientSecretClaimCommitter.call!(
-          client: @resolved_client, secret: secret_params[:secret], flow: flow,
-          ceremony: ceremony,
-        )
-      end
+    claim = ClientSecretClaimCommitter.call_for_oidc!(
+      client: @resolved_client, secret: secret_params[:secret], transaction: transaction, ceremony: ceremony,
+    )
     return render_form(status: :unprocessable_content, error: t("sign.app.authentication.secret.invalid")) unless claim
 
     result = AuthenticationSessionCommitter.call(
       controller: self, resource: claim.client, pt: signed_pt_param, ri: current_region_identifier,
       auth_method: "secret_credential",
     )
-    if transaction && result[:status] == :authentication_evidence_recorded
+    if result[:status] == :authentication_evidence_recorded
       redirect_to_sign_in_sequence!(pt: signed_pt_param, status: :see_other)
     elsif %i(authentication_evidence_recorded mfa_required).include?(result[:status]) && result[:redirect_path]
       redirect_to(result.fetch(:redirect_path), status: :see_other)

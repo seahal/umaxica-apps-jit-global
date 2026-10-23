@@ -13,8 +13,8 @@ class AuthenticationLogoutAllSessionsTest < ActiveSupport::TestCase
   end
 
   test "revokes real Root sessions without a session version authority" do
-    actor = Client.create!
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     encoded = AuthenticationToken.encode(
       actor, host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"), resource_type: "client",
              session_public_id: token.public_id,

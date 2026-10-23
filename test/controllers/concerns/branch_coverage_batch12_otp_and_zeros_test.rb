@@ -11,7 +11,7 @@ class BranchCoverageBatch12OtpAndZerosTest < ActionDispatch::IntegrationTest
         else
           [Visitor, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       contact =
         if channel == :email
           owner.client_emails.create!(
@@ -31,6 +31,7 @@ class BranchCoverageBatch12OtpAndZerosTest < ActionDispatch::IntegrationTest
       now = flow_model.database_now
       nonce = SecureRandom.hex(32)
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, entry_method: channel.to_s, step: "start",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         pending_contact_type: channel.to_s, pending_contact_id: contact.id,

@@ -15,7 +15,6 @@
 #  deactivated_at              :datetime
 #  discard_at                :datetime         default(Infinity), not null
 #  lock_version                :integer          default(0), not null
-#  mfa_level_enabled           :boolean          default(FALSE), not null
 #  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
@@ -26,7 +25,7 @@
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  admin_locked_by_operator_id :bigint
-#  mfa_level_id                :bigint           default(0), not null
+#  security_mode_id            :bigint           not null
 #  mfa_status_id               :bigint           default(5), not null
 #  public_id                   :string           default(""), not null
 #  status_id                   :bigint           default(2), not null
@@ -38,7 +37,7 @@
 #  index_visitors_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_visitors_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
 #  index_visitors_on_discard_at           (discard_at)
-#  index_visitors_on_mfa_level_id           (mfa_level_id)
+#  index_visitors_on_security_mode_id       (security_mode_id)
 #  index_visitors_on_mfa_status_id          (mfa_status_id)
 #  index_visitors_on_public_id              (public_id) UNIQUE
 #  index_visitors_on_purge_eligible_at              (purge_eligible_at)
@@ -52,7 +51,7 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (mfa_level_id => visitor_mfa_levels.id)
+#  fk_rails_...  (security_mode_id => visitor_security_modes.id)
 #  fk_rails_...  (mfa_status_id => visitor_mfa_statuses.id)
 #  fk_rails_...  (status_id => visitor_statuses.id)
 #  fk_rails_...  (visibility_id => visitor_visibilities.id)
@@ -61,20 +60,8 @@
 require "test_helper"
 
 class VisitorTest < ActiveSupport::TestCase
-  test "mfa_level_enabled and mfa_level_id must describe the same requirement" do
-    visitor = Visitor.new(mfa_level_enabled: true, mfa_level_id: VisitorMfaLevel::NOTHING)
-
-    assert_not visitor.valid?
-    assert_not_empty visitor.errors[:mfa_level_id]
-
-    visitor = Visitor.new(mfa_level_enabled: false, mfa_level_id: VisitorMfaLevel::FULL)
-
-    assert_not visitor.valid?
-    assert_not_empty visitor.errors[:mfa_level_enabled]
-  end
-
   test "termination requires finite withdrawal completion" do
-    visitor = Visitor.new(terminated_at: Time.current)
+    visitor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL, terminated_at: Time.current)
 
     assert_not visitor.valid?
     assert_not_empty visitor.errors[:terminated_at]
@@ -85,7 +72,10 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "withdrawal completion cannot precede withdrawal start" do
-    visitor = Visitor.new(withdrawal_started_at: Time.current, withdrawn_at: 1.minute.ago)
+    visitor = Visitor.new(
+      security_mode_id: SecurityModeConfigurable::NORMAL, withdrawal_started_at: Time.current,
+      withdrawn_at: 1.minute.ago,
+    )
 
     assert_not visitor.valid?
     assert_not_empty visitor.errors[:withdrawn_at]
@@ -93,7 +83,6 @@ class VisitorTest < ActiveSupport::TestCase
 
   def setup
     Prosopite.pause do
-      VisitorMfaLevel.ensure_defaults!
       VisitorMfaStatus.ensure_defaults!
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
@@ -104,56 +93,56 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "should be valid" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_predicate visitor, :valid?
   end
 
   test "public_id is auto-generated" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_predicate visitor.public_id, :present?
     assert_operator visitor.public_id.length, :<=, 21
   end
 
   test "default status_id is nothing" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal VisitorStatus::NOTHING, visitor.status_id
   end
 
   test "default visibility_id is visitor" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal VisitorVisibility::VISITOR, visitor.visibility_id
   end
 
   test "visitor? should return true" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_predicate visitor, :visitor?
   end
 
   test "user? should return false" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_not visitor.user?
   end
 
   test "staff? should return false" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_not visitor.staff?
   end
 
   test "login_allowed? is false for reserved status" do
-    visitor = Visitor.create!(status_id: VisitorStatus::RESERVED)
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::RESERVED)
 
     assert_not visitor.login_allowed?
   end
 
   test "verified_email? returns true when visitor has verified email" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorEmail.create!(
       visitor: visitor,
       address: "verified@example.com",
@@ -165,7 +154,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_email? uses loaded visitor_emails" do
-    created_visitor = Visitor.create!
+    created_visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorEmail.create!(
       visitor: created_visitor,
       address: "loaded@example.com",
@@ -178,7 +167,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_email? returns true when visitor has verified_with_sign_up email" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorEmail.create!(
       visitor: visitor,
       address: "signup@example.com",
@@ -190,7 +179,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_email? returns false when visitor has no verified email" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorEmail.create!(
       visitor: visitor,
       address: "unverified@example.com",
@@ -202,7 +191,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_telephone? returns true when visitor has verified telephone" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorTelephone.create!(
       visitor: visitor,
       number: "+15551234567",
@@ -213,7 +202,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_telephone? uses loaded visitor_telephones" do
-    created_visitor = Visitor.create!
+    created_visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorTelephone.create!(
       visitor: created_visitor,
       number: "+15557654321",
@@ -225,7 +214,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "verified_telephone? returns false when visitor has no verified telephone" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorTelephone.create!(
       visitor: visitor,
       number: "+15551234567",
@@ -236,7 +225,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "has_verified_pii? returns true when has verified email" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorEmail.create!(
       visitor: visitor,
       address: "verified@example.com",
@@ -248,7 +237,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "has_verified_pii? returns true when has verified telephone" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorTelephone.create!(
       visitor: visitor,
       number: "+15551234567",
@@ -259,25 +248,25 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "has_verified_pii? returns false when no verified identity" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_not visitor.has_verified_pii?
   end
 
   test "has_verified_recovery_identity? delegates to has_verified_pii?" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal visitor.has_verified_pii?, visitor.has_verified_recovery_identity?
   end
 
   test "passkey_login_available? returns false when no passkeys" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_not visitor.passkey_login_available?
   end
 
   test "passkey_login_available? requires verified telephone" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorTelephone.create!(
       visitor: visitor,
       number: "+15550001111",
@@ -295,7 +284,7 @@ class VisitorTest < ActiveSupport::TestCase
   end
 
   test "passkey_login_available? uses loaded association when visitor_passkeys are loaded" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorTelephone.create!(
       visitor: visitor,
       number: "+15550002222",

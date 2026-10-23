@@ -13,7 +13,6 @@ module AuthAdmissionBinding
   REFERENCE_PATTERN = /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i.freeze
 
   PARENT_PURPOSES = {
-    sign_in_flow: %w(local_sign_in local_sign_up),
     authorization_transaction: %w(authentication_handoff invitation_handoff),
     step_up_ceremony_transaction: %w(
       step_up_handoff reauthentication_handoff bootstrap_handoff
@@ -21,9 +20,10 @@ module AuthAdmissionBinding
     ),
   }.freeze
   BASE_TOKEN_PURPOSES = PARENT_PURPOSES.fetch(:step_up_ceremony_transaction).freeze
+  CURFEW_DURATION = 30.minutes
   IMMUTABLE_FACT_COLUMNS = %w(
-    entry_ref purpose sign_in_flow_id authorization_transaction_id step_up_ceremony_transaction_id
-    base_token_id base_browser_digest expires_at auth_ceremony_session_id confirmation_ref
+    entry_ref purpose authorization_transaction_id step_up_ceremony_transaction_id
+    base_token_id base_browser_digest expires_at curfew_at entry_intent auth_ceremony_session_id confirmation_ref
     base_confirmed_at redeemed_at admitted_auth_ceremony_session_id retired_at
   ).freeze
 
@@ -53,11 +53,10 @@ module AuthAdmissionBinding
   public
 
   def parent_count
-    [sign_in_flow_id, authorization_transaction_id, step_up_ceremony_transaction_id].compact.one? ? 1 : 0
+    [authorization_transaction_id, step_up_ceremony_transaction_id].compact.one? ? 1 : 0
   end
 
   def parent_kind
-    return :sign_in_flow if sign_in_flow_id.present?
     return :authorization_transaction if authorization_transaction_id.present?
     return :step_up_ceremony_transaction if step_up_ceremony_transaction_id.present?
 
@@ -228,6 +227,18 @@ module AuthAdmissionBinding
     return if parent_count == 1
 
     errors.add(:base, "exactly one admission parent is required")
+  end
+
+  def validate_entry_intent
+    allowed =
+      case purpose
+      when *PARENT_PURPOSES.fetch(:authorization_transaction) then %w(sign_in sign_up)
+      when *PARENT_PURPOSES.fetch(:step_up_ceremony_transaction) then ["not_applicable"]
+      else []
+      end
+    return if allowed.include?(entry_intent)
+
+    errors.add(:entry_intent, "does not match admission purpose")
   end
 
   def validate_purpose_parent

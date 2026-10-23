@@ -10,7 +10,7 @@ class ActorTest < ActiveSupport::TestCase
   teardown { Actor.reset }
 
   test "stores actor state in current attributes" do
-    user = Client.new(id: 123)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 123)
     Actor.actor = user
     Actor.actor_type = :client
 
@@ -88,7 +88,7 @@ class ActorTest < ActiveSupport::TestCase
   end
 
   test "clear empties current actor context" do
-    Actor.actor = Client.new(id: 123)
+    Actor.actor = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 123)
     Actor.actor_type = :client
     Actor.install_context!(
       authn: Actor::Authentication.new(
@@ -213,7 +213,7 @@ class ActorTest < ActiveSupport::TestCase
   end
 
   test "subject and actor are the same compatibility slot" do
-    user = Client.new(id: 7)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 7)
     Actor.actor = user
 
     assert_equal user, Actor.subject
@@ -221,7 +221,7 @@ class ActorTest < ActiveSupport::TestCase
   end
 
   test "compatibility setters update the installed context" do
-    user = Client.new(id: 8)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 8)
 
     Actor.subject = user
     Actor.authn = Actor::Authentication.new(login_public_id: "session-8")

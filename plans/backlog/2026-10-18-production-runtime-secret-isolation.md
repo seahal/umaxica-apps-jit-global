@@ -1,7 +1,10 @@
 # Production Runtime Secret Isolation
 
-Status: backlog. Deferred out of the current cycle by `adr/runtime-secret-isolation-deferred.md`
-(2026-10-18). Nothing here is accepted for implementation yet.
+Status: **per-role design withdrawn (2026-10-23).** The owner decided one credentials set for every
+environment, production included, and one Puma for every FQDN (amendment of
+`adr/runtime-secret-isolation-deferred.md`). What remains of this item is the AWS KMS signing
+direction and the Pending `global` pod co-location decision recorded in that amendment. The text
+below is history.
 
 ## Problem
 

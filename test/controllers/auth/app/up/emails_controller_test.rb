@@ -25,7 +25,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
     https!
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
     binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
@@ -446,7 +446,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "create beside an effective email owns a new candidate without changing the original binding" do
-    user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: user,
       address: "existing_signup@example.com",
@@ -499,7 +499,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "create beside a non-finalized verified signup candidate owns independent evidence" do
-    existing_user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    existing_user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: existing_user,
       address: "completed-signup@example.com",
@@ -586,7 +586,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "create delivers only the independent candidate OTP and preserves an effective contact OTP" do
-    user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: user,
       address: "no_otp_send@example.com",
@@ -616,7 +616,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "fresh sessions cannot distinguish pending and registered email sign-up" do
-    user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing = ClientEmail.create!(
       user: user, raw_address: "app-fresh-session-registered-signup@example.com", confirm_policy: true,
       user_email_status_id: ClientEmailStatus::VERIFIED,
@@ -634,7 +634,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
         browser = open_session
         browser.host!(ENV.fetch("PUBLIC_AUTH_SERVICE_URL"))
         browser.https!
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        issuance = OidcTestEntry.issue!(
           surface: "app", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
         )
         binding = ClientAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
@@ -1003,7 +1003,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
 
   test "new rejects when user is already logged in" do
     # Create a user and log them in
-    user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
 
     # Try to access registration page while logged in (using test header to inject current user)
     get new_auth_app_sign_up_email_url(ri: "jp"),
@@ -1014,7 +1014,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "create rejects when user is already logged in" do
-    user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
 
     assert_no_difference("ClientEmail.count") do
       post auth_app_sign_up_email_url(ri: "jp"),
@@ -1348,120 +1348,6 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
     set_cookie = response.headers["Set-Cookie"].to_s
 
     assert_no_match(/#{Regexp.escape(::AuthenticationClient::ACCESS_COOKIE_KEY.to_s)}=/, set_cookie)
-  end
-
-  test "Auth email signup finalizes its binding and hands verified login evidence to Base without issuing a root" do
-    email = "finalize_app_email_#{SecureRandom.hex(4)}@example.com"
-
-    post auth_app_sign_up_email_url(ri: "jp"),
-         params: {
-           user_email: {
-             raw_address: email,
-             confirm_policy: "1",
-           },
-           "cf-turnstile-response": "test",
-         },
-         headers: default_headers
-    flow_binding = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("fb")
-
-    assert_response :redirect
-    user_email = ClientEmail.order(:created_at).last
-    delivery =
-      (enqueued_jobs + performed_jobs).reverse.find do |entry|
-        next false unless entry.fetch(:job) == OtpNotifierEmailDeliveryJob
-
-        notification = ActiveJob::Arguments.deserialize(entry.fetch(:args)).last
-        notification.fetch(:params).fetch(:public_id) == user_email.public_id
-      end
-    notification = ActiveJob::Arguments.deserialize(delivery.fetch(:args)).last
-    pass_code = OutboundSensitivePayload.decrypt_email_otp(notification.fetch(:params).fetch(:encrypted_hotp_token))
-
-    patch auth_app_sign_up_check_email_otp_url(ri: "jp", fb: flow_binding),
-          params: { user_email: { pass_code: pass_code } },
-          headers: default_headers
-
-    flow = ClientSignUpFlow.find_by!(public_id: SignFlowBindingCodec.decode(flow_binding).flow_public_id)
-    flow_binding = current_sign_up_binding_from_redirect!(
-      SignFlowBindingCodec.decode(flow_binding), flow: flow,
-                                                 path_helper: :auth_app_sign_up_check_email_birthdate_url,
-    )
-
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
-
-    assert_response :ok
-    assert_equal "auth/app/sign/up/checkpoints/show", inertia_component
-    birthdate = inertia_props.fetch("birthdate")
-
-    assert_equal "iso", birthdate.fetch("fields").fetch("format")
-    assert_equal(
-      %w(year month day),
-      birthdate.fetch("fields").fetch("parts").map { |part| part.fetch("part") },
-    )
-    birthdate_path = auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
-
-    assert_equal birthdate_path, birthdate.fetch("action")
-    cancellation_path = auth_app_sign_up_check_email_birthdate_path(ri: "jp", fb: flow_binding)
-
-    assert_equal cancellation_path, inertia_props.fetch("cancellation").fetch("action")
-    # The auth surface carries no header navigation to sign-up/sign-in on any page, so a checkpoint
-    # offers no escape hatch without needing a per-page suppression flag.
-    assert_not inertia_props.fetch("chrome").key?("primary_navigation")
-
-    get auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding), headers: default_headers
-
-    assert_response :ok
-    assert_equal "iso", inertia_props.fetch("birthdate").fetch("fields").fetch("format")
-
-    cycle = current_sign_up_flow(user_email)
-
-    patch auth_app_sign_up_check_email_birthdate_url(ri: "jp", fb: flow_binding),
-          params: {
-            requirement: "birthdate",
-            birthdate: "2000-01-01",
-            checkpoint_version: cycle.reload.checkpoint_version,
-          },
-          headers: default_headers
-
-    assert_response :redirect
-    uri = URI.parse(response.location)
-
-    assert_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), uri.host
-    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
-
-    user = contact_owner_for_test(user_email.reload)
-
-    assert_equal ClientSignUpFlowStatus::COMPLETED, cycle.reload.status_id
-    assert_equal ClientStatus::VERIFIED_WITH_SIGN_UP, user.status_id
-    assert_equal 0, ClientToken.where(user_id: user.id).count
-    assert_predicate user_email, :binding_effective?
-    follow_redirect!
-
-    assert_response :redirect
-    assert_equal auth_app_sign_handoff_path(ri: "jp"), URI.parse(response.location).request_uri
-    follow_redirect!
-
-    assert_response :success
-    form = response.parsed_body.at_css("form")
-    csrf = form.at_css('input[name="authenticity_token"]')["value"]
-    post form["action"],
-         params: { authenticity_token: csrf },
-         headers: { "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin" }
-
-    assert_response :see_other
-    continuation = URI.parse(response.location)
-
-    assert_equal "https", continuation.scheme
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), continuation.host
-    assert_equal URI.parse(base_app_sign_completion_url(ri: "jp")).path, continuation.path
-    query = Rack::Utils.parse_query(continuation.query)
-
-    assert_equal %w(result_ref ri transaction_ref), query.keys.sort
-    parent = ClientSignInFlow.find_by!(public_id: query.fetch("transaction_ref"))
-
-    assert_equal user.id, parent.principal_id
-    assert_equal "email", parent.authentication_method
-    assert_predicate parent, :sign_in_session_issuance_pending?
-    assert_equal 0, ClientToken.where(user_id: user.id).count
   end
 
   test "OTP data is cleared after successful verification" do
@@ -2173,7 +2059,7 @@ class Auth::App::Sign::Up::EmailsControllerTest < ActionDispatch::IntegrationTes
   end
 
   test "existing registered emails show otp page instead of entering cooldown" do
-    user = Client.create!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
     existing_email = ClientEmail.create!(
       user: user,
       address: "registered_cooldown@example.com",
@@ -2356,7 +2242,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -2381,7 +2266,10 @@ class Auth::App::Sign::Up::EmailsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -2642,7 +2530,6 @@ class Auth::App::Sign::Up::EmailsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -2658,7 +2545,10 @@ class Auth::App::Sign::Up::EmailsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

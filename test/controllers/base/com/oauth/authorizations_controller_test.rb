@@ -7,6 +7,8 @@ require "test_helper"
 # and the controller deliberately answers RecordNotFound with a fixed description so a bad
 # result code cannot be used to probe stored data. Both halves are asserted here.
 class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::IntegrationTest
+  include OidcAuthorizationResponseHelper
+
   setup do
     @host = configured_host(:base_corporate)
   end
@@ -18,38 +20,37 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
     assert_equal "invalid_request", response.parsed_body["error"]
   end
 
-  test "a response_type other than code is refused" do
-    get base_com_oauth_authorization_url(host: @host, **authorize_params(response_type: "token")),
-        headers: host_headers(@host)
+  # D-147 N-1: after a valid client and redirect_uri, errors go back to the RP.
+  test "a response_type other than code is returned to the RP as unsupported_response_type" do
+    params = authorize_params(response_type: "token")
+    get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
-    assert_response :bad_request
-    assert_equal "invalid_request", response.parsed_body["error"]
-    assert_equal "response_type must be 'code'", response.parsed_body["error_description"]
+    assert_oidc_error_redirect(
+      error: "unsupported_response_type", redirect_uri: params[:redirect_uri],
+      state: params[:state],
+    )
   end
 
-  test "a missing code challenge is refused" do
+  test "a missing code challenge is returned to the RP as invalid_request" do
     params = authorize_params.except(:code_challenge)
 
     get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
-    assert_response :bad_request
-    assert_equal "code_challenge is required", response.parsed_body["error_description"]
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: params[:state])
   end
 
-  test "a code challenge method other than S256 is refused" do
-    get base_com_oauth_authorization_url(host: @host, **authorize_params(code_challenge_method: "plain")),
-        headers: host_headers(@host)
+  test "a code challenge method other than S256 is returned to the RP as invalid_request" do
+    params = authorize_params(code_challenge_method: "plain")
+    get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
-    assert_response :bad_request
-    assert_equal "code_challenge_method must be 'S256'", response.parsed_body["error_description"]
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: params[:state])
   end
 
-  test "a scope without openid is refused" do
-    get base_com_oauth_authorization_url(host: @host, **authorize_params(scope: "profile")),
-        headers: host_headers(@host)
+  test "a scope without openid is returned to the RP as invalid_request" do
+    params = authorize_params(scope: "profile")
+    get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
-    assert_response :bad_request
-    assert_equal "scope must include openid", response.parsed_body["error_description"]
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: params[:state])
   end
 
   test "an unregistered client is refused without naming what was looked up" do
@@ -101,7 +102,7 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
       response_type: "code",
       client_id: "core-com-jp",
       redirect_uri: OidcClientRegistry.find!("core-com-jp").redirect_uris_by_realm.fetch("visitor").first,
-      code_challenge: "a" * 43,
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       scope: "openid",
       state: SecureRandom.hex(8),

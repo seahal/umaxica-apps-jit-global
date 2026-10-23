@@ -20,7 +20,7 @@ class SessionLimitModelRefusalTest < ActiveSupport::TestCase
       # full. Historical status-103 rows are preserved but do not consume either boundary.
       tokens =
         Array.new(ClientToken::MAX_TOTAL_SESSIONS_PER_USER) do
-          ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
+          ClientToken.create!(authentication_epoch: 0, user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
         end
       tokens.first(ClientToken::MAX_TOTAL_SESSIONS_PER_USER - (ClientToken::MAX_SESSIONS_PER_USER - 1)).each do |token|
         token.device_session.revoke!(reason: "capacity-test")
@@ -73,7 +73,7 @@ class SessionLimitModelRefusalTest < ActiveSupport::TestCase
     ClientToken.where(user_id: @user.id).delete_all
     tokens =
       Array.new(ClientToken::MAX_SESSIONS_PER_USER) do
-        ClientToken.create!(user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
+        ClientToken.create!(authentication_epoch: 0, user: @user, user_token_status_id: ClientTokenStatus::ACTIVE)
       end
     tokens.first.device_session.revoke!(reason: "capacity-test")
 

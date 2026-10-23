@@ -24,7 +24,7 @@ class SignUpPhaseRegressionComTest < ActionDispatch::IntegrationTest
     https!
     TurnstileVerifierStub.challenge_enabled = true
     TurnstileVerifierStub.challenge_response = { "success" => true }
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
     )
     binding = VisitorAuthAdmissionBinding.find_by!(entry_ref: issuance.reference)
@@ -426,11 +426,13 @@ class SignUpPhaseRegressionComTest < ActionDispatch::IntegrationTest
                    "cf-turnstile-response" => "test", }
     flow = VisitorSignUpFlow.order(:created_at).last
     other_flow = VisitorSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow),
       status_id: VisitorSignUpFlowStatus::CONTACT_PENDING, step: "contact", entry_method: "email",
       nonce_digest: VisitorSignUpFlow.digest_nonce("other-nonce"), issued_at: Time.current,
       expires_at: 10.minutes.from_now,
     )
     client_flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact", entry_method: "email",
       nonce_digest: ClientSignUpFlow.digest_nonce("client-nonce"), issued_at: Time.current,
       expires_at: 10.minutes.from_now,

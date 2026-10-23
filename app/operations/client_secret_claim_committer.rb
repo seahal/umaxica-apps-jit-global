@@ -54,7 +54,7 @@ class ClientSecretClaimCommitter
       call!(client: client, secret: secret, flow: flow, ceremony: ceremony, authorization_transaction: transaction)
     end
 
-    def call!(client:, secret:, flow:, ceremony:, authorization_transaction: nil)
+    def call!(client:, secret:, flow:, ceremony:, authorization_transaction:)
       verify_claim_request!(flow, ceremony, authorization_transaction)
 
       credential = ClientSecretLookupQuery.call(client: client, secret: secret)
@@ -68,7 +68,7 @@ class ClientSecretClaimCommitter
         ClientSignInFlow.transaction do
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
-              authorization_transaction&.lock!
+              authorization_transaction.lock!
               flow.lock!
               ceremony.lock!
               credential.lock!
@@ -104,19 +104,14 @@ class ClientSecretClaimCommitter
           ceremony.is_a?(ClientAuthCeremonySession) && ceremony.persisted?
         raise ArgumentError, "Secret claim requires durable app flow and browser ceremony"
       end
-      return unless transaction
       return if transaction.is_a?(ClientOidcAuthorizationTransaction) && transaction.persisted?
 
       raise ArgumentError, "Secret authorization transaction must be durable app OIDC"
     end
 
     def claim_admission_matches?(actor, credential, flow, ceremony, transaction, now)
-      if transaction
-        transaction.secret_sign_in_flow_id == flow.id &&
-          oidc_binding_admitted?(actor, credential, transaction, ceremony, now)
-      else
-        ceremony.admission_purpose == "local_sign_in" && ceremony.local_sign_in_flow_ref == flow.public_id
-      end
+      transaction.secret_sign_in_flow_id == flow.id &&
+        oidc_binding_admitted?(actor, credential, transaction, ceremony, now)
     end
 
     def oidc_binding_admitted?(actor, credential, transaction, ceremony, now)

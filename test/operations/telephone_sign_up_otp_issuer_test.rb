@@ -21,7 +21,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
            :visitor_id, VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+120255501#{SecureRandom.random_number(10_000).to_s.rjust(4, "0")}",
         :confirm_policy => true,
@@ -29,6 +29,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "telephone-signup-collision-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -69,7 +70,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
            :visitor_id, VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+12025550#{SecureRandom.random_number(100_000).to_s.rjust(5, "0")}",
         :confirm_policy => true,
@@ -77,6 +78,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "telephone-signup-grant-collision-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -121,13 +123,14 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       connection = Umaxica::Valkey::Connection.new(namespace: namespace)
       budget = TelephoneOtpVerificationFailureBudget.new(connection: connection)
       [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each_with_index do |offset, index|
-        owner = owner_model.create!(status_id: status)
+        owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         telephone = telephone_model.create!(
           owner_key => owner.id, :raw_number => "+1202555017#{index}", :confirm_policy => true,
         )
         now = flow_model.database_now
         nonce = "retained-receipt-browser"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -178,13 +181,14 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
         when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+12025550151", :confirm_policy => true, :otp_attempts_count => 2,
       )
       now = flow_model.database_now
       nonce = "outer-lock-fault-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -218,13 +222,14 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
         when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+12025550152", :confirm_policy => true, :otp_attempts_count => 2,
       )
       now = flow_model.database_now
       nonce = "newer-failure-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -259,13 +264,14 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
         end
       [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each do |offset|
-        owner = owner_model.create!(status_id: status)
+        owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         telephone = telephone_model.create!(
           owner_key => owner.id, :raw_number => "+12025550147", :confirm_policy => true, :otp_attempts_count => 4,
         )
         now = flow_model.database_now
         nonce = "cooldown-boundary-browser"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -297,13 +303,14 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       issued = nil
       telephone = nil
       2.times do |index|
-        owner = owner_model.create!(status_id: status)
+        owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
         telephone = telephone_model.create!(
           owner_key => owner.id, :raw_number => "+12025550149", :confirm_policy => true,
         )
         now = flow_model.database_now
         nonce = "shared-budget-browser-#{index}"
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -344,13 +351,14 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction,
            :visitor_id, VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+12025550148", :confirm_policy => true, :otp_attempts_count => 2,
       )
       now = flow_model.database_now
       nonce = "source-reset-fault-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -394,7 +402,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
         when "app" then [Client, ClientTelephone, ClientSignUpFlow, :user_id, ClientStatus::UNVERIFIED_WITH_SIGN_UP]
         when "com" then [Visitor, VisitorTelephone, VisitorSignUpFlow, :visitor_id, VisitorStatus::ACTIVE]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+12025550141",
         :confirm_policy => true, :otp_attempts_count => 1,
@@ -402,6 +410,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "signup-delivery-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -442,7 +451,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction, :visitor_id,
            VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+12025550142",
         :confirm_policy => true, :otp_attempts_count => 1,
@@ -450,6 +459,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "owned-signup-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -529,7 +539,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
           [Visitor, VisitorTelephone, VisitorSignUpFlow, VisitorTelephoneCeremonyTransaction, :visitor_id,
            VisitorStatus::ACTIVE,]
         end
-      owner = owner_model.create!(status_id: status)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status)
       telephone = telephone_model.create!(
         owner_key => owner.id, :raw_number => "+12025550143",
         :confirm_policy => true, :otp_attempts_count => 1,
@@ -537,6 +547,7 @@ class TelephoneSignUpOtpIssuerTest < ActiveSupport::TestCase
       now = flow_model.database_now
       nonce = "signup-verify-browser"
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,

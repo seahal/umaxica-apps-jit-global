@@ -603,6 +603,9 @@ class SignFlowTest < ActiveSupport::TestCase
       now = model.database_now
       attributes = { step: "start" }
       attributes[:entry_method] = "email" unless model == OperatorSignUpFlow
+      if [ClientSignUpFlow, VisitorSignUpFlow].include?(model)
+        attributes[:auth_admission_binding] = SignUpAdmissionTestFactory.binding_for!(model)
+      end
       flow = model.create!(
         **attributes,
         nonce_digest: model.digest_nonce(SecureRandom.hex(16)),
@@ -664,8 +667,8 @@ class SignFlowTest < ActiveSupport::TestCase
   end
 
   test "client sign-in cycle can belong to a client token" do
-    user = Client.create!(public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: user)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: user)
 
     cycle = ClientSignInFlow.create!(
       cycle_attrs(ClientSignInFlow).merge(principal_id: user.id, token: token),
@@ -712,6 +715,9 @@ class SignFlowTest < ActiveSupport::TestCase
         }
       end
     attrs[:entry_method] = default_sign_up_entry_method(cycle_class) if cycle_class < SignUpFlowTicket
+    if [ClientSignUpFlow, VisitorSignUpFlow].include?(cycle_class)
+      attrs[:auth_admission_binding] = SignUpAdmissionTestFactory.binding_for!(cycle_class)
+    end
     attrs
   end
 

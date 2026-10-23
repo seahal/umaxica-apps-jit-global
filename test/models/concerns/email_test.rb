@@ -9,8 +9,8 @@ class EmailTest < ActiveSupport::TestCase
 
   setup do
     @user = clients(:none_user)
-    @otp_actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    @otp_token = ClientToken.create!(user: @otp_actor)
+    @otp_actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    @otp_token = ClientToken.create!(authentication_epoch: 0, user: @otp_actor)
     @otp_token.rotate_refresh_token!
     @otp_email = ClientEmail.create!(user: @otp_actor, raw_address: "ceremony-model@example.test", confirm_policy: true)
     @otp_browser_nonce = SecureRandom.urlsafe_base64(32)

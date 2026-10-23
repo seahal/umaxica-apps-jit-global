@@ -518,6 +518,7 @@ class SignUpPoliciesTest < ActiveSupport::TestCase
 
   def cycle_attrs(cycle_class)
     {
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(cycle_class),
       principal_id: nil,
       status_id: cycle_class::STATUS_IDS.first,
       step: cycle_class::STEPS.first,

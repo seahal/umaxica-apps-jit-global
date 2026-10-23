@@ -55,6 +55,7 @@ Rails.application.configure do
     valkey.rate_limit.namespace,
     ENV["RATE_LIMIT_NAMESPACE_SUFFIX"].presence,
   ].compact.join(":")
+  config.x.rate_limit.namespace = rate_limit_namespace
   config.x.rate_limit.store =
     ActiveSupport::Cache::RedisCacheStore.new(
       url: valkey.rate_limit.url,
@@ -323,6 +324,9 @@ Rails.application.configure do
   config.hosts.concat(
     (boot_config_hosts + localhost_tunnel_hosts + env_hosts).compact_blank.uniq,
   )
+
+  # Local development container entry points, including the published host port 3001.
+  config.hosts.concat(%w(visa.app.localhost visa.com.localhost visa.org.localhost))
 
   ## file watcher
   config.file_watcher = ActiveSupport::FileUpdateChecker

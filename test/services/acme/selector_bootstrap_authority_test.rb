@@ -167,7 +167,10 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
 
   test "rejects an ineligible new account after its authority family has cut over" do
     ClientPersonaAuthorityCutover.create!(id: ClientPersonaAuthorityCutover::CUTOVER_ID)
-    user = Client.create!(status_id: ClientStatus::INACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::INACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
 
     assert_raises(BaseSelectorBootstrapAuthority::PostCutoverBootstrapRejected) do
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
@@ -180,9 +183,9 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
 
   def ensure_reference_rows!
     [
-      ClientStatus, ClientVisibility, ClientMfaLevel, ClientMfaStatus,
-      VisitorStatus, VisitorVisibility, VisitorMfaLevel, VisitorMfaStatus,
-      OperatorStatus, OperatorVisibility, OperatorMfaLevel, OperatorMfaStatus,
+      ClientStatus, ClientVisibility, ClientMfaStatus,
+      VisitorStatus, VisitorVisibility, VisitorMfaStatus,
+      OperatorStatus, OperatorVisibility, OperatorMfaStatus,
       ClientIdentityState, VisitorIdentityState, OperatorIdentityState,
       PersonaMembershipKind, PersonaMembershipState,
       IndividualMembershipKind, IndividualMembershipState,
@@ -193,14 +196,20 @@ class BaseSelectorBootstrapAuthorityTest < ActiveSupport::TestCase
   end
 
   def create_client!
-    Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
   end
 
   def create_visitor!
-    Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
   end
 
   def create_operator!
-    Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::STAFF,
+    )
   end
 end

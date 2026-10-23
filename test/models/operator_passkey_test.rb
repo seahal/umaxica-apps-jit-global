@@ -42,7 +42,7 @@ require "test_helper"
 
 class OperatorPasskeyTest < ActiveSupport::TestCase
   test "physical deletion removes the Passkey from the owner count" do
-    actor = Operator.create!
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     passkeys =
       3.times.map do |index|
         PasskeyRegistrationOperation.call!(
@@ -62,7 +62,7 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
   end
 
   test "validation accepts the tenth Passkey and refuses the eleventh for one staff" do
-    owner = Operator.create!
+    owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     9.times do |index|
       PasskeyRegistrationOperation.call!(
         actor: owner, passkey_class: OperatorPasskey,
@@ -153,7 +153,7 @@ class OperatorPasskeyTest < ActiveSupport::TestCase
   end
 
   test "enforces maximum passkeys per staff" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     OperatorPasskey::MAX_PASSKEYS_PER_STAFF.times do |i|
       PasskeyRegistrationOperation.call!(
         actor: staff, passkey_class: OperatorPasskey,

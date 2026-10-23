@@ -8,7 +8,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
   setup do
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
-    @client = Client.create!(status_id: ClientStatus::ACTIVE)
+    @client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     @identifier = "secret-bound-#{SecureRandom.hex(4)}@example.com"
     @client.client_emails.create!(
       address: @identifier, user_email_status_id: ClientEmailStatus::VERIFIED,
@@ -40,9 +40,9 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
         "Origin" => "https://#{host}",
         "Sec-Fetch-Site" => "same-origin",
       }
-      admission, phase_binding = open_admitted_secret_page(headers)
+      admission, = open_admitted_secret_page(headers)
       page = JSON.parse(response.parsed_body.at_css("script[data-page='app']").text)
-      payload = { "identifier" => @identifier, "cf-turnstile-response" => "synthetic", "fb" => phase_binding }
+      payload = { "identifier" => @identifier, "cf-turnstile-response" => "synthetic" }
       payload[:secret] = value unless value == :missing
       before = ClientSecretCredential.order(:id).pluck(:id, :claimed_at, :consumed_at, :revoked_at, :discard_at)
       token_count = ClientToken.count
@@ -59,10 +59,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
                    ClientSecretCredential.order(:id).pluck(:id, :claimed_at, :consumed_at, :revoked_at, :discard_at)
       assert_equal token_count, ClientToken.count
       assert_equal outbox_count, ClientSecretAuditOutbox.count
-      flow = admission.transaction.reload
-
-      assert_nil flow.principal_id
-      assert_nil flow.token_id
+      assert_nil admission.transaction.reload.secret_sign_in_flow_id
     end
   end
 
@@ -83,7 +80,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     query = Rack::Utils.parse_nested_query(back_uri.query)
 
     assert_equal "jp", query.fetch("ri")
-    assert_equal "app", SignInFlowBindingCodec.decode(query.fetch("fb")).surface
+    assert_nil query["fb"]
   end
 
   test "known and unknown identifiers reach the same limit across request addresses" do
@@ -93,7 +90,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     headers = { "REMOTE_ADDR" => "192.0.2.80",
                 "Origin" => "https://#{host}",
                 "Sec-Fetch-Site" => "same-origin", }
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: "n" * 43, base_token: nil,
     )
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
@@ -112,10 +109,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
          params: { entry_ref: admission.reference, authenticity_token: csrf }, headers: headers
 
     assert_response :see_other
-    flow = ClientSignInFlow.find_by!(
-      public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-    )
-    phase_binding = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "PRIMARY_PENDING")
+    phase_binding = nil
     get new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers
     csrf = inertia_props.fetch("authenticity_token")
 
@@ -151,8 +145,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
 
     assert_equal [422, 422, 422, 422, 422, 429, 429], results.first
     assert_equal results.first, results.last
-    assert_nil flow.reload.principal_id
-    assert_nil flow.token_id
+    assert_nil admission.transaction.reload.secret_sign_in_flow_id
   end
 
   test "legacy Secret GET remains absent while canonical actions require browser admission" do
@@ -182,7 +175,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
   # Admits a Base local sign-in entry into this browser and opens the Secret page through the
   # canonical continuation, returning the admission and the PRIMARY_PENDING phase binding.
   def open_admitted_secret_page(headers)
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -210,12 +203,7 @@ class Auth::App::Sign::In::SecretsControllerTest < ActionDispatch::IntegrationTe
     )
 
     assert_response :see_other
-    phase_binding = SignInFlowBindingCodec.encode(
-      flow: ClientSignInFlow.find_by!(
-        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-      ),
-      surface: "app", phase: "PRIMARY_PENDING",
-    )
+    phase_binding = nil
     get(new_auth_app_sign_in_secret_path(ri: "jp", fb: phase_binding), headers: headers)
     [admission, phase_binding]
   end

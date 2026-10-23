@@ -13,14 +13,17 @@ class PasskeyMutationConcurrencyTest < ActiveSupport::TestCase
 
   %i(rename removal).each do |operation|
     test "#{operation} waits for device revocation and refuses the stale authority after the lock is released" do
-      actor = Client.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
+      actor = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+      )
       key = actor.client_passkeys.create!(
         webauthn_id: SecureRandom.uuid, public_key: "target-key", description: "Original", uv_verified_at: Time.current,
       )
       survivor = actor.client_passkeys.create!(
         webauthn_id: SecureRandom.uuid, public_key: "survivor-key", uv_verified_at: Time.current,
       )
-      token = ClientToken.create!(user: actor)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       token.update!(
         last_step_up_at: Time.current, last_step_up_scope: "settings_passkey", last_step_up_method: "passkey",
         last_step_up_credential_ref: key.public_id, last_step_up_session_public_id: token.public_id,

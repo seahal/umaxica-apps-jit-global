@@ -14,12 +14,14 @@ class BrowserRpParentStateFailClosedTest < ActionDispatch::IntegrationTest
     https!
     @user = clients(:one)
     @root_token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     @client = OidcClientRegistry.find!("warp-app-jp")
     @rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @root_token,
       oidc_client_id: @client.client_id,
       oidc_scope: "openid profile",

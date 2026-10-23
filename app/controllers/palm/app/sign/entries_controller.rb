@@ -14,7 +14,7 @@ module Palm
         before_action :reject_authenticated_rp_start!
         prepend_before_action :apply_sign_entry_cache_policy!
         ensure_fqdn_gate_first!
-        helper_method :neutral_sign_form_url
+        helper_method :neutral_sign_form_url, :neutral_sign_target_link_uri
 
         private
 

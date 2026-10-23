@@ -21,6 +21,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
     host! host
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -100,6 +101,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -222,6 +224,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
     host! host
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
@@ -301,6 +304,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -423,6 +427,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
     host! host
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -469,6 +474,7 @@ class DeliveredOtpAutocompleteTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

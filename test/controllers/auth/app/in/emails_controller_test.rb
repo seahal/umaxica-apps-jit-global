@@ -14,7 +14,10 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     pending_signup: ClientEmailStatus::UNVERIFIED_WITH_SIGN_UP,
     verified_without_binding: ClientEmailStatus::VERIFIED, }.each do |label, status|
     test "unbound #{label} email cannot authenticate or dispatch login OTP" do
-      owner = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+      owner = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        birthdate: "2000-01-01",
+      )
       ClientEmailStatus.find_or_create_by!(id: status)
       email = ClientEmail.create!(
         user: owner, address: "unbound-#{label}-app@example.test", confirm_policy: "1",
@@ -170,7 +173,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     # These are Auth endpoint tests. Base issuance and browser binding are exercised separately
     # in local_authentication_boundary_test; this admission grants only the credential ceremony.
-    @local_admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    @local_admission = OidcTestEntry.issue!(
       surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -202,12 +205,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_withheld("expected this browser's active Auth continuity") { @current_auth_ceremony.present? }
     assert_withheld("expected confirmed admission before issuing a code") { @current_auth_ceremony.admitted? }
-    assert_equal @local_admission.transaction.public_id, @current_auth_ceremony.local_sign_in_flow_ref
+    assert_equal @local_admission.transaction.transaction_id, @current_auth_ceremony.authorization_transaction_ref
 
-    flow = ClientSignInFlow.find_by!(public_id: @current_auth_ceremony.local_sign_in_flow_ref)
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: flow, surface: "app", phase: "PRIMARY_PENDING",
-    )
+    @primary_sign_in_binding = nil
   end
 
   teardown do
@@ -262,7 +262,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     missing_session = open_session
     browser_bindings = {}
     [existing_session, missing_session].each do |browser|
-      admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission = OidcTestEntry.issue!(
         surface: "app",
         intent: "sign_in",
         base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -287,14 +287,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       )
 
       assert_equal 303, browser.response.status
-      browser_flow = ClientSignInFlow.find_by!(
-        public_id: ClientAuthCeremonySession.find(
-          binding.reload.admitted_auth_ceremony_session_id,
-        ).local_sign_in_flow_ref,
-      )
-      browser_bindings[browser] = SignInFlowBindingCodec.encode(
-        flow: browser_flow, surface: "app", phase: "PRIMARY_PENDING",
-      )
+      browser_bindings[browser] = nil
     end
     existing_session.post(
       auth_app_sign_in_email_url(ri: "jp", fb: browser_bindings.fetch(existing_session)),
@@ -314,12 +307,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     assert_equal URI.parse(edit_auth_app_sign_in_email_url(ri: "jp")).path, existing_location.path
     assert_equal existing_location.path, missing_location.path
-    assert_equal "app", SignInFlowBindingCodec.decode(
-      Rack::Utils.parse_nested_query(existing_location.query).fetch("fb"),
-    ).surface
-    assert_equal "app", SignInFlowBindingCodec.decode(
-      Rack::Utils.parse_nested_query(missing_location.query).fetch("fb"),
-    ).surface
+    assert_equal existing_location.query, missing_location.query
     assert_equal existing_session.response.body, missing_session.response.body
 
     if existing_session.flash[:notice].nil?
@@ -387,7 +375,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     # admitted browser and parent, not a reopened checkpoint transaction.
     refused_browser = open_session
     refused_browser.host!(@host)
-    refused_admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    refused_admission = OidcTestEntry.issue!(
       surface: "app", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     refused_browser.get("/sign/in", params: { entry_ref: refused_admission.reference, ri: "jp" })
@@ -412,14 +400,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     )
 
     assert_equal 303, refused_browser.response.status
-    refused_flow = ClientSignInFlow.find_by!(
-      public_id: ClientAuthCeremonySession.find(
-        binding.reload.admitted_auth_ceremony_session_id,
-      ).local_sign_in_flow_ref,
-    )
-    refused_binding = SignInFlowBindingCodec.encode(
-      flow: refused_flow, surface: "app", phase: "PRIMARY_PENDING",
-    )
+    refused_binding = nil
     travel EmailOtpPolicy::SEND_COOLDOWN + 1.second do
       refused_browser.post(
         auth_app_sign_in_email_url(ri: "jp", fb: refused_binding),
@@ -434,7 +415,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
       assert_withheld("expected the second browser's active continuity") { refused_ceremony.present? }
       assert_withheld("expected confirmed admission for the second flow") { refused_ceremony.admitted? }
-      assert_equal refused_admission.transaction.public_id, refused_ceremony.local_sign_in_flow_ref
+      assert_equal refused_admission.transaction.transaction_id, refused_ceremony.authorization_transaction_ref
       code = refused_ceremony.issue_email_otp!(contact:, destination: contact.address)
       wrong = (code == "000000") ? "111111" : "000000"
       start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -503,9 +484,102 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     cycle = ClientSignInFlow.where(principal_id: user.id).recent_first.first
 
     assert_equal ClientSignInFlowState::CHECKPOINT_PENDING, cycle.state_id
-    assert_equal @local_admission.transaction.public_id, cycle.public_id
-    assert_nil session.dig(:app_sign_in_flow_locator, "public_id")
+    assert_equal cycle.public_id, session.dig(:app_sign_in_flow_locator, "public_id")
     assert_nil cycle.token_id
+  end
+
+  test "a second update in the same ceremony with a different code after success records no second evidence" do
+    user = clients(:one)
+    test_email = user.client_emails.create!(address: "retained_#{SecureRandom.hex(4)}@example.com")
+    test_email.finalize_binding!
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: { :user_email => { address: test_email.address }, "cf-turnstile-response" => "t" },
+         headers: { "Host" => @host }
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { "user_email" => { "pass_code" => valid_pass_code }, "cf-turnstile-response" => "t" },
+          headers: { "Host" => @host }
+
+    assert_response :found
+    cycle = ClientSignInFlow.where(principal_id: user.id).recent_first.first
+    state_after_first = [cycle.reload.state_id, cycle.updated_at]
+    wrong_code = valid_pass_code.to_s.tr("0123456789", "1234567890")
+
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { "user_email" => { "pass_code" => wrong_code }, "cf-turnstile-response" => "t" },
+          headers: { "Host" => @host }
+
+    # ADR 2026-10-11 B: a consumed OTP result is never accepted again; a different code must not
+    # advance or re-record anything (D-89 case 1).
+    assert_not_equal 302, response.status, "a different code after success was accepted (#{response.status})"
+    assert_equal state_after_first, [cycle.reload.state_id, cycle.updated_at]
+  end
+
+  test "a code issued to one admitted ceremony is refused when submitted from another ceremony" do
+    user = clients(:one)
+    test_email = user.client_emails.create!(address: "cross_#{SecureRandom.hex(4)}@example.com")
+    test_email.finalize_binding!
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: { :user_email => { address: test_email.address }, "cf-turnstile-response" => "t" },
+         headers: { "Host" => @host }
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
+
+    other = open_session
+    other.host!(@host)
+    admission = OidcTestEntry.issue!(
+      surface: "app", intent: "sign_in", base_browser_nonce: "m" * 43, base_token: nil,
+    )
+    other.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference))
+    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    other.post("/ceremony_bindings", params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" })
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    binding.reload.confirm_base!(base_token: nil, browser_digest: binding.base_browser_digest)
+    other.get(auth_app_sign_in_url(ri: "jp", entry_ref: admission.reference))
+    csrf = other.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
+    other.post(auth_app_sign_in_url(ri: "jp"), params: { entry_ref: admission.reference, authenticity_token: csrf })
+    other_binding = nil
+    other_ceremony = ClientAuthCeremonySession.find(binding.reload.admitted_auth_ceremony_session_id)
+    other.post(
+      auth_app_sign_in_email_url(ri: "jp", fb: other_binding),
+      params: { :user_email => { address: test_email.address }, "cf-turnstile-response" => "t" },
+    )
+
+    other.patch(
+      auth_app_sign_in_email_url(ri: "jp", fb: other_binding),
+      params: { "user_email" => { "pass_code" => valid_pass_code }, "cf-turnstile-response" => "t" },
+    )
+
+    # ADR 2026-10-11 A: an OTP is accepted only by its originating ceremony (D-89 case 2).
+    assert_not_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path,
+                     URI.parse(other.response.location.to_s).path, "another ceremony accepted the code"
+    assert_not_predicate other_ceremony.reload, :authentication_evidence_recorded?
+  end
+
+  test "resubmitting the same correct code after success records no second authentication event" do
+    user = clients(:one)
+    test_email = user.client_emails.create!(address: "repeat_#{SecureRandom.hex(4)}@example.com")
+    test_email.finalize_binding!
+    post auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+         params: { :user_email => { address: test_email.address }, "cf-turnstile-response" => "t" },
+         headers: { "Host" => @host }
+    valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { "user_email" => { "pass_code" => valid_pass_code }, "cf-turnstile-response" => "t" },
+          headers: { "Host" => @host }
+
+    assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location.to_s).path
+    first_event = [@current_auth_ceremony.reload.authentication_method, @current_auth_ceremony.authentication_event_at]
+
+    patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
+          params: { "user_email" => { "pass_code" => valid_pass_code }, "cf-turnstile-response" => "t" },
+          headers: { "Host" => @host }
+
+    # ADR 2026-10-11 B / R23-INV-4: a lost response after commit yields no new authentication
+    # result; the sequential form of D-89 case 3 (the two-connection form is not built yet).
+    assert_equal first_event,
+                 [@current_auth_ceremony.reload.authentication_method, @current_auth_ceremony.authentication_event_at]
+    assert_not_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location.to_s).path,
+                     "the repeated code was accepted again"
   end
 
   test "patch with a correct otp and missing or invalid Turnstile does not authenticate" do
@@ -646,11 +720,15 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   # The retired restricted placeholder no longer refuses the whole account: the address is
   # verified as usual, and the limit is decided when the session would be committed.
   test "post create proceeds to verification even when a leftover restricted session exists" do
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     test_email = user.client_emails.create!(
       address: "session_limit_#{SecureRandom.hex(4)}@example.com",
     ).tap(&:finalize_binding!)
     ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_status_id: ClientTokenStatus::RESTRICTED,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -787,12 +865,12 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
       end
 
     assert_empty auth_cookie_lines
-    assert_equal "email", @local_admission.transaction.reload.authentication_method
+    assert_equal "email", @current_auth_ceremony.reload.authentication_method
   end
 
   test "email sign-in redirects to MFA challenge when MFA is enabled" do
     user = clients(:one)
-    user.update!(mfa_level_enabled: true)
+    user.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     test_email = user.client_emails.create!(
       address: "mfa_email_login_#{SecureRandom.hex(4)}@example.com",
     ).tap(&:finalize_binding!)
@@ -997,9 +1075,9 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
             headers: { "Host" => @host }
     end
 
-    assert_equal user.id, @local_admission.transaction.reload.principal_id
-    assert_equal "email", @local_admission.transaction.authentication_method
-    assert_not_nil @local_admission.transaction.authentication_event_at
+    assert_equal user.id, ClientSignInFlow.where(principal_id: user.id).recent_first.first.principal_id
+    assert_equal "email", @current_auth_ceremony.reload.authentication_method
+    assert_not_nil @current_auth_ceremony.authentication_event_at
   end
 
   test "invalid OTP code returns error message" do
@@ -1094,10 +1172,8 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     location = URI.parse(response.location)
 
     assert_equal URI.parse(edit_auth_app_sign_in_email_path(ri: "jp")).path, location.path
-    binding = SignInFlowBindingCodec.decode(Rack::Utils.parse_nested_query(location.query).fetch("fb"))
-
-    assert_equal "app", binding.surface
-    assert_equal "PRIMARY_PENDING", binding.phase
+    # An OIDC-parent primary phase has no sign-in flow yet, so no phase binding is issued.
+    assert_nil Rack::Utils.parse_nested_query(location.query.to_s)["fb"]
   end
 
   test "redirects to encoded URL after successful login when pt parameter is provided" do
@@ -1250,7 +1326,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal 0, restricted.count
 
     assert_nil session[SessionLimitGate::GATE_SESSION_KEY]
-    assert_nil @local_admission.transaction.reload.token_id
+    assert_nil ClientSignInFlow.where(principal_id: user.id).recent_first.first.token_id
   end
 
   test "email login at the limit beside a leftover restricted session waits without issuing anything" do
@@ -1274,7 +1350,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
 
     valid_pass_code = @current_auth_ceremony.issue_email_otp!(contact: test_email, destination: test_email.address)
 
-    ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::RESTRICTED)
+    ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::RESTRICTED)
 
     patch auth_app_sign_in_email_url(ri: "jp", fb: @primary_sign_in_binding),
           params: { user_email: { pass_code: valid_pass_code } },
@@ -1283,7 +1359,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_response :redirect
     assert_equal "/sign/in/check", URI.parse(response.location).path
     assert_equal 1, ClientToken.where(user_id: user.id, user_token_status_id: ClientTokenStatus::RESTRICTED).count
-    assert_predicate @local_admission.transaction.reload, :sign_in_checkpoint_pending?
+    assert_predicate ClientSignInFlow.where(principal_id: user.id).recent_first.first, :sign_in_checkpoint_pending?
   end
 
   test "email verification JSON at the session limit records evidence and leaves root capacity evaluation to Base" do
@@ -1320,7 +1396,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
     assert_equal "authentication_evidence_recorded", json["status"]
     assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(json.fetch("redirect_url")).path
     assert_equal root_ids, ClientToken.where(user_id: user.id).order(:id).pluck(:id)
-    flow = ClientSignInFlow.find_by!(public_id: @local_admission.transaction.public_id)
+    flow = ClientSignInFlow.where(principal_id: user.id).recent_first.first
 
     assert_equal ClientSignInFlowState::CHECKPOINT_PENDING, flow.state_id
     assert_nil flow.token_id
@@ -1424,7 +1500,7 @@ class Auth::App::Sign::In::EmailsControllerTest < ActionDispatch::IntegrationTes
   private
 
   def create_rotated_active_user_session(user, rotations:)
-    token = ClientToken.create!(user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
     refresh = token.rotate_refresh_token!
 
     rotations.times do
@@ -1471,7 +1547,6 @@ class Auth::App::Sign::In::EmailsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1496,7 +1571,10 @@ class Auth::App::Sign::In::EmailsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -1747,7 +1825,6 @@ class Auth::App::Sign::In::EmailsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -1763,7 +1840,10 @@ class Auth::App::Sign::In::EmailsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

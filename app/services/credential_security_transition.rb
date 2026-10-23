@@ -4,6 +4,8 @@
 class CredentialSecurityTransition
   REASONS = %i(
     mfa_level_changed
+    security_mode_advanced
+    security_mode_normal
     mfa_disabled
     mfa_reset
     password_changed
@@ -87,9 +89,9 @@ class CredentialSecurityTransition
       end
     flow_model.connection_class_for_self.connected_to(role: :writing) do
       flow_model.transaction do
-        references = ceremony_model.where(admission_purpose: %w(local_sign_in local_sign_up))
-          .where.not(local_sign_in_flow_ref: nil).select(:local_sign_in_flow_ref)
-        flows = flow_model.where(principal_id: actor.id, public_id: references, base_finalized_at: nil)
+        # Every unfinished sign-in of this actor ends, whichever OIDC browser ceremony carries it: an
+        # MFA-phase flow is bound to the actor before its authorization transaction names one.
+        flows = flow_model.where(principal_id: actor.id, base_finalized_at: nil)
           .where.not(state_id: flow_model.state_ids_for("COMPLETED", "FAILED", "HALTED"))
         flows.lock.find_each do |flow|
           now = flow_model.database_now
@@ -99,13 +101,6 @@ class CredentialSecurityTransition
             else
               flow.halt_sign_in!
             end
-          end
-          # Expiry is also a refusal: dependent authority must still be revoked.
-          if flow.result_digest
-            flow.update!(result_expires_at: [flow.result_expires_at, now].min)
-          end
-          ceremony_model.where(local_sign_in_flow_ref: flow.public_id).lock.find_each do |ceremony|
-            ceremony.revoke!(now: ceremony_model.database_now) unless ceremony.terminal?
           end
         end
         expire_oidc_authentication!(authorization_model, ceremony_model)

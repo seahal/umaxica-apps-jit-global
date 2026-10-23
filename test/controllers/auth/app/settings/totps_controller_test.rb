@@ -26,7 +26,7 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
       user_email_status_id: ClientEmailStatus::VERIFIED,
     )
 
-    @token = ClientToken.create!(user_id: @user.id, root_login_established_at: Time.current)
+    @token = ClientToken.create!(authentication_epoch: 0, user_id: @user.id, root_login_established_at: Time.current)
     @token.rotate_refresh_token!
     access_token = AuthenticationToken.encode(
       @user,
@@ -122,12 +122,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted GET new starts no candidate and preserves the deadline" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_000, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_000, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -216,12 +216,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted enrollment POST and redisplay retain the same encrypted candidate" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_001, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_001, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -308,12 +308,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "canceling admission requires a new Base permission and a new candidate" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_002, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_002, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -456,12 +456,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "a canceled candidate cannot confirm a replacement Base permission" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_003, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_003, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -603,12 +603,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "cancelled admission refuses confirmation and retains no Auth root credentials" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_004, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_004, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -719,12 +719,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted TOTP page uses scoped actions and no store QR presentation" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_005, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_005, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -803,12 +803,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted GET displays the two slot limit after a competing registration" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_006, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_006, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -895,12 +895,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted enrollment POST refuses the two slot limit after a competing registration" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_007, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_007, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -981,12 +981,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted initial registration is available without Secret credentials" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_008, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_008, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1059,12 +1059,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted TOTP registration creates no Secret credentials" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_009, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_009, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1167,12 +1167,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted valid first code creates a credential only at Base finalization" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_010, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_010, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1273,12 +1273,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "Base finalization preserves the admitted TOTP title and first accepted window" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_011, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_011, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1387,12 +1387,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted first code accepts the existing space separated paste format" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_012, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_012, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1494,12 +1494,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted incorrect first code preserves the candidate and records one failure" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_013, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_013, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1588,12 +1588,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "admitted empty first code returns localized failure without confirming the candidate" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_014, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_014, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1678,12 +1678,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "Turnstile refusal does not verify an admitted correct first code" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_015, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_015, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1776,12 +1776,12 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   test "first TOTP registration uses explicit bootstrap without granting step up freshness" do
     reset!
     host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    actor = Client.create!(id: 9_104_000_000_016, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_104_000_000_016, status_id: ClientStatus::ACTIVE)
 
     assert_equal 0, actor.client_passkeys.count
     assert_equal 0, actor.client_totp_credentials.count
     assert_equal 0, actor.client_emails.count
-    token = ClientToken.create!(user: actor, root_login_established_at: Time.current)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, root_login_established_at: Time.current)
     requirement = StepUpRequirement.new(
       scope: "settings_birthdate", purpose: "bootstrap", step_up_required: false,
       phishing_resistant_required: false, user_verification_required: false,
@@ -1913,7 +1913,6 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -1924,7 +1923,10 @@ class Auth::App::Settings::TotpsControllerTest < ActionDispatch::IntegrationTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end

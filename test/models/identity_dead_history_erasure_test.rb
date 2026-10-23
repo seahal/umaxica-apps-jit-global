@@ -32,8 +32,11 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         when "com"
           [Visitor, VisitorEmailHistory, VisitorTelephoneHistory, :visitor_id, VisitorEmail, VisitorTelephone]
         end
-      owner = owner_model.create!(created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
-      peer = owner_model.create!
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
+        discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+      )
+      peer = owner_model.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_model))
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "whole-erasure-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true, :created_at => 2.days.ago, :discard_at => 2.days.ago,
@@ -73,7 +76,10 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         when "app" then [Client, ClientEmailHistory, :user_id]
         when "com" then [Visitor, VisitorEmailHistory, :visitor_id]
         end
-      owner = owner_model.create!(created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
+        discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+      )
       history = email_history.create!(
         owner_key => owner.id, :fingerprint => "retry-history", :attached_at => 3.days.ago,
         :detached_at => 2.days.ago, :created_at => 2.days.ago,
@@ -103,7 +109,10 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         when "app" then [Client, ClientEmailHistory, :user_id, ClientRetentionHold, :client]
         when "com" then [Visitor, VisitorEmailHistory, :visitor_id, VisitorRetentionHold, :visitor]
         end
-      owner = owner_model.create!(created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
+        discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+      )
       history = email_history.create!(
         owner_key => owner.id, :fingerprint => "held-history", :attached_at => 3.days.ago,
         :detached_at => 2.days.ago, :created_at => 2.days.ago,
@@ -123,7 +132,10 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         when "app" then [Client, ClientEmail, ClientEmailHistory, :user_id]
         when "com" then [Visitor, VisitorEmail, VisitorEmailHistory, :visitor_id]
         end
-      owner = owner_model.create!(created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
+        discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+      )
       original = email_model.create!(
         owner_key => owner.id, :raw_address => "first-erasure-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true,
@@ -152,7 +164,10 @@ class IdentityDeadHistoryErasureTest < ActiveSupport::TestCase
         when "app" then [Client, ClientEmailHistory, :user_id]
         when "com" then [Visitor, VisitorEmailHistory, :visitor_id]
         end
-      owner = owner_model.create!(created_at: 3.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.from_now)
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 3.days.ago,
+        discard_at: 2.days.ago, purge_eligible_at: 1.day.from_now,
+      )
       history = email_history.create!(
         owner_key => owner.id, :fingerprint => "retained-history", :attached_at => 3.days.ago,
         :detached_at => 2.days.ago, :created_at => 2.days.ago,

@@ -31,12 +31,13 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
                ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),]
             end
           actor = owner_model.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
             id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
             status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
           )
           token =
-            (surface == :app) ? ClientToken.create!(user: actor, discard_at: 1.day.from_now) :
-                        VisitorToken.create!(visitor: actor, discard_at: 1.day.from_now)
+            (surface == :app) ? ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now) :
+                        VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
           token.rotate_refresh_token!
           origin = "https://#{auth_host}"
           fake = WebAuthn::FakeClient.new(origin, encoding: :base64url)
@@ -161,12 +162,16 @@ class ContactRegistrationOtpFinalizerTest < ActiveSupport::TestCase
             arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
           when :foreign_root
             replacement =
-              (surface == :app) ? ClientToken.create!(user: actor, discard_at: 1.day.from_now) :
-                          VisitorToken.create!(visitor: actor, discard_at: 1.day.from_now)
+              (surface == :app) ? ClientToken.create!(
+                authentication_epoch: 0, user: actor,
+                discard_at: 1.day.from_now,
+              ) :
+                          VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
             replacement.rotate_refresh_token!
             arguments[:token] = replacement
           when :foreign_owner
             arguments[:actor] = owner_model.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
               status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
             )
           when :foreign_flow

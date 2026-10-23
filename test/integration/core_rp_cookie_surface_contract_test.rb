@@ -65,16 +65,19 @@ class CoreRpCookieSurfaceContractTest < ActionDispatch::IntegrationTest
     case resource_type
     when "client"
       [ClientToken.find_by(user_id: resource.id) || ClientToken.create!(
+        authentication_epoch: 0,
         user: resource, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
       ), OpAppGrant, :client_token,]
     when "visitor"
       [VisitorToken.find_by(visitor_id: resource.id) || VisitorToken.create!(
+        authentication_epoch: 0,
         visitor: resource, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       ), OpComGrant, :visitor_token,]
     when "operator"
       [OperatorToken.find_by(staff_id: resource.id) || OperatorToken.create!(
+        authentication_epoch: 0,
         staff: resource, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE,
       ), OpOrgGrant, :operator_token,]
@@ -87,6 +90,7 @@ class CoreRpCookieSurfaceContractTest < ActionDispatch::IntegrationTest
     client = OidcClientRegistry.find!(client_id)
     root_token, grant_class, grant_foreign_key = root_and_grant_for(resource, resource_type)
     rp_grant = grant_class.create!(
+      :authentication_epoch => 0,
       grant_foreign_key => root_token,
       :oidc_client_id => client.client_id,
       :oidc_scope => "openid profile",

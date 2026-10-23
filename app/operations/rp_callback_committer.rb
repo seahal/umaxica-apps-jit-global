@@ -26,13 +26,12 @@ class RpCallbackCommitter
   # already_enrolled  - this sid already has a live local session; the callback is not reused.
   OUTCOMES = %i(committed revoked binding_mismatch already_enrolled).freeze
 
-  def initialize(cell:, issuer:, subject:, sid:, absolute_expires_at:, contract_epoch:)
+  def initialize(cell:, issuer:, subject:, sid:, absolute_expires_at:)
     @cell = cell
     @issuer = require_value(issuer, "issuer")
     @subject = require_value(subject, "subject")
     @sid = require_value(sid, "sid")
     @absolute_expires_at = absolute_expires_at
-    @contract_epoch = ContractEpochValue.coerce(contract_epoch)
   end
 
   class << self
@@ -66,7 +65,7 @@ class RpCallbackCommitter
         # rubocop:enable Rails/SkipsModelValidations
 
         session = model(:Session).create!(
-          op_session_binding: anchor, absolute_expires_at:, contract_epoch:, installed_generation: 0,
+          op_session_binding: anchor, absolute_expires_at:, installed_generation: 0,
         )
         Result.new(outcome: :committed, session:, principal: identity_binding.principal)
       end
@@ -75,7 +74,7 @@ class RpCallbackCommitter
 
   private
 
-  attr_reader :cell, :issuer, :subject, :sid, :absolute_expires_at, :contract_epoch
+  attr_reader :cell, :issuer, :subject, :sid, :absolute_expires_at
 
   def lock_anchor!
     keys = { issuer:, realm: cell.realm, client_id: cell.client_id, sid: }

@@ -184,7 +184,10 @@ module AvatarBackfill
     private
 
     def create_client
-      Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        visibility_id: ClientVisibility::USER,
+      )
     end
 
     def ensure_lifecycle_state(key, title, sort_order, **attributes)

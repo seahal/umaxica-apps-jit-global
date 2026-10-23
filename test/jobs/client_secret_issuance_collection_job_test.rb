@@ -77,9 +77,12 @@ class ClientSecretIssuanceCollectionJobTest < ActiveJob::TestCase
     previous = ENV["APP_SECRET_PROOF_RETENTION_SECONDS"]
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.schedule_retention!(discard_at: Float::INFINITY, purge_eligible_at: Float::INFINITY)
-    expired = ClientToken.create!(user: actor, discard_at: ClientToken.database_now - 2.seconds)
+    expired = ClientToken.create!(
+      authentication_epoch: 0, user: actor,
+      discard_at: ClientToken.database_now - 2.seconds,
+    )
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
     allocations =

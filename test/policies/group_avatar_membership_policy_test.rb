@@ -5,7 +5,10 @@ require "test_helper"
 
 class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
   setup do
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     @group = AvatarGroup.create!(
       account_surface: "app",
@@ -80,12 +83,15 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
     membership = new_membership(group: wrong_group, avatar: @bootstrap.avatar)
 
     assert_not GroupAvatarMembershipPolicy.new(membership, user: @user).create?
-    assert_not GroupAvatarMembershipPolicy.new(new_membership(avatar: @bootstrap.avatar), user: Visitor.new).create?
+    assert_not GroupAvatarMembershipPolicy.new(
+      new_membership(avatar: @bootstrap.avatar),
+      user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL),
+    ).create?
 
     Actor.install_context!(tld: :com)
 
     assert_not GroupAvatarMembershipPolicy.new(
-      new_membership(avatar: @bootstrap.avatar), user: Visitor.new,
+      new_membership(avatar: @bootstrap.avatar), user: Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL),
     ).create?
   end
 
@@ -122,7 +128,10 @@ class GroupAvatarMembershipPolicyTest < ActiveSupport::TestCase
   end
 
   test "a stale cross-owner membership is denied for attach but remains detachable by group owner" do
-    other = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     other_avatar = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other).avatar
     membership = new_membership(avatar: other_avatar)
     policy = GroupAvatarMembershipPolicy.new(membership, user: @user)

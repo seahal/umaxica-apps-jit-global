@@ -9,7 +9,10 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
 
   test "encode rejects blank inputs and accepts a stubbed success path" do
     assert_nil SecurityJwtAuthAccessTokenCodec.encode(nil, host: "app.example.test")
-    assert_nil SecurityJwtAuthAccessTokenCodec.encode(Client.new, host: "")
+    assert_nil SecurityJwtAuthAccessTokenCodec.encode(
+      Client.new(security_mode_id: SecurityModeConfigurable::NORMAL),
+      host: "",
+    )
 
     payload = { "sub" => "123", "scope" => "domain:client" }
 
@@ -17,7 +20,7 @@ class SecurityJwtAuthAccessTokenCodecCoverageTest < ActiveSupport::TestCase
       JitSecurityJwtKeyring.stub(:encode, "encoded.jwt") do
         result =
           SecurityJwtAuthAccessTokenCodec.encode(
-            Client.new(id: 123),
+            Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 123),
             host: "app.example.test",
             resource_type: "client",
             session_public_id: "session-public-id",

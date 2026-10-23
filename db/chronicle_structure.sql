@@ -1468,6 +1468,7 @@ CREATE TABLE public.operator_chronicles (
     subject_type text CONSTRAINT staff_activities_subject_type_not_null NOT NULL,
     updated_at timestamp(6) with time zone CONSTRAINT staff_activities_updated_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staff_chronicles_discarded_at_not_null NOT NULL,
+    CONSTRAINT chk_operator_chronicles_sign_flow_halted_keys CHECK (((event_id <> 18) OR ((context ? 'transaction_public_id'::text) AND (context ? 'halt_generation'::text)))),
     CONSTRAINT staff_activities_event_id_non_negative_check CHECK ((event_id >= 0)),
     CONSTRAINT staff_activities_level_id_non_negative_check CHECK ((level_id >= 0))
 );
@@ -3829,6 +3830,13 @@ CREATE INDEX index_user_activities_on_actor ON public.client_chronicles USING bt
 
 
 --
+-- Name: uniq_operator_chronicles_sign_flow_halted; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_operator_chronicles_sign_flow_halted ON public.operator_chronicles USING btree (((context ->> 'transaction_public_id'::text)), ((context ->> 'halt_generation'::text))) WHERE (event_id = 18);
+
+
+--
 -- Name: app_document_audits fk_rails_04199ae3cc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4139,6 +4147,9 @@ ALTER TABLE ONLY public.org_preference_chronicles
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261022205322'),
+('20261022205321'),
+('20261022205320'),
 ('20261020110001'),
 ('20261020110000'),
 ('20261009204220'),

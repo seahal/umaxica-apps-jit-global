@@ -10,9 +10,15 @@ class StepUpFinalizationRestartRaceTest < ActiveSupport::TestCase
 
   test "finalization holding the source owner lock wins over cancel-and-start on an independent Ticket connection" do
     # Fixture sequence resets can reuse IDs held by committed rows in the separate Ticket database.
-    actor = Client.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000, status_id: ClientStatus::ACTIVE,
+    )
     credential = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public")
-    token = ClientToken.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000, user: actor)
+    token = ClientToken.create!(
+      authentication_epoch: 0, id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+      user: actor,
+    )
     device = token.device_session
     requirement = StepUpRequirement.new(
       scope: "settings_passkey", purpose: "step_up", step_up_required: true, allowed_methods: [:passkey],

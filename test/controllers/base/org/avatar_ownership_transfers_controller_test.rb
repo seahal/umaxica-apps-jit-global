@@ -6,9 +6,13 @@ require "test_helper"
 class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    @operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator)
     @source = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
-    @token = OperatorToken.create!(staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    @token = OperatorToken.create!(authentication_epoch: 0, staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
     @avatar_result = AvatarProvisioning::Create.call(
       actor: @operator,
@@ -23,7 +27,10 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     assert_predicate @avatar_result, :success?, @avatar_result.errors.inspect
     select_source_avatar!
 
-    @target_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @target_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     @target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @target_client)
   end
 
@@ -79,7 +86,10 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_response :success
     recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
-    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     other_target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_client)
     grant_step_up!("avatar_transfer_request")
 
@@ -103,7 +113,11 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
     assert_response :success
     recorded = AvatarTransferReservation.find_by!(idempotency_key: key).attributes
-    other_operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    other_operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(other_operator)
     other = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
     other_avatar_result = AvatarProvisioning::Create.call(
       actor: other_operator,
@@ -116,7 +130,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     )
 
     assert_predicate other_avatar_result, :success?, other_avatar_result.errors.inspect
-    other_token = OperatorToken.create!(staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    other_token = OperatorToken.create!(authentication_epoch: 0, staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     BaseSwitcherAuthority.switch(
       surface: :org,
       principal: other_operator,
@@ -223,6 +237,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -299,6 +314,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -347,9 +363,11 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
       target_collective_public_id: @target.collective.public_id,
     )
     other_operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE,
       visibility_id: OperatorVisibility::STAFF,
     )
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(other_operator)
     other = BaseSelectorBootstrapAuthority.call(surface: :org, principal: other_operator)
     AgentMembership.create!(
       agent: other.account,
@@ -371,7 +389,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     )
 
     assert_predicate other_avatar_result, :success?, other_avatar_result.errors.inspect
-    other_token = OperatorToken.create!(staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    other_token = OperatorToken.create!(authentication_epoch: 0, staff: other_operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     BaseSwitcherAuthority.switch(
       surface: :org,
       principal: other_operator,
@@ -432,6 +450,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -512,7 +531,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
   end
 
   test "an app principal cannot use the org transfer endpoint" do
-    token = ClientToken.create!(user: @target_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @target_client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     headers = as_user_headers(@target_client, host: @host, session_public_id: token.public_id)
 
     assert_no_difference -> { AvatarOwnershipTransfer.count } do
@@ -530,9 +549,11 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
   test "an operator cannot accept a transfer addressed to another bureau" do
     destination_operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
       status_id: OperatorStatus::ACTIVE,
       visibility_id: OperatorVisibility::STAFF,
     )
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(destination_operator)
     destination = BaseSelectorBootstrapAuthority.call(surface: :org, principal: destination_operator)
     transfer = AvatarOwnershipTransfers::RequestOperation.call(
       actor: @operator,
@@ -575,7 +596,10 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
 
   test "registry accept transport completes an explicit registry reservation" do
     establish_avatar_ownership_cutover!
-    source_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    source_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: source_client)
     source.avatar.current_avatar_persona_binding.revoke!(force: true)
     source_avatar_result = AvatarProvisioning::Create.call(
@@ -684,6 +708,7 @@ class Base::Org::AvatarOwnershipTransfersControllerTest < ActionDispatch::Integr
     rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
     rp_now = Time.current
     rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: rp_token,
       oidc_client_id: rp_client.client_id,
       oidc_scope: "openid profile",

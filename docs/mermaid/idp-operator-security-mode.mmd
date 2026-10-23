@@ -1,0 +1,5 @@
+stateDiagram-v2
+    %% CURRENT implementation; sources and guards in transition inventory.
+    state "NORMAL (3)" as normal
+    state "ADVANCED (7)" as advanced
+    [*] --> advanced: every Operator (migration backfill)

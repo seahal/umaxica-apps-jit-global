@@ -19,6 +19,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
     @host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
     @staff = operators(:one)
     @token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @staff,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
@@ -55,6 +56,7 @@ class OrgVerificationFlowTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

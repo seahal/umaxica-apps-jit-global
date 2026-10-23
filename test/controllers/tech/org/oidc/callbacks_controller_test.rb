@@ -34,7 +34,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     get tech_org_sign_show_path(ri: "jp")
     csrf_token = css_select('input[name="authenticity_token"]').first["value"]
     post tech_org_sign_create_path(ri: "jp"),
-         params: { authenticity_token: csrf_token, pt: "/dashboard" },
+         params: { authenticity_token: csrf_token, target_link_uri: "/dashboard" },
          headers: {
            "Origin" => "https://#{@host}",
            "Sec-Fetch-Site" => "same-origin",
@@ -43,10 +43,13 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     authorize_params = Rack::Utils.parse_nested_query(URI.parse(response.location).query)
     @state = authorize_params.fetch("state")
-    flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(@state)
+    flow = session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).fetch(OidcStateTestSupport.jti(@state))
     @client = OidcClientRegistry.find!("tech-org-ww")
     authentication_event_at = 1.minute.ago
-    @operator_token = OperatorToken.create!(staff: @operator, authentication_event_at: authentication_event_at)
+    @operator_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: @operator,
+      authentication_event_at: authentication_event_at,
+    )
     code = OidcAuthorizationCodeIssuer.call(
       client: @client,
       params: authorize_params.symbolize_keys,
@@ -207,7 +210,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
           code: @code.code, state: @state, iss: OidcIssuer.for_resource_type("operator"),
         }
 
-        assert_response :unprocessable_entity
+        assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
       end
     end
 
@@ -232,11 +235,11 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
         code: @code.code, state: "foreign-state", iss: OidcIssuer.for_resource_type("operator"),
       }
 
-      assert_response :unprocessable_entity
+      assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
       assert_equal 0, exchanges
       assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
       assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
-      assert session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).key?(@state)
+      assert session.fetch(OidcSsoInitiator::OIDC_PENDING_FLOWS_SESSION_KEY).key?(OidcStateTestSupport.jti(@state))
 
       OidcOpUserInfoClient.stub(:call, @userinfo_result) do
         get "/oidc/callback", params: {
@@ -262,7 +265,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_response :unprocessable_entity
+    assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
     assert_equal 0, exchanges
     assert_equal "no-store", response.headers["Cache-Control"]
     assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
@@ -290,7 +293,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_response :unprocessable_entity
+    assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
     assert_equal "no-store", response.headers["Cache-Control"]
     assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
     assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
@@ -315,7 +318,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_response :unprocessable_entity
+    assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
     assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
     assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
     assert_not OperatorOidcIdentityBinding.exists?(audience: @client.aud)
@@ -338,7 +341,7 @@ class Tech::Org::Oidc::CallbacksControllerTest < ActionDispatch::IntegrationTest
       }
     end
 
-    assert_response :unprocessable_entity
+    assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
     assert_no_set_cookie OidcRpBrowserCredentialContract::ACCESS_COOKIE
     assert_no_set_cookie OidcRpBrowserCredentialContract::REFRESH_COOKIE
     assert_not OperatorOidcIdentityBinding.exists?(audience: @client.aud)

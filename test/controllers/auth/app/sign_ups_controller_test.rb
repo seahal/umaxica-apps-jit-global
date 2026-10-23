@@ -2191,10 +2191,12 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
     assert_nil response.location
   end
 
-  test "checkpoint without active registration redirects to sign up start" do
+  test "checkpoint without a sign-up admission is refused with the uniform error" do
     get auth_app_sign_up_guard_email_path(ri: "jp"), headers: { "Host" => host }
 
-    assert_redirected_to auth_app_sign_up_url(ri: "jp")
+    # D-73: ownership is not proven, so nothing is redirected or ended.
+    assert_response :bad_request
+    assert_nil response.location
   end
 
   private
@@ -2223,11 +2225,12 @@ class Auth::App::SignUpsControllerTest < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: "core-app-jp",
       redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: SecureRandom.urlsafe_base64(16),
       nonce: SecureRandom.urlsafe_base64(16),
       scope: "openid profile",
+      prompt: "create",
     }
   end
   private
@@ -2312,7 +2315,6 @@ class Auth::App::SignUpsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -2324,7 +2326,6 @@ class Auth::App::SignUpsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -2354,7 +2355,10 @@ class Auth::App::SignUpsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

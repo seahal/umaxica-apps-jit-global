@@ -10,7 +10,10 @@ class DeadIdentifierRetentionTest < ActiveJob::TestCase
         when "app" then [Client, ClientEmail, ClientEmailHistory, :user_id, ClientOccurrence]
         when "com" then [Visitor, VisitorEmail, VisitorEmailHistory, :visitor_id, VisitorOccurrence]
         end
-      owner = owner_model.create!(created_at: 4.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 4.days.ago,
+        discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+      )
       email = email_model.create!(
         owner_key => owner.id, :raw_address => "retained-contact-#{SecureRandom.hex(8)}@example.test",
         :confirm_policy => true, :created_at => 3.days.ago, :discard_at => 2.days.ago,
@@ -52,7 +55,10 @@ class DeadIdentifierRetentionTest < ActiveJob::TestCase
         when "com"
           [Visitor, VisitorEmail, VisitorTelephone, VisitorEmailHistory, VisitorTelephoneHistory, :visitor_id]
         end
-      owner = owner_model.create!(created_at: 4.days.ago, discard_at: 2.days.ago, purge_eligible_at: 1.day.ago)
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, created_at: 4.days.ago,
+        discard_at: 2.days.ago, purge_eligible_at: 1.day.ago,
+      )
       original_address = "due-account-#{SecureRandom.hex(8)}@example.test"
       original_number = "+819012399930"
       email = email_model.create!(
@@ -75,7 +81,7 @@ class DeadIdentifierRetentionTest < ActiveJob::TestCase
   end
 
   test "protected Operator email refuses whole erasure without removing prior history or peer identifiers" do
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     first_email = OperatorEmail.create!(
       staff: operator, raw_address: "earlier-erasure-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
     )
@@ -103,7 +109,7 @@ class DeadIdentifierRetentionTest < ActiveJob::TestCase
   end
 
   test "irreversible due Operator erasure removes its dead histories and live identifiers atomically" do
-    operator = Operator.create!
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     email = OperatorEmail.create!(
       staff: operator, raw_address: "erasure-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
     )

@@ -20,7 +20,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "edit renders confirmation and post redirects to Base without an Auth RP logout" do
     user = create_verified_user_with_email(email_address: "auth-app-sign-out-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     satisfy_user_verification(token)
 
     get edit_auth_app_sign_out_url(ri: "jp", host: @host), headers: rp_session_headers(user, token)
@@ -54,7 +54,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "post sign out with a coordinated challenge clears this host and returns to base completion" do
     user = create_verified_user_with_email(email_address: "auth-app-coordinated-#{SecureRandom.hex(4)}@example.com")
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
         origin_surface: "core",
@@ -93,7 +93,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "destroy cancels the pending logout and keeps the current session" do
     user = create_verified_user_with_email(email_address: "sign-cancel@example.com")
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
@@ -127,7 +127,7 @@ class Auth::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
 
   test "destroy returns no content for json without revoking the current session" do
     user = create_verified_user_with_email(email_address: "sign-json-cancel@example.com")
-    token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = token.rotate_refresh_token!
     transaction =
       AcmeLogoutTransactionCoordinator.issue!(
@@ -216,7 +216,6 @@ class Auth::App::Sign::OutsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -248,7 +247,10 @@ class Auth::App::Sign::OutsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -495,7 +497,6 @@ class Auth::App::Sign::OutsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -504,7 +505,10 @@ class Auth::App::Sign::OutsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

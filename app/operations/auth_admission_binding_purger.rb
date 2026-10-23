@@ -6,9 +6,6 @@
 # before their parent rows because every parent foreign key is restrictive.
 class AuthAdmissionBindingPurger
   PARENT_BINDINGS = {
-    ClientSignInFlow => [ClientAuthAdmissionBinding, :sign_in_flow_id],
-    VisitorSignInFlow => [VisitorAuthAdmissionBinding, :sign_in_flow_id],
-    OperatorSignInFlow => [OperatorAuthAdmissionBinding, :sign_in_flow_id],
     ClientOidcAuthorizationTransaction => [ClientAuthAdmissionBinding, :authorization_transaction_id],
     VisitorOidcAuthorizationTransaction => [VisitorAuthAdmissionBinding, :authorization_transaction_id],
     OperatorOidcAuthorizationTransaction => [OperatorAuthAdmissionBinding, :authorization_transaction_id],

@@ -83,6 +83,7 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     end
 
     assert_equal 303, browser.response.status
+    switch_browser_to_sign_up!(browser, surface: "com")
     browser.get("/sign/up/email/new", params: { ri: "jp" })
 
     assert_equal 200, browser.response.status
@@ -562,7 +563,10 @@ class Auth::Com::Sign::Up::Check::Email::OtpsControllerTest < ActionDispatch::In
     VisitorStatus.find_or_create_by!(id: VisitorStatus::ACTIVE)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
-    owner = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    owner = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     existing = VisitorEmail.create!(
       visitor_id: owner.id, address: "com-email-existing@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,

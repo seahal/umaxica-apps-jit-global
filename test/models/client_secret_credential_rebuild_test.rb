@@ -62,7 +62,7 @@ end
 
 class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
   self.fixture_table_names = %w(
-    clients client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    clients client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_secret_credentials client_secret_issuances
   )
 
@@ -159,6 +159,7 @@ class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
 
   test "withdrawal anonymization retains Secret audit and removes credential authentication" do
     owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::ACTIVE, withdrawn_at: Client.database_now,
       terminated_at: Client.database_now,
     )
@@ -190,7 +191,10 @@ class ClientSecretCredentialPersistenceTest < ActiveSupport::TestCase
 
   test "withdrawal without Secret records preserves the existing no-issuance path" do
     now = Client.database_now
-    owner = Client.create!(status_id: ClientStatus::ACTIVE, withdrawn_at: now, terminated_at: now)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      withdrawn_at: now, terminated_at: now,
+    )
     previous_delay = ENV.delete("APP_SECRET_PURGE_DELAY_SECONDS")
     assert_no_difference ["ClientSecretCredential.count", "ClientSecretIssuance.count",
                           "ClientSecretAuditOutbox.count",] do

@@ -27,7 +27,7 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       auth_headers = { "Origin" => origin, "Sec-Fetch-Site" => nil }
       actor = Operator.create!(
         status_id: OperatorStatus::ACTIVE,
-        mfa_level_id: OperatorMfaLevel::NOTHING, mfa_status_id: OperatorMfaStatus::UNCONFIGURED,
+        security_mode_id: SecurityModeConfigurable::NORMAL, mfa_status_id: OperatorMfaStatus::UNCONFIGURED,
       )
       tenant = ExternalAuthentication::ProviderRegistry.tenant_id("entra")
       audience = ExternalAuthentication::ProviderRegistry.audience("entra")

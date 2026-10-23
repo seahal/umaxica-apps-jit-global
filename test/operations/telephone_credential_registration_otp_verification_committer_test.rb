@@ -9,15 +9,15 @@ class TelephoneCredentialRegistrationOtpVerificationCommitterTest < ActiveSuppor
         actor, token, telephone =
           case surface
           when "app"
-            owner = Client.create!(status_id: ClientStatus::ACTIVE)
-            root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+            owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+            root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
             candidate = owner.client_telephones.create!(
               raw_number: "+12025550191", confirm_policy: true, otp_attempts_count: 2,
             )
             [owner, root, candidate]
           when "com"
-            owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-            root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+            owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+            root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
             candidate = owner.visitor_telephones.create!(
               raw_number: "+12025550192", confirm_policy: true, otp_attempts_count: 2,
             )
@@ -103,13 +103,13 @@ class TelephoneCredentialRegistrationOtpVerificationCommitterTest < ActiveSuppor
       actor, token, telephone =
         case surface
         when "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_telephones.create!(raw_number: "+12025550193", confirm_policy: true)
           [owner, root, candidate]
         when "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
           candidate = owner.visitor_telephones.create!(raw_number: "+12025550194", confirm_policy: true)
           [owner, root, candidate]
         end

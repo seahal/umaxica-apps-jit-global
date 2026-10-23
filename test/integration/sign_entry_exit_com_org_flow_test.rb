@@ -85,7 +85,7 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
         response_type: "code",
         client_id: client.client_id,
         redirect_uri: client.redirect_uris_by_realm.fetch(config.fetch(:realm)).first,
-        code_challenge: "challenge",
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256",
         state: "state",
         nonce: "nonce",

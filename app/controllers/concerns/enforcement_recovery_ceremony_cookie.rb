@@ -14,7 +14,7 @@ module EnforcementRecoveryCeremonyCookie
 
   def recovery_ceremony_cookie_options
     CoreCookieOptions.for(
-      surface: CoreSurface.current(request), request: request, same_site: :strict, path: "/", domain: false,
+      request: request, same_site: :strict, path: "/",
       expires: EnforcementRecoveryCeremonyRecordable::TTL.from_now,
     )
   end
@@ -32,7 +32,7 @@ module EnforcementRecoveryCeremonyCookie
 
   def clear_recovery_ceremony_cookie!
     options = CoreCookieOptions.for(
-      surface: CoreSurface.current(request), request: request, same_site: :strict, path: "/", domain: false,
+      request: request, same_site: :strict, path: "/",
     ).except(:expires, :httponly)
     cookies.delete(recovery_ceremony_cookie_name, options)
   end

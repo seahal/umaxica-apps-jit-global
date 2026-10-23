@@ -15,8 +15,8 @@ class OtpLockableTest < ActiveSupport::TestCase
   end
 
   test "successful email consumption clears lockout only after its finite deadline" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: owner)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: owner)
     root.rotate_refresh_token!
     email = ClientEmail.create!(
       user: owner,
@@ -43,8 +43,8 @@ class OtpLockableTest < ActiveSupport::TestCase
   end
 
   test "successful telephone consumption clears lockout only after its finite deadline" do
-    owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    root = OperatorToken.create!(staff: owner)
+    owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    root = OperatorToken.create!(authentication_epoch: 0, staff: owner)
     root.rotate_refresh_token!
     telephone = OperatorTelephone.create!(
       number: "+819012345678", staff: owner, confirm_policy: true, confirm_using_mfa: true,

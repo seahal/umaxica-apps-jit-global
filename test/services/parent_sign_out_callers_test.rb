@@ -12,12 +12,12 @@ class ParentSignOutCallersTest < ActiveSupport::TestCase
   setup do
     @user = clients(:one)
     AuthenticationSessionRevoker.tokens_for(@user).find_each(&:revoke!)
-    @root = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    @root = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     @children = %w(core-app-jp warp-app-jp).map { |client_id| rp_session_for(@root, client_id) }
   end
 
   test "selected-session revocation ends the selected parent with its RP rows and leaves the current one" do
-    current = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    current = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     current_child = rp_session_for(current, "core-app-jp")
 
     assert_no_enqueued_jobs do
@@ -53,7 +53,7 @@ class ParentSignOutCallersTest < ActiveSupport::TestCase
   end
 
   test "a credential transition that revokes other sessions ends their parents with their RP rows" do
-    current = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    current = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
 
     assert_no_enqueued_jobs do
       CredentialSecurityTransition.call(
@@ -70,6 +70,7 @@ class ParentSignOutCallersTest < ActiveSupport::TestCase
 
   def rp_session_for(root, client_id)
     OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root,
       oidc_client_id: client_id,
       oidc_scope: "openid profile",

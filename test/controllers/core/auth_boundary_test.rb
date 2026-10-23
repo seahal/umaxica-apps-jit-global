@@ -73,7 +73,7 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
 
       get "https://#{host}/oidc/callback"
 
-      assert_response :unprocessable_content
+      assert_equal [303, "/sign/interruption"], [response.status, URI.parse(response.location.to_s).path]
     end
   end
 
@@ -112,6 +112,7 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
       else [OpAppGrant, :client_token]
       end
     rp_session = session_class.create!(
+      :authentication_epoch => 0,
       association => token,
       :oidc_client_id => client.client_id,
       :oidc_scope => "openid profile",
@@ -144,21 +145,22 @@ class CoreAuthBoundaryTest < ActionDispatch::IntegrationTest
     case resource_type
     when "operator"
       staff = operators(:one)
-      token = OperatorToken.create!(staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+      token = OperatorToken.create!(authentication_epoch: 0, staff: staff, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
       [staff, token, OperatorToken]
     when "visitor"
       VisitorStatus.ensure_defaults!
       VisitorVisibility.ensure_defaults!
       visitor = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         id: 9_116_000_000_000 + SecureRandom.random_number(1_000_000),
         status_id: VisitorStatus::ACTIVE,
         visibility_id: VisitorVisibility::VISITOR,
       )
-      token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+      token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
       [visitor, token, VisitorToken]
     else
       user = clients(:one)
-      token = ClientToken.create!(user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+      token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
       [user, token, ClientToken]
     end
   end

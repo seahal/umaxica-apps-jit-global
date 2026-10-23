@@ -26,6 +26,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
       begin
         fx0_step_up_scope = "settings_email"
         fx0_token = ClientToken.create!(
+          authentication_epoch: 0,
           user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -63,6 +64,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
                   f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
                   f0_now = Time.current
                   f0_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                     refresh_token_expires_at: f0_now + 10.minutes,
@@ -127,6 +129,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
               f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                 refresh_token_expires_at: f0_now + 10.minutes,
@@ -181,6 +184,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
       begin
         fx1_step_up_scope = nil
         fx1_token = ClientToken.create!(
+          authentication_epoch: 0,
           user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -218,6 +222,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
                   f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
                   f1_now = Time.current
                   f1_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                     refresh_token_expires_at: f1_now + 10.minutes,
@@ -282,6 +287,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
               f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                 refresh_token_expires_at: f1_now + 10.minutes,
@@ -330,6 +336,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
       begin
         fx2_step_up_scope = "settings_secret_credential"
         fx2_token = ClientToken.create!(
+          authentication_epoch: 0,
           user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
           user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
           root_login_established_at: Time.current, established_authentication_method: "passkey",
@@ -367,6 +374,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
                   f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
                   f2_now = Time.current
                   f2_session = OpAppGrant.create!(
+                    authentication_epoch: 0,
                     client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                     refresh_token_expires_at: f2_now + 10.minutes,
@@ -431,6 +439,7 @@ class Base::App::Identity::EmailsControllerTest < ActionDispatch::IntegrationTes
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,

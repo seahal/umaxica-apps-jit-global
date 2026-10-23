@@ -29,7 +29,10 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
     test "#{surface} anonymous Dashboard returns through Auth Passkey and canonical Base login" do
       case surface
       when :app
-        actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+        actor = Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+          birthdate: "2000-01-01",
+        )
         actor.client_emails.create!(
           address: "app-dashboard@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
         ).finalize_binding!
@@ -45,7 +48,10 @@ class BaseDashboardPasskeyLoginJourneyTest < ActionDispatch::IntegrationTest
         handoff_path = auth_app_sign_oidc_handoff_path(ri: "jp")
         selector_path = base_app_selector_path(ri: "jp")
       when :com
-        actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, birthdate: "2000-01-01")
+        actor = Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+          birthdate: "2000-01-01",
+        )
         actor.visitor_emails.create!(
           address: "com-dashboard@example.com", visitor_email_status_id: VisitorEmailStatus::VERIFIED,
         ).finalize_binding!

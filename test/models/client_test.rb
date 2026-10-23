@@ -16,7 +16,6 @@
 #  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null
-#  mfa_level_enabled           :boolean          default(FALSE), not null
 #  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
@@ -27,7 +26,7 @@
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  admin_locked_by_operator_id :bigint
-#  mfa_level_id                :bigint           default(0), not null
+#  security_mode_id            :bigint           not null
 #  mfa_status_id               :bigint           default(5), not null
 #  public_id                   :string(255)      default(""), not null
 #  status_id                   :bigint           default(11), not null
@@ -39,7 +38,7 @@
 #  index_clients_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_clients_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
 #  index_clients_on_discard_at           (discard_at)
-#  index_clients_on_mfa_level_id           (mfa_level_id)
+#  index_clients_on_security_mode_id       (security_mode_id)
 #  index_clients_on_mfa_status_id          (mfa_status_id)
 #  index_clients_on_public_id              (public_id) UNIQUE
 #  index_clients_on_purge_eligible_at              (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL)
@@ -53,7 +52,7 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (mfa_level_id => client_mfa_levels.id)
+#  fk_rails_...  (security_mode_id => client_security_modes.id)
 #  fk_rails_...  (mfa_status_id => client_mfa_statuses.id)
 #  fk_rails_...  (status_id => client_statuses.id)
 #  fk_rails_...  (visibility_id => client_visibilities.id)
@@ -82,7 +81,7 @@ class ClientTest < ActiveSupport::TestCase
     end
 
     @user =
-      Client.create!(public_id: PublicId.generate) do |u|
+      Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate) do |u|
         u.status_id = ClientStatus::NOTHING
       end
   end
@@ -114,7 +113,7 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "should set default status before creation" do
-    user = Client.create!
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal ClientStatus::NOTHING, user.status_id
   end
@@ -126,7 +125,7 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "should default visibility_id to staff (2)" do
-    user = Client.create!
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal ClientVisibility::STAFF, user.visibility_id
   end
@@ -141,24 +140,12 @@ class ClientTest < ActiveSupport::TestCase
     assert_predicate @user, :login_allowed?
   end
 
-  test "mfa_level_enabled and mfa_level_id must describe the same requirement" do
-    user = Client.new(mfa_level_enabled: true, mfa_level_id: ClientMfaLevel::NOTHING)
-
-    assert_not user.valid?
-    assert_not_empty user.errors[:mfa_level_id]
-
-    user = Client.new(mfa_level_enabled: false, mfa_level_id: ClientMfaLevel::FULL)
-
-    assert_not user.valid?
-    assert_not_empty user.errors[:mfa_level_enabled]
-  end
-
-  test "mfa_level has a translated attribute name" do
-    assert_equal "MFAレベル", Client.human_attribute_name(:mfa_level)
+  test "security_mode has a translated attribute name" do
+    assert_equal "セキュリティモード", Client.human_attribute_name(:security_mode)
   end
 
   test "termination requires finite withdrawal completion" do
-    user = Client.new(terminated_at: Time.current)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, terminated_at: Time.current)
 
     assert_not user.valid?
     assert_not_empty user.errors[:terminated_at]
@@ -169,20 +156,24 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "withdrawal completion cannot precede withdrawal start" do
-    user = Client.new(withdrawal_started_at: Time.current, withdrawn_at: 1.minute.ago)
+    user = Client.new(
+      security_mode_id: SecurityModeConfigurable::NORMAL, withdrawal_started_at: Time.current,
+      withdrawn_at: 1.minute.ago,
+    )
 
     assert_not user.valid?
     assert_not_empty user.errors[:withdrawn_at]
   end
 
   test "visibility association resolves to ClientVisibility with id 2 by default" do
-    user = Client.create!
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     assert_equal ClientVisibility::STAFF, user.visibility.id
   end
 
   test "invalid visibility_id is rejected by foreign key" do
     user = Client.new(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate,
       status_id: ClientStatus::NOTHING,
       visibility_id: 9_999,
@@ -208,9 +199,12 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "boundary values: public_id must be unique" do
-    existing_user = Client.create!(public_id: "duplicate-idxxxxxxxxx", status_id: ClientStatus::NOTHING)
+    existing_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      public_id: "duplicate-idxxxxxxxxx", status_id: ClientStatus::NOTHING,
+    )
 
-    duplicate_user = Client.new(public_id: "duplicate-idxxxxxxxxx")
+    duplicate_user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: "duplicate-idxxxxxxxxx")
 
     assert_not duplicate_user.valid?
     assert_not_empty duplicate_user.errors[:public_id]
@@ -248,6 +242,7 @@ class ClientTest < ActiveSupport::TestCase
 
   test "association deletion: destroys dependent client_tokens" do
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @user,
       discard_at: 1.day.from_now,
     )
@@ -261,13 +256,17 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "purge_eligible_at query picks clients with past purge_eligible_at" do
-    user = Client.create!(public_id: PublicId.generate, discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+      discard_at: 2.hours.ago, purge_eligible_at: 1.hour.ago,
+    )
 
     assert_includes Client.where(purge_eligible_at: ..Time.current), user
   end
 
   test "purge_eligible_at query excludes clients with future purge_eligible_at" do
     user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: PublicId.generate, discard_at: 30.minutes.from_now,
       purge_eligible_at: 1.hour.from_now,
     )
@@ -276,7 +275,7 @@ class ClientTest < ActiveSupport::TestCase
   end
 
   test "purge_eligible_at query excludes clients with default purge_eligible_at" do
-    user = Client.create!(public_id: PublicId.generate)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate)
 
     assert_not_includes Client.where(purge_eligible_at: ..Time.current), user
   end
@@ -335,6 +334,7 @@ class ClientTest < ActiveSupport::TestCase
 
   test "login_methods_remaining? returns false when no methods" do
     client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
     )
 

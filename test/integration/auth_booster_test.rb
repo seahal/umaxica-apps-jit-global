@@ -146,7 +146,7 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
 
   test "load session record" do
     ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
+    Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1, status_id: 1) unless Client.exists?(1)
     get "/test_load_session_record"
 
     assert_response :success
@@ -158,7 +158,7 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
 
   test "login creates session and sets cookies" do
     ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
+    Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1, status_id: 1) unless Client.exists?(1)
     post "/test_auth_login"
 
     assert_response :success
@@ -168,7 +168,7 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
 
   test "logout clears cookies" do
     ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
+    Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1, status_id: 1) unless Client.exists?(1)
     post "/test_auth_login"
     post "/test_auth_logout"
 
@@ -189,7 +189,7 @@ class AuthBoosterTest < ActionDispatch::IntegrationTest
 
   test "check auth allows authenticated" do
     ClientStatus.find_or_create_by!(id: 1)
-    Client.create!(id: 1, status_id: 1) unless Client.exists?(1)
+    Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1, status_id: 1) unless Client.exists?(1)
     post "/test_auth_login"
 
     access_cookie = response.cookies[AuthenticationCookieName.access]

@@ -99,6 +99,7 @@ class ContactEmailSignupSourceAuditTest < ActionDispatch::IntegrationTest
         end
 
         assert_equal 303, browser.response.status
+        switch_browser_to_sign_up!(browser, surface: surface.to_s)
         browser.get("/sign/up/email/new", params: { ri: "jp" })
 
         assert_equal 200, browser.response.status

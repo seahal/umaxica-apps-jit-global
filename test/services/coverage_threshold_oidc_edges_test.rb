@@ -5,7 +5,7 @@ require "test_helper"
 
 class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
   def service(**attrs)
-    defaults = { grant_type: "authorization_code", code: "code", redirect_uri: "https://client/cb", client_id: "client", client_secret: nil, code_verifier: "verifier", client_assertion_type: nil, client_assertion: nil, dpop_proof: nil, token_endpoint_uri: nil, expected_resource_type: "client" }
+    defaults = { grant_type: "authorization_code", code: "code", redirect_uri: "https://client/cb", client_id: "client", client_secret: nil, code_verifier: "v" * 43, client_assertion_type: nil, client_assertion: nil, dpop_proof: nil, token_endpoint_uri: nil, expected_resource_type: "client" }
     OidcTokenExchangeCoordinator.new(**defaults.merge(attrs))
   end
 
@@ -21,7 +21,7 @@ class CoverageThresholdOidcEdgesTest < ActiveSupport::TestCase
       "scope" => "openid",
       "auth_time" => Time.current.iso8601,
       "issued_at" => Time.current.iso8601,
-      "code_challenge" => "verifier",
+      "code_challenge" => "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       "code_challenge_method" => "S256",
       "subject" => OidcSubject.for(clients(:one), resource_type: "client"),
       "base_session_ref" => client_tokens(:one).public_id,

@@ -19,7 +19,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
        VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP, VisitorStatus::ACTIVE,
        SignComUpTelephoneRegistrationFinalizer, VisitorContactAuditOutbox, :com,],
     ].each do |principal, contact_type, owner_key, status_key, contact_status, owner_status, finalizer, outbox, surface|
-      owner = principal.create!(status_id: owner_status)
+      owner = principal.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: owner_status)
       contact = contact_type.create!(
         owner_key => owner.id, status_key => contact_status,
         :raw_number => "+819012345679", :confirm_policy => "1", :confirm_using_mfa => "1",
@@ -28,6 +28,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
       nonce = "telephone-source-audit-browser"
       now = flow_model.database_now
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: contact.id,
@@ -101,7 +102,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
        VisitorContactAuditOutbox, :com,],
     ].each do |principal, contact_type, owner_key, finalizer, outbox, surface|
       owner_status = (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE
-      owner = principal.create!(status_id: owner_status)
+      owner = principal.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: owner_status)
       contact = contact_type.create!(
         owner_key => owner.id,
         :raw_number => "+819012345674", :confirm_policy => "1", :confirm_using_mfa => "1",
@@ -110,6 +111,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
       nonce = "suspended-telephone-source-browser"
       now = flow_model.database_now
       flow = flow_model.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
         principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
         nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: contact.id,
@@ -152,7 +154,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
         owner, telephone, flow_model, finalizer, outbox, pending_status =
           case surface
           when "app"
-            actor = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+            actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
             candidate = actor.client_telephones.create!(
               raw_number: "+12025550191", confirm_policy: true,
               user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
@@ -163,7 +165,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
             [actor, candidate, ClientSignUpFlow, SignAppUpTelephoneRegistrationFinalizer,
              ClientContactAuditOutbox, ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,]
           when "com"
-            actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+            actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
             candidate = actor.visitor_telephones.create!(
               raw_number: "+12025550192", confirm_policy: true,
               visitor_telephone_status_id: VisitorTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
@@ -174,6 +176,7 @@ class TelephoneSignupSourceAuditTest < ActiveSupport::TestCase
         nonce = "telephone-finalization-authority"
         now = flow_model.database_now
         flow = flow_model.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
           principal_id: owner.id, status_id: flow_model::STATUS_MODEL::CONTACT_PENDING, step: "contact",
           nonce_digest: flow_model.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
           entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,

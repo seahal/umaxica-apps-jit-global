@@ -12,7 +12,10 @@ class AuthorityOwnerCutoverGuardTest < ActiveSupport::TestCase
   end
 
   test "does not authorize a family cutover while the resource lifecycle row is missing" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-gate-client",
@@ -33,7 +36,10 @@ class AuthorityOwnerCutoverGuardTest < ActiveSupport::TestCase
   end
 
   test "authorizes a family cutover only when owner and resource lifecycle are both eligible" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-gate-ready-client",
@@ -67,7 +73,10 @@ class AuthorityOwnerCutoverGuardTest < ActiveSupport::TestCase
   end
 
   test "keeps a family unresolved when one resource is ready and another is not" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     ready_identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-gate-mixed-ready-client",
@@ -118,7 +127,10 @@ class AuthorityOwnerCutoverGuardTest < ActiveSupport::TestCase
   end
 
   test "does not treat an ineligible authoritative owner as cutover-ready" do
-    client = Client.create!(status_id: ClientStatus::INACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::INACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-gate-inactive-owner",
@@ -140,7 +152,10 @@ class AuthorityOwnerCutoverGuardTest < ActiveSupport::TestCase
   end
 
   test "does not require an owner to authorize an explicitly inactive resource" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-gate-inactive-resource",
@@ -163,7 +178,10 @@ class AuthorityOwnerCutoverGuardTest < ActiveSupport::TestCase
   end
 
   test "does not require an owner for a discarded resource with explicit lifecycle state" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "cutover-gate-discarded-resource",

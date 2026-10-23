@@ -4,7 +4,7 @@ require "test_helper"
 
 class ClientSecretCapacityQueryTest < ActiveSupport::TestCase
   self.fixture_table_names = %w(
-    clients client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    clients client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_secret_credentials client_secret_issuances
   )
 

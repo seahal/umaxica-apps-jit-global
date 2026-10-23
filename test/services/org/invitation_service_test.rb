@@ -6,7 +6,7 @@ require "test_helper"
 
 class OrgInvitationServiceTest < ActiveSupport::TestCase
   setup do
-    @staff = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     @organization_id = 123
   end
 

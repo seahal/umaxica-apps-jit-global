@@ -5,11 +5,17 @@ require "test_helper"
 
 class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   setup do
-    @source_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @source_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @source_actor)
     @avatar = @source.avatar
 
-    @target_actor = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    @target_actor = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     @target = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @target_actor)
   end
 
@@ -55,7 +61,10 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
   test "registry idempotency key is bound to the authenticated initiator" do
     reservation = registry_request
-    other_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
 
     assert_raises(AvatarOwnershipTransfers::InvalidTransfer) do
       AvatarOwnershipTransfers::RegistryRequestOperation.call(
@@ -148,7 +157,10 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
     # This slice commits through the Avatar connection, which is intentionally outside the
     # ordinary fixture transaction. Build a private source actor/avatar so a pending reservation
     # from another committed test cannot make the one-pending-per-Avatar invariant collide here.
-    source_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    source_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     source = BaseSelectorBootstrapAuthority.call(surface: :app, principal: source_actor)
     avatar = source.avatar
 
@@ -338,7 +350,10 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "registry transfer accepts an Enterprise-owned Avatar into another Enterprise" do
-    target_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    target_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     target = BaseSelectorBootstrapAuthority.call(surface: :app, principal: target_actor)
     reservation = AvatarOwnershipTransfers::RegistryRequestOperation.call(
       actor: @source_actor,
@@ -454,7 +469,10 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   test "registry transfer accepts a Bureau-owned Avatar into another Bureau" do
-    target_actor = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    target_actor = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     target = BaseSelectorBootstrapAuthority.call(surface: :org, principal: target_actor)
     result = AvatarProvisioning::Create.call(
       actor: @target_actor,
@@ -610,6 +628,7 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
 
   test "org owner can transfer to app and target can subsequently select the Avatar" do
     @client_token_for_source = ClientToken.create!(
+      authentication_epoch: 0,
       user: @source_actor,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
     )
@@ -872,11 +891,11 @@ class AvatarOwnershipTransfersTest < ActiveSupport::TestCase
   end
 
   def client_token_for(actor)
-    ClientToken.create!(user: actor, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    ClientToken.create!(authentication_epoch: 0, user: actor, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 
   def operator_token_for(actor)
-    OperatorToken.create!(staff: actor, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    OperatorToken.create!(authentication_epoch: 0, staff: actor, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
   end
 
   def selector_ids(bootstrap, avatar)

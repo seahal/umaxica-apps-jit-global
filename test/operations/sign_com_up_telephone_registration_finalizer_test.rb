@@ -12,7 +12,7 @@ class SignComUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
 
   fixtures :visitor_statuses,
            :visitor_visibilities,
-           :visitor_mfa_levels,
+           :visitor_security_modes,
            :visitor_mfa_statuses,
            :visitor_telephone_statuses
 
@@ -21,7 +21,7 @@ class SignComUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
       public_id: PublicId.generate,
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
-      mfa_level_id: VisitorMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: VisitorMfaStatus::UNCONFIGURED,
     )
     telephone = VisitorTelephone.create!(
@@ -34,6 +34,7 @@ class SignComUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
     nonce = "com-telephone-finalization-browser"
     now = VisitorSignUpFlow.database_now
     flow = VisitorSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow),
       principal_id: visitor.id, status_id: VisitorSignUpFlowStatus::CONTACT_PENDING, step: "contact",
       nonce_digest: VisitorSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,

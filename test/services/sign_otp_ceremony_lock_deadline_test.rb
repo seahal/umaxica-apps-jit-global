@@ -20,6 +20,7 @@ class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
       %w(initial contact_lock).each do |lock_point|
         test "#{surface} #{channel} signup #{operation} commits overdue Ticket expiry at #{lock_point}" do
           owner = owner_model.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
             status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
           )
           destination =
@@ -34,6 +35,7 @@ class SignOtpCeremonyLockDeadlineTest < ActiveSupport::TestCase
           )
           now = flow_model.database_now
           flow = flow_model.create!(
+            auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_model),
             principal_id: owner.id, status_id: flow_model::STATUS_MODEL::STARTED, step: "start",
             nonce_digest: flow_model.digest_nonce("deadline-otp-browser"), issued_at: now,
             expires_at: now + 5.minutes, entry_method: channel.to_s,

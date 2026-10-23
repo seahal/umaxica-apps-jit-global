@@ -4,7 +4,7 @@ require "test_helper"
 
 class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
   test "signup payload failure remains collectible after later flow cancellation without rewriting its reason" do
-    actor = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     telephone = actor.client_telephones.create!(
       raw_number: "+819012349876", confirm_policy: "1", confirm_using_mfa: "1",
       user_telephone_status_id: ClientTelephoneStatus::UNVERIFIED_WITH_SIGN_UP,
@@ -12,6 +12,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     passkey = actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public-key")
     nonce = SecureRandom.base58(32)
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: actor.id, entry_method: "telephone", status_id: ClientSignUpFlowStatus::CHECKPOINT_PENDING,
       step: "checkpoint", issued_at: ClientSignUpFlow.database_now, expires_at: 5.minutes.from_now,
       nonce_digest: ClientSignUpFlow.digest_nonce(nonce), pending_passkey_registration_id: passkey.id,
@@ -62,6 +63,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     actor = clients(:one)
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: actor.id, entry_method: "email", state: "STARTED", step: "start",
       nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now + 5.minutes,
       completed_requirements: [],
@@ -108,6 +110,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
       [0, 1, 2].each do |count|
         now = ClientSignUpFlow.database_now
         flow = ClientSignUpFlow.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
           principal_id: actor.id, entry_method: "email", state: "STARTED", step: "start",
           nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now + 5.minutes,
           completed_requirements: [],
@@ -179,6 +182,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     actor = clients(:one)
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: actor.id, entry_method: "email", state: "STARTED", step: "start",
       nonce_digest: SecureRandom.hex(32), issued_at: now - 1.minute, expires_at: now + 5.minutes,
       completed_requirements: [],
@@ -284,7 +288,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "1"
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "public-key", uv_verified_at: Time.current,
     )
@@ -292,7 +296,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
       user: actor, address: "purger-#{SecureRandom.hex(4)}@example.com",
       user_email_status_id: ClientEmailStatus::VERIFIED, binding_finalized_at: ClientEmail.database_now,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -386,7 +390,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
 
   test "an unbounded original session retains omission proof until revocation and legal hold release" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.schedule_retention!(discard_at: Float::INFINITY, purge_eligible_at: Float::INFINITY)
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
@@ -429,7 +433,7 @@ class ClientSecretCompletedIssuancePurgerTest < ActiveSupport::TestCase
 
   test "omission collection retains a bound session through its expiry plus proof retention" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor, discard_at: ClientToken.database_now + 2.seconds)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: ClientToken.database_now + 2.seconds)
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
     issuance =

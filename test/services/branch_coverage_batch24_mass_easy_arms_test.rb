@@ -8,7 +8,7 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "Withdrawable recovery and early-termination blank arms" do
-    client = Client.new
+    client = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     client.define_singleton_method(:deactivated_at) { nil }
     client.define_singleton_method(:recovery_deadline) { 1.day.from_now }
     client.define_singleton_method(:recovery_available_at) { nil }
@@ -16,8 +16,8 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
     client.define_singleton_method(:early_termination_available_at) { nil }
 
     assert_predicate client, :can_recover?
-    assert_nil Client.new.recovery_available_at
-    assert_nil Client.new.early_termination_available_at
+    assert_nil Client.new(security_mode_id: SecurityModeConfigurable::NORMAL).recovery_available_at
+    assert_nil Client.new(security_mode_id: SecurityModeConfigurable::NORMAL).early_termination_available_at
     assert_not client.early_terminatable?
   end
 
@@ -29,6 +29,7 @@ class BranchCoverageBatch24MassEasyArmsTest < ActiveSupport::TestCase
     controller.set_response!(ActionDispatch::TestResponse.new)
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "telephone", step: "start", issued_at: now - 15.minutes, expires_at: now + 15.minutes,
       nonce_digest: ClientSignUpFlow.digest_nonce("gate-family"),
     )

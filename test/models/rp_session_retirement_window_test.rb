@@ -9,7 +9,8 @@ require "test_helper"
 class RpSessionRetirementWindowTest < ActiveSupport::TestCase
   setup do
     @session = OpAppGrant.create!(
-      client_token: ClientToken.create!(user: Client.create!),
+      authentication_epoch: 0,
+      client_token: ClientToken.create!(authentication_epoch: 0, user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)),
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,

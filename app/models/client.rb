@@ -18,7 +18,6 @@
 #  discard_at                :datetime         default(Infinity), not null
 #  last_step_up_at             :datetime
 #  lock_version                :integer          default(0), not null
-#  mfa_level_enabled           :boolean          default(FALSE), not null
 #  purge_eligible_at                   :datetime         default(Infinity), not null
 #  reactivated_at              :datetime
 #  terminated_at               :datetime
@@ -29,7 +28,7 @@
 #  created_at                  :datetime         not null
 #  updated_at                  :datetime         not null
 #  admin_locked_by_operator_id :bigint
-#  mfa_level_id                :bigint           default(0), not null
+#  security_mode_id            :bigint           not null
 #  mfa_status_id               :bigint           default(5), not null
 #  public_id                   :string(255)      default(""), not null
 #  status_id                   :bigint           default(11), not null
@@ -41,7 +40,7 @@
 #  index_clients_on_admin_locked_at        (admin_locked_at) WHERE (admin_locked_at IS NOT NULL)
 #  index_clients_on_deactivated_at         (deactivated_at) WHERE (deactivated_at IS NOT NULL)
 #  index_clients_on_discard_at           (discard_at)
-#  index_clients_on_mfa_level_id           (mfa_level_id)
+#  index_clients_on_security_mode_id       (security_mode_id)
 #  index_clients_on_mfa_status_id          (mfa_status_id)
 #  index_clients_on_public_id              (public_id) UNIQUE
 #  index_clients_on_purge_eligible_at              (purge_eligible_at) WHERE (purge_eligible_at IS NOT NULL)
@@ -55,7 +54,7 @@
 #
 # Foreign Keys
 #
-#  fk_rails_...  (mfa_level_id => client_mfa_levels.id)
+#  fk_rails_...  (security_mode_id => client_security_modes.id)
 #  fk_rails_...  (mfa_status_id => client_mfa_statuses.id)
 #  fk_rails_...  (status_id => client_statuses.id)
 #  fk_rails_...  (visibility_id => client_visibilities.id)
@@ -81,7 +80,7 @@ class Client < AppPrincipalRecord
   include ::Identity
   include AuthenticationCredentialInventoryOwner
   include WebauthnUserHandleOwner
-  include MfaLevelConfigurable
+  include SecurityModeConfigurable
   include MfaStatusTrackable
   include ActorLifecycleConsistency
   include AdministrativeAccessLockable
@@ -108,8 +107,8 @@ class Client < AppPrincipalRecord
   belongs_to :user_status, class_name: "ClientStatus",
                            foreign_key: :status_id,
                            inverse_of: :users
-  belongs_to :mfa_level,
-             class_name: "ClientMfaLevel",
+  belongs_to :security_mode,
+             class_name: "ClientSecurityMode",
              inverse_of: :users
   belongs_to :mfa_status,
              class_name: "ClientMfaStatus",
@@ -275,7 +274,6 @@ class Client < AppPrincipalRecord
 
   before_destroy :admit_identifier_history_erasure, prepend: true
 
-  mfa_level_reference ClientMfaLevel
   mfa_status_reference ClientMfaStatus
 
   before_destroy :erase_dead_identifier_histories

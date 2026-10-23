@@ -151,7 +151,7 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
 
   def second_actor
     # The com realm has a single Visitor fixture, so its second account is created here.
-    { "client" => -> { clients(:two) }, "visitor" => -> { Visitor.create! }, "operator" => -> { operators(:two) } }
+    { "client" => -> { clients(:two) }, "visitor" => -> { Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL) }, "operator" => -> { operators(:two) } }
       .fetch(@resource_type).call
   end
 
@@ -159,16 +159,19 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
     case @resource_type
     when "client"
       ClientToken.create!(
+        authentication_epoch: 0,
         user: actor, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
         user_token_status_id: ClientTokenStatus::ACTIVE,
       )
     when "visitor"
       VisitorToken.create!(
+        authentication_epoch: 0,
         visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       )
     when "operator"
       OperatorToken.create!(
+        authentication_epoch: 0,
         staff: actor, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
         staff_token_status_id: OperatorTokenStatus::ACTIVE,
       )
@@ -187,9 +190,9 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
       refresh_token_expires_at: 10.minutes.from_now,
     }
     case @resource_type
-    when "client" then OpAppGrant.create!(client_token: root_token, **attributes)
-    when "visitor" then OpComGrant.create!(visitor_token: root_token, **attributes)
-    when "operator" then OpOrgGrant.create!(operator_token: root_token, **attributes)
+    when "client" then OpAppGrant.create!(authentication_epoch: 0, client_token: root_token, **attributes)
+    when "visitor" then OpComGrant.create!(authentication_epoch: 0, visitor_token: root_token, **attributes)
+    when "operator" then OpOrgGrant.create!(authentication_epoch: 0, operator_token: root_token, **attributes)
     end
   end
 

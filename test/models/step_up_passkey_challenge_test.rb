@@ -7,7 +7,7 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
 
   test "challenge expiry rejects at and after the deadline and accepts one microsecond before" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, required_scope: "settings_birthdate",
       required_aal: "none", allowed_methods: ["passkey"], return_to: "/identity/birthdate",
@@ -55,7 +55,7 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
 
   test "a challenge is bound to the concrete transaction and consumed once" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.rotate_refresh_token!
     issuance = BaseStepUpAdmissionIssuer.call!(
       actor: actor, token: token,
@@ -89,7 +89,7 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
 
   test "a generated challenge reference retries the named unique index collision" do
     actor = clients(:one)
-    first_token = ClientToken.create!(user: actor)
+    first_token = ClientToken.create!(authentication_epoch: 0, user: actor)
     first_transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: first_token.public_id, required_scope: "settings_birthdate",
       required_aal: "none", allowed_methods: ["passkey"], return_to: "/identity/birthdate",
@@ -103,7 +103,7 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
       transaction: first_transaction, challenge: "first", rp_id: "app.example", origin: "https://app.example",
     )
 
-    second_token = ClientToken.create!(user: actor)
+    second_token = ClientToken.create!(authentication_epoch: 0, user: actor)
     second_transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: second_token.public_id, required_scope: "settings_birthdate",
       required_aal: "none", allowed_methods: ["passkey"], return_to: "/identity/birthdate",
@@ -130,7 +130,7 @@ class StepUpPasskeyChallengeTest < ActiveSupport::TestCase
 
   test "a matching challenge reference is burned on origin mismatch and its deadline is not extended" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, required_scope: "settings_birthdate",
       required_aal: "none", allowed_methods: ["passkey"], return_to: "/identity/birthdate",

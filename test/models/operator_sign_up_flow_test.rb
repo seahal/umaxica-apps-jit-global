@@ -7,6 +7,7 @@ class FlowSignUpTest < ActiveSupport::TestCase
   setup do
     now = ClientSignUpFlow.database_now
     @record = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       entry_method: "email", step: "start", nonce_digest: Digest::SHA256.hexdigest(SecureRandom.hex(32)),
       issued_at: now, expires_at: now + 15.minutes,
     )

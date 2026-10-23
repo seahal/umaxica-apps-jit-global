@@ -314,6 +314,7 @@ class AuthRegionContractTest < ActionDispatch::IntegrationTest
           state: SecureRandom.urlsafe_base64(16),
           nonce: SecureRandom.urlsafe_base64(16),
           scope: "openid profile",
+          prompt: (INTENT_BY_PATH.fetch(path) == "sign_up") ? "create" : nil,
         },
       ).transaction
     BaseAuthAdmissionCoordinator.issue_handoff!(

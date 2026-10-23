@@ -9,8 +9,6 @@ module AuthCeremonyContext
 
   include AuthCeremonySidCookie
 
-  ORDINARY_AUTHENTICATION_INTENTS = %w(authentication sign_in sign_up).freeze
-
   private
 
   def require_sign_in_ceremony_admission!
@@ -28,7 +26,7 @@ module AuthCeremonyContext
 
   def auth_social_admission_binding!
     record = admitted_auth_ceremony_session
-    unless record&.active? && %w(authentication_handoff local_sign_in local_sign_up).include?(record.admission_purpose)
+    unless record&.active? && record.admission_purpose == "authentication_handoff"
       raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
     end
 
@@ -42,6 +40,24 @@ module AuthCeremonyContext
     binding
   rescue ActiveRecord::RecordNotFound
     raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
+  end
+
+  def auth_sign_up_admission_binding!
+    unless auth_ceremony_matches_intent?("sign_up")
+      raise SignUpCycleLocator::OwnershipMismatch, "sign-up admission ownership mismatch"
+    end
+
+    model = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+    model.connection_owner.connected_to(role: :writing) do
+      model.find_by!(admitted_auth_ceremony_session_id: admitted_auth_ceremony_session.id)
+    end
+  rescue ActiveRecord::RecordNotFound
+    raise SignUpCycleLocator::OwnershipMismatch, "sign-up admission ownership mismatch"
+  end
+
+  def render_sign_up_ownership_mismatch
+    Rails.logger.info(JitLogEvent.format("sign.signup.ownership_refused", reason_code: "ownership_mismatch"))
+    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
   def auth_ceremony_surface
@@ -82,20 +98,6 @@ module AuthCeremonyContext
 
   def oidc_authorization_login_challenge
     auth_ceremony_authorization_transaction&.login_challenge
-  end
-
-  def auth_ceremony_local_sign_in_flow
-    record = admitted_auth_ceremony_session
-    return nil unless record&.local_sign_in_flow_ref
-    return nil unless %w(local_sign_in local_sign_up).include?(record.admission_purpose)
-
-    model = BaseAuthAdmissionCoordinator::LOCAL_SIGN_IN_FLOW.fetch(auth_ceremony_surface)
-    model.connection_class_for_self.connected_to(role: :writing) do
-      flow = model.find_by!(public_id: record.local_sign_in_flow_ref)
-      return nil if flow.expired?(model.database_now) || flow.sign_in_failed?
-
-      flow
-    end
   end
 
   def auth_ceremony_step_up_transaction
@@ -200,14 +202,19 @@ module AuthCeremonyContext
     end
 
     transaction = auth_ceremony_authorization_transaction
-    if transaction.nil?
-      expected_purpose = BaseAuthAdmissionCoordinator::LOCAL_ENTRY_PURPOSE[expected_intent.to_s]
-      return expected_purpose.present? && admitted_auth_ceremony_session&.admission_purpose == expected_purpose &&
-          auth_ceremony_local_sign_in_flow.present?
-    end
+    return false if transaction.nil?
 
-    transaction.intent.to_s == expected_intent.to_s ||
-      (ORDINARY_AUTHENTICATION_INTENTS.include?(transaction.intent.to_s) &&
-        %w(sign_in sign_up).include?(expected_intent.to_s))
+    record = admitted_auth_ceremony_session
+    return false unless record
+
+    binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+      .find_by(admitted_auth_ceremony_session_id: record.id)
+    return false unless binding&.purpose == "authentication_handoff" &&
+      binding.authorization_transaction_id == transaction.id
+
+    AuthEntryIntentResolver.call(
+      prompt: transaction.oidc_prompt,
+      entry_intent: binding.entry_intent,
+    ) == expected_intent.to_s
   end
 end

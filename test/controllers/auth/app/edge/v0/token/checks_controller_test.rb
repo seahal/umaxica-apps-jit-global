@@ -17,7 +17,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
 
   test "GET check with valid JWT access token returns 200" do
     # Create a token record and generate tokens
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     token_record.rotate_refresh_token!
 
     # Generate a valid JWT access token
@@ -48,7 +48,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   # to start a DBSC session. A non-DBSC token must therefore receive `Secure-Session-Registration`
   # (and its legacy `Sec-Session-Registration` alias) pointing at the DBSC refresh endpoint.
   test "GET check offers Secure-Session-Registration to a non-DBSC-bound session" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     token_record.rotate_refresh_token!
 
     assert_not token_record.binding_method_dbsc?,
@@ -83,7 +83,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   # and refresh. Per-request context params (ri/lx/tz) merged into generated URLs must not leak
   # into it, or a later region switch would break the bound-session refresh.
   test "GET check with context params still advertises the canonical DBSC path" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     token_record.rotate_refresh_token!
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = jwt_access_token_for(
       @user,
@@ -131,7 +131,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
 
   test "GET check with expired JWT returns 401" do
     # Create a token record
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     token_record.rotate_refresh_token!
 
     # Generate a JWT that's already expired
@@ -161,7 +161,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
 
   test "GET check with wrong resource type returns 401" do
     # Create a token record
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     token_record.rotate_refresh_token!
 
     # Generate a JWT with wrong resource type (operator instead of user)
@@ -186,7 +186,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   end
 
   test "GET check includes Cache-Control no-store header" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     access_token = jwt_access_token_for(
       @user, host: @host, session_public_id: token_record.public_id,
              resource_type: "client",
@@ -204,7 +204,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
 
   test "GET check with Bearer header takes precedence over cookie" do
     # Create a token record and generate tokens
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     token_record.rotate_refresh_token!
 
     # Generate a valid JWT access token
@@ -236,7 +236,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   end
 
   test "GET check accepts DPoP-bound token with valid proof" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     private_key, jwk = generate_dpop_jwk
     jkt = JitSecurityJwtThumbprintCalculator.calculate(jwk)
     token_record.update!(dpop_jkt: jkt)
@@ -267,7 +267,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   end
 
   test "GET check rejects DPoP-bound token presented as Bearer" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     private_key, jwk = generate_dpop_jwk
     jkt = JitSecurityJwtThumbprintCalculator.calculate(jwk)
     access_token = jwt_access_token_for(
@@ -297,7 +297,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   end
 
   test "GET check rejects DPoP-bound token without proof" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     _private_key, jwk = generate_dpop_jwk
     jkt = JitSecurityJwtThumbprintCalculator.calculate(jwk)
     access_token = jwt_access_token_for(
@@ -322,7 +322,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   end
 
   test "GET check rejects DPoP proof with wrong ath" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     private_key, jwk = generate_dpop_jwk
     jkt = JitSecurityJwtThumbprintCalculator.calculate(jwk)
     access_token = jwt_access_token_for(
@@ -352,7 +352,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   end
 
   test "GET check rejects when access token cnf jkt differs from stored token JKT" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     _stored_key, stored_jwk = generate_dpop_jwk
     proof_key, proof_jwk = generate_dpop_jwk
     stored_jkt = JitSecurityJwtThumbprintCalculator.calculate(stored_jwk)
@@ -404,7 +404,7 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest < ActionDispatch::Integra
   end
 
   test "logout destroys token record so old Bearer access fails" do
-    token_record = ClientToken.create!(user: @user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: @user)
     refresh_plain = token_record.rotate_refresh_token!
     access_token = jwt_access_token_for(
       @user,
@@ -493,7 +493,10 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -719,7 +722,6 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -731,7 +733,6 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -754,7 +755,10 @@ class Auth::App::Edge::V0::Token::ChecksControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

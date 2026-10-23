@@ -1,0 +1,12 @@
+# == Schema Information
+#
+# Table name: visitor_security_modes
+# Database name: com_principal
+#
+#  id :bigint           not null, primary key
+#
+normal:
+  id: 3
+
+advanced:
+  id: 7

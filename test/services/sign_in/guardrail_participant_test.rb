@@ -65,7 +65,7 @@ module SignIn
     # elsewhere must not hold every other sign-in hostage.
     test "a leftover restricted session does not block the guardrail" do
       actor = create_client
-      ClientToken.create!(user: actor, user_token_status_id: ClientTokenStatus::RESTRICTED)
+      ClientToken.create!(authentication_epoch: 0, user: actor, user_token_status_id: ClientTokenStatus::RESTRICTED)
       cycle = create_cycle(actor)
 
       result = SignInGuardrailParticipant.new(cycle: cycle, actor: actor).advance_if_clear!
@@ -119,15 +119,18 @@ module SignIn
     private
 
     def create_client(status_id: ClientStatus::ACTIVE)
-      Client.create!(public_id: PublicId.generate, status_id: status_id)
+      Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate,
+        status_id: status_id,
+      )
     end
 
     def create_visitor
-      Visitor.create!(public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE)
+      Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate, status_id: VisitorStatus::ACTIVE)
     end
 
     def create_operator
-      Operator.create!(status_id: OperatorStatus::ACTIVE)
+      Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     end
 
     def create_cycle(actor, cycle_class: ClientSignInFlow)

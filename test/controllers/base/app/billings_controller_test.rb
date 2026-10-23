@@ -6,8 +6,11 @@ require "test_helper"
 class Base::App::BillingsControllerTest < ActionDispatch::IntegrationTest
   setup do
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    @client_token = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    @client_token = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     host! @host
   end
 
@@ -31,6 +34,7 @@ class Base::App::BillingsControllerTest < ActionDispatch::IntegrationTest
         unless @base_rp_fixture_credentials[fixture_key]
           fixture_now = OpAppGrant.database_now
           fixture_rp = OpAppGrant.create!(
+            authentication_epoch: 0,
             client_token: fixture_root, oidc_client_id: fixture_client.client_id,
             oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
             oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,

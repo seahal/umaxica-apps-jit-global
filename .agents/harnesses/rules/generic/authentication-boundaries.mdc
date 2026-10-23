@@ -13,7 +13,9 @@ description: Preserve Rails forgery protection, browser-bound ceremony admission
 - A browser-bound admission may add a nonce or digest as defense in depth, but it never replaces
   Rails CSRF, Origin and Fetch Metadata checks. The nonce is server-issued, bound to the initiating
   browser and operation, single-use, and refused when stale, cross-browser, mismatched or replayed.
-- GET and HEAD do not create reservations, candidates, proofs, grants or ceremony state.
+- GET and HEAD do not create reservations, candidates, proofs, grants or ceremony state. The only
+  exception is the Sign-in path continuation GETs under the six conditions of
+  `adr/sign-in-path-continuation-protocol.md`; HEAD is always refused there.
 
 ## Auth and step-up ownership
 

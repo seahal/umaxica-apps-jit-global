@@ -53,7 +53,10 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
 
   test "attach rejects an Avatar whose current owner differs from the Group owner" do
     context = app_context
-    other_actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     other_avatar = BaseSelectorBootstrapAuthority.call(surface: :app, principal: other_actor).avatar
 
     assert_no_difference -> { GroupAvatarMembership.count } do
@@ -189,7 +192,10 @@ class GroupAvatarMembershipsTest < ActiveSupport::TestCase
   private
 
   def app_context
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
     group = AvatarGroup.create!(
       account_surface: "app",

@@ -3,7 +3,7 @@
 require "test_helper"
 
 class ClientSecretAuditOutboxTest < ActiveSupport::TestCase
-  self.fixture_table_names = %w(clients client_statuses client_visibilities client_mfa_levels client_mfa_statuses)
+  self.fixture_table_names = %w(clients client_statuses client_visibilities client_security_modes client_mfa_statuses)
 
   test "audit actor is the verified request actor rather than the credential owner" do
     actor = clients(:one)
@@ -62,7 +62,7 @@ class ClientSecretAuditOutboxTest < ActiveSupport::TestCase
 
   test "issuance purge snapshots require one authority reference and remain immutable" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     event = ClientSecretAuditOutbox.record!(
       actor_context: ActorValuesContext.empty, client_ref: actor.public_id,
       operation_ref: SecureRandom.uuid, occurred_at: Client.database_now,
@@ -145,7 +145,10 @@ class ClientSecretAuditOutboxTest < ActiveSupport::TestCase
     contexts = [
       nil,
       ActorValuesContext.empty.with(subject: clients(:one)),
-      ActorValuesContext.empty.with(subject: Client.new, actor_type: :client, tld: :app),
+      ActorValuesContext.empty.with(
+        subject: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL),
+        actor_type: :client, tld: :app,
+      ),
     ]
 
     contexts.each do |context|

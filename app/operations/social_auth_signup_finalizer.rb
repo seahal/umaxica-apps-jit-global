@@ -89,17 +89,14 @@ class SocialAuthSignupFinalizer
       birthdate: birthdate,
       status_id: ClientStatus::VERIFIED_WITH_SIGN_UP,
       visibility_id: default_visibility_id,
-      mfa_level_id: default_mfa_level_id,
+      # adr/authentication-security-mode.md B1: APP sign-up starts in NORMAL.
+      security_mode_id: ClientSecurityMode::NORMAL,
       mfa_status_id: default_mfa_status_id,
     )
   end
 
   def default_visibility_id
     ClientVisibility::STAFF
-  end
-
-  def default_mfa_level_id
-    ClientMfaLevel::NOTHING
   end
 
   def default_mfa_status_id
@@ -110,7 +107,6 @@ class SocialAuthSignupFinalizer
     [
       ClientStatus,
       ClientVisibility,
-      ClientMfaLevel,
       ClientMfaStatus,
     ].each { |klass| klass.ensure_defaults! if klass.respond_to?(:ensure_defaults!) }
   end

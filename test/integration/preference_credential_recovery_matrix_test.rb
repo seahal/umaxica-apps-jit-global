@@ -198,7 +198,6 @@ class PreferenceCredentialRecoveryMatrixTest < ActionDispatch::IntegrationTest
 
     get "/preference?ri=jp", headers: cookie_header(REFRESH => forged)
     head "/preference?ri=jp", headers: cookie_header(REFRESH => forged)
-    get "/edge/v0/cookie", headers: cookie_header(REFRESH => forged).merge("Accept" => "application/json")
 
     assert_equal before, counts.call
     assert_nil preference.reload.used_at

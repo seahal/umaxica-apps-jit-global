@@ -111,6 +111,7 @@ class SignUpExpiryJobTest < ActiveJob::TestCase
 
   def create_flow(model, now:, expires_at:, status_id: nil, step: "start", completed_at: nil)
     model.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(model),
       principal_id: nil,
       status_id: status_id || model::STATUS_MODEL::STARTED,
       step: step,

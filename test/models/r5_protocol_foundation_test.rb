@@ -9,7 +9,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
   REALMS = [
     {
       realm: "app",
-      epoch: OpAppProtocolEpoch,
       consumed_jti: OpAppConsumedJti,
       flow: OpAppLogoutFlow,
       participant: OpAppLogoutFlowParticipant,
@@ -19,7 +18,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
     },
     {
       realm: "com",
-      epoch: OpComProtocolEpoch,
       consumed_jti: OpComConsumedJti,
       flow: OpComLogoutFlow,
       participant: OpComLogoutFlowParticipant,
@@ -29,7 +27,6 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
     },
     {
       realm: "org",
-      epoch: OpOrgProtocolEpoch,
       consumed_jti: OpOrgConsumedJti,
       flow: OpOrgLogoutFlow,
       participant: OpOrgLogoutFlowParticipant,
@@ -39,10 +36,8 @@ class R5ProtocolFoundationTest < ActiveSupport::TestCase
     },
   ].freeze
 
-  test "each realm has an initialized current contract epoch and separated protocol tables" do
+  test "each realm has separated protocol tables" do
     REALMS.each do |entry|
-      assert_equal 1, entry.fetch(:epoch).find(1).contract_epoch
-      assert_equal entry.fetch(:realm), entry.fetch(:epoch).find(1).realm
       assert_equal "op_consumed_jtis", entry.fetch(:consumed_jti).table_name
       assert_equal "logout_flows", entry.fetch(:flow).table_name
       assert_equal "logout_flow_participants", entry.fetch(:participant).table_name

@@ -15,9 +15,12 @@ class StepUpTransactionReferenceUniquenessTest < ActiveSupport::TestCase
   CELLS.each do |principal_class, status, visibility, root_class, root_owner_key,
                  session_class, session_token_key, transaction_class|
     test "#{session_class.name} keeps nullable transaction references and raw unique enforcement" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
-      first_root = root_class.create!(root_owner_key => actor)
-      second_root = root_class.create!(root_owner_key => actor)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
+      first_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
+      second_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
       metadata = { scope: "settings_birthdate",
                    return_to: "/identity/birthdate",
                    status: "PENDING",
@@ -41,8 +44,11 @@ class StepUpTransactionReferenceUniquenessTest < ActiveSupport::TestCase
       first.save!
 
       assert_equal reference, first.reload.step_up_ceremony_transaction_ref
-      other_actor = principal_class.create!(status_id: status, visibility_id: visibility)
-      third_root = root_class.create!(root_owner_key => other_actor)
+      other_actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
+      third_root = root_class.create!(:authentication_epoch => 0, root_owner_key => other_actor)
       third_transaction = transaction_class.create_transaction!(
         actor_ref: other_actor.public_id, session_ref: third_root.public_id, required_scope: "settings_birthdate",
         required_aal: "none", allowed_methods: ["passkey"], return_to: "/identity/birthdate",
@@ -70,9 +76,12 @@ class StepUpTransactionReferenceUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{session_class.name} refuses a duplicate transaction reference on creation" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
-      first_root = root_class.create!(root_owner_key => actor)
-      second_root = root_class.create!(root_owner_key => actor)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
+      first_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
+      second_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
       transaction = transaction_class.create_transaction!(
         actor_ref: actor.public_id, session_ref: first_root.public_id, required_scope: "settings_birthdate",
         required_aal: "none", allowed_methods: ["passkey"], return_to: "/identity/birthdate",
@@ -91,9 +100,12 @@ class StepUpTransactionReferenceUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{session_class.name} validates transaction reference changes on reused persisted rows" do
-      actor = principal_class.create!(status_id: status, visibility_id: visibility)
-      first_root = root_class.create!(root_owner_key => actor)
-      second_root = root_class.create!(root_owner_key => actor)
+      actor = principal_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status,
+        visibility_id: visibility,
+      )
+      first_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
+      second_root = root_class.create!(:authentication_epoch => 0, root_owner_key => actor)
       transaction = transaction_class.create_transaction!(
         actor_ref: actor.public_id, session_ref: first_root.public_id, required_scope: "settings_birthdate",
         required_aal: "none", allowed_methods: ["passkey"], return_to: "/identity/birthdate",

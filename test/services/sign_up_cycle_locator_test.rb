@@ -26,6 +26,7 @@ class SignUpCycleLocatorTest < ActiveSupport::TestCase
   test "issue! persists nonce while request is on a read connection" do
     session = {}
     cycle = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: 123,
       status_id: ClientSignUpFlowStatus::STARTED,
       step: "start",
@@ -45,16 +46,11 @@ class SignUpCycleLocatorTest < ActiveSupport::TestCase
     assert cycle.reload.nonce_matches?("fresh-nonce")
   end
 
-  test "returns nil when payload is missing required keys" do
-    session = { app_sign_up_flow_locator: { "public_id" => "missing-nonce" } }
-    locator = SignUpCycleLocator.new(session, surface: :app)
-
-    assert_nil locator.current
-  end
-
-  test "rescues KeyError when nonce is missing from session" do
+  test "refuses a session payload without a nonce for the admitted owner" do
+    binding = SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)
+    ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
     cycle = ClientSignUpFlow.create!(
-      principal_id: 123,
+      auth_admission_binding: binding,
       status_id: ClientSignUpFlowStatus::STARTED,
       step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("a-nonce"),
@@ -62,10 +58,19 @@ class SignUpCycleLocatorTest < ActiveSupport::TestCase
       expires_at: 15.minutes.from_now,
       entry_method: "email",
     )
-
     session = { app_sign_up_flow_locator: { "public_id" => cycle.public_id } }
     locator = SignUpCycleLocator.new(session, surface: :app)
 
-    assert_nil locator.current
+    assert_raises(SignUpCycleLocator::OwnershipMismatch) do
+      locator.current(admission_binding: binding, ceremony_session: ceremony)
+    end
+  end
+
+  test "returns nil for an admitted owner without a flow or a session payload" do
+    binding = SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)
+    ceremony = ClientAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
+    locator = SignUpCycleLocator.new({}, surface: :app)
+
+    assert_nil locator.current(admission_binding: binding, ceremony_session: ceremony)
   end
 end

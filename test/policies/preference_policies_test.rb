@@ -9,7 +9,7 @@ require "test_helper"
 
 class AppPreferenceCurrencyPolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.new
+    @user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @record = AppPreferenceCurrency.new
     @policy = AppPreferenceCurrencyPolicy.new(@record, user: @user)
   end
@@ -37,7 +37,7 @@ end
 
 class AppPreferenceLanguagePolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.new
+    @user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @record = AppPreferenceLanguage.new
     @policy = AppPreferenceLanguagePolicy.new(@record, user: @user)
   end
@@ -65,7 +65,7 @@ end
 
 class AppPreferenceThemePolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.new
+    @user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @record = AppPreferenceTheme.new
     @policy = AppPreferenceThemePolicy.new(@record, user: @user)
   end
@@ -93,7 +93,7 @@ end
 
 class AppPreferenceTimezonePolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.new
+    @user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @record = AppPreferenceTimezone.new
     @policy = AppPreferenceTimezonePolicy.new(@record, user: @user)
   end
@@ -121,7 +121,7 @@ end
 
 class AppPreferenceRegionPolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.new
+    @user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @record = AppPreferenceRegion.new
     @policy = AppPreferenceRegionPolicy.new(@record, user: @user)
   end

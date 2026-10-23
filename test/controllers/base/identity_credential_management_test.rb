@@ -49,6 +49,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
       visitor_secret_credential_kind_id: VisitorSecretCredentialKind::LOGIN, uses: 10, status: :active,
     )
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       root_login_established_at: Time.current,
@@ -86,6 +87,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -135,6 +137,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -192,6 +195,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
       staff_secret_kind_id: OperatorSecretCredentialKind::LOGIN, uses: 10, status: :active,
     )
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       root_login_established_at: Time.current,
@@ -229,6 +233,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -278,6 +283,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -322,6 +328,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
     client = clients(:one)
     passkey = client.client_passkeys.create!(webauthn_id: "mfa-management-passkey", public_key: "public-key")
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: client, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       root_login_established_at: Time.current,
@@ -345,6 +352,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -404,6 +412,7 @@ class BaseIdentityCredentialManagementTest < ActionDispatch::IntegrationTest
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpAppGrant.create!(
+                authentication_epoch: 0,
                 client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

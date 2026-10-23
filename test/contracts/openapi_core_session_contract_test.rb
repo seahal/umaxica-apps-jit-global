@@ -112,7 +112,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
     oidc_client = OidcClientRegistry.find!("core-app-jp")
     root_token = client_tokens(:one)
     rp_grant = OpAppGrant.create!(
-      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       client_token: root_token,
       oidc_client_id: oidc_client.client_id,
       oidc_scope: "openid profile",
@@ -142,7 +142,7 @@ class OpenapiCoreSessionContractTest < ActionDispatch::IntegrationTest
 
   def oidc_refresh_token_for_client
     session = OpAppGrant.create!(
-      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       client_token: client_tokens(:one),
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",

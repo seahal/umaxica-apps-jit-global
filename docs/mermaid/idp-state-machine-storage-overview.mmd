@@ -2,7 +2,7 @@ flowchart LR
     %% CURRENT; dashed lines are code ownership, solid FK lines are database constraints.
     LEGEND["Dashed: code reads/writes state; NOT FK. Solid: actual SQL FK fact to reference. No live DB claim."]
     subgraph client_ownership["client state ownership"]
-        M0["idp-client-sign-in: FlowSignIn; participants; LocalAuthenticationSessionCommitter"]
+        M0["idp-client-sign-in: FlowSignIn; participants; AuthenticationSessionCommitter"]
         T0["client_sign_in_flows: status_id"]
         M0 -.->|"owns or evaluates state; not FK"| T0
         R0_0["client_sign_in_flow_statuses.id"]
@@ -41,7 +41,7 @@ flowchart LR
         M10["idp-client-oauth-callback: OauthCallbackStateable"]
         T10["client_oauth_callback_states: consumed_at / expires_at"]
         M10 -.->|"owns or evaluates state; not FK"| T10
-        M11["idp-client-local-result-delivery: LocalAuthenticationResultDelivery; LocalAuthenticationResultCoordinator"]
+        M11["idp-client-sign-in-flow-evidence: SignInFlowAuthenticationEvidence"]
         T11["client_sign_in_flows: result_generation / result_digest / base_finalized_at"]
         M11 -.->|"owns or evaluates state; not FK"| T11
         M12["idp-client-token: TokenStatusManagement; RefreshTokenable"]
@@ -167,7 +167,7 @@ flowchart LR
         T123 -->|"mfa_status_id FK; VALID; DELETE NO ACTION"| R123_0
     end
     subgraph visitor_ownership["visitor state ownership"]
-        M17["idp-visitor-sign-in: FlowSignIn; participants; LocalAuthenticationSessionCommitter"]
+        M17["idp-visitor-sign-in: FlowSignIn; participants; AuthenticationSessionCommitter"]
         T17["visitor_sign_in_flows: status_id"]
         M17 -.->|"owns or evaluates state; not FK"| T17
         R17_0["visitor_sign_in_flow_statuses.id"]
@@ -203,7 +203,7 @@ flowchart LR
         M26["idp-visitor-oidc-authorization: OidcAuthorizationTransactionable"]
         T26["visitor_oidc_authorization_transactions: status"]
         M26 -.->|"owns or evaluates state; not FK"| T26
-        M27["idp-visitor-local-result-delivery: LocalAuthenticationResultDelivery; LocalAuthenticationResultCoordinator"]
+        M27["idp-visitor-sign-in-flow-evidence: SignInFlowAuthenticationEvidence"]
         T27["visitor_sign_in_flows: result_generation / result_digest / base_finalized_at"]
         M27 -.->|"owns or evaluates state; not FK"| T27
         M28["idp-visitor-token: TokenStatusManagement; RefreshTokenable"]
@@ -301,7 +301,7 @@ flowchart LR
         T124 -->|"mfa_status_id FK; VALID; DELETE NO ACTION"| R124_0
     end
     subgraph operator_ownership["operator state ownership"]
-        M33["idp-operator-sign-in: FlowSignIn; participants; LocalAuthenticationSessionCommitter"]
+        M33["idp-operator-sign-in: FlowSignIn; participants; AuthenticationSessionCommitter"]
         T33["operator_sign_in_flows: status_id"]
         M33 -.->|"owns or evaluates state; not FK"| T33
         R33_0["operator_sign_in_flow_statuses.id"]
@@ -340,7 +340,7 @@ flowchart LR
         M43["idp-operator-oauth-callback: OauthCallbackStateable"]
         T43["operator_oauth_callback_states: consumed_at / expires_at"]
         M43 -.->|"owns or evaluates state; not FK"| T43
-        M44["idp-operator-local-result-delivery: LocalAuthenticationResultDelivery; LocalAuthenticationResultCoordinator"]
+        M44["idp-operator-sign-in-flow-evidence: SignInFlowAuthenticationEvidence"]
         T44["operator_sign_in_flows: result_generation / result_digest / base_finalized_at"]
         M44 -.->|"owns or evaluates state; not FK"| T44
         M45["idp-operator-token: TokenStatusManagement; RefreshTokenable"]

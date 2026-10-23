@@ -8,16 +8,16 @@ class EmailCredentialRegistrationOtpResendIssuerTest < ActiveSupport::TestCase
       actor, token, email =
         case surface
         when "app"
-          owner = Client.create!(status_id: ClientStatus::ACTIVE)
-          root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+          owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
           candidate = owner.client_emails.create!(
             raw_address: "registration-resend-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,
           )
           [owner, root, candidate]
         when "com"
-          owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+          owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
           candidate = owner.visitor_emails.create!(
             raw_address: "registration-resend-#{SecureRandom.hex(8)}@example.test", confirm_policy: true,
             otp_attempts_count: 1,

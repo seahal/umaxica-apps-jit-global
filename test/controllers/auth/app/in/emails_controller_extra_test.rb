@@ -29,7 +29,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
       }.fetch(admission_surface)
       admission_browser.host!(admission_host)
-      admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+      admission_issuance = OidcTestEntry.issue!(
         surface: admission_surface, intent: admission_intent,
         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
       )
@@ -63,14 +63,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
       )
 
       assert_equal 303, admission_browser.response.status
-      @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-        flow: ClientSignInFlow.find_by!(
-          public_id: ClientAuthCeremonySession.find(
-            admission_binding.reload.admitted_auth_ceremony_session_id,
-          ).local_sign_in_flow_ref,
-        ),
-        surface: "app", phase: "PRIMARY_PENDING",
-      )
+      @primary_sign_in_binding = nil
     end
     ActionMailer::Base.deliveries.clear
     TurnstileVerifierStub.challenge_enabled = true
@@ -137,7 +130,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   end
 
   test "patch update success with JSON" do
-    user = Client.create!(status_id: 1)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: 1)
     email = ClientEmail.create!(
       user: user,
       address: "app-json-success@example.com",
@@ -167,7 +160,7 @@ class Auth::App::Sign::In::EmailsControllerExtraTest < ActionDispatch::Integrati
   end
 
   test "patch update failure with JSON" do
-    user = Client.create!(status_id: 1)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: 1)
     email = ClientEmail.create!(
       user: user,
       address: "app-json-fail@example.com",
@@ -239,7 +232,6 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -271,7 +263,10 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -522,7 +517,6 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -531,7 +525,10 @@ class Auth::App::Sign::In::EmailsControllerExtraTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -26,7 +26,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "withdrawable methods available on staff" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
 
     assert_respond_to staff, :withdrawn?
     assert_respond_to staff, :active?
@@ -277,7 +277,7 @@ class WithdrawableTest < ActiveSupport::TestCase
 
   # Staff integration tests
   test "staff withdrawn? works correctly" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     staff.update!(withdrawn_at: Time.current)
 
     assert_predicate staff, :withdrawn?
@@ -288,7 +288,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "staff active? works correctly" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     staff.update!(withdrawn_at: nil)
 
     assert_predicate staff, :active?
@@ -299,7 +299,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "staff can_recover? works correctly" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     staff.update_columns(deactivated_at: 15.days.ago, discard_at: 15.days.ago, purge_eligible_at: 16.days.from_now)
 
     assert_predicate staff, :can_recover?
@@ -310,7 +310,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "staff permanently_deletable? works correctly" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     staff.update_columns(deactivated_at: 15.days.ago, discard_at: 15.days.ago, purge_eligible_at: 16.days.from_now)
 
     assert_not staff.permanently_deletable?
@@ -321,7 +321,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "staff suspended? works with the same retention columns as app and com actors" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     staff.update_columns(deactivated_at: 2.hours.ago, discard_at: 2.hours.ago, purge_eligible_at: 31.days.from_now)
 
     assert_predicate staff, :suspended?
@@ -330,7 +330,7 @@ class WithdrawableTest < ActiveSupport::TestCase
   end
 
   test "operator withdrawal_in_progress? delegates to withdrawable concern" do
-    staff = Operator.create!
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     staff.update_columns(withdrawal_started_at: Time.current, deactivated_at: nil)
 
     assert_predicate staff, :withdrawal_in_progress?

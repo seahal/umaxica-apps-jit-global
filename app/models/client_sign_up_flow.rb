@@ -146,12 +146,15 @@ class ClientSignUpFlow < OpBaseAppRecord
   }.freeze
 
   belongs_to :token, class_name: "ClientToken"
+  belongs_to :auth_admission_binding, class_name: "ClientAuthAdmissionBinding", optional: false
+  attr_readonly :auth_admission_binding_id
   belongs_to :principal, class_name: "Client", optional: true
   belongs_to :status, class_name: "ClientSignUpFlowStatus"
   belongs_to :cleanup_status, class_name: "ClientSignUpFlowCleanupStatus", optional: false
 
   # SignFlow disables required belongs_to validation, so status presence stays explicit.
   # rubocop:disable Rails/RedundantPresenceValidationOnBelongsTo
+  validates :auth_admission_binding, presence: true
   validates :status_id, presence: true,
                         inclusion: { in: ->(record) { record.class::STATUS_IDS } }
   # rubocop:enable Rails/RedundantPresenceValidationOnBelongsTo
@@ -160,6 +163,7 @@ class ClientSignUpFlow < OpBaseAppRecord
   validate :legacy_state_matches_status
   validate :step_matches_status
   validate :completed_status_has_completed_at
+  validate :sign_up_admission_is_redeemed, on: :create
 
   validates :social_provider, inclusion: { in: SOCIAL_ENTRY_METHODS }, allow_nil: true
   validates :result_digest, length: { maximum: 64 }

@@ -38,7 +38,7 @@ class IdentityEmailTest < ActiveSupport::TestCase
 
     test "#{model} enforces case-insensitive uniqueness of the effective ownership binding" do
       if model == ClientEmail
-        owner = Client.create!
+        owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
         record = ClientEmail.create!(user: owner, address: "eg@example.com", confirm_policy: true)
         record.finalize_binding!
         ["eg@example.com", "EG@EXAMPLE.COM"].each do |address|

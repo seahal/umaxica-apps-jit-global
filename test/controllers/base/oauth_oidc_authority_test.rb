@@ -747,7 +747,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   test "base app token check authenticates a valid client session" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
-    token_record = ClientToken.create!(user: user)
+    token_record = ClientToken.create!(authentication_epoch: 0, user: user)
     token_record.rotate_refresh_token!
     access_token = AuthenticationToken.encode(
       user,
@@ -774,7 +774,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   test "base org token check authenticates a valid operator session" do
     host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
     staff = operators(:one)
-    token_record = OperatorToken.create!(staff: staff)
+    token_record = OperatorToken.create!(authentication_epoch: 0, staff: staff)
     token_record.rotate_refresh_token!
     access_token = AuthenticationToken.encode(
       staff,
@@ -834,6 +834,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     user = clients(:one)
     ensure_user_token_reference_records!
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -872,6 +873,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -945,6 +947,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1041,6 +1044,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         token: ->(actor) do
           ensure_user_token_reference_records!
           ClientToken.create!(
+            authentication_epoch: 0,
             user: actor,
             user_token_kind_id: ClientTokenKind::BROWSER_WEB,
             user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1082,6 +1086,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = OpAppGrant.create!(
+                  authentication_epoch: 0,
                   client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -1121,6 +1126,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         token: ->(actor) do
           ensure_staff_token_reference_records!
           OperatorToken.create!(
+            authentication_epoch: 0,
             staff: actor,
             staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
             staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -1162,6 +1168,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -1201,6 +1208,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
         token: ->(actor) do
           ensure_visitor_token_reference_records!
           VisitorToken.create!(
+            authentication_epoch: 0,
             visitor: actor,
             skip_session_limit_check: true,
             visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
@@ -1243,6 +1251,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = OpComGrant.create!(
+                  authentication_epoch: 0,
                   visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -1313,6 +1322,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     actor = clients(:one)
     ensure_user_token_reference_records!
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1354,6 +1364,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token,
               oidc_client_id: rp_client.client_id,
               oidc_scope: "openid profile",
@@ -1414,6 +1425,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     actor = clients(:one)
     ensure_user_token_reference_records!
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
@@ -1454,6 +1466,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -1671,7 +1684,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     assert_oidc_error_redirect(error: "login_required", redirect_uri: oidc_authorize_params.fetch(:redirect_uri))
   end
 
-  test "base oauth authorize rejects requests without openid scope" do
+  test "base oauth authorize returns a request without openid scope to the RP as invalid_request" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
 
@@ -1679,12 +1692,10 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       get "/oauth/authorize", params: oidc_authorize_params(scope: "profile email"), headers: browser_headers
     end
 
-    assert_response :bad_request
-    assert_equal "invalid_request", response.parsed_body["error"]
-    assert_equal "scope must include openid", response.parsed_body["error_description"]
+    assert_oidc_error_redirect(error: "invalid_request", redirect_uri: oidc_authorize_params[:redirect_uri])
   end
 
-  test "base oauth authorize rejects scopes outside the client allowlist" do
+  test "base oauth authorize returns scopes outside the client allowlist to the RP as invalid_scope" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host!(host)
 
@@ -1692,8 +1703,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       get "/oauth/authorize", params: oidc_authorize_params(scope: "openid palm.read"), headers: browser_headers
     end
 
-    assert_response :bad_request
-    assert_equal "invalid_scope", response.parsed_body["error"]
+    assert_oidc_error_redirect(error: "invalid_scope", redirect_uri: oidc_authorize_params[:redirect_uri])
   end
 
   test "base oauth authorize can retry a finalized result without a second root session" do
@@ -1834,13 +1844,19 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       actor, model, tokens, owner_key, base_host, auth_host, client_id, realm =
         case surface
         when :app
-          [Client.create!(id: 9_125_000_000_000), ClientOidcAuthorizationTransaction, ClientToken, :user_id,
+          [Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_125_000_000_000,
+          ), ClientOidcAuthorizationTransaction, ClientToken, :user_id,
            ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "core-app-jp", "client",]
         when :com
-          [Visitor.create!(id: 9_125_000_000_000), VisitorOidcAuthorizationTransaction, VisitorToken, :visitor_id,
+          [Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, id: 9_125_000_000_000,
+          ), VisitorOidcAuthorizationTransaction, VisitorToken, :visitor_id,
            ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "core-com-jp", "visitor",]
         when :org
-          [Operator.create!(id: 9_125_000_000_000), OperatorOidcAuthorizationTransaction, OperatorToken, :staff_id,
+          [Operator.create!(
+            security_mode_id: SecurityModeConfigurable::ADVANCED, id: 9_125_000_000_000,
+          ), OperatorOidcAuthorizationTransaction, OperatorToken, :staff_id,
            ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"), "core-org-jp", "operator",]
         end
       host!(base_host)
@@ -2039,7 +2055,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: client_id,
       redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(resource_type).first,
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: "state",
       nonce: "nonce",
@@ -2055,6 +2071,7 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
     OpBaseOrgRecord.connected_to(role: :writing) do
       count.times do |index|
         token = ClientToken.new(
+          authentication_epoch: 0,
           user: user,
           user_token_status_id: ClientTokenStatus::ACTIVE,
           created_at: (count + index + 1).hours.ago,
@@ -2076,12 +2093,11 @@ class BaseOauthOidcAuthorityTest < ActionDispatch::IntegrationTest
   def create_visitor!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::NOTHING)
     VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
     VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
     VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    Visitor.create!
+    Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
   end
   private
 end
@@ -2199,7 +2215,6 @@ class BaseOauthOidcAuthorityTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -2211,7 +2226,6 @@ class BaseOauthOidcAuthorityTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -2241,7 +2255,10 @@ class BaseOauthOidcAuthorityTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

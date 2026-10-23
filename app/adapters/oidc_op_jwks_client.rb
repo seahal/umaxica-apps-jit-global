@@ -20,54 +20,104 @@ class OidcOpJwksClient
   OPEN_TIMEOUT = 2
   READ_TIMEOUT = 5
 
+  # found(key) / invalid(reason) / unavailable(reason) (D-136): callers map invalid to their own
+  # 400/401 contract and unavailable to 503, never the reverse.
+  Lookup =
+    Data.define(:status, :key, :reason) do
+      def found? = status == :found
+
+      def invalid? = status == :invalid
+
+      def unavailable? = status == :unavailable
+    end
+
+  CLIENTS = Concurrent::Map.new
+
   class << self
     public
 
-    def for_resource_type(resource_type, fetcher: nil, clock: -> { Time.current })
-      new(
-        jwks_uri: OidcIssuer.jwks_uri(resource_type),
-        fetcher: fetcher,
-        clock: clock,
-      )
+    def for_resource_type(resource_type)
+      for_jwks_uri(OidcIssuer.jwks_uri(resource_type))
+    end
+
+    # One cached client per JWKS URI and process (BX-6); verifiers never build their own.
+    def for_jwks_uri(jwks_uri)
+      CLIENTS.compute_if_absent(jwks_uri.to_s) { new(jwks_uri:) }
     end
   end
 
-  def initialize(jwks_uri:, fetcher: nil, clock: -> { Time.current })
+  def initialize(jwks_uri:, fetcher: nil, clock: -> { Time.current }, limiter: OidcJwksRefetchLimiter.shared)
     @jwks_uri = normalize_jwks_uri(jwks_uri)
     @fetcher = fetcher || method(:fetch_from_network)
     @clock = clock
+    @limiter = limiter
     @mutex = Mutex.new
     @cache_entry = nil
   end
 
   public
 
-  def public_key_for(kid)
+  def lookup(kid)
     normalized_kid = normalize_kid(kid)
-    return if normalized_kid.blank?
+    return invalid("malformed_kid") unless normalized_kid
 
     current = cache_entry
-    return current.keys.fetch(normalized_kid) if current && fresh?(current) && current.keys.key?(normalized_kid)
+    return found(current.keys.fetch(normalized_kid)) if current && fresh?(current) && current.keys.key?(normalized_kid)
 
-    refreshed = refresh(normalized_kid)
-    return refreshed.keys.fetch(normalized_kid) if refreshed&.keys&.key?(normalized_kid)
-
-    # The first fetch establishes an empty cache; a kid miss after that fetch is
-    # the single bounded rotation refetch. A pre-existing cache only receives
-    # the one refetch above.
-    refreshed = refresh(normalized_kid) if current.nil? && refreshed
-    return refreshed.keys.fetch(normalized_kid) if refreshed&.keys&.key?(normalized_kid)
-
-    current = cache_entry
-    return unless current&.keys&.key?(normalized_kid)
-    return unless usable_stale_entry?(current)
-
-    current.keys.fetch(normalized_kid)
+    lookup_after_limiter(normalized_kid, current)
   end
 
   private
 
-  attr_reader :jwks_uri, :fetcher, :clock
+  def lookup_after_limiter(kid, current)
+    decision = limiter.acquire(OidcJwksRefetchLimiter.issuer_key(jwks_uri))
+    if decision.lease?
+      entry = fetch_and_store
+      limiter.record(
+        OidcJwksRefetchLimiter.issuer_key(jwks_uri), outcome: entry ? "ok" : "failed",
+                                                     kids: entry ? entry.keys.keys : [],
+      )
+      return stale_or(current, kid, unavailable("fetch_failed")) unless entry
+
+      return entry.keys.key?(kid) ? found(entry.keys.fetch(kid)) : invalid("unknown_kid")
+    end
+    return stale_or(current, kid, unavailable("refetch_in_progress")) if decision.busy?
+    return stale_or(current, kid, unavailable("recent_fetch_failed")) unless decision.ok?
+    return stale_or(current, kid, invalid("unknown_kid")) unless decision.kids.include?(kid)
+
+    # A recent fetch saw this kid, so it is genuine; this process fetches once for itself.
+    entry = fetch_and_store
+    return stale_or(current, kid, unavailable("fetch_failed")) unless entry
+
+    entry.keys.key?(kid) ? found(entry.keys.fetch(kid)) : invalid("unknown_kid")
+  end
+
+  # A known kid inside the stale window keeps verifying while refresh is refused or failing.
+  def stale_or(current, kid, result)
+    return found(current.keys.fetch(kid)) if current&.keys&.key?(kid) && usable_stale_entry?(current)
+
+    result
+  end
+
+  def found(key) = Lookup.new(status: :found, key:, reason: nil)
+
+  def invalid(reason) = Lookup.new(status: :invalid, key: nil, reason:)
+
+  def unavailable(reason) = Lookup.new(status: :unavailable, key: nil, reason:)
+
+  def fetch_and_store
+    @mutex.synchronize do
+      document = fetch_document
+      @cache_entry = CacheEntry.new(keys: document, fetched_at: clock.call).freeze
+    rescue FetchError, JSON::ParserError, URI::InvalidURIError, TypeError,
+           *OutboundHttp::Connection::NETWORK_ERRORS
+      nil
+    end
+  end
+
+  private
+
+  attr_reader :jwks_uri, :fetcher, :clock, :limiter
 
   def normalize_jwks_uri(value)
     uri = URI.parse(value.to_s)
@@ -100,19 +150,6 @@ class OidcOpJwksClient
   def usable_stale_entry?(entry)
     age = clock.call - entry.fetched_at
     age > CACHE_TTL && age <= CACHE_TTL + MAX_STALE_TTL
-  end
-
-  def refresh(kid)
-    @mutex.synchronize do
-      current = @cache_entry
-      return current if current && fresh?(current) && current.keys.key?(kid)
-
-      document = fetch_document
-      @cache_entry = CacheEntry.new(keys: document, fetched_at: clock.call).freeze
-    rescue FetchError, JSON::ParserError, URI::InvalidURIError, TypeError,
-           *OutboundHttp::Connection::NETWORK_ERRORS
-      nil
-    end
   end
 
   def fetch_document

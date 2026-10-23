@@ -16,8 +16,8 @@ class CredentialRegistrationOtpSupersessionTest < ActiveSupport::TestCase
             when ["org", :email] then [Operator, OperatorToken, OperatorEmail, :staff_id, OperatorStatus::ACTIVE]
             when ["org", :telephone] then [Operator, OperatorToken, OperatorTelephone, :staff_id, OperatorStatus::ACTIVE]
             end
-          actor = owner_model.create!(status_id: active_status)
-          token = root_model.create!(owner_key => actor.id)
+          actor = owner_model.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: active_status)
+          token = root_model.create!(:authentication_epoch => 0, owner_key => actor.id)
           token.rotate_refresh_token!
           contact = contact_model.create!(
             owner_key => actor.id, :confirm_policy => true, :otp_attempts_count => 1,

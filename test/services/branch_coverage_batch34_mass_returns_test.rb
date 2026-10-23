@@ -7,7 +7,9 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   test "AuthenticationSelectedSessionRevoker missing token" do
-    result = AuthenticationSelectedSessionRevoker.call(owner: Client.new, token: nil)
+    result = AuthenticationSelectedSessionRevoker.call(
+      owner: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL), token: nil,
+    )
 
     assert_equal :failure, result.status
   end
@@ -128,7 +130,7 @@ class BranchCoverageBatch34MassReturnsTest < ActiveSupport::TestCase
 
   test "AvatarFollowPolicy non-avatar pair" do
     policy = AvatarFollowPolicy.new(Object.new)
-    policy.define_singleton_method(:user) { Client.new }
+    policy.define_singleton_method(:user) { Client.new(security_mode_id: SecurityModeConfigurable::NORMAL) }
 
     assert_not policy.create?
   end

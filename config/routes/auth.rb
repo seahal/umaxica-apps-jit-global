@@ -59,7 +59,6 @@ scope(module: :auth, as: :auth) do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
-        resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
         resource :cancellation, only: :create
@@ -300,7 +299,6 @@ scope(module: :auth, as: :auth) do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
-        resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
         resource :cancellation, only: :create
@@ -478,7 +476,6 @@ scope(module: :auth, as: :auth) do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
         resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
-        resource :handoff, only: %i(show create)
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D09: first-page Cancel to the RP. Org has no public Sign Up, so no Switch.
         resource :cancellation, only: :create

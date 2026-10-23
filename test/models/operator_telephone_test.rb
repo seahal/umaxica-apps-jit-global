@@ -147,7 +147,7 @@ class OperatorTelephoneTest < ActiveSupport::TestCase
   end
 
   test "enforces maximum telephones per staff" do
-    staff = Operator.create!(staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
+    staff = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, staff_status: OperatorStatus.find(OperatorStatus::NOTHING))
     Prosopite.pause do
       OperatorTelephone::MAX_TELEPHONES_PER_STAFF.times do |i|
         OperatorTelephone.create!(

@@ -6,9 +6,10 @@ class Auth::Org::Verification::SetupsControllerTest < ActionDispatch::Integratio
   fixtures :operators, :operator_tokens
 
   test "an admitted bootstrap shows the passkey registration method and cancellation, never a back link" do
-    # An operator fixture that holds no passkey: bootstrap is first registration only.
-    actor = operators(:none_staff)
-    token = OperatorToken.create!(staff: actor, root_login_established_at: Time.current)
+    # An operator that holds no passkey: bootstrap is first registration only. Fixture operators hold
+    # two (D-132), so this one is created here.
+    actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::NOTHING)
+    token = OperatorToken.create!(authentication_epoch: 0, staff: actor, root_login_established_at: Time.current)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(

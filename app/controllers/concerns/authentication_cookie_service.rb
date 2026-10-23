@@ -25,7 +25,6 @@ class AuthenticationCookieService
 
   def auth_cookie_options(expires: nil, httponly: true)
     CoreCookieOptions.for(
-      surface: CoreSurface.current(request),
       request: request,
       httponly: httponly,
       # Strict so the auth cookie is never sent on cross-site requests. The
@@ -33,17 +32,14 @@ class AuthenticationCookieService
       same_site: :strict,
       path: "/",
       expires: expires,
-      domain: false,
     )
   end
 
   def auth_cookie_deletion_options
     CoreCookieOptions.for(
-      surface: CoreSurface.current(request),
       request: request,
       same_site: :strict,
       path: "/",
-      domain: false,
     ).except(:expires, :httponly)
   end
 

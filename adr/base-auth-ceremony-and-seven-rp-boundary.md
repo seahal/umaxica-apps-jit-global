@@ -35,6 +35,13 @@ Supersedes conflicting authority claims in:
 Acme remains the conceptual authority vocabulary for shared logout/session services. Base is the
 physical Rails Identity Provider and Authorization Server implementation.
 
+> **Partial supersession (2026-10-22, design only):**
+> [OP, Auth, and RP responsibility separation](op-auth-rp-authentication-responsibility-separation.md)
+> separates the OP from application Base, which becomes an RP, and permits authenticated method
+> management and step-up directly through Auth. OP sessions and existing security contracts remain;
+> direct-path protocol details remain open. The combined-Base implementation described below is
+> not certified as migrated by this decision.
+
 ## Context
 
 The repository previously mixed Base RP routes, Auth RP routes, shared browser client IDs

@@ -8,7 +8,10 @@ class SignupOtpDeliveryPayloadTest < ActiveSupport::TestCase
   %i(app com).each do |surface|
     %i(email telephone).each do |channel|
       test "#{surface} #{channel} signup retains binding and encrypted code" do
-        owner = (surface == :app) ? Client.create! : Visitor.create!
+        owner =
+          (surface == :app) ? Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+          ) : Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
         contact_class, owner_key =
           case [surface, channel]
           when [:app, :email] then [ClientEmail, :user_id]

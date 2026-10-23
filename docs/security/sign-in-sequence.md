@@ -172,6 +172,19 @@ adapter. The current result shape includes `success`, `mfa_required`, `session_l
 `session_limit_conflict`, `credential_rejected`, `identity_unavailable`, `transaction_expired`,
 `failure`, and `invalid_request`.
 
+## One RP sign-in per browser (decided; implemented by WU-43)
+
+Decided 2026-10-22 (D-155, `adr/rp-oidc-state-and-return-target.md`); the RP code does not do this
+yet. A browser runs one sign-in at a time per RP: the RP cookie session holds one pending entry, and
+each `POST /sign` replaces it, so the last start wins. An earlier tab is not told; it can continue
+through Auth and the OP (OTP mails, Passkey, even an issued authorization code) and is refused only
+at the RP callback, which lands on `GET /sign/interruption`. This is the intended behavior, not a
+defect. When the earlier tab was a Sign Up, its registration is still saved and only its sign-in
+handoff is refused — at the OP, because the browser already holds a Root Session, or at the RP; the
+person signs in with the new account later. The rule is per browser: different browsers have
+separate cookies and are independent; only the account's session limit applies
+(`ClientToken::MAX_SESSIONS_PER_USER` 2, `VisitorToken` 1, `OperatorToken` 1).
+
 ## Timing And Enumeration Mitigation
 
 Credential endpoints must not make account or credential existence easy to infer from response

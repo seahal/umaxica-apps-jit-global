@@ -25,7 +25,7 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
         -> {
           RpCallbackCommitter.call(
             cell: cell, issuer: issuer, subject: "subject-#{suffix}", sid: sid,
-            absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+            absolute_expires_at: 1.hour.from_now,
           ).outcome
         }
       logout =
@@ -130,7 +130,7 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
     suffix = SecureRandom.hex(12)
     session = RpCallbackCommitter.call(
       cell: cell, issuer: issuer, subject: "subject-#{suffix}", sid: "sid-#{suffix}",
-      absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      absolute_expires_at: 1.hour.from_now,
     ).session
     anchor = RpCoreAppOpSessionBinding.find(session.op_session_binding_id)
     identity = RpCoreAppIdentityBinding.find(anchor.identity_binding_id)
@@ -148,7 +148,6 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
         "client_id" => cell.client_id,
         "jti" => "jti-#{suffix}",
         "scope" => "openid",
-        "umx_contract_epoch" => 1,
         "authn_ctx" => "normal", },
       key, "ES384", { "kid" => "replica", "typ" => "at+jwt" },
     )
@@ -160,7 +159,7 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
       -> {
         RpRequestAuthenticator.call(
           cell: cell, access_token: access, local_session_id: session.public_id,
-          issuer: issuer, contract_epoch: 1, jwks_client: jwks,
+          issuer: issuer, jwks_client: jwks,
         ).status
       }
     reader_backend = nil
@@ -188,7 +187,7 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
         statuses << authenticate.call
         callback_outcome = RpCallbackCommitter.call(
           cell: cell, issuer: issuer, subject: identity.subject, sid: anchor.sid,
-          absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+          absolute_expires_at: 1.hour.from_now,
         ).outcome
       end
     end
@@ -213,7 +212,7 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
     suffix = SecureRandom.hex(12)
     session = RpCallbackCommitter.call(
       cell: cell, issuer: issuer, subject: "subject-#{suffix}", sid: "sid-#{suffix}",
-      absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      absolute_expires_at: 1.hour.from_now,
     ).session
     anchor = RpCoreAppOpSessionBinding.find(session.op_session_binding_id)
     identity = RpCoreAppIdentityBinding.find(anchor.identity_binding_id)
@@ -231,7 +230,6 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
         "client_id" => cell.client_id,
         "jti" => "jti-#{suffix}",
         "scope" => "openid",
-        "umx_contract_epoch" => 1,
         "authn_ctx" => "normal", },
       key, "ES384", { "kid" => "rotation", "typ" => "at+jwt" },
     )
@@ -259,7 +257,7 @@ class RpRefreshLogoutConcurrencyTest < ActiveSupport::TestCase
             outcomes << connection.select_value("SELECT pg_backend_pid()")
             outcomes << RpRefreshCommitter.call(
               cell: cell, local_session_id: session.public_id, refresh_token: "synthetic-predecessor",
-              issuer: issuer, contract_epoch: 1, jwks_client: jwks, token_url: "#{issuer}/oauth/token",
+              issuer: issuer, jwks_client: jwks, token_url: "#{issuer}/oauth/token",
               query_url: "#{issuer}/oauth/refresh-deliveries/query",
             )
           end

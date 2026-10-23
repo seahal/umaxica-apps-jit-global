@@ -15,11 +15,11 @@ class ClientSecretPasskeyReservationIssuer
         raise Denied, "Secret signup retirement requires its durable flow and finite retention"
       end
 
-      AppZenithRecord.connected_to(role: :writing) do
-        Client.find(flow.principal_id).with_lock do
-          OpBaseAppRecord.connected_to(role: :writing) do
-            ClientSignUpFlow.transaction do
-              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientSignUpFlow.transaction do
+          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
+          AppZenithRecord.connected_to(role: :writing) do
+            Client.find(current.principal_id).with_lock do
               reason =
                 case ClientSignUpFlow::STATUS_NAMES.fetch(current.status_id)
                 when "CANCELLED" then "flow_canceled"
@@ -38,12 +38,12 @@ class ClientSecretPasskeyReservationIssuer
     def complete_sign_up!(flow:)
       raise Denied, "Secret activation requires an app signup flow" unless flow.is_a?(ClientSignUpFlow)
 
-      AppZenithRecord.connected_to(role: :writing) do
-        actor = Client.find(flow.principal_id)
-        actor.with_lock do
-          OpBaseAppRecord.connected_to(role: :writing) do
-            ClientSignUpFlow.transaction do
-              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id, principal_id: actor.id)
+      OpBaseAppRecord.connected_to(role: :writing) do
+        ClientSignUpFlow.transaction do
+          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
+          AppZenithRecord.connected_to(role: :writing) do
+            actor = Client.find(current.principal_id)
+            actor.with_lock do
               raise Denied, "Secret activation requires completed signup" unless current.sign_up_completed?
 
               owned = ClientSecretIssuance.lock.where(
@@ -83,9 +83,9 @@ class ClientSecretPasskeyReservationIssuer
       actor = Client.find(issuance.client_id)
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
+          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
-              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
               passkey = actor.client_passkeys.lock.find(current.pending_passkey_registration_id)
               verify_sign_up_registration!(actor, current, passkey, nonce)
               owned = ClientSecretIssuance.lock.find_by!(
@@ -120,9 +120,9 @@ class ClientSecretPasskeyReservationIssuer
       actor = Client.find(flow.principal_id)
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
+          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
-              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
               registered = actor.client_passkeys.lock.find(current.pending_passkey_registration_id)
               verify_sign_up_registration!(actor, current, registered, nonce)
               reattempt_sign_up!(actor, current, registered, predecessor, expires_after)
@@ -143,9 +143,9 @@ class ClientSecretPasskeyReservationIssuer
       actor = Client.find(flow.principal_id)
       OpBaseAppRecord.connected_to(role: :writing) do
         ClientSignUpFlow.transaction do
+          current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
           AppZenithRecord.connected_to(role: :writing) do
             actor.with_lock do
-              current = ClientSignUpFlow.lock.find_by!(id: flow.id, public_id: flow.public_id)
               registered = actor.client_passkeys.lock.find_by!(id: passkey.id, public_id: passkey.public_id)
               verify_sign_up_registration!(actor, current, registered, nonce)
               reserve_sign_up!(actor, current, registered, expires_after)

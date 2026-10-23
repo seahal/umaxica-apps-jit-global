@@ -96,7 +96,7 @@ module OidcClientStoresStaticClientStore
     },
   }.freeze
 
-  RP_BACKCHANNEL_LOGOUT_PATH = "/oidc/backchannel-logout"
+  RP_BACKCHANNEL_LOGOUT_PATH = "/oidc/closures"
 
   # The frozen back-channel logout endpoint for an active first-party RP (R5-WU10, one.md 7.6).
   # It is derived from the same registered host as the RP callback; no logout delivery target is
@@ -138,8 +138,24 @@ module OidcClientStoresStaticClientStore
     configured_hosts_for(env_key, default_host).map do |host|
       protocol = (Rails.env.production? || public_host?(host)) ? "https" : "http"
       port_suffix = (Rails.env.production? || public_host?(host)) ? "" : ":3000"
-      "#{protocol}://#{host}#{port_suffix}#{path}"
+      validate_registered_redirect_uri!("#{protocol}://#{host}#{port_suffix}#{path}")
     end
+  end
+
+  RESERVED_REDIRECT_QUERY_KEYS = %w(code state iss error error_description error_uri session_state).freeze
+
+  # D-147 N-4: an invalid registration stops the boot (RFC 6749 3.1.2 absolute, no fragment;
+  # TLS in production, RFC 6749 3.1.2.1 and RFC 9700 2.1; no reserved query key, UMAXICA).
+  def validate_registered_redirect_uri!(value)
+    uri = URI.parse(value)
+    valid = uri.absolute? && uri.host.present? && uri.fragment.nil? && uri.userinfo.nil? &&
+      %w(http https).include?(uri.scheme) && (!Rails.env.production? || uri.scheme == "https") &&
+      (URI.decode_www_form(uri.query.to_s).map(&:first) & RESERVED_REDIRECT_QUERY_KEYS).empty?
+    raise ArgumentError, "invalid registered redirect_uri: #{value}" unless valid
+
+    value
+  rescue URI::InvalidURIError
+    raise ArgumentError, "invalid registered redirect_uri: #{value}"
   end
 
   def build_post_logout_redirect_uris(env_key, default_host = nil,
@@ -211,5 +227,5 @@ module OidcClientStoresStaticClientStore
   private_class_method :first_party_browser_rp_clients, :face_rp_client, :build_redirect_uris,
                        :build_post_logout_redirect_uris,
                        :public_host?, :configured_hosts_for, :boot_host_for,
-                       :normalize_host
+                       :normalize_host, :validate_registered_redirect_uri!
 end

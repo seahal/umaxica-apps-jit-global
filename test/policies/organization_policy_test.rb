@@ -5,8 +5,14 @@ require "test_helper"
 
 class OrganizationPolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    @other_user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    @other_user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @record = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user).collective
     @other_record = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @other_user).collective
     @policy = OrganizationPolicy.new(@record, user: @user)

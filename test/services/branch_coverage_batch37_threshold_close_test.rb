@@ -57,9 +57,9 @@ class BranchCoverageBatch37ThresholdCloseTest < ActiveSupport::TestCase
     assert_raises(ArgumentError) { WithdrawalOccurrenceRecording.occurrence_class_for(Object.new) }
     assert_raises(ArgumentError) { WithdrawalOccurrenceRecording.surface_for(Object.new) }
 
-    subject = Client.new
+    subject = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     subject.define_singleton_method(:public_id) { "client-pub" }
-    actor = Visitor.new
+    actor = Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     actor.define_singleton_method(:public_id) { "visitor-pub" }
     request = ActionDispatch::TestRequest.create
     request.request_id = "req-1"

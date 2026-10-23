@@ -4,8 +4,14 @@ require "test_helper"
 
 class EnterprisePendingTransferUniquenessTest < ActiveSupport::TestCase
   test "EnterpriseOwnershipTransferRequest preserves closed history resource scope and SQL uniqueness" do
-    first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
+    second_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     first_resource = Enterprise.create!(name: "First resource", title: "First")
     second_resource = Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -39,8 +45,14 @@ class EnterprisePendingTransferUniquenessTest < ActiveSupport::TestCase
   end
 
   test "EnterpriseOwnershipTransferRequest rejects pending duplicates before SQL" do
-    first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
+    second_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     first_resource = Enterprise.create!(name: "First resource", title: "First")
     Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -69,8 +81,14 @@ end
 
 class ClientPersonaPendingTransferUniquenessTest < ActiveSupport::TestCase
   test "ClientPersonaOwnershipTransferRequest preserves closed history resource scope and SQL uniqueness" do
-    first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
+    second_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     ClientIdentityState.ensure_defaults!
     first_identity = ClientIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -113,8 +131,14 @@ class ClientPersonaPendingTransferUniquenessTest < ActiveSupport::TestCase
   end
 
   test "ClientPersonaOwnershipTransferRequest rejects pending duplicates before SQL" do
-    first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
+    second_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     ClientIdentityState.ensure_defaults!
     first_identity = ClientIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -152,8 +176,14 @@ end
 
 class CompanyPendingTransferUniquenessTest < ActiveSupport::TestCase
   test "CompanyOwnershipTransferRequest preserves closed history resource scope and SQL uniqueness" do
-    first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    first_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
+    second_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
     first_resource = Company.create!(name: "First resource", title: "First")
     second_resource = Company.create!(name: "Second resource", title: "Second")
 
@@ -187,8 +217,14 @@ class CompanyPendingTransferUniquenessTest < ActiveSupport::TestCase
   end
 
   test "CompanyOwnershipTransferRequest rejects pending duplicates before SQL" do
-    first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    first_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
+    second_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
     first_resource = Company.create!(name: "First resource", title: "First")
     Company.create!(name: "Second resource", title: "Second")
 
@@ -217,8 +253,14 @@ end
 
 class IndividualPendingTransferUniquenessTest < ActiveSupport::TestCase
   test "IndividualOwnershipTransferRequest preserves closed history resource scope and SQL uniqueness" do
-    first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    first_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
+    second_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorIdentityState.ensure_defaults!
     first_identity = VisitorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -261,8 +303,14 @@ class IndividualPendingTransferUniquenessTest < ActiveSupport::TestCase
   end
 
   test "IndividualOwnershipTransferRequest rejects pending duplicates before SQL" do
-    first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    first_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
+    second_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorIdentityState.ensure_defaults!
     first_identity = VisitorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -300,8 +348,14 @@ end
 
 class BureauPendingTransferUniquenessTest < ActiveSupport::TestCase
   test "BureauOwnershipTransferRequest preserves closed history resource scope and SQL uniqueness" do
-    first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    first_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    second_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     first_resource = Bureau.create!(name: "First resource", title: "First")
     second_resource = Bureau.create!(name: "Second resource", title: "Second")
 
@@ -335,8 +389,14 @@ class BureauPendingTransferUniquenessTest < ActiveSupport::TestCase
   end
 
   test "BureauOwnershipTransferRequest rejects pending duplicates before SQL" do
-    first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    first_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    second_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     first_resource = Bureau.create!(name: "First resource", title: "First")
     Bureau.create!(name: "Second resource", title: "Second")
 
@@ -365,8 +425,14 @@ end
 
 class AgentPendingTransferUniquenessTest < ActiveSupport::TestCase
   test "AgentOwnershipTransferRequest preserves closed history resource scope and SQL uniqueness" do
-    first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    first_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    second_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     OperatorIdentityState.ensure_defaults!
     first_identity = OperatorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -409,8 +475,14 @@ class AgentPendingTransferUniquenessTest < ActiveSupport::TestCase
   end
 
   test "AgentOwnershipTransferRequest rejects pending duplicates before SQL" do
-    first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    first_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    second_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     OperatorIdentityState.ensure_defaults!
     first_identity = OperatorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",

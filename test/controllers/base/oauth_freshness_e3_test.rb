@@ -54,6 +54,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -102,7 +103,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   test "stale max_age with an existing session starts a fresh ceremony" do
     host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     user = clients(:one)
-    token = ClientToken.create!(user: user, authentication_event_at: 1.hour.ago)
+    token = ClientToken.create!(authentication_epoch: 0, user: user, authentication_event_at: 1.hour.ago)
 
     http_headers_0 =
       begin
@@ -134,6 +135,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -188,7 +190,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: "core-com-jp",
       redirect_uri: client.redirect_uris_by_realm.fetch("visitor").first,
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: "state",
       nonce: "nonce",
@@ -211,7 +213,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: "core-org-jp",
       redirect_uri: client.redirect_uris_by_realm.fetch("operator").first,
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: "state",
       nonce: "nonce",
@@ -244,7 +246,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
       response_type: "code",
       client_id: "core-app-jp",
       redirect_uri: client.redirect_uris.first,
-      code_challenge: "challenge",
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       state: "state",
       nonce: "nonce",

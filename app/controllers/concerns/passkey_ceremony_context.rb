@@ -38,7 +38,7 @@ module PasskeyCeremonyContext
     options = Webauthn::RegistrationVerifier.options_for(
       config: config,
       user_id: resource.webauthn_user_handle,
-      user_name: passkey_resource_display_name(resource),
+      user_name: webauthn_surface.account_label,
       exclude_ids: webauthn_credential_ids(exclude_credentials),
       surface: webauthn_surface.key,
     )
@@ -122,18 +122,6 @@ module PasskeyCeremonyContext
   def webauthn_credential_ids(list)
     list.map do |item|
       item.respond_to?(:webauthn_id) ? item.webauthn_id : (item[:id] || item["id"])
-    end
-  end
-
-  def passkey_resource_display_name(resource)
-    if resource.respond_to?(:client_emails) && resource.client_emails.any?
-      resource.client_emails.first.address
-    elsif resource.respond_to?(:staff_emails) && resource.staff_emails.any?
-      resource.staff_emails.first.address
-    elsif resource.respond_to?(:public_id)
-      resource.public_id
-    else
-      resource.id.to_s
     end
   end
 end

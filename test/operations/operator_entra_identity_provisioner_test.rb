@@ -9,7 +9,7 @@ class OperatorEntraIdentityProvisionerTest < ActiveSupport::TestCase
 
   setup do
     OperatorEntraIdentityState.ensure_defaults!
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    @operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
   end
 
   test "creates the identity in the pinned tenant, inactive" do
@@ -66,7 +66,7 @@ class OperatorEntraIdentityProvisionerTest < ActiveSupport::TestCase
   end
 
   test "rejects an app Client identifier as an org Entra provisioning target" do
-    client = Client.create!(public_id: PublicId.generate)
+    client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: PublicId.generate)
 
     assert_raises(OperatorEntraIdentityProvisioner::OperatorNotFound) do
       with_pinned_tenant { provision(client.public_id, OBJECT_ID) }
@@ -87,7 +87,7 @@ class OperatorEntraIdentityProvisionerTest < ActiveSupport::TestCase
   # A typo'd public_id must not silently move an Entra account onto another operator.
   test "refuses to map one Entra object to a second operator" do
     with_pinned_tenant { provision(@operator.public_id, OBJECT_ID) }
-    other = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    other = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
 
     error =
       assert_raises(OperatorEntraIdentityProvisioner::AlreadyProvisioned) do
@@ -106,7 +106,7 @@ class OperatorEntraIdentityProvisionerTest < ActiveSupport::TestCase
     with_pinned_tenant { provision(@operator.public_id, OBJECT_ID) }
     OperatorEntraIdentity.find_by(operator_id: @operator.id)
       .update!(status_id: OperatorEntraIdentityState::REVOKED)
-    returning = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    returning = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
 
     error =
       assert_raises(OperatorEntraIdentityProvisioner::AlreadyProvisioned) do

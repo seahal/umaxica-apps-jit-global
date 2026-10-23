@@ -23,8 +23,9 @@ class Tech::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
       expires_at: 1.day.from_now,
     )
     client = OidcClientRegistry.find!("tech-org-ww")
-    root_token = OperatorToken.create!(staff: @operator)
+    root_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator)
     rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: root_token,
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",
@@ -63,8 +64,9 @@ class Tech::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
 
   test "an authenticated operator without tech access sees a no-store 403 and no tools" do
     client = OidcClientRegistry.find!("tech-org-ww")
-    root_token = OperatorToken.create!(staff: @operator)
+    root_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator)
     rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: root_token,
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",
@@ -113,8 +115,9 @@ class Tech::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
       expires_at: 1.day.ago,
     )
     client = OidcClientRegistry.find!("tech-org-ww")
-    root_token = OperatorToken.create!(staff: @operator)
+    root_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator)
     rp_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: root_token,
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",
@@ -151,8 +154,9 @@ class Tech::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
     edit_host = ENV.fetch("PUBLIC_EDIT_STAFF_URL")
     edit_client = OidcClientRegistry.find!("edit-org-ww")
     tech_client = OidcClientRegistry.find!("tech-org-ww")
-    root_token = OperatorToken.create!(staff: @operator)
+    root_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator)
     edit_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: root_token,
       oidc_client_id: edit_client.client_id,
       oidc_scope: "openid profile",
@@ -162,6 +166,7 @@ class Tech::Org::DashboardsControllerTest < ActionDispatch::IntegrationTest
       refresh_token_expires_at: 10.minutes.from_now,
     )
     tech_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: root_token,
       oidc_client_id: tech_client.client_id,
       oidc_scope: "openid profile",

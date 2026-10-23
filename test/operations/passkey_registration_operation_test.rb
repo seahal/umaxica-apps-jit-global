@@ -13,7 +13,7 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
 
   test "the ninth and tenth registrations succeed and the eleventh is refused on every surface" do
     SURFACES.each do |actor_class, passkey_class, owner_key, surface|
-      actor = actor_class.create!
+      actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
       registered = 10.times.map { |index| register(actor, passkey_class, index, surface:) }
 
       assert_equal 10, passkey_class.where(owner_key => actor.id).count, surface
@@ -34,7 +34,7 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
   end
 
   test "removing a Passkey at the limit frees capacity for the same owner" do
-    actor = Client.create!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     registered = 10.times.map { |index| register(actor, ClientPasskey, index) }
 
     registered.first.destroy!
@@ -45,8 +45,8 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
   end
 
   test "one owner at the limit does not limit another owner" do
-    full = Client.create!
-    other = Client.create!
+    full = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     10.times { |index| register(full, ClientPasskey, index) }
 
     assert_predicate register(other, ClientPasskey, 0), :persisted?
@@ -54,13 +54,16 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
 
   test "an unsupported record class is refused" do
     assert_raises(ArgumentError) do
-      PasskeyRegistrationOperation.call!(actor: Client.create!, passkey_class: Client, attributes: {})
+      PasskeyRegistrationOperation.call!(
+        actor: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL),
+        passkey_class: Client, attributes: {},
+      )
     end
   end
 
   test "only the credential ID constraint is classified as a duplicate credential on each surface" do
     SURFACES.each do |actor_class, passkey_class, _owner_key, _surface|
-      owner = actor_class.create!
+      owner = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
       credential = PasskeyRegistrationOperation.call!(
         actor: owner, passkey_class: passkey_class,
         attributes: { webauthn_id: SecureRandom.uuid, public_key: "constraint-key" },
@@ -88,7 +91,7 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
 
   test "invalid audit references roll back registration on every surface" do
     SURFACES.each do |actor_class, passkey_class, owner_key, surface|
-      actor = actor_class.create!
+      actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
       credential_id = SecureRandom.uuid
       assert_raises(ArgumentError) do
         PasskeyRegistrationOperation.call!(
@@ -107,7 +110,7 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
 
   test "outer principal rollback removes both credential and audit event on every surface" do
     SURFACES.each do |actor_class, passkey_class, owner_key, surface|
-      actor = actor_class.create!
+      actor = actor_class.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_class))
       external_id = nil
       actor_class.transaction do
         record = PasskeyRegistrationOperation.call!(
@@ -127,7 +130,7 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
   test "a passkey cannot cross its identity surface" do
     assert_raises(ArgumentError) do
       PasskeyRegistrationOperation.call!(
-        actor: Visitor.create!,
+        actor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL),
         passkey_class: ClientPasskey,
         attributes: passkey_attributes(0),
         audit: audit("app"),
@@ -136,7 +139,7 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
   end
 
   test "an explicit class cannot disguise a credential from another surface" do
-    actor = Client.create!
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     foreign_record = VisitorPasskey.new(webauthn_id: SecureRandom.uuid, public_key: "foreign-key")
 
     assert_raises(ArgumentError) do
@@ -146,8 +149,8 @@ class PasskeyRegistrationOperationTest < ActiveSupport::TestCase
   end
 
   test "registration cannot reassign an existing credential to another owner" do
-    owner = Client.create!
-    other = Client.create!
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     record = PasskeyRegistrationOperation.call!(
       actor: owner, passkey_class: ClientPasskey,
       attributes: { webauthn_id: SecureRandom.uuid, public_key: "existing-owner-key" },

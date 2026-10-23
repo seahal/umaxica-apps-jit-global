@@ -11,7 +11,10 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorPasskeyStatus.find_or_create_by!(id: VisitorPasskeyStatus::ACTIVE)
-    actor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    actor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     address = "com-entry-#{SecureRandom.hex(4)}@example.com"
     VisitorEmail.create!(
       visitor_id: actor.id, address: address, address_digest: IdentifierBlindIndex.bidx_for_email(address, realm: :com),
@@ -23,7 +26,7 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
       visitor: actor, webauthn_id: SecureRandom.uuid, external_id: SecureRandom.uuid, public_key: "public",
       description: "Entry passkey", sign_count: 0,
     )
-    token = VisitorToken.create!(visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(
@@ -119,8 +122,11 @@ class Auth::Com::VerificationsControllerTest < ActionDispatch::IntegrationTest
   test "an admission issued for the com surface is refused on the app host" do
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    actor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
-    token = VisitorToken.create!(visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    actor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(

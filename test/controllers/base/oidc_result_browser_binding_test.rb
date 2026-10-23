@@ -18,7 +18,7 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
         response_type: "code",
         client_id:,
         redirect_uri: OidcClientRegistry.find!(client_id).redirect_uris_by_realm.fetch(realm).first,
-        code_challenge: "a" * 43,
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
         code_challenge_method: "S256",
         scope: "openid",
         state: SecureRandom.urlsafe_base64(32),
@@ -130,7 +130,7 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
       assert_predicate binding.reload, :redeemed?
 
       # Public Auth proof issuance isolates result-receiver browser binding from credential verification.
-      actor = actor_model.create!
+      actor = actor_model.create!(security_mode_id: SecurityModeTestDefault.id_for(actor_model))
       result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
         surface:, login_challenge: parent.login_challenge, actor:, session_ref: "ceremony-result",
         auth_method: "passkey", authentication_event_at: parent.class.database_now,

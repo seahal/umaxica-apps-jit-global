@@ -30,13 +30,16 @@
 require "test_helper"
 
 class OperatorStepUpSessionTest < ActiveSupport::TestCase
-  fixtures :operator_statuses, :operator_visibilities, :operator_mfa_levels,
+  fixtures :operator_statuses, :operator_visibilities, :operator_security_modes,
            :operator_mfa_statuses
 
   setup do
     OperatorTokenStatus.find_or_create_by!(id: OperatorTokenStatus::ACTIVE)
-    @staff = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH)
-    @staff_token = OperatorToken.create!(staff: @staff)
+    @staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      visibility_id: OperatorVisibility::BOTH,
+    )
+    @staff_token = OperatorToken.create!(authentication_epoch: 0, staff: @staff)
     @valid_params = {
       staff_token: @staff_token,
       scope: "account_update",
@@ -121,10 +124,16 @@ class OperatorStepUpSessionTest < ActiveSupport::TestCase
   end
 
   test "scopes filter and order sessions" do
-    older_staff = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH)
-    newer_staff = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH)
-    older_token = OperatorToken.create!(staff: older_staff)
-    newer_token = OperatorToken.create!(staff: newer_staff)
+    older_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH,
+    )
+    newer_staff = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::BOTH,
+    )
+    older_token = OperatorToken.create!(authentication_epoch: 0, staff: older_staff)
+    newer_token = OperatorToken.create!(authentication_epoch: 0, staff: newer_staff)
     older = OperatorStepUpSession.create!(
       @valid_params.merge(
         staff_token: older_token, return_to: "/older", created_at: 2.minutes.ago,
@@ -145,7 +154,7 @@ class OperatorStepUpSessionTest < ActiveSupport::TestCase
   end
 
   test "same actor can have independent token-bound tickets" do
-    other_token = OperatorToken.create!(staff: @staff)
+    other_token = OperatorToken.create!(authentication_epoch: 0, staff: @staff)
     first = OperatorStepUpSession.create!(@valid_params)
     second = OperatorStepUpSession.create!(@valid_params.merge(staff_token: other_token, return_to: "/other"))
 

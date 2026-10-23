@@ -9,7 +9,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   setup do
     @user = clients(:one)
-    @user_session_token = ClientToken.create!(user: @user)
+    @user_session_token = ClientToken.create!(authentication_epoch: 0, user: @user)
     @code_verifier = SecureRandom.urlsafe_base64(32)
     @code_challenge = Base64.urlsafe_encode64(
       Digest::SHA256.digest(@code_verifier),
@@ -355,17 +355,15 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       fetcher: -> { published }, clock: -> { Time.current },
     )
     verify =
-      lambda do |epoch|
+      lambda do
         OidcOpAccessTokenVerifier.new(
           access_token:, client_id: "core-app-jp", realm: "app", issuer: OidcIssuer.for_client(@client),
-          audience: @client.aud, contract_epoch: epoch, jwks_client: jwks,
+          audience: @client.aud, jwks_client: jwks,
         ).call
       end
-    current_epoch = OpAppProtocolEpoch.find(1).contract_epoch
 
-    assert_predicate verify.call(current_epoch), :success?
-    # A token is bound to the epoch it was minted under; a later release profile refuses it.
-    assert_not_predicate verify.call(current_epoch + 1), :success?
+    assert_predicate verify.call, :success?
+    assert_not_includes JWT.decode(access_token, nil, false).first.keys, "umx_contract_epoch"
 
     id_result = OidcOpIdTokenVerifier.new(
       id_token: result.token_response.fetch(:id_token), client_id: "core-app-jp", realm: "app",
@@ -383,7 +381,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_predicate initial, :success?
     grant = OpAppGrant.find_by!(oidc_client_id: "core-app-jp", client_token_id: @user_session_token.id)
 
-    assert_equal [0, OpAppProtocolEpoch.current_contract_epoch], [grant.authentication_epoch, grant.contract_epoch]
+    assert_equal 0, grant.authentication_epoch
 
     # Same epoch: rotation continues.
     rotated = refresh_with(initial.token_response.fetch(:refresh_token))
@@ -395,39 +393,6 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
     assert_not_predicate stopped, :success?
     assert_equal "invalid_grant", stopped.error
-  end
-
-  test "a root without a recorded epoch is refused once any identity stop has advanced the actor" do
-    @user_session_token.update_columns(authentication_epoch: nil)
-    initial = exchange_issued_code(issue_code!)
-
-    assert_predicate initial, :success?
-    @user.update_columns(authentication_epoch: 1)
-
-    assert_equal "invalid_grant", refresh_with(initial.token_response.fetch(:refresh_token)).error
-  end
-
-  test "a Grant from before the current OP contract epoch cannot Refresh into the new profile" do
-    initial = exchange_issued_code(issue_code!)
-
-    assert_predicate initial, :success?
-    grant = OpAppGrant.find_by!(oidc_client_id: "core-app-jp", client_token_id: @user_session_token.id)
-    current = OpAppProtocolEpoch.current_contract_epoch
-    rotated = refresh_with(initial.token_response.fetch(:refresh_token))
-
-    assert_predicate rotated, :success?, "a Grant at the current epoch keeps rotating"
-
-    # A pre-R5 family has no recorded epoch; it must not be stamped with the current one on Refresh.
-    grant.update_columns(contract_epoch: nil)
-
-    assert_equal "invalid_grant", refresh_with(rotated.token_response.fetch(:refresh_token)).error
-
-    # The realm cut over to the next epoch: a Grant minted one epoch below is refused.
-    grant.update_columns(contract_epoch: current)
-    OpAppProtocolEpoch.find(1).update_columns(contract_epoch: current + 1)
-
-    assert_equal "invalid_grant", refresh_with(rotated.token_response.fetch(:refresh_token)).error
-    assert_nil grant.reload.revoked_at, "a refused cutover Refresh does not rewrite the Grant"
   end
 
   test "the delivery query returns the exact rotation for its attempt and nothing else" do
@@ -533,6 +498,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "refresh grant fails closed when the RP session has no authentication event" do
     usage = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @user_session_token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -1149,7 +1115,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       )
 
       assert_not result.success?
-      assert_equal "invalid_request", result.error
+      assert_equal "invalid_grant", result.error
       assert_equal "redirect_uri mismatch", result.error_description
     end
   end
@@ -1184,12 +1150,13 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
         code: code_record.code,
         redirect_uri: public_client.redirect_uris.first,
         client_id: public_client.client_id,
-        code_verifier: "wrong-verifier",
+        code_verifier: "w" * 43,
         expected_resource_type: "client",
       )
 
       assert_not result.success?
-      assert_equal "invalid_request", result.error
+      # RFC 7636 4.6 (D-147 N-3): a well-formed verifier that does not match is invalid_grant.
+      assert_equal "invalid_grant", result.error
       assert_equal "PKCE verification failed", result.error_description
     end
   end
@@ -1215,7 +1182,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
       assert_not result.success?
       assert_equal "invalid_request", result.error
-      assert_equal "PKCE verification failed", result.error_description
+      assert_equal "code_challenge_method must be S256", result.error_description
     end
   end
 
@@ -1234,7 +1201,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       )
 
       assert_not result.success?
-      assert_equal "invalid_request", result.error
+      assert_equal "invalid_grant", result.error
       assert_equal "redirect_uri mismatch", result.error_description
     end
   end
@@ -1258,7 +1225,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       )
 
       assert_not result.success?
-      assert_equal "invalid_request", result.error
+      assert_equal "invalid_grant", result.error
       assert_equal "redirect_uri is not registered for this authorization code's realm", result.error_description
     end
   end
@@ -1279,7 +1246,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
       )
 
       assert_not result.success?
-      assert_equal "invalid_request", result.error
+      assert_equal "invalid_grant", result.error
       assert_equal "client_id mismatch", result.error_description
     end
   end
@@ -2267,7 +2234,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "exchanges valid operator code for tokens with OperatorToken" do
     staff = operators(:one)
-    staff_session_token = OperatorToken.create!(staff: staff)
+    staff_session_token = OperatorToken.create!(authentication_epoch: 0, staff: staff)
     org_client = OidcClientRegistry.find!("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
     staff_secret_credential = "test_secret_credential_for_core_org"
@@ -2302,7 +2269,10 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "refreshes an operator RP session without changing auth_time" do
     staff = operators(:one)
-    staff_session_token = OperatorToken.create!(staff: staff, authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5))
+    staff_session_token = OperatorToken.create!(
+      authentication_epoch: 0, staff: staff,
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    )
     org_client = OidcClientRegistry.find!("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
     code_record = issue_code!(
@@ -2354,7 +2324,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "creates staff token record for org client" do
     staff = operators(:one)
-    staff_session_token = OperatorToken.create!(staff: staff)
+    staff_session_token = OperatorToken.create!(authentication_epoch: 0, staff: staff)
     org_client = OidcClientRegistry.find("core-org-jp")
     org_redirect_uri = org_client.redirect_uris_by_realm.fetch("operator").first
     staff_secret_credential = "test_secret_credential_for_core_org"
@@ -2387,7 +2357,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "records staff RP connection" do
     staff = operators(:one)
-    staff_session_token = OperatorToken.create!(staff: staff)
+    staff_session_token = OperatorToken.create!(authentication_epoch: 0, staff: staff)
     org_client = OidcClientRegistry.find("core-org-jp")
     staff_secret_credential = "test_secret_credential_for_core_org"
     code_record = issue_code!(
@@ -2422,7 +2392,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "exchanges valid visitor code for tokens with VisitorToken" do
     visitor = create_visitor!
-    visitor_session_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    visitor_session_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     com_client = OidcClientRegistry.find!("core-com-jp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
     visitor_secret_credential = "test_secret_credential_for_core_com"
@@ -2458,6 +2428,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   test "refreshes a visitor RP session without changing auth_time" do
     visitor = visitors(:reserved_visitor)
     visitor_session_token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       authentication_event_at: Time.utc(
         2026, 1, 2, 3, 4, 5,
@@ -2514,7 +2485,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "creates visitor token record for com client" do
     visitor = create_visitor!
-    visitor_session_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    visitor_session_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     com_client = OidcClientRegistry.find("core-com-jp")
     com_redirect_uri = com_client.redirect_uris_by_realm.fetch("visitor").first
     visitor_secret_credential = "test_secret_credential_for_core_com"
@@ -2547,7 +2518,7 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
 
   test "records visitor RP connection" do
     visitor = create_visitor!
-    visitor_session_token = VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    visitor_session_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     com_client = OidcClientRegistry.find("core-com-jp")
     visitor_secret_credential = "test_secret_credential_for_core_com"
     code_record = issue_code!(
@@ -3155,12 +3126,11 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
   def create_visitor!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorTokenBindingMethod.find_or_create_by!(id: VisitorTokenBindingMethod::NOTHING)
     VisitorTokenDbscStatus.find_or_create_by!(id: VisitorTokenDbscStatus::NOTHING)
     VisitorTokenKind.find_or_create_by!(id: VisitorTokenKind::BROWSER_WEB)
     VisitorTokenStatus.find_or_create_by!(id: VisitorTokenStatus::ACTIVE)
-    Visitor.create!
+    Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
   end
 
   # Stub ClientRegistry.authenticate to bypass secret_credential resolution in tests

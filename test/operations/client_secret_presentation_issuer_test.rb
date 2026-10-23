@@ -4,8 +4,8 @@ require "test_helper"
 
 class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
   test "manual presentation generates exactly the reserved set once and storage declaration activates it" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, established_authentication_method: "secret")
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, established_authentication_method: "secret")
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -38,8 +38,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
 
   test "missing and corrupt payloads cannot replace candidates or activate an unpresented set" do
     [nil, "invalid encrypted payload"].each do |payload|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       token.update!(
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -94,8 +94,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
   test "another issuance's authentic payload cannot present or confirm the target candidates" do
     operations =
       Array.new(2) do
-        actor = Client.create!(status_id: ClientStatus::ACTIVE)
-        token = ClientToken.create!(user: actor)
+        actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+        token = ClientToken.create!(authentication_epoch: 0, user: actor)
         token.update!(
           last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
           last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -140,8 +140,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
   end
 
   test "expired encrypted payload is rejected while its issuance authorization remains valid" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -180,8 +180,8 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
   end
 
   test "unscoped or different browser cannot generate or present candidates" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -193,7 +193,7 @@ class ClientSecretPresentationIssuerTest < ActiveSupport::TestCase
     issuance = ClientSecretManualReservationIssuer.call!(
       actor_context: context, token: token, operation_id: SecureRandom.uuid, expires_after: 1.minute,
     )
-    other = ClientToken.create!(user: actor)
+    other = ClientToken.create!(authentication_epoch: 0, user: actor)
     [other, token].each do |browser|
       token.update!(last_step_up_at: nil) if browser == token
       assert_no_difference("ClientSecretCredential.count") do

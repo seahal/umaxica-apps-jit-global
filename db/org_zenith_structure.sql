@@ -1758,34 +1758,6 @@ ALTER SEQUENCE public.operator_lifecycle_requests_id_seq OWNED BY public.operato
 
 
 --
--- Name: operator_mfa_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.operator_mfa_levels (
-    id bigint CONSTRAINT staff_multi_factors_id_not_null NOT NULL
-);
-
-
---
--- Name: operator_mfa_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.operator_mfa_levels_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: operator_mfa_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.operator_mfa_levels_id_seq OWNED BY public.operator_mfa_levels.id;
-
-
---
 -- Name: operator_mfa_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3051,6 +3023,16 @@ ALTER SEQUENCE public.operator_workspace_accounts_id_seq OWNED BY public.operato
 
 
 --
+-- Name: operator_security_modes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.operator_security_modes (
+    id bigint NOT NULL,
+    CONSTRAINT chk_operator_security_modes_id CHECK ((id = ANY (ARRAY[(3)::bigint, (7)::bigint])))
+);
+
+
+--
 -- Name: operators; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3062,12 +3044,11 @@ CREATE TABLE public.operators (
     public_id character varying(16) CONSTRAINT staffs_public_id_not_null NOT NULL,
     withdrawn_at timestamp(6) with time zone,
     status_id bigint DEFAULT 0 CONSTRAINT staffs_status_id_not_null NOT NULL,
-    mfa_level_enabled boolean DEFAULT false CONSTRAINT staffs_multi_factor_enabled_not_null NOT NULL,
     lock_version integer DEFAULT 0 CONSTRAINT staffs_lock_version_not_null NOT NULL,
     visibility_id bigint DEFAULT 2 CONSTRAINT staffs_visibility_id_not_null NOT NULL,
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staffs_deletable_at_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT staffs_discarded_at_not_null NOT NULL,
-    mfa_level_id bigint DEFAULT 0 CONSTRAINT staffs_multi_factor_id_not_null NOT NULL,
+    security_mode_id bigint NOT NULL,
     mfa_status_id bigint DEFAULT 5 CONSTRAINT operators_multi_factor_status_id_not_null NOT NULL,
     withdrawal_started_at timestamp(6) with time zone,
     deactivated_at timestamp(6) with time zone,
@@ -4151,13 +4132,6 @@ ALTER TABLE ONLY public.operator_lifecycle_requests ALTER COLUMN id SET DEFAULT 
 
 
 --
--- Name: operator_mfa_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.operator_mfa_levels ALTER COLUMN id SET DEFAULT nextval('public.operator_mfa_levels_id_seq'::regclass);
-
-
---
 -- Name: operator_mfa_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4571,6 +4545,14 @@ ALTER TABLE ONLY public.workspaces ALTER COLUMN id SET DEFAULT nextval('public.w
 
 
 --
+-- Name: operator_security_modes operator_security_modes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operator_security_modes
+    ADD CONSTRAINT operator_security_modes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: agent_administration_grants agent_administration_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4771,14 +4753,6 @@ ALTER TABLE ONLY public.bureaus
 
 
 --
--- Name: operators chk_operators_mfa_requirement_consistency; Type: CHECK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE public.operators
-    ADD CONSTRAINT chk_operators_mfa_requirement_consistency CHECK ((((mfa_level_enabled = false) AND (mfa_level_id = 0)) OR ((mfa_level_enabled = true) AND (mfa_level_id <> 0)))) NOT VALID;
-
-
---
 -- Name: operators chk_operators_withdrawal_order; Type: CHECK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4968,14 +4942,6 @@ ALTER TABLE ONLY public.operator_identity_states
 
 ALTER TABLE ONLY public.operator_lifecycle_requests
     ADD CONSTRAINT operator_lifecycle_requests_pkey PRIMARY KEY (id);
-
-
---
--- Name: operator_mfa_levels operator_mfa_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.operator_mfa_levels
-    ADD CONSTRAINT operator_mfa_levels_pkey PRIMARY KEY (id);
 
 
 --
@@ -5464,6 +5430,13 @@ ALTER TABLE ONLY public.workspace_statuses
 
 ALTER TABLE ONLY public.workspaces
     ADD CONSTRAINT workspaces_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: index_operators_on_security_mode_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_operators_on_security_mode_id ON public.operators USING btree (security_mode_id);
 
 
 --
@@ -6594,13 +6567,6 @@ CREATE INDEX index_operators_on_discard_at ON public.operators USING btree (disc
 
 
 --
--- Name: index_operators_on_mfa_level_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_operators_on_mfa_level_id ON public.operators USING btree (mfa_level_id);
-
-
---
 -- Name: index_operators_on_mfa_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6871,6 +6837,14 @@ CREATE TRIGGER operator_rotation_audit_guard BEFORE INSERT OR UPDATE ON public.o
 --
 
 CREATE TRIGGER operator_telephones_public_id_immutability BEFORE UPDATE OF public_id ON public.operator_telephones FOR EACH ROW EXECUTE FUNCTION public.prevent_operator_telephone_public_id_mutation();
+
+
+--
+-- Name: operators fk_rails_07c07a9af9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.operators
+    ADD CONSTRAINT fk_rails_07c07a9af9 FOREIGN KEY (security_mode_id) REFERENCES public.operator_security_modes(id);
 
 
 --
@@ -7474,14 +7448,6 @@ ALTER TABLE ONLY public.agent_memberships
 
 
 --
--- Name: operators fk_rails_894ffe7965; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.operators
-    ADD CONSTRAINT fk_rails_894ffe7965 FOREIGN KEY (mfa_level_id) REFERENCES public.operator_mfa_levels(id);
-
-
---
 -- Name: operator_capability_grants fk_rails_8c98d78c9c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7912,6 +7878,10 @@ ALTER TABLE ONLY public.operator_secret_credentials
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261023140003'),
+('20261023140002'),
+('20261023140001'),
+('20261023140000'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261020110001'),

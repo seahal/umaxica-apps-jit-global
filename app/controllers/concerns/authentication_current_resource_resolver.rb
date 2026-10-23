@@ -242,6 +242,11 @@ class AuthenticationCurrentResourceResolver
     if token_stale_for_administrative_lock?(resource, payload)
       return resource_failure(:administrative_access_token_stale, payload, token_record, sid)
     end
+    # D-165: a root issued before an identity stop never authenticates again, even after restore.
+    if token_record.respond_to?(:authentication_epoch) &&
+        !AuthenticationEpochValue.root_current?(root_token: token_record, actor: resource)
+      return resource_failure(:authentication_epoch_stale, payload, token_record, sid)
+    end
 
     touch_session_activity!(token_record)
 

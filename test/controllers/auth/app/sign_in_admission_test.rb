@@ -19,7 +19,7 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
   end
 
   test "legacy admission query is rejected without consuming a code" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -89,65 +89,8 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
     assert_equal "/sign/in", URI.parse(response.location).path
   end
 
-  test "Base-owned local admission reaches the ceremony without creating an OIDC transaction" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
-      surface: "app",
-      intent: "sign_in",
-      base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-      base_token: nil,
-    )
-    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
-    _auth_session, raw_sid =
-      begin
-        admission_binding = binding
-        admission_session, admission_raw_sid = admission_binding.class.auth_admission_session_class.issue!
-        admission_binding.attach_auth_session!(
-          auth_session: admission_session,
-          confirmation_ref: SecureRandom.uuid,
-        )
-        admission_binding.confirm_base!(
-          base_token: nil,
-          browser_digest: AuthAdmissionBinding.browser_digest(
-            surface: admission_binding.class.auth_admission_surface_name,
-            entry_ref: admission_binding.entry_ref,
-            nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
-          ),
-        )
-        [admission_session, admission_raw_sid]
-      end
-    get auth_app_sign_in_url(ri: "jp"), headers: { "Host" => @host }
-    cookies["auth_sid"] = raw_sid
-    reference = issuance.reference
-
-    get auth_app_sign_in_url(ri: "jp", entry_ref: reference), headers: { "Host" => @host }
-
-    assert_response :success
-    assert_includes response.headers["Cache-Control"], "no-store"
-    assert_equal "no-referrer", response.headers["Referrer-Policy"]
-    post auth_app_sign_in_path(ri: "jp"), params: {
-      entry_ref: reference,
-      authenticity_token: response.body[/name="authenticity_token"[^>]+value="([^"]+)"/, 1],
-    }, headers: { "Host" => @host }
-
-    assert_response :see_other
-    assert_includes response.headers["Cache-Control"], "no-store"
-    assert_equal "no-referrer", response.headers["Referrer-Policy"]
-    assert_nil session[:oidc_authorization_login_challenge]
-
-    record = ClientAuthCeremonySession.order(created_at: :desc).first
-
-    assert_predicate record, :admitted?
-    assert_nil record.authorization_transaction_ref
-    assert_nil session[:auth_ceremony_admitted_intent]
-
-    follow_redirect!
-
-    assert_response :success
-    assert_equal "auth/app/sign_ins/new", inertia_component
-  end
-
   test "a replayed Base-owned local admission returns to the clean ceremony" do
-    issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    issuance = OidcTestEntry.issue!(
       surface: "app",
       intent: "sign_in",
       base_browser_nonce: "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
@@ -237,7 +180,7 @@ class Auth::App::SignInAdmissionTest < ActionDispatch::IntegrationTest
           response_type: "code",
           client_id: "core-app-jp",
           redirect_uri: OidcClientRegistry.find!("core-app-jp").redirect_uris.first,
-          code_challenge: "challenge",
+          code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
           code_challenge_method: "S256",
           state: SecureRandom.urlsafe_base64(16),
           nonce: SecureRandom.urlsafe_base64(16),

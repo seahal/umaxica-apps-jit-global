@@ -59,7 +59,7 @@ module Auth
                         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
                       }.fetch(entry0_surface)
                       entry0_browser.host!(entry0_host)
-                      entry0_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+                      entry0_issuance = OidcTestEntry.issue!(
                         surface: entry0_surface, intent: entry0_intent,
                         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
                       )
@@ -99,14 +99,7 @@ module Auth
                       )
 
                       assert_equal 303, entry0_browser.response.status
-                      entry0_phase_binding = SignInFlowBindingCodec.encode(
-                        flow: ClientSignInFlow.find_by!(
-                          public_id: ClientAuthCeremonySession.find(
-                            entry0_binding.reload.admitted_auth_ceremony_session_id,
-                          ).local_sign_in_flow_ref,
-                        ),
-                        surface: "app", phase: "PRIMARY_PENDING",
-                      )
+                      entry0_phase_binding = nil
                     end
                     fx0_session.post(
                       auth_app_sign_in_email_url(ri: "jp", fb: entry0_phase_binding), params: {
@@ -142,7 +135,7 @@ module Auth
                         "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
                       }.fetch(entry1_surface)
                       entry1_browser.host!(entry1_host)
-                      entry1_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+                      entry1_issuance = OidcTestEntry.issue!(
                         surface: entry1_surface, intent: entry1_intent,
                         base_browser_nonce: SecureRandom.hex(32), base_token: nil,
                       )
@@ -182,14 +175,7 @@ module Auth
                       )
 
                       assert_equal 303, entry1_browser.response.status
-                      entry1_phase_binding = SignInFlowBindingCodec.encode(
-                        flow: ClientSignInFlow.find_by!(
-                          public_id: ClientAuthCeremonySession.find(
-                            entry1_binding.reload.admitted_auth_ceremony_session_id,
-                          ).local_sign_in_flow_ref,
-                        ),
-                        surface: "app", phase: "PRIMARY_PENDING",
-                      )
+                      entry1_phase_binding = nil
                     end
                     fx1_session.post(
                       auth_app_sign_in_email_url(ri: "jp", fb: entry1_phase_binding), params: {
@@ -231,7 +217,7 @@ module Auth
                 "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
               }.fetch(admission_surface)
               admission_browser.host!(admission_host)
-              admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+              admission_issuance = OidcTestEntry.issue!(
                 surface: admission_surface, intent: admission_intent,
                 base_browser_nonce: SecureRandom.hex(32), base_token: nil,
               )
@@ -271,14 +257,7 @@ module Auth
               )
 
               assert_equal 303, admission_browser.response.status
-              phase_binding = SignInFlowBindingCodec.encode(
-                flow: ClientSignInFlow.find_by!(
-                  public_id: ClientAuthCeremonySession.find(
-                    admission_binding.reload.admitted_auth_ceremony_session_id,
-                  ).local_sign_in_flow_ref,
-                ),
-                surface: "app", phase: "PRIMARY_PENDING",
-              )
+              phase_binding = nil
             end
             session.post(
               auth_app_sign_in_email_url(ri: "jp", fb: phase_binding), params: {
@@ -303,7 +282,7 @@ module Auth
                 "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
               }.fetch(admission_surface)
               admission_browser.host!(admission_host)
-              admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+              admission_issuance = OidcTestEntry.issue!(
                 surface: admission_surface, intent: admission_intent,
                 base_browser_nonce: SecureRandom.hex(32), base_token: nil,
               )
@@ -343,14 +322,7 @@ module Auth
               )
 
               assert_equal 303, admission_browser.response.status
-              phase_binding = SignInFlowBindingCodec.encode(
-                flow: ClientSignInFlow.find_by!(
-                  public_id: ClientAuthCeremonySession.find(
-                    admission_binding.reload.admitted_auth_ceremony_session_id,
-                  ).local_sign_in_flow_ref,
-                ),
-                surface: "app", phase: "PRIMARY_PENDING",
-              )
+              phase_binding = nil
             end
             session.post(
               auth_app_sign_in_email_url(ri: "jp", fb: phase_binding), params: {

@@ -20,7 +20,7 @@ class Base::Org::Api::V0::Publishing::EntriesControllerTest < ActionController::
       ["news", "com"] => Publishing::News::Com::Entry,
       ["news", "org"] => Publishing::News::Org::Entry,
     }
-    operator = Operator.new
+    operator = Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED)
     auth = OidcAccessTokenAuthenticator::Result.new(
       success: true, payload: { "client_id" => "edit-org-ww" }, resource: operator, token: nil, error: nil,
     )
@@ -67,7 +67,10 @@ class Base::Org::Api::V0::Publishing::EntriesControllerTest < ActionController::
   end
 
   test "an authenticated suspended operator is refused by the publishing policy" do
-    operator = Operator.new(deactivated_at: 1.minute.ago, purge_eligible_at: Float::INFINITY)
+    operator = Operator.new(
+      security_mode_id: SecurityModeConfigurable::ADVANCED, deactivated_at: 1.minute.ago,
+      purge_eligible_at: Float::INFINITY,
+    )
     auth = OidcAccessTokenAuthenticator::Result.new(
       success: true, payload: { "client_id" => "edit-org-ww" }, resource: operator, token: nil, error: nil,
     )

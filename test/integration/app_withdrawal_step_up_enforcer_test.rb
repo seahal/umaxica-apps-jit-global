@@ -9,7 +9,6 @@ class AppWithdrawalStepUpEnforcerTest < ActionDispatch::IntegrationTest
   setup do
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
     ClientTokenKind.find_or_create_by!(id: ClientTokenKind::BROWSER_WEB)
     ClientTokenStatus.find_or_create_by!(id: ClientTokenStatus::ACTIVE)
@@ -21,10 +20,11 @@ class AppWithdrawalStepUpEnforcerTest < ActionDispatch::IntegrationTest
     @client = Client.create!(
       status_id: ClientStatus::NOTHING,
       visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     @token = ClientToken.create!(
+      authentication_epoch: 0,
       user: @client,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -143,6 +143,7 @@ class AppWithdrawalStepUpEnforcerTest < ActionDispatch::IntegrationTest
         unless @base_rp_fixture_credentials[fixture_key]
           fixture_now = OpAppGrant.database_now
           fixture_rp = OpAppGrant.create!(
+            authentication_epoch: 0,
             client_token: fixture_root, oidc_client_id: fixture_client.client_id,
             oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
             oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,

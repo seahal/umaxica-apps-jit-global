@@ -41,7 +41,13 @@ class ClientTotpCredentialPolicyTest < ActiveSupport::TestCase
 
   # index?/new?/create? allow any client actor (registration does not yet have a record).
   def test_index_and_create_allow_client
-    policy = ClientTotpCredentialPolicy.new(ClientTotpCredential.new, user: Client.new(id: 1))
+    policy = ClientTotpCredentialPolicy.new(
+      ClientTotpCredential.new,
+      user: Client.new(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 1,
+      ),
+    )
 
     assert_predicate policy, :index?
     assert_predicate policy, :create?
@@ -49,7 +55,13 @@ class ClientTotpCredentialPolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_and_create_deny_other_actor_types
-    policy = ClientTotpCredentialPolicy.new(ClientTotpCredential.new, user: Operator.new(id: 1))
+    policy = ClientTotpCredentialPolicy.new(
+      ClientTotpCredential.new,
+      user: Operator.new(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        id: 1,
+      ),
+    )
 
     assert_not policy.index?
     assert_not policy.create?
@@ -57,7 +69,7 @@ class ClientTotpCredentialPolicyTest < ActiveSupport::TestCase
 
   # Per-record actions require ownership (record.user_id == user.id).
   def test_owner_may_manage_own_record
-    owner = Client.new(id: 1)
+    owner = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     record = ClientTotpCredential.new(user_id: owner.id)
     policy = ClientTotpCredentialPolicy.new(record, user: owner)
 
@@ -69,7 +81,13 @@ class ClientTotpCredentialPolicyTest < ActiveSupport::TestCase
 
   def test_non_owner_may_not_manage_record
     record = ClientTotpCredential.new(user_id: 1)
-    policy = ClientTotpCredentialPolicy.new(record, user: Client.new(id: 2))
+    policy = ClientTotpCredentialPolicy.new(
+      record,
+      user: Client.new(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        id: 2,
+      ),
+    )
 
     assert_not policy.show?
     assert_not policy.update?

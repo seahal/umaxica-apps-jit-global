@@ -250,7 +250,7 @@ module Auth
           # lock collapses the second arrival into a no-op
           # cycle-already-issued.
           with_social_sign_up_lock(identity) do
-            cycle = sign_up_flow_locator.current || create_social_sign_up_flow!(user, identity, pt: pt)
+            cycle = current_social_sign_up_flow || create_social_sign_up_flow!(user, identity, pt: pt)
             bind_social_sign_up_flow!(cycle, user, identity)
           end
 
@@ -276,7 +276,7 @@ module Auth
           provider = callback_result.principal.provider
 
           with_pending_social_sign_up_lock(provider, callback_result.principal.subject) do
-            cycle = sign_up_flow_locator.current || create_pending_social_sign_up_flow!(provider, pt: pt)
+            cycle = current_social_sign_up_flow || create_pending_social_sign_up_flow!(provider, pt: pt)
             store_pending_social_signup_evidence!(cycle, callback_result)
             if cycle.step == "checkpoint"
               return redirect_pending_social_signup_confirmation(provider, pt: pt)
@@ -309,6 +309,7 @@ module Auth
         def create_pending_social_sign_up_flow!(provider, pt: nil)
           OpBaseAppRecord.connected_to(role: :writing) do
             cycle = ClientSignUpFlow.create!(
+              auth_admission_binding: auth_sign_up_admission_binding!,
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
               step: "social_callback",
@@ -468,6 +469,7 @@ module Auth
 
           OpBaseAppRecord.connected_to(role: :writing) do
             cycle = ClientSignUpFlow.create!(
+              auth_admission_binding: auth_sign_up_admission_binding!,
               principal_id: nil,
               status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
               step: "social_callback",
@@ -557,6 +559,13 @@ module Auth
           session[:auth_app_up_sequence_id] = cycle.public_id
         rescue ActionDispatch::Request::Session::DisabledSessionError
           nil
+        end
+
+        # E1 (WU-24h): the Flow is the one bound to this admission; the locator is only a hint.
+        def current_social_sign_up_flow
+          sign_up_flow_locator.current(
+            admission_binding: auth_sign_up_admission_binding!, ceremony_session: admitted_auth_ceremony_session,
+          )
         end
 
         def sign_up_flow_locator

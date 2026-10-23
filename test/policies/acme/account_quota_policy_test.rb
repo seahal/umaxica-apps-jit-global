@@ -41,14 +41,20 @@ class Acme::AccountQuotaPolicyTest < ActiveSupport::TestCase
 
   test "counts only resources owned by the principal when no scope is supplied" do
     create_personas(1)
-    other_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    other_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     other_persona = ClientPersona.create!(client_identity: client_identity_for(other_client), title: "Other")
     ClientPersonaOwnership.create!(client_persona: other_persona, client: other_client)
     ClientPersonaLifecycle.create!(
       client_persona: other_persona,
       state: AuthorityResourceLifecycleStateValue::ACTIVE,
     )
-    unowned_client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    unowned_client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     unowned_persona = ClientPersona.create!(client_identity: client_identity_for(unowned_client), title: "Unowned")
 
     policy = Acme::AccountQuotaPolicy.new(surface: :app, principal: client)
@@ -100,7 +106,10 @@ class Acme::AccountQuotaPolicyTest < ActiveSupport::TestCase
   private
 
   def client
-    @client ||= Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client ||= Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
   end
 
   def create_personas(count)

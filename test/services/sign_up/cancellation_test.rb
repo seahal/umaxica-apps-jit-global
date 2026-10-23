@@ -6,7 +6,7 @@ require "test_helper"
 
 class SignUpCancellationTest < ActiveSupport::TestCase
   test "cancel records durable cleanup intent and schedules dependent records" do
-    user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = ClientEmail.create!(
       user: user,
       raw_address: "cancel-#{SecureRandom.hex(6)}@example.com",
@@ -48,7 +48,7 @@ class SignUpCancellationTest < ActiveSupport::TestCase
   end
 
   test "artifact cleanup only schedules the bound pending passkey" do
-    user = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    user = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     telephone = ClientTelephone.create!(
       user: user,
       raw_number: "+12345670001",
@@ -103,7 +103,7 @@ class SignUpCancellationTest < ActiveSupport::TestCase
         issued_at: Time.current,
         expires_at: 15.minutes.from_now,
         entry_method: "email",
-      }.merge(attrs),
+      }.merge(attrs).merge(auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)),
     )
   end
 end

@@ -30,20 +30,23 @@ class CoreAccessRefusalRefreshRetentionTest < ActionDispatch::IntegrationTest
           token = client_tokens(:one)
           token.update!(discard_at: deadline)
           OpAppGrant.create!(
-            contract_epoch: OpAppProtocolEpoch.current_contract_epoch, client_token: token,
+            authentication_epoch: 0,
+            client_token: token,
             oidc_client_id: client_id, **attributes,
           )
         when "visitor"
-          token = VisitorToken.create!(visitor: resource, discard_at: deadline)
+          token = VisitorToken.create!(authentication_epoch: 0, visitor: resource, discard_at: deadline)
           OpComGrant.create!(
-            contract_epoch: OpComProtocolEpoch.current_contract_epoch, visitor_token: token,
+            authentication_epoch: 0,
+            visitor_token: token,
             oidc_client_id: client_id, **attributes,
           )
         when "operator"
           token = operator_tokens(:one)
           token.update!(discard_at: deadline)
           OpOrgGrant.create!(
-            contract_epoch: OpOrgProtocolEpoch.current_contract_epoch, operator_token: token,
+            authentication_epoch: 0,
+            operator_token: token,
             oidc_client_id: client_id, **attributes,
           )
         else

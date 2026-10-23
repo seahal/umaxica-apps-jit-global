@@ -116,6 +116,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             "operator" => :operator_token_id,
           }.fetch(rc8_type)
           rc8_rp = rc8_rp_model.create!(
+            :authentication_epoch => 0,
             rc8_fk => rc8_root.id, :device_session_id => rc8_root.device_session_id,
             :oidc_client_id => rc8_registered.client_id, :oidc_scope => "openid profile",
             :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -177,6 +178,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             "operator" => :operator_token_id,
           }.fetch(rc7_type)
           rc7_rp = rc7_rp_model.create!(
+            :authentication_epoch => 0,
             rc7_fk => rc7_root.id, :device_session_id => rc7_root.device_session_id,
             :oidc_client_id => rc7_registered.client_id, :oidc_scope => "openid profile",
             :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -239,6 +241,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             "operator" => :operator_token_id,
           }.fetch(rc6_type)
           rc6_rp = rc6_rp_model.create!(
+            :authentication_epoch => 0,
             rc6_fk => rc6_root.id, :device_session_id => rc6_root.device_session_id,
             :oidc_client_id => rc6_registered.client_id, :oidc_scope => "openid profile",
             :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -309,7 +312,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   test "app: a truncated valid access token is detached" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     resource = clients(:one)
-    token = ClientToken.create!(user: resource)
+    token = ClientToken.create!(authentication_epoch: 0, user: resource)
     cookies[ACCESS] = begin
       rc5_actor = resource
       rc5_type = { Client => "client", Visitor => "visitor", Operator => "operator" }.fetch(rc5_actor.class)
@@ -338,6 +341,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
         "operator" => :operator_token_id,
       }.fetch(rc5_type)
       rc5_rp = rc5_rp_model.create!(
+        :authentication_epoch => 0,
         rc5_fk => rc5_root.id, :device_session_id => rc5_root.device_session_id,
         :oidc_client_id => rc5_registered.client_id, :oidc_scope => "openid profile",
         :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -370,7 +374,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
     test "app: an access cookie #{label} is #{detached ? "detached" : "kept"}" do
       host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
       resource = clients(:one)
-      token = ClientToken.create!(user: resource)
+      token = ClientToken.create!(authentication_epoch: 0, user: resource)
       freeze_time
       expires_at = 5.minutes.from_now
       cookies[ACCESS] =
@@ -405,6 +409,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
             "operator" => :operator_token_id,
           }.fetch(rc4_type)
           rc4_rp = rc4_rp_model.create!(
+            :authentication_epoch => 0,
             rc4_fk => rc4_root.id, :device_session_id => rc4_root.device_session_id,
             :oidc_client_id => rc4_registered.client_id, :oidc_scope => "openid profile",
             :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -436,7 +441,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   test "app: an access cookie for a session idle past the window is detached as a lifecycle end" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     resource = clients(:one)
-    token = ClientToken.create!(user: resource)
+    token = ClientToken.create!(authentication_epoch: 0, user: resource)
     cookies[ACCESS] =
       begin
         rc3_actor = resource
@@ -466,6 +471,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           "operator" => :operator_token_id,
         }.fetch(rc3_type)
         rc3_rp = rc3_rp_model.create!(
+          :authentication_epoch => 0,
           rc3_fk => rc3_root.id, :device_session_id => rc3_root.device_session_id,
           :oidc_client_id => rc3_registered.client_id, :oidc_scope => "openid profile",
           :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -507,9 +513,12 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "app: a withdrawn account's valid access cookie is not detached as an invalid credential" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    user = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: user)
-    token = ClientToken.create!(user: user)
+    token = ClientToken.create!(authentication_epoch: 0, user: user)
     cookies[ACCESS] =
       begin
         rc2_actor = user
@@ -539,6 +548,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           "operator" => :operator_token_id,
         }.fetch(rc2_type)
         rc2_rp = rc2_rp_model.create!(
+          :authentication_epoch => 0,
           rc2_fk => rc2_root.id, :device_session_id => rc2_root.device_session_id,
           :oidc_client_id => rc2_registered.client_id, :oidc_scope => "openid profile",
           :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -605,6 +615,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           "operator" => :operator_token_id,
         }.fetch(rc1_type)
         rc1_rp = rc1_rp_model.create!(
+          :authentication_epoch => 0,
           rc1_fk => rc1_root.id, :device_session_id => rc1_root.device_session_id,
           :oidc_client_id => rc1_registered.client_id, :oidc_scope => "openid profile",
           :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -639,7 +650,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "the issued auth cookies and their deletions share name, path, host-only scope, Secure, and SameSite" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
 
     post_refresh(refresh_plain)
@@ -673,7 +684,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   }.each do |label, forge|
     test "refresh: #{label} is refused with the shared JSON body and every auth cookie is deleted" do
       host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      token = ClientToken.create!(user: clients(:one))
+      token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
       token.rotate_refresh_token!
 
       post_refresh(forge.call(token))
@@ -686,7 +697,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "refresh: a credential at its discard boundary is refused as a lifecycle end" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(discard_at: token.class.database_now)
 
@@ -701,7 +712,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   # cannot freeze, so "just before" is the nearest value that stays ahead of real elapsed time.
   test "refresh: a credential shortly before its discard boundary refreshes" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(discard_at: 1.minute.from_now)
 
@@ -712,7 +723,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "refresh: reuse keeps the family revocation policy and deletes every auth cookie" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     first = token.rotate_refresh_token!
     post_refresh(first)
 
@@ -727,7 +738,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "refresh: a DBSC-bound session presented without its bound cookie is refused and the DBSC cookie deleted" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
     token.update_columns(
       user_token_binding_method_id: ClientTokenBindingMethod::DBSC,
@@ -747,7 +758,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "refusal reasons share status, body, and cookie writes, and the log carries no credential" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     token.rotate_refresh_token!
     secret_verifier = SecureRandom.urlsafe_base64(32)
     observations =
@@ -774,7 +785,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   test "a database failure while resolving the RP access cookie returns 503 and preserves credentials" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     resource = clients(:one)
-    token = ClientToken.create!(user: resource)
+    token = ClientToken.create!(authentication_epoch: 0, user: resource)
     cookies[ACCESS] =
       begin
         rc0_actor = resource
@@ -804,6 +815,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
           "operator" => :operator_token_id,
         }.fetch(rc0_type)
         rc0_rp = rc0_rp_model.create!(
+          :authentication_epoch => 0,
           rc0_fk => rc0_root.id, :device_session_id => rc0_root.device_session_id,
           :oidc_client_id => rc0_registered.client_id, :oidc_scope => "openid profile",
           :oidc_jti => SecureRandom.uuid, :oidc_auth_time => Time.current,
@@ -830,7 +842,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "an issuer failure during refresh propagates instead of becoming an invalid credential" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
 
     AcmeRefreshTokenIssuer.stub(:call, ->(**) { raise ActiveRecord::StatementInvalid, "injected" }) do
@@ -840,7 +852,7 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
 
   test "a database failure in the DBSC endpoint's refresh lookup propagates" do
     host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    token = ClientToken.create!(user: clients(:one))
+    token = ClientToken.create!(authentication_epoch: 0, user: clients(:one))
     refresh_plain = token.rotate_refresh_token!
 
     ClientToken.stub(:find_by, ->(*) { raise ActiveRecord::ConnectionNotEstablished }) do
@@ -857,16 +869,19 @@ class AuthInvalidCookieRecoveryTest < ActionDispatch::IntegrationTest
   def surface_resource(surface)
     case surface
     when :app then clients(:one)
-    when :com then Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    when :com then Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR,
+    )
     when :org then operators(:one)
     end
   end
 
   def surface_token(surface, resource)
     case surface
-    when :app then ClientToken.create!(user: resource)
-    when :com then VisitorToken.create!(visitor: resource)
-    when :org then OperatorToken.create!(staff: resource)
+    when :app then ClientToken.create!(authentication_epoch: 0, user: resource)
+    when :com then VisitorToken.create!(authentication_epoch: 0, visitor: resource)
+    when :org then OperatorToken.create!(authentication_epoch: 0, staff: resource)
     end
   end
 

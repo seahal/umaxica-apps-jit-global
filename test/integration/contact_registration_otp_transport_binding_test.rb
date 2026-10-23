@@ -24,10 +24,13 @@ class ContactRegistrationOtpTransportBindingTest < ActiveSupport::TestCase
             when [:com, :telephone]
               [Visitor, VisitorTelephone, :visitor_id, VisitorTelephoneCeremonyTransaction, nil]
             end
-          actor = owner_model.create!(status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE)
+          actor = owner_model.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: (surface == :app) ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+          )
           token =
-            (surface == :app) ? ClientToken.create!(user: actor, discard_at: 1.day.from_now) :
-                        VisitorToken.create!(visitor: actor, discard_at: 1.day.from_now)
+            (surface == :app) ? ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now) :
+                        VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
           token.rotate_refresh_token!
           destination =
             (channel == :email) ? "transport-#{SecureRandom.hex(8)}@example.test" :

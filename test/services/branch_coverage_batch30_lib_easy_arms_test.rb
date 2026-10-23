@@ -71,7 +71,7 @@ class BranchCoverageBatch30LibEasyArmsTest < ActiveSupport::TestCase
     client = Struct.new(:client_id, :resource_type).new("cid", "client")
     assert_raises(ArgumentError) do
       SecurityJwtOidcIdTokenCodec.build_payload(
-        resource: Client.new,
+        resource: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL),
         client: client,
         nonce: "n",
         issued_at: now + 1.hour,
@@ -87,7 +87,7 @@ class BranchCoverageBatch30LibEasyArmsTest < ActiveSupport::TestCase
     end
 
     payload = SecurityJwtOidcIdTokenCodec.build_payload(
-      resource: Client.new,
+      resource: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL),
       client: client,
       nonce: "n",
       issued_at: now,
@@ -109,8 +109,8 @@ class BranchCoverageBatch30LibEasyArmsTest < ActiveSupport::TestCase
                  SecurityJwtOidcIdTokenCodec.resource_type_for_client(Struct.new(:resource_type).new("staff"))
     assert_equal "visitor",
                  SecurityJwtOidcIdTokenCodec.resource_type_for_client(Struct.new(:resource_type).new("customer"))
-    assert_equal "operator", SecurityJwtOidcIdTokenCodec.resource_type_for_resource(Operator.new)
-    assert_equal "visitor", SecurityJwtOidcIdTokenCodec.resource_type_for_resource(Visitor.new)
+    assert_equal "operator", SecurityJwtOidcIdTokenCodec.resource_type_for_resource(Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED))
+    assert_equal "visitor", SecurityJwtOidcIdTokenCodec.resource_type_for_resource(Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
   end
 
   test "SignInSequence expired blank expires_at is expired" do

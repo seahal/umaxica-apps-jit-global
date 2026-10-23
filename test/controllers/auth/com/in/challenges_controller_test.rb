@@ -8,6 +8,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   include AuthEmailMfaHelper
 
   setup do
+    @test_started_at = VisitorSignInFlow.database_now
     host! ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
     https!
     VisitorSignInFlowState.ensure_defaults!
@@ -18,9 +19,11 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     @visitor = create_verified_visitor_with_email(
       email_address: "com_challenge_#{SecureRandom.hex(4)}@example.com",
     )
-    @visitor.visitor_emails.last.finalize_binding!
-    @visitor.reload.update!(mfa_level_enabled: true)
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    @email_record = @visitor.visitor_emails.last
+    @email_record.finalize_binding!
+    @email = @email_record.address
+    @visitor.reload.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+    admission = OidcTestEntry.issue!(
       surface: "com", intent: "sign_in", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     get auth_com_sign_in_path, params: { entry_ref: admission.reference, ri: "jp" }
@@ -35,18 +38,12 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
     post auth_com_sign_in_path, params: { entry_ref: admission.reference, authenticity_token: csrf, ri: "jp" }
 
     assert_response :see_other
-    @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-      flow: VisitorSignInFlow.find_by!(
-        public_id: admitted_auth_ceremony_session_for_test(binding.reload).local_sign_in_flow_ref,
-      ),
-      surface: "com", phase: "PRIMARY_PENDING",
-    )
+    @primary_sign_in_binding = nil
   end
 
   test "contradictory MFA GET and HEAD preserve the original com flow and issue no session" do
-    flow = VisitorSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
     before = flow.attributes
     path = auth_com_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
 
@@ -71,9 +68,8 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "missing malformed and wrong-surface MFA bindings cannot halt the com flow" do
-    flow = VisitorSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
     wrong_surface = SignInFlowBindingCodec.encode(flow: flow, surface: "app", phase: "PRIMARY_PENDING")
     before = flow.attributes
 
@@ -89,9 +85,8 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   end
 
   test "a contradictory com mutation halts once and replay cannot issue a session" do
-    flow = VisitorSignInFlow.find_by!(
-      public_id: SignInFlowBindingCodec.decode(@primary_sign_in_binding).flow_public_id,
-    )
+    establish_contradictory_primary_binding!
+    flow = @mfa_flow
     path = auth_com_sign_in_challenge_path(ri: "jp", fb: @primary_sign_in_binding)
 
     assert_no_difference -> { VisitorToken.count } do
@@ -117,8 +112,9 @@ class Auth::Com::Sign::In::ChallengesControllerTest < ActionDispatch::Integratio
   test "show requires pending_mfa" do
     get mfa_challenge_path
 
-    assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    # Without an MFA-phase flow the request restarts at the OIDC sign-in page.
+    assert_response :see_other
+    assert_equal auth_com_sign_in_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 end
 
@@ -194,16 +190,26 @@ class Auth::Com::Sign::In::ChallengesControllerTest
       delete mfa_challenge_path
     end
 
-    assert_response :conflict
-    assert_equal "戻るはだめです", response.body
+    # Without an MFA-phase flow the request restarts at the OIDC sign-in page.
+    assert_response :see_other
+    assert_equal auth_com_sign_in_path(ri: "jp"), URI.parse(response.location).request_uri
   end
 
   private
 
+  # An OIDC-parent flow exists only after primary authentication; a PRIMARY binding to that
+  # MFA-phase flow is the contradictory observation these cases submit.
+  def establish_contradictory_primary_binding!
+    sign_in_with_email_to_mfa!(surface: :com, email_record: @email_record, email: @email)
+    @mfa_flow = VisitorSignInFlow.where(principal_id: @visitor.id).recent_first.first!
+    @primary_sign_in_binding = SignInFlowBindingCodec.encode(flow: @mfa_flow, surface: "com", phase: "PRIMARY_PENDING")
+  end
+
   def mfa_binding_params
     locator = session[:com_sign_in_flow_locator]
     cycle = VisitorSignInFlow.find_by(public_id: locator&.[]("public_id"))
-    cycle ||= VisitorSignInFlow.where(principal_id: @visitor.id).order(:id).last
+    # Only a flow this test created; rows left by non-transactional tests never stand in for it.
+    cycle ||= VisitorSignInFlow.where(principal_id: @visitor.id, created_at: @test_started_at..).order(:id).last
     return {} unless cycle
 
     { fb: SignInFlowBindingCodec.encode(flow: cycle, surface: "com", phase: "MFA_PENDING") }
@@ -257,7 +263,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -289,7 +294,10 @@ class Auth::Com::Sign::In::ChallengesControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -536,7 +544,6 @@ class Auth::Com::Sign::In::ChallengesControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -546,6 +553,7 @@ class Auth::Com::Sign::In::ChallengesControllerTest
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
     visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 8_000_000_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
       status_id: VisitorStatus::NOTHING,
       visibility_id: VisitorVisibility::VISITOR,

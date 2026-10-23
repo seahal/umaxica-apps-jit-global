@@ -85,6 +85,7 @@ class Auth::Com::Sign::Up::Check::Email::BirthdatesControllerTest < ActionDispat
     end
 
     assert_equal 303, browser.response.status
+    switch_browser_to_sign_up!(browser, surface: "com")
     browser.get("/sign/up/email/new", params: { ri: "jp" })
 
     assert_equal 200, browser.response.status

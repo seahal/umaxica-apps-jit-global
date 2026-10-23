@@ -12,7 +12,7 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
 
   fixtures :client_statuses,
            :client_visibilities,
-           :client_mfa_levels,
+           :client_security_modes,
            :client_mfa_statuses,
            :client_telephone_statuses,
            :client_passkey_statuses,
@@ -24,7 +24,7 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
       public_id: PublicId.generate,
       status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     telephone = ClientTelephone.create!(
@@ -37,6 +37,7 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
     nonce = "app-telephone-finalization-browser"
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: user.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
       nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,
@@ -103,7 +104,7 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
       public_id: PublicId.generate,
       status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP,
       visibility_id: ClientVisibility::USER,
-      mfa_level_id: ClientMfaLevel::NOTHING,
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       mfa_status_id: ClientMfaStatus::UNCONFIGURED,
     )
     telephone = ClientTelephone.create!(
@@ -116,6 +117,7 @@ class SignAppUpTelephoneRegistrationFinalizerTest < ActiveSupport::TestCase
     nonce = "app-missing-passkey-browser"
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: user.id, status_id: ClientSignUpFlowStatus::CONTACT_PENDING, step: "contact",
       nonce_digest: ClientSignUpFlow.digest_nonce(nonce), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "telephone", pending_contact_type: "telephone", pending_contact_id: telephone.id,

@@ -1305,34 +1305,6 @@ ALTER SEQUENCE public.client_memberships_id_seq OWNED BY public.client_membershi
 
 
 --
--- Name: client_mfa_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.client_mfa_levels (
-    id bigint CONSTRAINT user_multi_factors_id_not_null NOT NULL
-);
-
-
---
--- Name: client_mfa_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.client_mfa_levels_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: client_mfa_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.client_mfa_levels_id_seq OWNED BY public.client_mfa_levels.id;
-
-
---
 -- Name: client_mfa_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3425,6 +3397,16 @@ ALTER SEQUENCE public.client_withdrawal_flows_id_seq OWNED BY public.client_with
 
 
 --
+-- Name: client_security_modes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.client_security_modes (
+    id bigint NOT NULL,
+    CONSTRAINT chk_client_security_modes_id CHECK ((id = ANY (ARRAY[(3)::bigint, (7)::bigint])))
+);
+
+
+--
 -- Name: clients; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3437,13 +3419,12 @@ CREATE TABLE public.clients (
     updated_at timestamp(6) with time zone CONSTRAINT users_updated_at_not_null NOT NULL,
     withdrawn_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone,
     status_id bigint DEFAULT 11 CONSTRAINT users_status_id_not_null NOT NULL,
-    mfa_level_enabled boolean DEFAULT false CONSTRAINT users_multi_factor_enabled_not_null NOT NULL,
     withdrawal_started_at timestamp(6) with time zone,
     deactivated_at timestamp(6) with time zone,
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT users_purged_at_not_null NOT NULL,
     visibility_id bigint DEFAULT 2 CONSTRAINT users_visibility_id_not_null NOT NULL,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT users_discarded_at_not_null NOT NULL,
-    mfa_level_id bigint DEFAULT 0 CONSTRAINT users_multi_factor_id_not_null NOT NULL,
+    security_mode_id bigint NOT NULL,
     mfa_status_id bigint DEFAULT 5 CONSTRAINT users_multi_factor_status_id_not_null NOT NULL,
     terminated_at timestamp(6) with time zone,
     birthdate text,
@@ -4760,13 +4741,6 @@ ALTER TABLE ONLY public.client_memberships ALTER COLUMN id SET DEFAULT nextval('
 
 
 --
--- Name: client_mfa_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_mfa_levels ALTER COLUMN id SET DEFAULT nextval('public.client_mfa_levels_id_seq'::regclass);
-
-
---
 -- Name: client_mfa_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -5411,6 +5385,14 @@ ALTER TABLE ONLY public.user_clients ALTER COLUMN id SET DEFAULT nextval('public
 
 
 --
+-- Name: client_security_modes client_security_modes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.client_security_modes
+    ADD CONSTRAINT client_security_modes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: accounts accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5504,14 +5486,6 @@ ALTER TABLE public.client_passkeys
 
 ALTER TABLE public.client_telephones
     ADD CONSTRAINT chk_client_telephones_retention_order CHECK ((discard_at <= purge_eligible_at)) NOT VALID;
-
-
---
--- Name: clients chk_clients_mfa_requirement_consistency; Type: CHECK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE public.clients
-    ADD CONSTRAINT chk_clients_mfa_requirement_consistency CHECK ((((mfa_level_enabled = false) AND (mfa_level_id = 0)) OR ((mfa_level_enabled = true) AND (mfa_level_id <> 0)))) NOT VALID;
 
 
 --
@@ -5704,14 +5678,6 @@ ALTER TABLE ONLY public.client_members
 
 ALTER TABLE ONLY public.client_memberships
     ADD CONSTRAINT client_memberships_pkey PRIMARY KEY (id);
-
-
---
--- Name: client_mfa_levels client_mfa_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.client_mfa_levels
-    ADD CONSTRAINT client_mfa_levels_pkey PRIMARY KEY (id);
 
 
 --
@@ -6456,6 +6422,13 @@ ALTER TABLE ONLY public.user_client_suspensions
 
 ALTER TABLE ONLY public.user_clients
     ADD CONSTRAINT user_clients_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: index_clients_on_security_mode_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_clients_on_security_mode_id ON public.clients USING btree (security_mode_id);
 
 
 --
@@ -7894,13 +7867,6 @@ CREATE INDEX index_clients_on_early_termination_available_at ON public.clients U
 
 
 --
--- Name: index_clients_on_mfa_level_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_clients_on_mfa_level_id ON public.clients USING btree (mfa_level_id);
-
-
---
 -- Name: index_clients_on_mfa_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -8339,6 +8305,14 @@ CREATE TRIGGER enforcement_protect_client_emails_delete BEFORE DELETE ON public.
 --
 
 CREATE TRIGGER enforcement_protect_clients_delete BEFORE DELETE ON public.clients FOR EACH ROW EXECUTE FUNCTION public.enforcement_protect_clients_delete();
+
+
+--
+-- Name: clients fk_rails_fcb70bada4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clients
+    ADD CONSTRAINT fk_rails_fcb70bada4 FOREIGN KEY (security_mode_id) REFERENCES public.client_security_modes(id);
 
 
 --
@@ -8923,14 +8897,6 @@ ALTER TABLE ONLY public.client_member_revocations
 
 ALTER TABLE ONLY public.client_withdrawal_flow_events
     ADD CONSTRAINT fk_rails_7344701780 FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE CASCADE;
-
-
---
--- Name: clients fk_rails_73fa0fcaee; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.clients
-    ADD CONSTRAINT fk_rails_73fa0fcaee FOREIGN KEY (mfa_level_id) REFERENCES public.client_mfa_levels(id);
 
 
 --
@@ -9572,6 +9538,10 @@ ALTER TABLE ONLY public.client_preference_timezones
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261023140003'),
+('20261023140002'),
+('20261023140001'),
+('20261023140000'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261020120001'),

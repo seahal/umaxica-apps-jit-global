@@ -26,7 +26,11 @@ module SignEntryExit
 
     cycle_class = sign_entry_exit_sign_up_cycle_class
     return record if cycle_class.nil?
-    return nil if SignUpCycleLocator.new(session, surface: auth_ceremony_surface.to_sym, cycle_class:).current
+
+    # E1 (WU-24h): a started sign-up is a Flow bound to this admission's Binding, whatever the locator says.
+    binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+      .find_by(admitted_auth_ceremony_session_id: record.id)
+    return nil if binding && cycle_class.exists?(auth_admission_binding_id: binding.id)
 
     record
   end

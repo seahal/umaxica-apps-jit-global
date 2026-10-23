@@ -47,6 +47,7 @@ class Core::Com::Api::V0::SessionsControllerTest < ActionDispatch::IntegrationTe
     visitor = visitors(:reserved_visitor)
     client = OidcClientRegistry.find!("core-com-jp")
     root_token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
@@ -126,11 +127,13 @@ class Core::Com::Api::V0::SessionsControllerTest < ActionDispatch::IntegrationTe
   def oidc_access_token_for(visitor, client_id: "core-com-jp")
     client = OidcClientRegistry.find!("core-com-jp")
     root_token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
     )
     rp_grant = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: root_token,
       oidc_client_id: client.client_id,
       oidc_scope: "openid profile",

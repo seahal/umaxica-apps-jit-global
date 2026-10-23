@@ -24,7 +24,7 @@ module Auth
               "org" => ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
             }.fetch(admission_surface)
             admission_browser.host!(admission_host)
-            admission_issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+            admission_issuance = OidcTestEntry.issue!(
               surface: admission_surface, intent: admission_intent,
               base_browser_nonce: SecureRandom.hex(32), base_token: nil,
             )
@@ -62,14 +62,7 @@ module Auth
             )
 
             assert_equal 303, admission_browser.response.status
-            @primary_sign_in_binding = SignInFlowBindingCodec.encode(
-              flow: ClientSignInFlow.find_by!(
-                public_id: ClientAuthCeremonySession.find(
-                  admission_binding.reload.admitted_auth_ceremony_session_id,
-                ).local_sign_in_flow_ref,
-              ),
-              surface: "app", phase: "PRIMARY_PENDING",
-            )
+            @primary_sign_in_binding = nil
           end
           TurnstileVerifierStub.challenge_enabled = true
           TurnstileVerifierStub.challenge_response = { "success" => true }

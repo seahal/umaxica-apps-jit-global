@@ -37,8 +37,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     test "signed-in Passkey registration distributes correctly at A=#{active_count}" do
       auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(
+        authentication_epoch: 0,
         user: actor, established_authentication_method: "secret", root_login_established_at: ClientToken.database_now,
       )
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
@@ -77,7 +78,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         fv5344 = OidcClientRegistry.find!("base-app-ww")
         fv5346 = OpAppGrant.database_now
         fv5341 = OpAppGrant.create!(
-          contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+          authentication_epoch: 0,
           client_token: fv5226,
           oidc_client_id: fv5344.client_id,
           oidc_scope: "openid profile",
@@ -140,7 +141,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
             rp_actor = Client.find(rp_token.user_id)
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
-              contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,
@@ -545,8 +546,9 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
   test "unavailable manual payload retires candidates and releases capacity through the protected HTTP endpoint" do
     [nil, "invalid encrypted payload"].each do |payload|
       base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
       token = ClientToken.create!(
+        authentication_epoch: 0,
         user: actor, established_authentication_method: "secret", root_login_established_at: ClientToken.database_now,
       )
       BaseSelectorBootstrapAuthority.call(surface: :app, principal: actor)
@@ -575,7 +577,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
         fv5267 = OidcClientRegistry.find!("base-app-ww")
         fv5269 = OpAppGrant.database_now
         fv5264 = OpAppGrant.create!(
-          contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+          authentication_epoch: 0,
           client_token: fv5270,
           oidc_client_id: fv5267.client_id,
           oidc_scope: "openid profile",
@@ -649,7 +651,10 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, birthdate: "2000-01-01")
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      birthdate: "2000-01-01",
+    )
     identifier = "secret-login-#{SecureRandom.hex(4)}@example.com"
     actor.client_emails.create!(
       address: identifier, user_email_status_id: ClientEmailStatus::VERIFIED,
@@ -666,6 +671,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
       webauthn_id: registered.id, public_key: registered.public_key, sign_count: 0,
     )
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor, established_authentication_method: "passkey",
       root_login_established_at: ClientToken.database_now - 1.hour,
     )
@@ -692,7 +698,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     ), :satisfied?
     base_client = OidcClientRegistry.find!("base-app-ww")
     base_rp_session = OpAppGrant.create!(
-      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       client_token: token, oidc_client_id: base_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: token.root_login_established_at,
       refresh_token_expires_at: 10.minutes.from_now,
@@ -1131,7 +1137,7 @@ class AppSecretLoginJourneyTest < ActionDispatch::IntegrationTest
     )
     rp_client = OidcClientRegistry.find!("base-app-ww")
     rp_session = OpAppGrant.create!(
-      contract_epoch: OpAppProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       client_token: root,
       oidc_client_id: rp_client.client_id,
       oidc_scope: "openid profile",

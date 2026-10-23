@@ -12,18 +12,18 @@ class StepUpSessionRevocationTest < ActiveSupport::TestCase
           actor, token, transaction_model, session_model, token_key, rp_id =
             case surface
             when :app
-              owner = Client.create!(status_id: ClientStatus::ACTIVE)
-              [owner, ClientToken.create!(user: owner, discard_at: 1.day.from_now),
+              owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+              [owner, ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now),
                ClientStepUpCeremonyTransaction, ClientStepUpSession, :user_token,
                ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),]
             when :com
-              owner = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-              [owner, VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now),
+              owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+              [owner, VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now),
                VisitorStepUpCeremonyTransaction, VisitorStepUpSession, :visitor_token,
                ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),]
             when :org
-              owner = Operator.create!
-              [owner, OperatorToken.create!(staff: owner, discard_at: 1.day.from_now),
+              owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+              [owner, OperatorToken.create!(authentication_epoch: 0, staff: owner, discard_at: 1.day.from_now),
                OperatorStepUpCeremonyTransaction, OperatorStepUpSession, :staff_token,
                ENV.fetch("PUBLIC_AUTH_STAFF_URL"),]
             end

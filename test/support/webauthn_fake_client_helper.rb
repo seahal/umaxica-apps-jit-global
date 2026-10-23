@@ -20,7 +20,7 @@ module WebauthnFakeClientHelper
 
   # Returns the raw params hash a browser would POST for a registration.
   def fake_attestation(client, challenge:, rp_id: nil, user_verified: true, user_present: true,
-                       backup_eligibility: false, backup_state: false)
+                       backup_eligibility: false, backup_state: false, extensions: nil)
     client.create(
       challenge: challenge,
       rp_id: rp_id,
@@ -28,6 +28,7 @@ module WebauthnFakeClientHelper
       user_verified: user_verified,
       backup_eligibility: backup_eligibility,
       backup_state: backup_state,
+      extensions: extensions,
     )
   end
 

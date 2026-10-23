@@ -11,7 +11,7 @@ class IdentityStepUpEmailVerificationCommitterTest < ActiveSupport::TestCase
       address: "step-up-verification@example.com", user_email_status_id: ClientEmailStatus::VERIFIED,
     )
     @credential.finalize_binding!
-    @token = ClientToken.create!(user: @actor)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     @transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: @actor.public_id, session_ref: @token.public_id, required_scope: "settings_email",
       required_aal: "none", allowed_methods: ["email_otp"], return_to: "/identity/emails",

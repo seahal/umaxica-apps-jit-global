@@ -135,7 +135,8 @@ class ClientToken < OpBaseAppRecord
           dependent: :destroy
 
   validates :public_id, uniqueness: true, length: { maximum: 21 }
-  validates :contract_epoch, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+  # WU-17: written at issuance from the actor (roots) or the root (grants); never defaulted.
+  validates :authentication_epoch, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
   validate :enforce_concurrent_session_limit, on: :create
   validates :device_session_id, :user_id, exclusion: { in: [nil] }

@@ -17,6 +17,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     @operator = operators(:one)
     AuthenticationSessionRevoker.tokens_for(@operator).find_each(&:revoke!)
     @token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       discard_at: OperatorToken.database_now + 1.hour,
     )
@@ -49,7 +50,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         reason_code: "bootstrap", starts_at: 1.minute.ago, expires_at: 1.day.from_now,
       )
     end
-    target_session = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    target_session = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     fake = WebAuthn::FakeClient.new("https://#{@auth_host}", encoding: :base64url)
     registration = fake.create(challenge: SecureRandom.urlsafe_base64(32), user_verified: true)
     relying_party = WebAuthn::RelyingParty.new(
@@ -75,7 +76,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       revoked_at: nil,
     )
     rp_record ||= OpOrgGrant.create!(
-      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
       refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
@@ -227,7 +228,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
     assert_equal ["support.session.revoked", "succeeded"], [chronicle.action, chronicle.result]
     assert_equal ["Operator", @operator.id], [chronicle.actor_type, chronicle.actor_id]
 
-    replacement_session = ClientToken.create!(user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    replacement_session = ClientToken.create!(authentication_epoch: 0, user: @client, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     OperatorCapabilityGrant.find_by!(
       operator: @operator, capability: OperatorCapabilityGrant::SUPPORT_SESSION_REVOKE_APP,
     ).revoke!(by: operators(:two), reason_code: "duty_ended")
@@ -299,7 +300,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       revoked_at: nil,
     )
     rp_record ||= OpOrgGrant.create!(
-      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
       refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
@@ -348,7 +349,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       revoked_at: nil,
     )
     rp_record ||= OpOrgGrant.create!(
-      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
       refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
@@ -397,7 +398,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         revoked_at: nil,
       )
       rp_record ||= OpOrgGrant.create!(
-        contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+        authentication_epoch: 0,
         operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
         oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
         refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,
@@ -449,7 +450,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
 
       if mismatch == :session
         foreign_actor = @operator
-        foreign_token = OperatorToken.create!(staff: @operator)
+        foreign_token = OperatorToken.create!(authentication_epoch: 0, staff: @operator)
         reference = @passkey.external_id
         foreign_requirement = StepUpRequirement.new(
           step_up_required: true,
@@ -471,7 +472,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
         )
       else
         foreign_actor = @client
-        foreign_token = ClientToken.create!(user: @client)
+        foreign_token = ClientToken.create!(authentication_epoch: 0, user: @client)
         reference = @client.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public").public_id
         foreign_requirement = StepUpRequirement.new(
           step_up_required: true,
@@ -601,7 +602,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
           revoked_at: nil,
         )
         rp_record ||= OpOrgGrant.create!(
-          contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+          authentication_epoch: 0,
           operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
           oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
           refresh_token_expires_at: 10.minutes.from_now,
@@ -666,7 +667,7 @@ class OrgAdminStepUpCeremonyTest < ActionDispatch::IntegrationTest
       revoked_at: nil,
     )
     rp_record ||= OpOrgGrant.create!(
-      contract_epoch: OpOrgProtocolEpoch.current_contract_epoch,
+      authentication_epoch: 0,
       operator_token: rp_root, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpOrgGrant.database_now,
       refresh_token_expires_at: OpOrgGrant.database_now + 10.minutes,

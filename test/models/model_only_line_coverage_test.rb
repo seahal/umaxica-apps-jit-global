@@ -136,7 +136,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     status_class.define_singleton_method(:ensure_defaults!) { true }
     occurrence_class = Object.new
     occurrence_class.define_singleton_method(:create!) { |attributes| created_attributes = attributes }
-    subject = Client.new(public_id: "client-occurrence")
+    subject = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: "client-occurrence")
     request = Struct.new(:request_id, :user_agent).new("request-id", "agent")
 
     WithdrawalOccurrenceRecording.stub(:occurrence_class_for, occurrence_class) do
@@ -158,12 +158,12 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal "self_service", created_attributes[:context]["reason_code"]
     assert_not created_attributes[:context].key?("forbidden")
     assert_equal ClientOccurrence, WithdrawalOccurrenceRecording.occurrence_class_for(subject)
-    assert_equal VisitorOccurrence, WithdrawalOccurrenceRecording.occurrence_class_for(Visitor.new)
-    assert_equal "com", WithdrawalOccurrenceRecording.surface_for(Visitor.new)
+    assert_equal VisitorOccurrence, WithdrawalOccurrenceRecording.occurrence_class_for(Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
+    assert_equal "com", WithdrawalOccurrenceRecording.surface_for(Visitor.new(security_mode_id: SecurityModeConfigurable::NORMAL))
   end
 
   test "session limit transaction creates finds and completes every remaining state" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = ClientSignInFlow.database_now
     flow = ClientSignInFlow.create!(
       principal_id: actor.id,
@@ -182,7 +182,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
 
     assert_predicate record, :pending?
     assert_equal record.id, ClientSessionLimitResolutionTransaction.find_active_by_challenge(issuance.challenge).id
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     record.select_session!(
       actor: actor,
       challenge: issuance.challenge,
@@ -218,9 +218,10 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
 
   test "oidc token usage scope and rotation update the refresh token family" do
     assert_kind_of ActiveRecord::Relation, OpAppGrant.currently_usable_at(Time.current)
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: actor)
     usage = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, oidc_client_id: "base-app-ww", oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
       oidc_nonce: SecureRandom.hex(16), oidc_auth_time: OpAppGrant.database_now,
       refresh_token_expires_at: OpAppGrant.database_now + 10.minutes,
@@ -314,18 +315,6 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal({ dbsc_status_id: AppPreferenceDbscStatus::NOTHING }, updates.last)
   end
 
-  test "mfa level compatibility reads both normalized and legacy attributes" do
-    client = Client.new(mfa_level_id: ClientMfaLevel::NOTHING, mfa_level_enabled: false)
-
-    assert_not_predicate client, :mfa_level_enabled?
-    assert_not_predicate client, :mfa_level_required?
-
-    client.mfa_level_enabled = true
-
-    assert_predicate client, :mfa_level_enabled?
-    assert_equal ClientMfaLevel::FULL, client.mfa_level_id
-  end
-
   test "sign in flow recognizes legacy states and advances to return" do
     flow = ClientSignInFlow.new(state_id: ClientSignInFlowState::PRIMARY_PENDING)
 
@@ -364,7 +353,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_equal :operator, OperatorEmail.new.promotional_unsubscribe_scope
     assert_equal :visitor, VisitorEmail.new.promotional_unsubscribe_scope
     assert_equal "visitor-email", VisitorEmail.new(public_id: "visitor-email").to_param
-    assert_equal "public", Client.new(public_id: "public").to_param
+    assert_equal "public", Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, public_id: "public").to_param
     assert_equal "nothing", AppPreference.new.adult_content_gate
     assert_equal "nothing", ClientPreference.new.adult_content_gate
     assert_not ClientSecretCredential.new.available_at?(at: Client.database_now)
@@ -413,7 +402,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
     assert_kind_of ActiveRecord::Relation, ClientWithdrawalFlow.active
     assert_kind_of ActiveRecord::Relation, ClientSignInFlow.current
 
-    client = Client.new
+    client = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
 
     client.stub(:remaining_social_unlink_methods, [:email]) do
       assert client.social_unlink_methods_remaining?(excluding_provider: "google")
@@ -421,7 +410,7 @@ class ModelOnlyLineCoverageTest < ActiveSupport::TestCase
   end
 
   test "withdrawal ceremony issue and expiration use the model boundary" do
-    subject = Client.new
+    subject = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     created = Object.new
     attributes = nil
 

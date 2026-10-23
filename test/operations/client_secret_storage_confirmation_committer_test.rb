@@ -4,8 +4,8 @@ require "test_helper"
 
 class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
   test "storage declaration activates the presented manual reservation and preserves the session" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor, established_authentication_method: "secret")
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor, established_authentication_method: "secret")
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -61,8 +61,8 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
   end
 
   test "the exact two presented candidates confirm together and source audit failure rolls back the whole batch" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_passkey",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -119,8 +119,8 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
   test "confirmation refuses invalid authority and inconsistent presentation evidence" do
     %i(no_step_up wrong_scope wrong_session wrong_owner expired_step_up revoked restricted
        secret_method unpresented unaudited mismatched_presented extra_candidate).each do |scenario|
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       token.update!(
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,
@@ -150,9 +150,9 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
       case scenario
       when :no_step_up then token.update!(last_step_up_at: nil)
       when :wrong_scope then token.update!(last_step_up_scope: "settings_passkey")
-      when :wrong_session then token = ClientToken.create!(user: actor)
+      when :wrong_session then token = ClientToken.create!(authentication_epoch: 0, user: actor)
       when :wrong_owner
-        context = context.with(subject: Client.create!(status_id: ClientStatus::ACTIVE))
+        context = context.with(subject: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE))
       when :expired_step_up then token.update!(last_step_up_at: ClientToken.database_now - 16.minutes)
       when :revoked then token.update!(discard_at: ClientToken.database_now)
       when :restricted then token.update!(user_token_status_id: ClientTokenStatus::RESTRICTED)
@@ -180,8 +180,8 @@ class ClientSecretStorageConfirmationCommitterTest < ActiveSupport::TestCase
 
   [-1, 0, 1].each do |offset|
     test "confirmation evaluates issuance expiry #{offset} microseconds from its boundary" do
-      actor = Client.create!(status_id: ClientStatus::ACTIVE)
-      token = ClientToken.create!(user: actor)
+      actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+      token = ClientToken.create!(authentication_epoch: 0, user: actor)
       token.update!(
         last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
         last_step_up_method: "totp", last_step_up_session_public_id: token.public_id,

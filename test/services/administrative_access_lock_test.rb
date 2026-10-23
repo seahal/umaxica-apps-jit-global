@@ -10,6 +10,7 @@ class AdministrativeAccessLockTest < ActiveSupport::TestCase
     operator = operators(:one)
     token = client_tokens(:one)
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",

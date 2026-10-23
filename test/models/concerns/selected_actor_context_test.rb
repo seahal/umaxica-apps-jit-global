@@ -23,8 +23,12 @@ class SelectedActorContextTest < ActiveSupport::TestCase
   end
 
   test "clear_selected_actor_context! clears the real persisted selection and freshness" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: actor, selected_account_public_id: "account", selected_collective_public_id: "collective",
       selected_collective_unit_public_id: "unit", selected_avatar_public_id: "avatar", selected_at: Time.current,
       last_step_up_at: Time.current, last_step_up_scope: "settings_birthdate",

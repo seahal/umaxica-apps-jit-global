@@ -300,10 +300,6 @@ module AuthenticationBase
     false
   end
 
-  def local_authentication_ceremony?
-    auth_credential_ceremony? && !oidc_authentication_ceremony?
-  end
-
   # Issues a session only when every precondition holds at the final boundary.
   #
   # The decision (cooldown, session limit, flow binding) and the writes that
@@ -1079,8 +1075,14 @@ module AuthenticationBase
     raise ArgumentError, "unsupported session establishment: #{establishment.inspect}"
   end
 
+  # D-163: the eligibility checked before the lock is only an early refusal; the decision is made
+  # again on the row reloaded under the principal lock, so a stop that committed while this login
+  # waited (status changed, epoch advanced) issues no Root.
   def commit_login_session_under_actor_lock(resource, **issuance_attributes)
     with_actor_session_lock(resource) do
+      next { status: :access_locked } if administratively_locked_resource?(resource)
+      next { status: :login_forbidden } unless resource.login_allowed?
+
       commit_login_session!(resource, **issuance_attributes)
     end
   end
@@ -2458,13 +2460,9 @@ module AuthenticationBase
       token_attributes[:authentication_context] = token_authentication_context(authentication_context) if
         authentication_context.present?
 
-      # R5-WU06: a root records the actor authentication epoch and OP contract epoch it was issued
-      # under, so a later identity stop cuts off exactly this and older authority.
+      # R5-WU06: a root records the actor authentication epoch it was issued under, so a later
+      # identity stop cuts off exactly this and older authority.
       token_attributes[:authentication_epoch] = resource.authentication_epoch
-      token_attributes[:contract_epoch] =
-        { ClientToken => OpAppProtocolEpoch,
-          VisitorToken => OpComProtocolEpoch,
-          OperatorToken => OpOrgProtocolEpoch, }.fetch(token_class).current_contract_epoch
 
       token_attributes.merge!(default_status_token_attributes(token_status_id))
       token_attributes.merge!(default_dbsc_token_attributes(token_kind_id))
@@ -2715,12 +2713,6 @@ module AuthenticationBase
       return false if Time.zone.at(issued_at) < pending_mfa_ttl.ago
     end
 
-    if local_authentication_ceremony?
-      cycle = auth_ceremony_local_sign_in_flow
-      return false unless cycle&.sign_in_mfa_pending? &&
-        cycle.principal_id == data[:user_id]
-    end
-
     true
   end
 
@@ -2884,9 +2876,6 @@ module AuthenticationBase
         authentication_event_at: authentication_event_at,
       )
       result = advance_pending_sign_in_flow_after_primary!(cycle, resource, result)
-      if local_authentication_ceremony? && result[:status] == :authentication_evidence_recorded
-        result[:redirect_path] = sign_in_sequence_redirect_path(pt: pt)
-      end
       return result
     end
 
@@ -2894,7 +2883,7 @@ module AuthenticationBase
     outcome = cycle.with_cycle_lock { cycle.advance_sign_in_to_mfa! }
     return { status: :invalid_request, reason: :flow_expired } if outcome.is_a?(FlowTransitionResult)
 
-    sign_in_flow_locator_for(actor: resource).issue!(cycle) unless local_authentication_ceremony?
+    sign_in_flow_locator_for(actor: resource).issue!(cycle)
     set_pending_mfa!(
       resource: resource, primary: auth_method, pt: resolved_pt, ri: ri,
       auth_method: auth_method,
@@ -2921,6 +2910,8 @@ module AuthenticationBase
                                             audit_context:, established_authentication_method: nil,
                                             authentication_context: nil, authentication_event_at: nil)
     return { status: :login_forbidden } unless resource.login_allowed?
+    # A5: an unknown or missing Security Mode permits no authentication.
+    return { status: :login_forbidden } unless resource.security_mode_valid?
 
     if oidc_authentication_ceremony?
       return establish_oidc_authentication_evidence!(
@@ -2932,12 +2923,9 @@ module AuthenticationBase
       )
     end
 
-    if local_authentication_ceremony?
-      return record_local_ceremony_evidence!(
-        resource, cycle: cycle, method: established_authentication_method,
-                  authentication_event_at: authentication_event_at, authentication_context: authentication_context,
-      )
-    end
+    # Auth never commits a root login. Without an OIDC parent a credential ceremony has no
+    # supported continuation, so it is refused rather than issued here.
+    return { status: :invalid_request } if auth_credential_ceremony?
 
     result = log_in(
       resource,
@@ -2954,37 +2942,6 @@ module AuthenticationBase
     return result unless result[:status] == :success
 
     result.merge(redirect_path: sign_in_sequence_redirect_path(pt: pt))
-  end
-
-  def record_local_ceremony_evidence!(resource, cycle:, method:, authentication_event_at:, authentication_context:)
-    ceremony = admitted_auth_ceremony_session
-    return { status: :invalid_request } unless cycle && ceremony
-
-    resource.class.connection_class_for_self.connected_to(role: :writing) do
-      resource.with_lock do
-        return { status: :login_forbidden } unless resource.login_allowed?
-
-        cycle.class.connection_class_for_self.connected_to(role: :writing) do
-          cycle.with_lock do
-            ceremony.lock!
-            now = cycle.class.database_now
-            valid_phase = cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?
-            unless valid_phase && cycle.principal_id == resource.id && !cycle.expired?(now) &&
-                ceremony.local_sign_in_flow_ref == cycle.public_id && ceremony.active?(now: now) &&
-                ceremony.admitted? && !cycle.authentication_event_at && !ceremony.authentication_evidence_recorded?
-              return { status: :invalid_request }
-            end
-
-            cycle.record_local_authentication_evidence!(
-              method: method, authenticated_at: authentication_event_at,
-              authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
-            )
-            ceremony.record_authentication_evidence!(method: method)
-          end
-        end
-      end
-    end
-    { status: :authentication_evidence_recorded }
   end
 
   # Auth verifies the credential, but Base owns the Browser Session and every
@@ -3013,24 +2970,50 @@ module AuthenticationBase
 
     if resource.is_a?(Client) && method == "secret"
       with_claimed_oidc_secret_flow(resource) do |flow, admitted|
-        flow.record_local_authentication_evidence!(method: method)
+        flow.record_authentication_evidence!(method: method)
         admitted.record_authentication_evidence!(method: method)
       end
     else
-      flow = cycle
-      raise AuthCeremonySession::InvalidTransition, "OIDC sign-in flow is missing" unless flow
-
-      flow.record_local_authentication_evidence!(
-        method: method,
-        authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
-      )
-      ceremony.record_authentication_evidence!(method: method)
+      refusal = record_oidc_flow_evidence!(resource, cycle, ceremony, method, authentication_context)
+      return refusal if refusal
     end
 
     {
       status: :authentication_evidence_recorded,
       redirect_path: sign_in_sequence_redirect_path(pt: pt),
     }
+  end
+
+  # A concurrent halt, phase advance or actor change ends this attempt; it is a refusal of this
+  # browser's attempt, not a broken invariant. Returns the refusal, or nil once evidence is recorded.
+  def record_oidc_flow_evidence!(resource, cycle, ceremony, method, authentication_context)
+    return { status: :invalid_request } unless cycle
+
+    resource.class.connection_class_for_self.connected_to(role: :writing) do
+      resource.with_lock do
+        return { status: :login_forbidden } unless resource.login_allowed?
+
+        cycle.class.connection_class_for_self.connected_to(role: :writing) do
+          cycle.with_lock do
+            ceremony.lock!
+            return { status: :invalid_request } unless oidc_flow_evidence_open?(resource, cycle, ceremony)
+
+            cycle.record_authentication_evidence!(
+              method: method, authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
+            )
+            ceremony.record_authentication_evidence!(method: method)
+          end
+        end
+      end
+    end
+    nil
+  end
+
+  def oidc_flow_evidence_open?(resource, cycle, ceremony)
+    now = cycle.class.database_now
+    (cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?) && cycle.principal_id == resource.id &&
+      !cycle.expired?(now) && ceremony.active?(now: now) && ceremony.admitted? && !cycle.authentication_event_at &&
+      !ceremony.authentication_evidence_recorded?
   end
 
   def oidc_authentication_ceremony?
@@ -3377,15 +3360,12 @@ module AuthenticationBase
     0
   end
 
+  # adr/authentication-security-mode.md C1: only ADVANCED requires a second step, and that step is a
+  # Passkey. NORMAL signs in with its primary method.
   def mfa_required_for?(resource)
     return false unless resource.is_a?(::Client) || resource.is_a?(::Operator) || resource.is_a?(::Visitor)
-    return false unless resource.respond_to?(:mfa_level_required?) || resource.respond_to?(:mfa_level_enabled?)
 
-    if resource.respond_to?(:mfa_level_required?)
-      resource.mfa_level_required?
-    else
-      resource.mfa_level_enabled?
-    end
+    resource.security_mode_advanced?
   end
 
   # Auth methods that imply the user already presented local strong evidence

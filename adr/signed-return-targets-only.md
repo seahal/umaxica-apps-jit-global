@@ -4,6 +4,11 @@
 
 Accepted (2026-05-25)
 
+> **Amendment (2026-10-23):** for the first-party **RP** lane only, `pt` is replaced by the path-only
+> `target_link_uri` carried in the RP's signed OIDC `state`
+> ([RP OIDC state and return target](rp-oidc-state-and-return-target.md)). Auth's own signed `pt`, and
+> the `nt` / `xt` lanes, are unchanged.
+
 ## Context
 
 The authentication surfaces carry continuation destinations in the public `rt` parameter. Older code

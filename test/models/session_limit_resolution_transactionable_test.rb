@@ -23,8 +23,8 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "client resolution binds the parent and revokes only an owned selected session" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    foreign_actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    foreign_actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5030 = actor
@@ -37,8 +37,8 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           expires_at: fv5029 + 5.minutes,
         )
       end
-    token = ClientToken.create!(user: actor)
-    foreign_token = ClientToken.create!(user: foreign_actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    foreign_token = ClientToken.create!(authentication_epoch: 0, user: foreign_actor)
     binding = SecureRandom.urlsafe_base64(32)
 
     issuance = ClientSessionLimitResolutionTransaction.issue!(
@@ -81,7 +81,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "session issuance finalization rolls back selected revocation with the ticket transaction" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = ClientSignInFlow.database_now
     flow = ClientSignInFlow.create!(
       principal_id: actor.id,
@@ -90,7 +90,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       issued_at: now,
       expires_at: now + 5.minutes,
     )
-    tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(user: actor) }
+    tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: actor) }
     binding = SecureRandom.urlsafe_base64(32)
     issuance = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: flow,
@@ -129,7 +129,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "visitor and operator resolutions use their own realm state and token ownership" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
     visitor_flow_record =
       begin
         fv5028 = visitor
@@ -142,7 +142,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           expires_at: fv5027 + 5.minutes,
         )
       end
-    visitor_token = VisitorToken.create!(visitor: visitor, skip_session_limit_check: true)
+    visitor_token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor, skip_session_limit_check: true)
     visitor_binding = SecureRandom.urlsafe_base64(32)
     visitor_issuance = VisitorSessionLimitResolutionTransaction.issue!(
       sign_in_flow: visitor_flow_record,
@@ -162,7 +162,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       browser_binding_digest: VisitorSessionLimitResolutionTransaction.digest_challenge(visitor_binding),
     )
 
-    operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
+    operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
     operator_flow_record =
       begin
         fv5026 = operator
@@ -175,7 +175,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           expires_at: fv5025 + 5.minutes,
         )
       end
-    operator_token = OperatorToken.create!(staff: operator)
+    operator_token = OperatorToken.create!(authentication_epoch: 0, staff: operator)
     operator_binding = SecureRandom.urlsafe_base64(32)
     operator_issuance = OperatorSessionLimitResolutionTransaction.issue!(
       sign_in_flow: operator_flow_record,
@@ -194,7 +194,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "a live resolution occupies the actor waiting slot across sign-in flows" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = ClientSignInFlow.database_now
     first_flow = ClientSignInFlow.create!(
       principal_id: actor.id,
@@ -232,7 +232,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "issuing a new flow lazily expires the actor's elapsed resolution and claims its slot" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = ClientSignInFlow.database_now
     first_flow = ClientSignInFlow.create!(
       principal_id: actor.id,
@@ -270,7 +270,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "database constraints enforce waiting-slot state ownership independently of model validation" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = ClientSignInFlow.database_now
     flow = ClientSignInFlow.create!(
       principal_id: actor.id,
@@ -305,7 +305,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "wrong browser binding and terminal replay cannot mutate a resolution" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5024 = actor
@@ -318,7 +318,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           expires_at: fv5023 + 5.minutes,
         )
       end
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     binding = SecureRandom.urlsafe_base64(32)
     issuance = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: flow,
@@ -349,8 +349,8 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "issue enforces actor ownership and realm ownership" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    foreign_actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    foreign_actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5022 = actor
@@ -372,7 +372,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       )
     end
 
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
     assert_raises(ArgumentError) do
       VisitorSessionLimitResolutionTransaction.issue!(
         sign_in_flow: flow,
@@ -383,7 +383,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "resolution expiry uses the parent deadline and rejects at -1, exact, and +1" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5020 = actor
@@ -461,7 +461,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "an expired parent cannot issue a child" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5014 = actor
@@ -488,7 +488,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "a second selection cannot replace the first selected session" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5012 = actor
@@ -501,8 +501,8 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           expires_at: fv5011 + 5.minutes,
         )
       end
-    first_token = ClientToken.create!(user: actor)
-    second_token = ClientToken.create!(user: actor)
+    first_token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    second_token = ClientToken.create!(authentication_epoch: 0, user: actor)
     binding = SecureRandom.urlsafe_base64(32)
     issuance = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: flow,
@@ -527,7 +527,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "concurrent issue creates one open child and returns an opaque challenge for each caller" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5010 = actor
@@ -574,7 +574,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
   end
 
   test "concurrent conflicting selections have one winner and never revoke the losing choice" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     flow =
       begin
         fv5008 = actor
@@ -587,8 +587,8 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
           expires_at: fv5007 + 5.minutes,
         )
       end
-    first_token = ClientToken.create!(user: actor)
-    second_token = ClientToken.create!(user: actor)
+    first_token = ClientToken.create!(authentication_epoch: 0, user: actor)
+    second_token = ClientToken.create!(authentication_epoch: 0, user: actor)
     binding = SecureRandom.urlsafe_base64(32)
     issuance = ClientSessionLimitResolutionTransaction.issue!(
       sign_in_flow: flow,
@@ -645,12 +645,17 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       actor, flow_class =
         case surface
         when "app"
-          [Client.create!(status_id: ClientStatus::ACTIVE), ClientSignInFlow]
+          [Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
+           ClientSignInFlow,]
         when "com"
-          [Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR),
+          [Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+          ),
            VisitorSignInFlow,]
         when "org"
-          [Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF),
+          [Operator.create!(
+            security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+          ),
            OperatorSignInFlow,]
         end
       now = flow_class.database_now
@@ -667,7 +672,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
       token_class.where(owner_key => actor.id).delete_all
       limit.times do
-        token = token_class.new(owner_key => actor.id)
+        token = token_class.new(:authentication_epoch => 0, owner_key => actor.id)
         token.skip_session_limit_check = true if token.respond_to?(:skip_session_limit_check=)
         token.save!
       end
@@ -684,6 +689,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
       pending = controllers.first.log_in(
         actor.class.find(actor.id), establishment: :root_login, sign_in_flow: flow_class.find(flows.first.id),
+                                    require_totp_check: false,
       )
 
       assert_equal :session_limit_pending, pending.fetch(:status)
@@ -695,6 +701,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
 
       refused = controllers.second.log_in(
         actor.class.find(actor.id), establishment: :root_login, sign_in_flow: flow_class.find(flows.second.id),
+                                    require_totp_check: false,
       )
 
       assert_equal :session_limit_conflict, refused.fetch(:status)
@@ -734,7 +741,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       actor, flows =
         case surface
         when "app"
-          client = Client.create!(status_id: ClientStatus::ACTIVE)
+          client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
           [client, Array.new(2) {
             begin
               fv5005 = client
@@ -749,7 +756,10 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
             end
           },]
         when "com"
-          visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+          visitor = Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+          )
           [visitor, Array.new(2) {
             begin
               fv5003 = visitor
@@ -764,7 +774,10 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
             end
           },]
         when "org"
-          operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+          operator = Operator.create!(
+            security_mode_id: SecurityModeConfigurable::ADVANCED,
+            status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+          )
           [operator, Array.new(2) {
             begin
               fv5001 = operator
@@ -787,7 +800,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
       stale_flows = flows.first.class.where.not(token_id: nil).where.not(token_id: token_class.select(:id))
       resolution_class.where(sign_in_flow_id: stale_flows.select(:id)).delete_all
       stale_flows.delete_all
-      (limit - 1).times { token_class.create!(owner_key => actor.id) }
+      (limit - 1).times { token_class.create!(:authentication_epoch => 0, owner_key => actor.id) }
       controllers =
         Array.new(2) do
           request = ActionDispatch::TestRequest.create
@@ -808,6 +821,7 @@ class SessionLimitResolutionTransactionableTest < ActiveSupport::TestCase
             barrier.wait
             results << controller.log_in(
               actor.class.find(actor.id), establishment: :root_login, sign_in_flow: flow.class.find(flow.id),
+                                          require_totp_check: false,
             ).fetch(:status)
           rescue StandardError => e
             results << e

@@ -8,16 +8,34 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
       actor, token, transaction_model, ceremony_model =
         case surface
         when :app
-          principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-          [principal, ClientToken.create!(user: principal), ClientStepUpCeremonyTransaction, ClientAuthCeremonySession]
+          principal = Client.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+          )
+          [principal, ClientToken.create!(authentication_epoch: 0, user: principal), ClientStepUpCeremonyTransaction,
+           ClientAuthCeremonySession,]
         when :com
-          principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-          [principal, VisitorToken.create!(visitor: principal), VisitorStepUpCeremonyTransaction,
-           VisitorAuthCeremonySession,]
+          principal = Visitor.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
+            status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+          )
+          [
+            principal,
+            VisitorToken.create!(authentication_epoch: 0, visitor: principal),
+            VisitorStepUpCeremonyTransaction,
+            VisitorAuthCeremonySession,
+          ]
         when :org
-          principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-          [principal, OperatorToken.create!(staff: principal), OperatorStepUpCeremonyTransaction,
-           OperatorAuthCeremonySession,]
+          principal = Operator.create!(
+            security_mode_id: SecurityModeConfigurable::ADVANCED,
+            status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+          )
+          [
+            principal,
+            OperatorToken.create!(authentication_epoch: 0, staff: principal),
+            OperatorStepUpCeremonyTransaction,
+            OperatorAuthCeremonySession,
+          ]
         else
           raise ArgumentError, "unsupported test surface"
         end
@@ -99,8 +117,11 @@ class SelectedContextStepUpBoundaryTest < ActiveSupport::TestCase
   end
 
   test "switching COM organizations revokes verified evidence without issuing another root session" do
-    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    token = VisitorToken.create!(visitor: actor)
+    actor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
     bootstrap = BaseSelectorBootstrapAuthority.call(surface: :com, principal: actor)
     selector = BaseSelectorAuthority.new(surface: :com, principal: actor, session: token)
     initial = selector.selectable_candidates.first.fetch(:public)

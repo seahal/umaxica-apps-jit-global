@@ -15,8 +15,8 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
           actor, token, contact, flow_model, token_model =
             case [surface, channel]
             when ["app", :email], ["app", :telephone]
-              owner = Client.create!(status_id: ClientStatus::ACTIVE)
-              root = ClientToken.create!(user: owner, discard_at: 1.day.from_now)
+              owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+              root = ClientToken.create!(authentication_epoch: 0, user: owner, discard_at: 1.day.from_now)
               candidate =
                 if channel == :email
                   owner.client_emails.create!(
@@ -31,8 +31,8 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
               [owner, root, candidate, (channel == :email) ? ClientEmailCeremonyTransaction :
                 ClientTelephoneCeremonyTransaction, ClientToken,]
             when ["com", :email], ["com", :telephone]
-              owner = Visitor.create!
-              root = VisitorToken.create!(visitor: owner, discard_at: 1.day.from_now)
+              owner = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+              root = VisitorToken.create!(authentication_epoch: 0, visitor: owner, discard_at: 1.day.from_now)
               candidate =
                 if channel == :email
                   owner.visitor_emails.create!(
@@ -77,11 +77,18 @@ class ContactRegistrationOtpVerificationCommitterTest < ActiveSupport::TestCase
             arguments[:browser_nonce] = SecureRandom.urlsafe_base64(32)
             expected_status = :session_mismatch
           when :foreign_owner
-            arguments[:actor] = (surface == "app") ? Client.create!(status_id: ClientStatus::ACTIVE) : Visitor.create!
+            arguments[:actor] =
+              (surface == "app") ? Client.create!(
+                security_mode_id: SecurityModeConfigurable::NORMAL,
+                status_id: ClientStatus::ACTIVE,
+              ) : Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
           when :foreign_root
             replacement =
-              (surface == "app") ? ClientToken.create!(user: actor, discard_at: 1.day.from_now) :
-                           VisitorToken.create!(visitor: actor, discard_at: 1.day.from_now)
+              (surface == "app") ? ClientToken.create!(
+                authentication_epoch: 0, user: actor,
+                discard_at: 1.day.from_now,
+              ) :
+                           VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
             replacement.rotate_refresh_token!
             arguments[:token] = replacement
             expected_status = :session_mismatch

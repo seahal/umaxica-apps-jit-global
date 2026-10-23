@@ -1710,34 +1710,6 @@ ALTER SEQUENCE public.visitor_identity_states_id_seq OWNED BY public.visitor_ide
 
 
 --
--- Name: visitor_mfa_levels; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.visitor_mfa_levels (
-    id bigint CONSTRAINT visitor_multi_factors_id_not_null NOT NULL
-);
-
-
---
--- Name: visitor_mfa_levels_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.visitor_mfa_levels_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: visitor_mfa_levels_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.visitor_mfa_levels_id_seq OWNED BY public.visitor_mfa_levels.id;
-
-
---
 -- Name: visitor_mfa_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3342,6 +3314,16 @@ ALTER SEQUENCE public.visitor_withdrawal_flows_id_seq OWNED BY public.visitor_wi
 
 
 --
+-- Name: visitor_security_modes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visitor_security_modes (
+    id bigint NOT NULL,
+    CONSTRAINT chk_visitor_security_modes_id CHECK ((id = ANY (ARRAY[(3)::bigint, (7)::bigint])))
+);
+
+
+--
 -- Name: visitors; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3351,7 +3333,6 @@ CREATE TABLE public.visitors (
     purge_eligible_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT customers_deletable_at_not_null NOT NULL,
     created_at timestamp(6) with time zone CONSTRAINT customers_created_at_not_null NOT NULL,
     lock_version integer DEFAULT 0 CONSTRAINT customers_lock_version_not_null NOT NULL,
-    mfa_level_enabled boolean DEFAULT false CONSTRAINT customers_multi_factor_enabled_not_null NOT NULL,
     public_id character varying(21) DEFAULT ''::character varying CONSTRAINT customers_public_id_not_null NOT NULL,
     status_id bigint DEFAULT 2 CONSTRAINT customers_status_id_not_null NOT NULL,
     visibility_id bigint DEFAULT 1 CONSTRAINT customers_visibility_id_not_null NOT NULL,
@@ -3359,7 +3340,7 @@ CREATE TABLE public.visitors (
     withdrawn_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp without time zone,
     withdrawal_started_at timestamp(6) with time zone,
     discard_at timestamp(6) with time zone DEFAULT 'infinity'::timestamp with time zone CONSTRAINT customers_discarded_at_not_null NOT NULL,
-    mfa_level_id bigint DEFAULT 0 CONSTRAINT visitors_multi_factor_id_not_null NOT NULL,
+    security_mode_id bigint NOT NULL,
     mfa_status_id bigint DEFAULT 5 CONSTRAINT visitors_multi_factor_status_id_not_null NOT NULL,
     terminated_at timestamp(6) with time zone,
     birthdate text,
@@ -3711,13 +3692,6 @@ ALTER TABLE ONLY public.visitor_identity_states ALTER COLUMN id SET DEFAULT next
 
 
 --
--- Name: visitor_mfa_levels id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitor_mfa_levels ALTER COLUMN id SET DEFAULT nextval('public.visitor_mfa_levels_id_seq'::regclass);
-
-
---
 -- Name: visitor_mfa_statuses id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -4054,6 +4028,14 @@ ALTER TABLE ONLY public.visitors ALTER COLUMN id SET DEFAULT nextval('public.vis
 
 
 --
+-- Name: visitor_security_modes visitor_security_modes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitor_security_modes
+    ADD CONSTRAINT visitor_security_modes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: action_push_native_devices action_push_native_devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4091,14 +4073,6 @@ ALTER TABLE public.visitor_passkeys
 
 ALTER TABLE public.visitor_telephones
     ADD CONSTRAINT chk_visitor_telephones_retention_order CHECK ((discard_at <= purge_eligible_at)) NOT VALID;
-
-
---
--- Name: visitors chk_visitors_mfa_requirement_consistency; Type: CHECK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE public.visitors
-    ADD CONSTRAINT chk_visitors_mfa_requirement_consistency CHECK ((((mfa_level_enabled = false) AND (mfa_level_id = 0)) OR ((mfa_level_enabled = true) AND (mfa_level_id <> 0)))) NOT VALID;
 
 
 --
@@ -4467,14 +4441,6 @@ ALTER TABLE ONLY public.visitor_identities
 
 ALTER TABLE ONLY public.visitor_identity_states
     ADD CONSTRAINT visitor_identity_states_pkey PRIMARY KEY (id);
-
-
---
--- Name: visitor_mfa_levels visitor_mfa_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitor_mfa_levels
-    ADD CONSTRAINT visitor_mfa_levels_pkey PRIMARY KEY (id);
 
 
 --
@@ -4859,6 +4825,13 @@ ALTER TABLE ONLY public.visitor_withdrawal_flows
 
 ALTER TABLE ONLY public.visitors
     ADD CONSTRAINT visitors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: index_visitors_on_security_mode_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_visitors_on_security_mode_id ON public.visitors USING btree (security_mode_id);
 
 
 --
@@ -6101,13 +6074,6 @@ CREATE INDEX index_visitors_on_early_termination_available_at ON public.visitors
 
 
 --
--- Name: index_visitors_on_mfa_level_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX index_visitors_on_mfa_level_id ON public.visitors USING btree (mfa_level_id);
-
-
---
 -- Name: index_visitors_on_mfa_status_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6255,6 +6221,14 @@ CREATE TRIGGER visitor_telephones_binding_facts_trigger BEFORE UPDATE ON public.
 
 
 --
+-- Name: visitors fk_rails_d6e6dec333; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visitors
+    ADD CONSTRAINT fk_rails_d6e6dec333 FOREIGN KEY (security_mode_id) REFERENCES public.visitor_security_modes(id);
+
+
+--
 -- Name: company_units fk_company_units_parent_same_company; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6332,14 +6306,6 @@ ALTER TABLE ONLY public.com_enforcement_authentication_method_effects
 
 ALTER TABLE ONLY public.visitor_email_histories
     ADD CONSTRAINT fk_rails_0f626c72ea FOREIGN KEY (visitor_id) REFERENCES public.visitors(id) ON DELETE RESTRICT;
-
-
---
--- Name: visitors fk_rails_15c7fee824; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visitors
-    ADD CONSTRAINT fk_rails_15c7fee824 FOREIGN KEY (mfa_level_id) REFERENCES public.visitor_mfa_levels(id);
 
 
 --
@@ -7125,6 +7091,10 @@ ALTER TABLE ONLY public.visitor_withdrawal_flow_events
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261023140003'),
+('20261023140002'),
+('20261023140001'),
+('20261023140000'),
 ('20261020130001'),
 ('20261020130000'),
 ('20261020120001'),

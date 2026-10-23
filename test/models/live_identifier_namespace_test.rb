@@ -64,9 +64,9 @@ class LiveIdentifierNamespaceTest < ActiveSupport::TestCase
             end
             competing_owner =
               case realm
-              when "app" then Client.create!(status_id: ClientStatus::ACTIVE)
-              when "com" then Visitor.create!(status_id: VisitorStatus::ACTIVE)
-              when "org" then Operator.create!
+              when "app" then Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+              when "com" then Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+              when "org" then Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
               end
             competing_attributes = attributes.merge(owner_key => competing_owner.id)
             if boundary == :model

@@ -20,22 +20,37 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
       controller: Base::App::AuthorityController,
       host: "PUBLIC_BASE_SERVICE_URL",
       token_class: ClientToken,
-      resource: -> { Client.create!(status_id: ClientStatus::NOTHING, birthdate: "2000-01-01") },
-      token: ->(resource, attrs) { ClientToken.create!(user: resource, **attrs) },
+      resource: -> {
+        Client.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+          birthdate: "2000-01-01",
+        )
+      },
+      token: ->(resource, attrs) { ClientToken.create!(authentication_epoch: 0, user: resource, **attrs) },
     },
     com: {
       controller: Base::Com::AuthorityController,
       host: "PUBLIC_BASE_CORPORATE_URL",
       token_class: VisitorToken,
-      resource: -> { Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR) },
-      token: ->(resource, attrs) { VisitorToken.create!(visitor_id: resource.id, **attrs) },
+      resource: -> {
+        Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+          visibility_id: VisitorVisibility::VISITOR,
+        )
+      },
+      token: ->(resource, attrs) { VisitorToken.create!(authentication_epoch: 0, visitor_id: resource.id, **attrs) },
     },
     org: {
       controller: Base::Org::AuthorityController,
       host: "PUBLIC_BASE_STAFF_URL",
       token_class: OperatorToken,
-      resource: -> { Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF) },
-      token: ->(resource, attrs) { OperatorToken.create!(staff_id: resource.id, **attrs) },
+      resource: -> {
+        Operator.create!(
+          security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+          visibility_id: OperatorVisibility::STAFF,
+        )
+      },
+      token: ->(resource, attrs) { OperatorToken.create!(authentication_epoch: 0, staff_id: resource.id, **attrs) },
     },
   }.freeze
 
@@ -154,7 +169,7 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
           signed_out_token(config, resource, root_login_established_at: anchor)
 
           with_login_cooldown(WINDOW) do
-            result = build_controller(config).log_in(resource, establishment: :rp_session)
+            result = build_controller(config).log_in(resource, establishment: :rp_session, require_totp_check: false)
 
             assert_equal :success, result.fetch(:status)
           end
@@ -202,7 +217,7 @@ class AuthLoginCooldownSurfacesTest < ActiveSupport::TestCase
   end
 
   def root_login(config, resource)
-    build_controller(config).log_in(resource, establishment: :root_login)
+    build_controller(config).log_in(resource, establishment: :root_login, require_totp_check: false)
   end
 
   def fk_for(config)

@@ -12,7 +12,7 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_index_allowed_for_authenticated_user
-    user = Client.new(id: 1)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     policy = ClientPasskeyPolicy.new(ClientPasskey.new, user: user)
 
     assert_predicate policy, :index?
@@ -25,7 +25,7 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_show_allowed_for_owner
-    user = Client.new(id: 1)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     passkey = ClientPasskey.new(user_id: user.id)
     policy = ClientPasskeyPolicy.new(passkey, user: user)
 
@@ -33,8 +33,8 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_show_denied_for_non_owner
-    owner = Client.new(id: 1)
-    other = Client.new(id: 2)
+    owner = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
+    other = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 2)
     passkey = ClientPasskey.new(user_id: owner.id)
     policy = ClientPasskeyPolicy.new(passkey, user: other)
 
@@ -48,14 +48,14 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_create_allowed_for_authenticated_user
-    user = Client.new(id: 1)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     policy = ClientPasskeyPolicy.new(ClientPasskey.new, user: user)
 
     assert_predicate policy, :create?
   end
 
   def test_new_delegates_to_create
-    user = Client.new(id: 1)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     policy = ClientPasskeyPolicy.new(ClientPasskey.new, user: user)
 
     assert_predicate policy, :new?
@@ -74,7 +74,7 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_update_allowed_for_owner
-    user = Client.new(id: 1)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     passkey = ClientPasskey.new(user_id: user.id)
     policy = ClientPasskeyPolicy.new(passkey, user: user)
 
@@ -82,8 +82,8 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_update_denied_for_non_owner
-    owner = Client.new(id: 1)
-    other = Client.new(id: 2)
+    owner = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
+    other = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 2)
     passkey = ClientPasskey.new(user_id: owner.id)
     policy = ClientPasskeyPolicy.new(passkey, user: other)
 
@@ -91,7 +91,7 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_edit_delegates_to_update
-    user = Client.new(id: 1)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     passkey = ClientPasskey.new(user_id: user.id)
     policy = ClientPasskeyPolicy.new(passkey, user: user)
 
@@ -111,7 +111,7 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_destroy_allowed_for_owner
-    user = Client.new(id: 1)
+    user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
     passkey = ClientPasskey.new(user_id: user.id)
     policy = ClientPasskeyPolicy.new(passkey, user: user)
 
@@ -119,8 +119,8 @@ class ClientPasskeyPolicyTest < ActiveSupport::TestCase
   end
 
   def test_destroy_denied_for_non_owner
-    owner = Client.new(id: 1)
-    other = Client.new(id: 2)
+    owner = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 1)
+    other = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: 2)
     passkey = ClientPasskey.new(user_id: owner.id)
     policy = ClientPasskeyPolicy.new(passkey, user: other)
 

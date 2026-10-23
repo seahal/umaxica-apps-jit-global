@@ -10,8 +10,12 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
 
   setup do
     @host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    @operator = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    @token = OperatorToken.create!(staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
+    @operator = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    OperatorPasskeyTestSupport.give_two_active_passkeys!(@operator)
+    @token = OperatorToken.create!(authentication_epoch: 0, staff: @operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     @bootstrap = BaseSelectorBootstrapAuthority.call(surface: :org, principal: @operator)
     BaseSelectorAuthority.prepare(surface: :org, principal: @operator, session: @token)
   end
@@ -54,6 +58,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -114,6 +119,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f0_token.rotate_refresh_token! unless f0_token.device_session_record.current_refresh_token_id
               f0_now = Time.current
               f0_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f0_token, oidc_client_id: f0_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f0_now,
                 refresh_token_expires_at: f0_now + 10.minutes,
@@ -189,6 +195,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -249,6 +256,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f1_token.rotate_refresh_token! unless f1_token.device_session_record.current_refresh_token_id
               f1_now = Time.current
               f1_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f1_token, oidc_client_id: f1_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f1_now,
                 refresh_token_expires_at: f1_now + 10.minutes,
@@ -327,6 +335,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -387,6 +396,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f2_token.rotate_refresh_token! unless f2_token.device_session_record.current_refresh_token_id
               f2_now = Time.current
               f2_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f2_token, oidc_client_id: f2_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f2_now,
                 refresh_token_expires_at: f2_now + 10.minutes,
@@ -462,6 +472,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -522,6 +533,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f3_token.rotate_refresh_token! unless f3_token.device_session_record.current_refresh_token_id
               f3_now = Time.current
               f3_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f3_token, oidc_client_id: f3_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f3_now,
                 refresh_token_expires_at: f3_now + 10.minutes,
@@ -603,6 +615,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -663,6 +676,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f4_token.rotate_refresh_token! unless f4_token.device_session_record.current_refresh_token_id
               f4_now = Time.current
               f4_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f4_token, oidc_client_id: f4_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f4_now,
                 refresh_token_expires_at: f4_now + 10.minutes,
@@ -740,6 +754,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -800,6 +815,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f5_token.rotate_refresh_token! unless f5_token.device_session_record.current_refresh_token_id
               f5_now = Time.current
               f5_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f5_token, oidc_client_id: f5_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f5_now,
                 refresh_token_expires_at: f5_now + 10.minutes,
@@ -883,6 +899,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -943,6 +960,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f6_token.rotate_refresh_token! unless f6_token.device_session_record.current_refresh_token_id
               f6_now = Time.current
               f6_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f6_token, oidc_client_id: f6_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f6_now,
                 refresh_token_expires_at: f6_now + 10.minutes,
@@ -1025,6 +1043,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                   rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                   rp_now = Time.current
                   rp_session = OpOrgGrant.create!(
+                    authentication_epoch: 0,
                     operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                     oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                     refresh_token_expires_at: rp_now + 10.minutes,
@@ -1085,6 +1104,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
               f7_token.rotate_refresh_token! unless f7_token.device_session_record.current_refresh_token_id
               f7_now = Time.current
               f7_session = OpOrgGrant.create!(
+                authentication_epoch: 0,
                 operator_token: f7_token, oidc_client_id: f7_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f7_now,
                 refresh_token_expires_at: f7_now + 10.minutes,
@@ -1156,6 +1176,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
                 rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
                 rp_now = Time.current
                 rp_session = OpOrgGrant.create!(
+                  authentication_epoch: 0,
                   operator_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                   oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                   refresh_token_expires_at: rp_now + 10.minutes,
@@ -1216,6 +1237,7 @@ class Base::Org::DashboardAvatarImagesControllerTest < ActionDispatch::Integrati
             f8_token.rotate_refresh_token! unless f8_token.device_session_record.current_refresh_token_id
             f8_now = Time.current
             f8_session = OpOrgGrant.create!(
+              authentication_epoch: 0,
               operator_token: f8_token, oidc_client_id: f8_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: f8_now,
               refresh_token_expires_at: f8_now + 10.minutes,

@@ -7,8 +7,9 @@ class OpOutboxDispatchJobTest < ActiveSupport::TestCase
 
   setup do
     client = clients(:one)
-    root = ClientToken.create!(user: client)
+    root = ClientToken.create!(authentication_epoch: 0, user: client)
     OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: root, client_device_session: root.device_session, device_session_id: root.device_session_id,
       oidc_client_id: "core-app-jp", oidc_scope: "openid", oidc_jti: SecureRandom.uuid, last_used_at: Time.current,
       refresh_token_expires_at: 1.day.from_now,

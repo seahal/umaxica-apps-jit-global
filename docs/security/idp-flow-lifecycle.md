@@ -424,6 +424,10 @@ contains the flow public identifier, the expected phase, an immutable flow-gener
 surface. It is purpose-bound and signed by the application. The binding does not expose the locator
 nonce, a raw database id, or a client-chosen phase. The flow row, actor binding, expiry, and
 session-issuance boundary remain authoritative; the binding is an additional admission check.
+Since the entry-less Local Sign-in Flow was removed (D-60, 2026-10-23), every sign-in runs under an
+OIDC authorization parent and the flow row exists only once primary authentication names its
+principal. Primary-phase requests therefore carry no binding; the check passes only when neither a
+current flow nor a binding is present, and a supplied binding without a current flow is refused.
 
 Same-phase reload and re-entry are allowed. A GET or HEAD request whose binding is missing,
 malformed, expired, for another surface or flow, or for a different phase is refused with HTTP

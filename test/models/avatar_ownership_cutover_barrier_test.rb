@@ -6,7 +6,10 @@ class AvatarOwnershipCutoverBarrierTest < ActiveSupport::TestCase
   self.fixture_table_names = []
 
   setup do
-    @client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    @client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     @bootstrap = BaseSelectorBootstrapAuthority.call(surface: :app, principal: @client)
     @avatar = @bootstrap.avatar
     @legacy_period = @avatar.avatar_ownership_periods.order(:id).last

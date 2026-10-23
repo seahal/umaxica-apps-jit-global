@@ -6,7 +6,7 @@ require "test_helper"
 
 class AppPreferencePolicyTest < ActiveSupport::TestCase
   def setup
-    @user = Client.new
+    @user = Client.new(security_mode_id: SecurityModeConfigurable::NORMAL)
     @record = AppPreference.new
     @policy = AppPreferencePolicy.new(@record, user: @user)
   end

@@ -11,6 +11,7 @@ class ClientCoverageTest < ActiveSupport::TestCase
     ClientStatus.find_or_create_by!(id: 1)
     ClientVisibility.find_or_create_by!(id: 1)
     @user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000), status_id: 1, visibility_id: 1,
     )
     ClientEmailStatus.find_or_create_by!(id: ClientEmailStatus::VERIFIED)

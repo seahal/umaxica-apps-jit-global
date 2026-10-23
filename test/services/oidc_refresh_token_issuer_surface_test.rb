@@ -18,6 +18,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
   test "a staff refresh token rotates and touches the staff connection" do
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
@@ -27,6 +28,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       staff: operator, client_id: "org-console-rp", last_used_at: 3.days.ago,
     )
     usage = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -41,12 +43,14 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
   test "replaying a staff refresh token is reported as reuse against the staff id" do
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
     usage = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     replayed = usage.issue_refresh_token!
@@ -83,6 +87,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
   test "a visitor refresh token rotates and touches the visitor connection" do
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
@@ -92,6 +97,7 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
       visitor: visitor, client_id: "com-portal-rp", last_used_at: 3.days.ago,
     )
     usage = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!
@@ -106,12 +112,14 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
   test "a client refresh token is refused after its parent Browser Session is revoked" do
     client = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: client,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
     usage = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -133,12 +141,14 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
   test "replaying a visitor refresh token is reported as reuse against the visitor id" do
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
     usage = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: token, oidc_client_id: "com-portal-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     replayed = usage.issue_refresh_token!
@@ -175,12 +185,14 @@ class OidcRefreshTokenIssuerSurfaceTest < ActiveSupport::TestCase
   test "refresh rotation locks the browser session before its RP session" do
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator,
       staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE,
       discard_at: 1.day.from_now,
     )
     usage = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: token, oidc_client_id: "org-console-rp", refresh_token_expires_at: 1.hour.from_now,
     )
     refresh_token = usage.issue_refresh_token!

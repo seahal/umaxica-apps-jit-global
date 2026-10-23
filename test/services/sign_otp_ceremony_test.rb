@@ -32,6 +32,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       candidates =
         2.times.map do |index|
           owner = owner_class.create!(
+            security_mode_id: SecurityModeConfigurable::NORMAL,
             status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
           )
           contact = contact_class.create!(
@@ -40,6 +41,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
           )
           now = flow_class.database_now
           flow = flow_class.create!(
+            auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_class),
             principal_id: owner.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
             nonce_digest: flow_class.digest_nonce("budget-browser-#{index}"), issued_at: now,
             expires_at: now + 15.minutes, entry_method: channel.to_s,
@@ -100,6 +102,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
     ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
       owner = owner_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
       )
       contact = contact_class.create!(
@@ -109,6 +112,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       )
       now = flow_class.database_now
       flow = flow_class.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_class),
         principal_id: owner.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
         nonce_digest: flow_class.digest_nonce("sign-otp-browser"), issued_at: now,
         expires_at: now + 15.minutes, entry_method: channel.to_s,
@@ -153,9 +157,10 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       [Visitor, VisitorTelephone, :visitor_id, VisitorSignUpFlow, :com, :telephone],
     ].each do |owner_class, contact_class, owner_key, flow_class, surface, channel|
       owner = owner_class.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
         status_id: (surface == :app) ? ClientStatus::UNVERIFIED_WITH_SIGN_UP : VisitorStatus::ACTIVE,
       )
-      foreign = owner_class.create!
+      foreign = owner_class.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_class))
       contact = contact_class.create!(
         owner_key => owner.id, :confirm_policy => "1",
         ((channel == :email) ? :address : :number) =>
@@ -163,6 +168,7 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       )
       now = flow_class.database_now
       flow = flow_class.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_class),
         principal_id: owner.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
         nonce_digest: flow_class.digest_nonce("sign-otp-browser"), issued_at: now,
         expires_at: now + 15.minutes, entry_method: channel.to_s,
@@ -203,13 +209,14 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
       [Visitor, VisitorEmail, :visitor_id, VisitorSignUpFlow, VisitorStatus::ACTIVE],
     ].each do |owner_class, email_class, owner_key, flow_class, owner_status|
       %i(cancelled expired).each do |condition|
-        owner = owner_class.create!(status_id: owner_status)
+        owner = owner_class.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: owner_status)
         email = email_class.create!(
           owner_key => owner.id, :address => "terminal-#{condition}-#{SecureRandom.hex(6)}@example.test",
           :confirm_policy => "1",
         )
         decision_time = flow_class.database_now
         flow = flow_class.create!(
+          auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(flow_class),
           principal_id: owner.id, status_id: flow_class::STATUS_MODEL::STARTED, step: "start",
           nonce_digest: flow_class.digest_nonce("sign-otp-browser"),
           issued_at: decision_time - 1.second, expires_at: decision_time + 15.minutes,
@@ -249,7 +256,8 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   test "typed Email form refuses a signup ticket with no bound candidate" do
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
-      principal_id: Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP).id,
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
+      principal_id: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP).id,
       status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"),
       issued_at: now, expires_at: now + 15.minutes,
@@ -265,11 +273,12 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "issued Email proof rejects another candidate destination then consumes once and retains nonfresh evidence" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "sign-otp@example.test", confirm_policy: "1")
     foreign_email = owner.client_emails.create!(address: "other-address@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -320,11 +329,12 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "Email verification refuses a different destination candidate without consuming the bound proof" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "sign-otp-mismatch@example.test", confirm_policy: "1")
     foreign_email = owner.client_emails.create!(address: "someone-else@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -348,10 +358,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "Email verification classifies code length neighbors and typed sentinels without admitting failure budgets" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "sign-otp-malformed@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -378,10 +389,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "reissuing signup Email preserves failures until fresh successful consumption" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "sign-otp-attempts@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -413,10 +425,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "another signup browser cannot issue query verify or consume the original Email proof" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "sign-otp-session-binding@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -440,10 +453,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "Telephone issuance refuses an Email signup ticket without creating another channel proof" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     telephone = owner.client_telephones.create!(number: "+819012345674", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: nil,
@@ -459,10 +473,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "persisted Email resend cooldown preserves proof and refuses delivery material" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "signup-cooldown@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -485,10 +500,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "Email signup random challenge stays within its five-minute lifetime and ten-minute policy ceiling" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "sign-otp-expiry@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -505,10 +521,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
 
   { immediately_before: -1, at: 0, immediately_after: 1 }.each do |boundary, offset|
     test "Email signup proof #{boundary} its persisted expiry uses the nearest microsecond boundary" do
-      owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+      owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
       email = owner.client_emails.create!(address: "sign-otp-expiry-#{boundary}@example.test", confirm_policy: "1")
       now = ClientSignUpFlow.database_now
       flow = ClientSignUpFlow.create!(
+        auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
         principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
         nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
         entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,
@@ -542,10 +559,11 @@ class SignOtpCeremonyTest < ActiveSupport::TestCase
   end
 
   test "Email issuance uses owning Source and Ticket database clocks for sent timestamp and proof expiry" do
-    owner = Client.create!(status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::UNVERIFIED_WITH_SIGN_UP)
     email = owner.client_emails.create!(address: "sign-otp-database-clock@example.test", confirm_policy: "1")
     now = ClientSignUpFlow.database_now
     flow = ClientSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow),
       principal_id: owner.id, status_id: ClientSignUpFlowStatus::STARTED, step: "start",
       nonce_digest: ClientSignUpFlow.digest_nonce("sign-otp-browser"), issued_at: now, expires_at: now + 15.minutes,
       entry_method: "email", pending_contact_type: "email", pending_contact_id: email.id,

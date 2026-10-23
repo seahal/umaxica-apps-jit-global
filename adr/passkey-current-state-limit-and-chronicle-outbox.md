@@ -8,7 +8,13 @@ direction; deployment and production queue operation still require the evidence 
 
 ## Decision
 
-### Partial supersession (2026-10-21)
+### Capacity restored (2026-10-23)
+
+[Passkey authenticator account label](passkey-authenticator-account-label.md) restores the ten-per-owner capacity of this ADR on APP, COM and ORG
+(owner decision, 2026-10-22); the 2026-10-21 four-slot partial supersession below is itself
+superseded. Enforcement remains unverified.
+
+### Partial supersession (2026-10-21, superseded for capacity on 2026-10-23)
 
 [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) replaces the ten-per-owner
 capacity below with a four-slot target on APP, COM and ORG. The original ten-credential decision

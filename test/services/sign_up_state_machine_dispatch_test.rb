@@ -25,6 +25,7 @@ class SignUpStateMachineDispatchTest < ActiveSupport::TestCase
     ticket.entry_method = "google"
     ticket.state = "SOCIAL_CALLBACK_PENDING"
     ticket.nonce_digest = ClientSignUpFlow.digest_nonce("social-dispatch-nonce")
+    ticket.auth_admission_binding = SignUpAdmissionTestFactory.binding_for!(ClientSignUpFlow)
     ticket.save!(validate: false)
     ticket
   end

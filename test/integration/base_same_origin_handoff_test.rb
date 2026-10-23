@@ -115,6 +115,7 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
     https!
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, authentication_event_at: Time.current,
     )
@@ -154,6 +155,7 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
     https!
     visitor = visitors(:reserved_visitor)
     token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       authentication_event_at: Time.current,
@@ -193,6 +195,7 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
     https!
     operator = operators(:one)
     token = OperatorToken.create!(
+      authentication_epoch: 0,
       staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB,
       staff_token_status_id: OperatorTokenStatus::ACTIVE, discard_at: 1.day.from_now,
       authentication_event_at: Time.current,
@@ -233,6 +236,7 @@ class BaseSameOriginHandoffTest < ActionDispatch::IntegrationTest
     https!
     user = clients(:one)
     token = ClientToken.create!(
+      authentication_epoch: 0,
       user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB,
       user_token_status_id: ClientTokenStatus::ACTIVE, authentication_event_at: Time.current,
     )

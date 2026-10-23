@@ -8,7 +8,7 @@ class ClientPersonaCreatorConcurrencyTest < ActiveSupport::TestCase
 
   setup do
     ClientIdentityState.ensure_defaults!
-    @owner = Client.create!(id: unique_client_id, status_id: ClientStatus::ACTIVE)
+    @owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, id: unique_client_id, status_id: ClientStatus::ACTIVE)
     @identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "creator-concurrency-#{SecureRandom.hex(8)}",

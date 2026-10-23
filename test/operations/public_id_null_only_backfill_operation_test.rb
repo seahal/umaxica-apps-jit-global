@@ -5,11 +5,24 @@ require "test_helper"
 class PublicIdNullOnlyBackfillOperationTest < ActiveSupport::TestCase
   test "post-cutover supported scopes are idempotent and preserve source rows" do
     targets = [
-      [ClientPreference, ClientPreference.create!(user: Client.create!(status_id: ClientStatus::ACTIVE))],
-      [VisitorPreference, VisitorPreference.create!(visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE))],
-      [OperatorPreference, OperatorPreference.create!(staff: Operator.create!(status_id: OperatorStatus::ACTIVE))],
+      [ClientPreference,
+       ClientPreference.create!(user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)),],
+      [VisitorPreference,
+       VisitorPreference.create!(
+         visitor: Visitor.create!(
+           security_mode_id: SecurityModeConfigurable::NORMAL,
+           status_id: VisitorStatus::ACTIVE,
+         ),
+       ),],
+      [OperatorPreference,
+       OperatorPreference.create!(
+         staff: Operator.create!(
+           security_mode_id: SecurityModeConfigurable::ADVANCED,
+           status_id: OperatorStatus::ACTIVE,
+         ),
+       ),],
       [ClientPasskey, ClientPasskey.create!(
-        user: Client.create!(status_id: ClientStatus::ACTIVE),
+        user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE),
         webauthn_id: SecureRandom.uuid,
         public_key: "public-key",
         description: "backfill-test",

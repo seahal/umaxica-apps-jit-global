@@ -21,16 +21,25 @@ class BaseStepUpResultBindingNegativesTest < ActiveSupport::TestCase
         actor, token, credential =
           case surface
           when "app"
-            actor = Client.create!(id: SecureRandom.random_number(1 << 60), status_id: ClientStatus::ACTIVE)
-            [actor, ClientToken.create!(user: actor),
+            actor = Client.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
+              id: SecureRandom.random_number(1 << 60), status_id: ClientStatus::ACTIVE,
+            )
+            [actor, ClientToken.create!(authentication_epoch: 0, user: actor),
              actor.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
           when "com"
-            actor = Visitor.create!(id: SecureRandom.random_number(1 << 60), status_id: VisitorStatus::ACTIVE)
-            [actor, VisitorToken.create!(visitor: actor),
+            actor = Visitor.create!(
+              security_mode_id: SecurityModeConfigurable::NORMAL,
+              id: SecureRandom.random_number(1 << 60), status_id: VisitorStatus::ACTIVE,
+            )
+            [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor),
              actor.visitor_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
           when "org"
-            actor = Operator.create!(id: SecureRandom.random_number(1 << 60))
-            [actor, OperatorToken.create!(staff: actor),
+            actor = Operator.create!(
+              security_mode_id: SecurityModeConfigurable::ADVANCED,
+              id: SecureRandom.random_number(1 << 60),
+            )
+            [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor),
              actor.operator_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "public"),]
           end
         requirement = StepUpRequirement.new(

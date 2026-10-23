@@ -26,7 +26,7 @@ class VisitorAccountTest < ActiveSupport::TestCase
   end
 
   test "creates one visitor scoped client account for a visitor" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     account = VisitorAccount.create!(visitor: visitor)
 
     assert_predicate account.public_id, :present?
@@ -42,7 +42,7 @@ class VisitorAccountTest < ActiveSupport::TestCase
   end
 
   test "allows only one account per visitor" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     VisitorAccount.create!(visitor: visitor)
 
     duplicate = VisitorAccount.new(visitor: visitor)
@@ -52,9 +52,12 @@ class VisitorAccountTest < ActiveSupport::TestCase
   end
 
   test "requires unique generated public id" do
-    account = VisitorAccount.create!(visitor: Visitor.create!)
+    account = VisitorAccount.create!(visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL))
 
-    duplicate = VisitorAccount.new(visitor: Visitor.create!, public_id: account.public_id)
+    duplicate = VisitorAccount.new(
+      visitor: Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL),
+      public_id: account.public_id,
+    )
 
     assert_not duplicate.valid?
     assert duplicate.errors.of_kind?(:public_id, :taken)

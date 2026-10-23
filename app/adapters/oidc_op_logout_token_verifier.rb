@@ -11,8 +11,10 @@ require "jwt"
 # logout). Keys and URLs never come from the token.
 class OidcOpLogoutTokenVerifier
   Result =
-    Data.define(:success, :payload) do
+    Data.define(:success, :payload, :error) do
       def success? = success
+
+      def key_unavailable? = error == "key_unavailable"
     end
 
   ALGORITHM = "ES384"
@@ -34,11 +36,16 @@ class OidcOpLogoutTokenVerifier
   def call
     return failure if logout_token.blank?
 
-    _payload, header = JWT.decode(logout_token, nil, false)
+    unverified_payload, header = JWT.decode(logout_token, nil, false)
     return failure unless valid_header?(header)
+    # D-144: no refetch for a token that names another issuer.
+    return failure unless unverified_payload.is_a?(Hash) && unverified_payload["iss"] == issuer
 
-    key = jwks_client.public_key_for(header.fetch("kid"))
-    return failure unless key
+    lookup = jwks_client.lookup(header.fetch("kid"))
+    return failure("key_unavailable") if lookup.unavailable?
+    return failure unless lookup.found?
+
+    key = lookup.key
 
     payload, = JWT.decode(
       logout_token, key, true,
@@ -46,7 +53,7 @@ class OidcOpLogoutTokenVerifier
       verify_iat: { leeway: CLOCK_SKEW_LEEWAY_SECONDS },
       verify_iss: true, iss: issuer, verify_aud: true, aud: client_id, verify_expiration: true,
     )
-    valid_claims?(payload) ? Result.new(success: true, payload:) : failure
+    valid_claims?(payload) ? Result.new(success: true, payload:, error: nil) : failure
   rescue JWT::DecodeError, OpenSSL::PKey::PKeyError, ArgumentError, KeyError, TypeError
     failure
   end
@@ -71,7 +78,7 @@ class OidcOpLogoutTokenVerifier
     payload["exp"].to_i - payload["iat"].to_i <= MAX_LIFETIME_SECONDS
   end
 
-  def failure
-    Result.new(success: false, payload: nil)
+  def failure(error = "invalid_token")
+    Result.new(success: false, payload: nil, error:)
   end
 end

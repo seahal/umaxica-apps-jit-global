@@ -5,10 +5,10 @@ module Base
   module Com
     module Oauth
       class AuthorizationsController < Base::Com::AuthorityController
-        include ::OpClientAdmissionGate
         include ::OauthAuthorizeRateLimit
         include ::OauthAuthorizeRequestSizeLimit
         include ::OidcAuthorizationResultPost
+        include ::OidcAuthorizationRequestErrors
 
         AUTHENTICATION_MODE = :open
         declare_authentication_mode! :open
@@ -26,7 +26,6 @@ module Base
           end
 
           validate_authorization_request!
-          return render_client_not_admitted unless op_client_admitted?(authorize_params[:client_id].to_s)
 
           if authorization_session_sufficient?
             issue_authorization_code!(current_visitor)
@@ -35,8 +34,10 @@ module Base
           else
             render_authorization_ceremony_start!
           end
-        rescue OidcAuthorizeRequestResolver::InvalidScope => e
-          render json: { error: "invalid_scope", error_description: e.message }, status: :bad_request
+        rescue OidcAuthorizeRequestResolver::UnsupportedPrompt => e
+          render_unsupported_prompt!(e)
+        rescue OidcAuthorizeRequestResolver::RequestError => e
+          redirect_authorization_request_error!(e)
         # OidcAuthorizeRequestResolver raises ArgumentError with spec-level request
         # descriptions ("scope must include openid", "state is required"), and the registry
         # errors are equally spec-defined. RFC 6749 section 4.1.2.1 expects these in

@@ -6,12 +6,12 @@ class IdentityStepUpTotpVerificationCommitterTest < ActiveSupport::TestCase
   fixtures :client_statuses
 
   setup do
-    @actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    @actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     @credential = ClientTotpCredential.create_for_user!(
       user: @actor, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,
     )
-    @token = ClientToken.create!(user: @actor)
+    @token = ClientToken.create!(authentication_epoch: 0, user: @actor)
     @transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: @actor.public_id, session_ref: @token.public_id, required_scope: "settings_email",
       required_aal: "none", allowed_methods: ["totp"], return_to: "/identity/emails",
@@ -48,7 +48,7 @@ class IdentityStepUpTotpVerificationCommitterTest < ActiveSupport::TestCase
   end
 
   test "another actor's credential and another browser session cannot create proof" do
-    outsider = Client.create!(status_id: ClientStatus::ACTIVE)
+    outsider = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     foreign_credential = ClientTotpCredential.create_for_user!(
       user: outsider, private_key: ROTP::Base32.random_base32,
       user_totp_credential_status_id: ClientTotpCredentialStatus::ACTIVE,

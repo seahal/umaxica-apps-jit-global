@@ -32,14 +32,14 @@ class StepUpNullableEvidenceContractTest < ActiveSupport::TestCase
       token =
         case surface
         when :app
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          ClientToken.create!(user: actor, discard_at: 1.day.from_now)
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          ClientToken.create!(authentication_epoch: 0, user: actor, discard_at: 1.day.from_now)
         when :com
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          VisitorToken.create!(visitor: actor, discard_at: 1.day.from_now)
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          VisitorToken.create!(authentication_epoch: 0, visitor: actor, discard_at: 1.day.from_now)
         when :org
-          actor = Operator.create!
-          OperatorToken.create!(staff: actor, discard_at: 1.day.from_now)
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED)
+          OperatorToken.create!(authentication_epoch: 0, staff: actor, discard_at: 1.day.from_now)
         end
       token.update!(last_step_up_user_verified: true, last_step_up_full_reauthentication: false)
       original_status = token.attributes.slice(

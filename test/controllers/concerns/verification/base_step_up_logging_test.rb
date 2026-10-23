@@ -23,6 +23,7 @@ class VerificationBaseStepUpLoggingTest < ActionDispatch::IntegrationTest
     token.rotate_refresh_token!
     rp_client = OidcClientRegistry.find!("base-app-ww")
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
       oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,

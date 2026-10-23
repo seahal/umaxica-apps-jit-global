@@ -14,7 +14,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
           when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
           when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
           end
-        issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+        issuance = OidcTestEntry.issue!(
           surface:, intent: "sign_in", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
         )
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
@@ -73,7 +73,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
         assert_predicate binding.reload, :redeemed?
         assert_predicate admitted_auth_ceremony_session_for_test(binding), :admitted?
         assert_equal session_count + 1, model.count
-        assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
+        assert_equal "pending", issuance.transaction.reload.status
         admitted_id = binding.admitted_auth_ceremony_session_id
         browser.post("/sign/in", params: fields, headers:)
 
@@ -100,7 +100,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
             when "com" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
             when "org" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
             end
-          issuance = BaseAuthAdmissionCoordinator.issue_local_entry!(
+          issuance = OidcTestEntry.issue!(
             surface:, intent: "sign_in", base_browser_nonce: SecureRandom.urlsafe_base64(32), base_token: nil,
           )
           binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
@@ -160,7 +160,7 @@ class AdmissionRedemptionInputBoundaryTest < ActionDispatch::IntegrationTest
           assert_equal retained_sid, browser.cookies[sid_key]
           assert_equal original,
                        Valkey::AuthState::OpaqueAdmissionStore.new.read_reference!(reference: issuance.reference)
-          assert_predicate issuance.transaction.reload, :sign_in_primary_pending?
+          assert_equal "pending", issuance.transaction.reload.status
         ensure
           ActionController::Base.allow_forgery_protection = protection
         end

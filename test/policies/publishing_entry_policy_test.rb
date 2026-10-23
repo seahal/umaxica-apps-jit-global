@@ -45,7 +45,10 @@ class PublishingEntryPolicyTest < ActiveSupport::TestCase
   # The CMS is a staff surface. An end-user client that reached the policy with a session of its
   # own is not a staff operator, and no answer here may depend on which cell was asked about.
   test "a client is not a staff operator" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     policy = PublishingEntryPolicy.new(@entry, user: client)
 
     assert_not policy.index?

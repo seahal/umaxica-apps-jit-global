@@ -4,6 +4,7 @@
 module Base
   module Org
     class ApplicationController < ActionController::Base
+      include ::OrgSecondPasskeyGate
       include ::FqdnAvailabilityGate
       include ::RateLimit
       include ::DefaultNoStore
@@ -85,6 +86,8 @@ module Base
       before_action :set_region
 
       before_action :set_current_actor
+
+      before_action :enforce_second_passkey_gate!
       before_action :apply_localization_preferences
       before_action :set_locale
       before_action :set_timezone
@@ -125,11 +128,12 @@ module Base
         browser_rp_client_id
       end
 
+      # D-151: path-only `target_link_uri`; no query is carried.
       def sign_in_url_with_pt(pt)
-        base_org_sign_show_path(
-          ri: RequestContextContract.normalize_region(params[:ri]),
-          pt: decode_pt(pt).presence,
-        )
+        target = pt.present? ? RpTargetLinkUri.normalize(URI.parse(decode_pt(pt)).path) : nil
+        base_org_sign_show_path(ri: RequestContextContract.normalize_region(params[:ri]), target_link_uri: target)
+      rescue URI::InvalidURIError
+        base_org_sign_show_path(ri: RequestContextContract.normalize_region(params[:ri]))
       end
 
       # The browser is redirected to this host for the OIDC hop, so it has to be the public

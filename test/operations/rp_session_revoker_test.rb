@@ -5,14 +5,16 @@ require "test_helper"
 
 class RpSessionRevokerTest < ActiveSupport::TestCase
   setup do
-    @root = ClientToken.create!(user: Client.create!)
+    @root = ClientToken.create!(authentication_epoch: 0, user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL))
     @session_a = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @root,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
       refresh_token_expires_at: 1.hour.from_now,
     )
     @session_b = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @root,
       oidc_client_id: "warp-app-jp",
       oidc_scope: "openid profile",
@@ -41,6 +43,7 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
 
   test "browser_session scope revokes an unrevoked child after its refresh window expires" do
     expired_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: @root,
       oidc_client_id: "edit-app",
       oidc_scope: "openid profile",
@@ -106,8 +109,9 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   end
 
   test "identity scope walks each Base Browser Session" do
-    other_root = ClientToken.create!(user: Client.create!)
+    other_root = ClientToken.create!(authentication_epoch: 0, user: Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL))
     other_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: other_root,
       oidc_client_id: "core-app-jp",
       oidc_scope: "openid profile",
@@ -124,8 +128,14 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   end
 
   test "browser_session scope revokes a visitor session's RP Sessions and the visitor token" do
-    visitor_root = VisitorToken.create!(visitor: Visitor.create!(status_id: VisitorStatus::ACTIVE))
+    visitor_root = VisitorToken.create!(
+      authentication_epoch: 0,
+      visitor: Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      ),
+    )
     visitor_session = OpComGrant.create!(
+      authentication_epoch: 0,
       visitor_token: visitor_root,
       oidc_client_id: "core-com-jp",
       oidc_scope: "openid profile",
@@ -140,8 +150,14 @@ class RpSessionRevokerTest < ActiveSupport::TestCase
   end
 
   test "browser_session scope revokes an operator session's RP Sessions and the operator token" do
-    operator_root = OperatorToken.create!(staff_id: Operator.create!(status_id: OperatorStatus::ACTIVE).id)
+    operator_root = OperatorToken.create!(
+      authentication_epoch: 0,
+      staff_id: Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+      ).id,
+    )
     operator_session = OpOrgGrant.create!(
+      authentication_epoch: 0,
       operator_token: operator_root,
       oidc_client_id: "core-org-jp",
       oidc_scope: "openid profile",

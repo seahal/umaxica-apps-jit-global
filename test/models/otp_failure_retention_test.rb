@@ -65,8 +65,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
         when "OperatorTelephone"
           [Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE, TelephoneOtpPolicy, :telephone]
         end
-      owner = owner_model.create!(status_id: active_status)
-      root = root_model.create!(owner_key => owner.id)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: active_status)
+      root = root_model.create!(:authentication_epoch => 0, owner_key => owner.id)
       root.rotate_refresh_token!
       attributes = { owner_key => owner.id, :confirm_policy => true }
       if channel == :email
@@ -120,8 +120,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
         when "OperatorTelephone"
           [Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE, :telephone]
         end
-      owner = owner_model.create!(status_id: active_status)
-      root = root_model.create!(owner_key => owner.id)
+      owner = owner_model.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: active_status)
+      root = root_model.create!(:authentication_epoch => 0, owner_key => owner.id)
       root.rotate_refresh_token!
       attributes = { owner_key => owner.id, :confirm_policy => true, :otp_attempts_count => 1 }
       if channel == :email
@@ -192,14 +192,14 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
       owner, root, owner_attributes =
         case model.name
         when "ClientEmail"
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor), { user: actor }]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), { user: actor }]
         when "VisitorEmail"
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor), { visitor: actor }]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), { visitor: actor }]
         when "OperatorEmail"
-          actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
-          [actor, OperatorToken.create!(staff: actor), { staff: actor }]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), { staff: actor }]
         end
       root.rotate_refresh_token!
       record = model.create!(
@@ -226,14 +226,14 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
       owner, root, owner_attributes =
         case model.name
         when "ClientTelephone"
-          actor = Client.create!(status_id: ClientStatus::ACTIVE)
-          [actor, ClientToken.create!(user: actor), { user: actor }]
+          actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+          [actor, ClientToken.create!(authentication_epoch: 0, user: actor), { user: actor }]
         when "VisitorTelephone"
-          actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
-          [actor, VisitorToken.create!(visitor: actor), { visitor: actor }]
+          actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
+          [actor, VisitorToken.create!(authentication_epoch: 0, visitor: actor), { visitor: actor }]
         when "OperatorTelephone"
-          actor = Operator.create!(status_id: OperatorStatus::ACTIVE)
-          [actor, OperatorToken.create!(staff: actor), { staff: actor }]
+          actor = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+          [actor, OperatorToken.create!(authentication_epoch: 0, staff: actor), { staff: actor }]
         end
       root.rotate_refresh_token!
       record = model.create!(
@@ -256,8 +256,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   end
 
   test "cancelling an email challenge preserves failures until a new valid proof is consumed" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: owner)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: owner)
     root.rotate_refresh_token!
     email = ClientEmail.create!(
       user: owner, address: "cancel-budget@example.com", confirm_policy: true, otp_attempts_count: 1,
@@ -286,8 +286,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   end
 
   test "cancelling a telephone challenge preserves failures until a new valid proof is consumed" do
-    owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    root = OperatorToken.create!(staff: owner)
+    owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    root = OperatorToken.create!(authentication_epoch: 0, staff: owner)
     root.rotate_refresh_token!
     telephone = OperatorTelephone.create!(
       staff: owner, number: "+819012345680", confirm_policy: true, confirm_using_mfa: true, otp_attempts_count: 1,
@@ -316,8 +316,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   end
 
   test "email issuance and resend preserve zero one MAX minus one MAX and MAX plus one failures" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: owner)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: owner)
     root.rotate_refresh_token!
     email = ClientEmail.create!(
       user: owner, address: "email-issuance-boundaries@example.com", confirm_policy: true,
@@ -343,8 +343,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   end
 
   test "telephone issuance and resend preserve zero one MAX minus one MAX and MAX plus one failures" do
-    owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    root = OperatorToken.create!(staff: owner)
+    owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    root = OperatorToken.create!(authentication_epoch: 0, staff: owner)
     root.rotate_refresh_token!
     telephone = OperatorTelephone.create!(
       staff: owner, number: "+819012345679", confirm_policy: true, confirm_using_mfa: true,
@@ -370,8 +370,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   end
 
   test "email failure count survives expiry of its issuance and attempt window" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE)
-    root = ClientToken.create!(user: owner)
+    owner = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    root = ClientToken.create!(authentication_epoch: 0, user: owner)
     root.rotate_refresh_token!
     email = ClientEmail.create!(
       user: owner, address: "failure-retention@example.com",
@@ -394,8 +394,8 @@ class OtpFailureRetentionTest < ActiveSupport::TestCase
   end
 
   test "telephone failure count survives expiry of its issuance and attempt window" do
-    owner = Operator.create!(status_id: OperatorStatus::ACTIVE)
-    root = OperatorToken.create!(staff: owner)
+    owner = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+    root = OperatorToken.create!(authentication_epoch: 0, staff: owner)
     root.rotate_refresh_token!
     telephone = OperatorTelephone.create!(
       staff: owner, number: "+819012345678", confirm_policy: true, confirm_using_mfa: true,

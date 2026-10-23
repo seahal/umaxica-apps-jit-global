@@ -340,6 +340,6 @@ class BaseIdentityActivityLogPresenterTest < ActiveSupport::TestCase
   # non-transactional test already wrote committed chronicle rows for. Those rows are not this
   # client's history; the test transaction restores them afterwards.
   def fresh_client
-    Client.create!.tap { |client| ClientChronicle.where(subject_type: "Client", subject_id: client.id).delete_all }
+    Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL).tap { |client| ClientChronicle.where(subject_type: "Client", subject_id: client.id).delete_all }
   end
 end

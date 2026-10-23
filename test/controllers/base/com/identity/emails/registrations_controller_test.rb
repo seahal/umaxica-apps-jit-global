@@ -16,8 +16,12 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
     @host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     host! @host
     # Nontransactional multi-database cases retain roots; avoid reusing their sequence-owned identities.
-    @visitor = Visitor.create!(id: SecureRandom.random_number(1 << 60) + 1_000_000_000)
+    @visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: SecureRandom.random_number(1 << 60) + 1_000_000_000,
+    )
     @token = VisitorToken.create!(
+      authentication_epoch: 0,
       visitor: @visitor,
       visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
       visitor_token_status_id: VisitorTokenStatus::ACTIVE,
@@ -42,6 +46,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -129,6 +134,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -392,7 +398,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
   test "update verifies the address and returns to the identity page on the correct code" do
     assert_equal [@token.id], VisitorToken.not_revoked.where(visitor_id: @visitor.id, rotated_at: nil).pluck(:id),
                  "the owning visitor must have only the setup root before allocating a competing browser"
-    other_token = VisitorToken.create!(visitor: @visitor)
+    other_token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor)
     other_requirement = StepUpRequirement.new(
       scope: "settings_email", allowed_methods: [:passkey], purpose: "step_up", audience: "step_up:com",
       step_up_required: true, phishing_resistant_required: false, user_verification_required: false,
@@ -443,7 +449,10 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
   end
 
   test "revoked credential history does not qualify for the first-contact exception" do
-    visitor = Visitor.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
     visitor.visitor_telephones.create!(
       number: "+8190#{SecureRandom.random_number(10**8).to_s.rjust(8, "0")}",
       visitor_telephone_status_id: VisitorTelephoneStatus::VERIFIED,
@@ -452,7 +461,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
       webauthn_id: SecureRandom.uuid, public_key: "revoked-contact-test-public-key", sign_count: 0,
       status_id: VisitorPasskeyStatus::REVOKED,
     )
-    token = VisitorToken.create!(visitor: visitor)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: visitor)
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
     begin
@@ -472,6 +481,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,
@@ -526,8 +536,14 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
   end
 
   test "first confirmed contact is registered on Base without freshness and ends the initial exception" do
-    visitor = Visitor.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
-    token = VisitorToken.create!(visitor: visitor, root_login_established_at: VisitorToken.database_now - 1.minute)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
+    token = VisitorToken.create!(
+      authentication_epoch: 0, visitor: visitor,
+      root_login_established_at: VisitorToken.database_now - 1.minute,
+    )
     BaseSelectorBootstrapAuthority.call(surface: :com, principal: visitor)
     BaseSelectorAuthority.prepare(surface: :com, principal: visitor, session: token)
     begin
@@ -547,6 +563,7 @@ class Base::Com::Identity::Emails::RegistrationsControllerTest < ActionDispatch:
               rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
               rp_now = Time.current
               rp_session = OpComGrant.create!(
+                authentication_epoch: 0,
                 visitor_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
                 oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
                 refresh_token_expires_at: rp_now + 10.minutes,

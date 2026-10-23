@@ -22,6 +22,7 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
 
   test "authenticates an existing identity linked to a user" do
     client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::ACTIVE,
       public_id: PublicId.generate,
       birthdate: "2000-01-01",

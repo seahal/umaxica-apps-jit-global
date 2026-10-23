@@ -24,7 +24,7 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     TurnstileVerifierStub.challenge_response = { "success" => true }
 
     # Exercise OTP endpoints only after the public admission transitions.
-    admission = BaseAuthAdmissionCoordinator.issue_local_entry!(
+    admission = OidcTestEntry.issue!(
       surface: "com", intent: "sign_up", base_browser_nonce: SecureRandom.hex(32), base_token: nil,
     )
     get "/sign/up", params: { ri: "jp", entry_ref: admission.reference }, headers: { "Host" => @host }
@@ -198,6 +198,60 @@ class Auth::Com::Sign::Up::Check::Telephone::OtpsControllerTest < ActionDispatch
     assert_equal VisitorSignUpFlowStatus::CANCELLED, cycle.reload.status_id
     assert_operator cycle.discard_at, :<=, Time.current
     assert_nil session[:com_sign_up_flow_locator]
+  end
+
+  test "show renders visible Turnstile props on the otp form" do
+    start_telephone_signup!("+819011110080")
+
+    get auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), headers: default_headers
+
+    assert_response :success
+    turnstile = inertia_props.fetch("turnstile")
+
+    assert_equal "render", turnstile.fetch("mode")
+    assert_predicate turnstile.fetch("site_key"), :present?
+    assert_predicate turnstile.fetch("challenge_id"), :present?
+  end
+
+  test "patch with a valid otp and missing, invalid, or unavailable Turnstile does not consume the otp" do
+    user_telephone = start_telephone_signup!("+819011110081")
+    cycle = current_sign_up_flow
+    code = otp_code_for(user_telephone)
+    transaction = VisitorTelephoneCeremonyTransaction.find_by!(telephone_candidate_ref: user_telephone.public_id)
+    attempts_before = user_telephone.reload.otp_attempts_count
+    proof_before = transaction.attributes
+
+    [
+      [nil, { "success" => false }],
+      ["invalid-turnstile-token", { "success" => false }],
+      ["provider-outage-token", { "success" => false, "unavailable" => true }],
+    ].each do |turnstile_token, verification_result|
+      TurnstileVerifierStub.challenge_response = verification_result
+      params = { visitor_telephone: { pass_code: code } }
+      params["cf-turnstile-response"] = turnstile_token if turnstile_token
+
+      patch auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding), params: params,
+                                                                                   headers: default_headers
+
+      assert_response :unprocessable_content
+      assert_equal "render", inertia_props.fetch("turnstile").fetch("mode")
+    end
+
+    assert_equal attempts_before, user_telephone.reload.otp_attempts_count
+    assert_withheld("Turnstile refusal must preserve the entire live OTP proof") {
+      proof_before == transaction.reload.attributes
+    }
+    assert_not session.dig(:visitor_telephone_registration, "otp_verified")
+    assert_equal VisitorSignUpFlowStatus::CONTACT_PENDING, cycle.reload.status_id
+    assert_nil cycle.completed_requirements["otp"]
+
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+    patch auth_com_sign_up_check_telephone_otp_url(ri: "jp", fb: @flow_binding),
+          params: { :visitor_telephone => { pass_code: code }, "cf-turnstile-response" => "retry" },
+          headers: default_headers
+
+    assert_response :redirect
+    assert_equal VisitorSignUpFlowStatus::CHECKPOINT_PENDING, cycle.reload.status_id
   end
 
   private

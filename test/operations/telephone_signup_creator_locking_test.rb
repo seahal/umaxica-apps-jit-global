@@ -13,7 +13,7 @@ class TelephoneSignupCreatorLockingTest < ActiveSupport::TestCase
   test "signup creation refuses persisted Telephone candidates without transferring their owner" do
     [[Client, ClientTelephone, :user, :user_id], [Visitor, VisitorTelephone, :visitor, :visitor_id]].each do |
       owner_model, telephone_model, association, owner_key|
-      owner = owner_model.create!
+      owner = owner_model.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_model))
       telephone = telephone_model.create!(
         association => owner, :raw_number => "+12025550161", :confirm_policy => true,
       )
@@ -34,7 +34,8 @@ class TelephoneSignupCreatorLockingTest < ActiveSupport::TestCase
   test "signup creation refuses new Telephone candidates with persisted or unsaved owners" do
     [[Client, ClientTelephone, :user], [Visitor, VisitorTelephone, :visitor]].each do |
       owner_model, telephone_model, association|
-      [owner_model.create!, owner_model.new].each do |owner|
+      [owner_model.create!(security_mode_id: SecurityModeTestDefault.id_for(owner_model)),
+       owner_model.new(security_mode_id: SecurityModeTestDefault.id_for(owner_model)),].each do |owner|
         telephone = telephone_model.new(
           association => owner, :raw_number => "+12025550162", :confirm_policy => true,
         )

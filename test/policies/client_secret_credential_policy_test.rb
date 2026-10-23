@@ -4,7 +4,7 @@ require "test_helper"
 
 class ClientSecretCredentialPolicyTest < ActiveSupport::TestCase
   self.fixture_table_names = %w(
-    clients client_statuses client_visibilities client_mfa_levels client_mfa_statuses
+    clients client_statuses client_visibilities client_security_modes client_mfa_statuses
     client_secret_credentials client_secret_issuances
   )
 
@@ -34,7 +34,12 @@ class ClientSecretCredentialPolicyTest < ActiveSupport::TestCase
 
   test "foreign surface and unsaved actors cannot manage app Secrets even with matching numeric IDs" do
     owner_id = clients(:one).id
-    [Operator.new(id: owner_id), Visitor.new(id: owner_id), Client.new(id: owner_id), Client.new].each do |actor|
+    [Operator.new(security_mode_id: SecurityModeConfigurable::ADVANCED, id: owner_id),
+     Visitor.new(
+       security_mode_id: SecurityModeConfigurable::NORMAL, id: owner_id,
+     ),
+     Client.new(security_mode_id: SecurityModeConfigurable::NORMAL, id: owner_id),
+     Client.new(security_mode_id: SecurityModeConfigurable::NORMAL),].each do |actor|
       policy = ClientSecretCredentialPolicy.new(client_secret_credentials(:one), user: actor)
 
       %i(index? new? create? show? update? destroy?).each do |rule|

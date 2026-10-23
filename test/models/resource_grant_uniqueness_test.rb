@@ -7,8 +7,14 @@ class EnterpriseGrantUniquenessTest < ActiveSupport::TestCase
 
   GRANTS.each do |model|
     test "#{model.name} preserves pair scope DB enforcement and ownership boundaries" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       first_resource = Enterprise.create!(name: "First resource", title: "First")
       second_resource = Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -41,8 +47,14 @@ class EnterpriseGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicates and colliding scope changes before SQL" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       first_resource = Enterprise.create!(name: "First resource", title: "First")
       second_resource = Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -63,8 +75,14 @@ class EnterpriseGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} distinguishes missing foreign keys from the existing zero client" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+        visibility_id: ClientVisibility::USER,
+      )
       first_resource = Enterprise.create!(name: "First resource", title: "First")
       Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -85,8 +103,14 @@ class EnterpriseGrantUniquenessTest < ActiveSupport::TestCase
       end
     end
     test "#{model.name} adds one pair probe and skips unchanged existing keys" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       first_resource = Enterprise.create!(name: "First resource", title: "First")
       second_resource = Enterprise.create!(name: "Second resource", title: "Second")
 
@@ -113,8 +137,14 @@ class ClientPersonaGrantUniquenessTest < ActiveSupport::TestCase
 
   GRANTS.each do |model|
     test "#{model.name} preserves pair scope DB enforcement and ownership boundaries" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       ClientIdentityState.ensure_defaults!
       first_identity = ClientIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -156,8 +186,14 @@ class ClientPersonaGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicates and colliding scope changes before SQL" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       ClientIdentityState.ensure_defaults!
       first_identity = ClientIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -187,8 +223,14 @@ class ClientPersonaGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} distinguishes missing foreign keys from the existing zero client" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       ClientIdentityState.ensure_defaults!
       first_identity = ClientIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -218,8 +260,14 @@ class ClientPersonaGrantUniquenessTest < ActiveSupport::TestCase
       end
     end
     test "#{model.name} adds one pair probe and skips unchanged existing keys" do
-      first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-      second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+      first_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
+      second_principal = Client.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+      )
       ClientIdentityState.ensure_defaults!
       first_identity = ClientIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -254,8 +302,14 @@ class CompanyGrantUniquenessTest < ActiveSupport::TestCase
 
   GRANTS.each do |model|
     test "#{model.name} preserves pair scope DB enforcement and ownership boundaries" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       first_resource = Company.create!(name: "First resource", title: "First")
       second_resource = Company.create!(name: "Second resource", title: "Second")
 
@@ -288,8 +342,14 @@ class CompanyGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicates and colliding scope changes before SQL" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       first_resource = Company.create!(name: "First resource", title: "First")
       second_resource = Company.create!(name: "Second resource", title: "Second")
 
@@ -310,8 +370,14 @@ class CompanyGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} keeps missing and sentinel foreign keys invalid" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+        visibility_id: VisitorVisibility::VISITOR,
+      )
       first_resource = Company.create!(name: "First resource", title: "First")
       Company.create!(name: "Second resource", title: "Second")
 
@@ -326,8 +392,14 @@ class CompanyGrantUniquenessTest < ActiveSupport::TestCase
       end
     end
     test "#{model.name} adds one pair probe and skips unchanged existing keys" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       first_resource = Company.create!(name: "First resource", title: "First")
       second_resource = Company.create!(name: "Second resource", title: "Second")
 
@@ -353,8 +425,14 @@ class IndividualGrantUniquenessTest < ActiveSupport::TestCase
 
   GRANTS.each do |model|
     test "#{model.name} preserves pair scope DB enforcement and ownership boundaries" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       VisitorIdentityState.ensure_defaults!
       first_identity = VisitorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -396,8 +474,14 @@ class IndividualGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicates and colliding scope changes before SQL" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       VisitorIdentityState.ensure_defaults!
       first_identity = VisitorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -427,8 +511,14 @@ class IndividualGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} keeps missing and sentinel foreign keys invalid" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       VisitorIdentityState.ensure_defaults!
       first_identity = VisitorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -452,8 +542,14 @@ class IndividualGrantUniquenessTest < ActiveSupport::TestCase
       end
     end
     test "#{model.name} adds one pair probe and skips unchanged existing keys" do
-      first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-      second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+      first_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
+      second_principal = Visitor.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+      )
       VisitorIdentityState.ensure_defaults!
       first_identity = VisitorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -488,8 +584,14 @@ class BureauGrantUniquenessTest < ActiveSupport::TestCase
 
   GRANTS.each do |model|
     test "#{model.name} preserves pair scope DB enforcement and ownership boundaries" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       first_resource = Bureau.create!(name: "First resource", title: "First")
       second_resource = Bureau.create!(name: "Second resource", title: "Second")
 
@@ -522,8 +624,14 @@ class BureauGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicates and colliding scope changes before SQL" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       first_resource = Bureau.create!(name: "First resource", title: "First")
       second_resource = Bureau.create!(name: "Second resource", title: "Second")
 
@@ -544,8 +652,14 @@ class BureauGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} keeps missing and sentinel foreign keys invalid" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE,
+        visibility_id: OperatorVisibility::STAFF,
+      )
       first_resource = Bureau.create!(name: "First resource", title: "First")
       Bureau.create!(name: "Second resource", title: "Second")
 
@@ -560,8 +674,14 @@ class BureauGrantUniquenessTest < ActiveSupport::TestCase
       end
     end
     test "#{model.name} adds one pair probe and skips unchanged existing keys" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       first_resource = Bureau.create!(name: "First resource", title: "First")
       second_resource = Bureau.create!(name: "Second resource", title: "Second")
 
@@ -587,8 +707,14 @@ class AgentGrantUniquenessTest < ActiveSupport::TestCase
 
   GRANTS.each do |model|
     test "#{model.name} preserves pair scope DB enforcement and ownership boundaries" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       OperatorIdentityState.ensure_defaults!
       first_identity = OperatorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -630,8 +756,14 @@ class AgentGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} rejects duplicates and colliding scope changes before SQL" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       OperatorIdentityState.ensure_defaults!
       first_identity = OperatorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -661,8 +793,14 @@ class AgentGrantUniquenessTest < ActiveSupport::TestCase
     end
 
     test "#{model.name} keeps missing and sentinel foreign keys invalid" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       OperatorIdentityState.ensure_defaults!
       first_identity = OperatorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",
@@ -686,8 +824,14 @@ class AgentGrantUniquenessTest < ActiveSupport::TestCase
       end
     end
     test "#{model.name} adds one pair probe and skips unchanged existing keys" do
-      first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-      second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+      first_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
+      second_principal = Operator.create!(
+        security_mode_id: SecurityModeConfigurable::ADVANCED,
+        status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+      )
       OperatorIdentityState.ensure_defaults!
       first_identity = OperatorIdentity.create!(
         issuer: "https://grants.example.test", subject: "first",

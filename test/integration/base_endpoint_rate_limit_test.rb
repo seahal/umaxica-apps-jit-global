@@ -17,8 +17,18 @@ class BaseEndpointRateLimitTest < ActionDispatch::IntegrationTest
 
   self.fixture_table_names = []
 
-  setup { Rails.configuration.x.rate_limit.fetch(:store).clear }
-  teardown { Rails.configuration.x.rate_limit.fetch(:store).clear }
+  setup do
+    Rails.configuration.x.rate_limit.fetch(:store).clear
+    # The recovery send branch verifies visible Turnstile (D-156); these probes pass it.
+    TurnstileVerifierStub.challenge_enabled = true
+    TurnstileVerifierStub.challenge_response = { "success" => true }
+  end
+
+  teardown do
+    Rails.configuration.x.rate_limit.fetch(:store).clear
+    TurnstileVerifierStub.challenge_enabled = false
+    TurnstileVerifierStub.challenge_response = nil
+  end
 
   OAUTH_REVOCATION_QUOTA = 20
   OAUTH_USERINFO_QUOTA = 60

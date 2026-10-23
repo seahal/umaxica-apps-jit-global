@@ -7,6 +7,10 @@ current code still uses `mfa_level_id` and the `NOTHING/WEAK/MEDIUM/FULL` refere
 > `ADVANCED` minimum is two active passkeys, not one), E2 (two to one is refused), the clause of C3
 > that Emergency never satisfies Persona/RP authorization, F1–F5 and G2 (returned to Pending), and
 > resolves Open decision 2. Those sections are kept below as history and are not current.
+>
+> **Open decision 1 (2026-10-23):** answered by the consolidation ADR §2.2 — the `ADVANCED` minimum is
+> two active passkeys and nothing else counts. Value mapping for the migration (D-92): APP/COM every
+> value → `NORMAL=3`; ORG every Operator → `ADVANCED=7`.
 
 ## Context
 

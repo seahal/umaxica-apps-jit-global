@@ -9,8 +9,8 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "payload failure reaches Chronicle before real jobs delete the candidate and allocation" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
-    token = ClientToken.create!(user: actor)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,
@@ -82,7 +82,10 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
 
   test "withdrawal candidate audit reaches Chronicle before real lifecycle deletion" do
     now = Client.database_now
-    actor = Client.create!(status_id: ClientStatus::ACTIVE, withdrawn_at: now, terminated_at: now)
+    actor = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      withdrawn_at: now, terminated_at: now,
+    )
     issuance = ClientSecretIssuance.create!(
       client: actor, origin: "manual", origin_operation_id: SecureRandom.uuid, attempt_number: 1,
       browser_session_ref: "withdrawal-audit-session", planned_count: 1, expires_at: now + 1.minute,
@@ -133,7 +136,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "retired allocation waits for Chronicle and legal hold and rolls deletion back with its outbox" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
       client: actor, origin: "manual", origin_operation_id: SecureRandom.uuid, attempt_number: 1,
@@ -170,7 +173,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "unconfirmed allocation collector preserves confirmed and omitted operation facts" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = Client.database_now
     confirmed = ClientSecretIssuance.create!(
       client: actor, origin: "manual", origin_operation_id: SecureRandom.uuid, attempt_number: 1,
@@ -193,7 +196,7 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
   end
 
   test "expired unconfirmed candidates require delivered terminal audit before physical purge" do
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     now = Client.database_now
     issuance = ClientSecretIssuance.create!(
       client: actor, origin: "manual", origin_operation_id: SecureRandom.uuid, attempt_number: 1,
@@ -317,11 +320,11 @@ class ClientSecretAuditDeliveryJobTest < ActiveSupport::TestCase
     ENV["APP_SECRET_PURGE_DELAY_SECONDS"] = "60"
     ENV["APP_SECRET_OUTBOX_RETENTION_SECONDS"] = "3600"
     ENV["APP_SECRET_PROOF_RETENTION_SECONDS"] = "1"
-    actor = Client.create!(status_id: ClientStatus::ACTIVE)
+    actor = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE)
     actor.client_passkeys.create!(
       webauthn_id: SecureRandom.uuid, public_key: "public-key", uv_verified_at: Client.database_now,
     )
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     token.update!(
       last_step_up_at: ClientToken.database_now, last_step_up_scope: "settings_secret_credential",
       last_step_up_method: "passkey", last_step_up_session_public_id: token.public_id,

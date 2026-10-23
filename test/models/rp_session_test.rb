@@ -10,8 +10,8 @@ class RpSessionTest < ActiveSupport::TestCase
       model: OpAppGrant,
       root_model: ClientToken,
       root_builder: -> {
-        client = Client.create!
-        ClientToken.create!(user: client)
+        client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+        ClientToken.create!(authentication_epoch: 0, user: client)
       },
       parent_key: :client_token_id,
       parent_label: :client_token,
@@ -21,8 +21,8 @@ class RpSessionTest < ActiveSupport::TestCase
       model: OpOrgGrant,
       root_model: OperatorToken,
       root_builder: -> {
-        operator = Operator.create!(status_id: OperatorStatus::ACTIVE)
-        OperatorToken.create!(staff: operator)
+        operator = Operator.create!(security_mode_id: SecurityModeConfigurable::ADVANCED, status_id: OperatorStatus::ACTIVE)
+        OperatorToken.create!(authentication_epoch: 0, staff: operator)
       },
       parent_key: :operator_token_id,
       parent_label: :operator_token,
@@ -34,8 +34,11 @@ class RpSessionTest < ActiveSupport::TestCase
       root_builder: -> {
         VisitorStatus.ensure_defaults!
         VisitorVisibility.ensure_defaults!
-        visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-        VisitorToken.create!(visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+        visitor = Visitor.create!(
+          security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+          visibility_id: VisitorVisibility::VISITOR,
+        )
+        VisitorToken.create!(authentication_epoch: 0, visitor: visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
       },
       parent_key: :visitor_token_id,
       parent_label: :visitor_token,
@@ -55,6 +58,7 @@ class RpSessionTest < ActiveSupport::TestCase
           ),
         )
         session = rp_session_case[:model].create!(
+          :authentication_epoch => 0,
           rp_session_case[:parent_label] => root, :oidc_client_id => "core-app-jp",
           :refresh_token_expires_at => decision_time + 1.hour,
         )
@@ -81,6 +85,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session generates a public id and validates parent and rp identity" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -98,6 +103,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session enforces active parent and RP uniqueness" do
       root = rp_session_case[:root_builder].call
       first = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -106,6 +112,7 @@ class RpSessionTest < ActiveSupport::TestCase
 
       assert_raises(ActiveRecord::RecordNotUnique) do
         rp_session_case[:model].create!(
+          :authentication_epoch => 0,
           rp_session_case[:parent_label] => root,
           :oidc_client_id => "core-app-jp",
           :oidc_scope => "openid profile",
@@ -116,6 +123,7 @@ class RpSessionTest < ActiveSupport::TestCase
       first.update!(revoked_at: Time.current)
 
       replacement = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid email",
@@ -130,6 +138,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session remains when the rotating root row is physically deleted" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -149,6 +158,7 @@ class RpSessionTest < ActiveSupport::TestCase
       root.refresh_token = "rp-root-rotation-verifier"
       root.save!
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -171,6 +181,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session rotates refresh tokens without exposing raw secrets" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -189,6 +200,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session refuses blank verifiers and sessions without an issued refresh token" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -209,6 +221,7 @@ class RpSessionTest < ActiveSupport::TestCase
       absolute_expiry = 1.hour.from_now
       root.update!(discard_at: absolute_expiry)
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -229,6 +242,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} RP session rejects a missing or infinite parent or child expiry" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -260,6 +274,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session detects a replay of the digest superseded by rotation" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -282,6 +297,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session refuses access-token expiry recording after revoke" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -298,6 +314,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session refuses refresh issuance after revoke" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",
@@ -314,6 +331,7 @@ class RpSessionTest < ActiveSupport::TestCase
     test "#{rp_session_case[:name]} rp session uses the writer database clock for lifecycle changes" do
       root = rp_session_case[:root_builder].call
       session = rp_session_case[:model].create!(
+        :authentication_epoch => 0,
         rp_session_case[:parent_label] => root,
         :oidc_client_id => "core-app-jp",
         :oidc_scope => "openid profile",

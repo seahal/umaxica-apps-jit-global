@@ -165,6 +165,10 @@ module RefreshTokenable
     # list, because this one is a security invariant
     # (docs/security/org-emergency-access.md).
     def copy_rotated_token_authentication_context(attrs, previous_token)
+      # The replacement keeps the authentication epoch of the root it replaces (WU-17): an identity
+      # stop must cut off the rotated row exactly like the original.
+      attrs[:authentication_epoch] = previous_token.authentication_epoch if
+        previous_token.has_attribute?(:authentication_epoch)
       return unless previous_token.has_attribute?(:authentication_context)
 
       attrs[:authentication_context] = previous_token.authentication_context

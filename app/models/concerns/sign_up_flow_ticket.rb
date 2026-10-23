@@ -91,6 +91,22 @@ module SignUpFlowTicket
 
   private
 
+  # APP/COM explicitly opt in at creation; ORG has no public sign-up admission.
+  def sign_up_admission_is_redeemed
+    binding = auth_admission_binding
+    return unless binding
+
+    # Bindings are strict-loading; both parents are read explicitly.
+    ceremony = binding.association(:admitted_auth_ceremony_session).scope.take
+    parent = binding.association(:authorization_transaction).scope.take
+    return if binding.redeemed? && !binding.retired? && binding.purpose == "authentication_handoff" &&
+      binding.entry_intent == "sign_up" && ceremony&.active? && ceremony.admitted? &&
+      ceremony.admission_purpose == binding.purpose && parent &&
+      ceremony.authorization_transaction_ref == parent.transaction_id
+
+    errors.add(:auth_admission_binding, "must identify a redeemed sign-up ceremony")
+  end
+
   def normalize_completed_requirements
     self.completed_requirements = {} if completed_requirements.blank?
   end

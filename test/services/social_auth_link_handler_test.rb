@@ -5,7 +5,7 @@ require "test_helper"
 
 class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
   setup do
-    @client = Client.create!
+    @client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     @principal = ExternalAuthentication::VerifiedPrincipal.new(
       provider: "google", subject: "subject-#{SecureRandom.hex(12)}", issuer: "https://accounts.google.com",
       audience: "google-test-client-id", verified_at: ClientExternalIdentity.database_now,
@@ -33,7 +33,7 @@ class SocialAuthLinkHandlerTest < ActiveSupport::TestCase
   end
 
   test "rejects a provider identity already linked to another client" do
-    other = Client.create!
+    other = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     identity = @repository.build_for_user(user: other, principal: @principal, credential_candidate: nil)
     identity.save!
 

@@ -31,7 +31,10 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "does not promote a legacy identity binding without an explicit reviewed owner" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "direct-backfill-client",
@@ -56,7 +59,10 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "backfills one explicitly reviewed direct identity candidate and is idempotent" do
-    client = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "direct-backfill-client-reviewed",
@@ -102,7 +108,10 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "does not backfill an inactive principal" do
-    client = Client.create!(status_id: ClientStatus::INACTIVE, visibility_id: ClientVisibility::USER)
+    client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::INACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "inactive-backfill-client",
@@ -129,6 +138,7 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
 
   test "does not backfill a suspended principal" do
     client = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::USER,
       access_state: AdministrativeAccessLockable::ACCESS_STATE_ADMIN_LOCKED,
@@ -178,7 +188,10 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "accepts an explicit reviewed owner for an organization without inferring membership" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
     enterprise = I18n.with_locale(:en) { Enterprise.create!(name: "Reviewed Enterprise", title: "Reviewed") }
 
     result = AuthorityOwnerDirectBindingBackfillOperation.call(
@@ -196,7 +209,10 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rejects an explicit owner from another surface" do
-    visitor = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     enterprise = I18n.with_locale(:en) { Enterprise.create!(name: "Cross Surface", title: "Cross") }
 
     result = AuthorityOwnerDirectBindingBackfillOperation.call(
@@ -214,11 +230,13 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   test "rejects an owner identifier that collides across principal surfaces" do
     shared_public_id = "cross-surface-ownerxx"
     Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: shared_public_id,
       status_id: ClientStatus::ACTIVE,
       visibility_id: ClientVisibility::USER,
     )
     Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
       public_id: shared_public_id,
       status_id: VisitorStatus::ACTIVE,
       visibility_id: VisitorVisibility::VISITOR,
@@ -238,8 +256,14 @@ class AuthorityOwnerDirectBindingBackfillOperationTest < ActiveSupport::TestCase
   end
 
   test "rejects a conflicting explicit owner instead of replacing it" do
-    owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    conflicting_owner = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::ACTIVE,
+      visibility_id: ClientVisibility::USER,
+    )
+    conflicting_owner = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     identity = ClientIdentity.create!(
       issuer: "https://id.example.test",
       subject: "conflict-backfill-client",

@@ -13,7 +13,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
     @key = OpenSSL::PKey::EC.generate("secp384r1")
     @session = RpCallbackCommitter.call(
       cell: @cell, issuer: ISSUER, subject: "subject-a", sid: "sid-1",
-      absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+      absolute_expires_at: 1.hour.from_now,
     ).session
   end
 
@@ -107,15 +107,15 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
     assert_equal :refused, refresh(token: other).outcome
   end
 
-  test "Refresh refuses signed responses for another subject or a mismatched local epoch" do
+  test "Refresh refuses signed responses for another subject" do
     jwks = OidcOpJwksClient.new(
       jwks_uri: "#{ISSUER}/.well-known/jwks.json",
       fetcher: -> { { "keys" => [JitSecurityJwtJwk.export_public(@key, kid: "k1")] } },
     )
-    ["other-subject", "subject-a"].each do |subject|
+    ["other-subject"].each do |subject|
       session = RpCallbackCommitter.call(
         cell: @cell, issuer: ISSUER, subject: "subject-a", sid: "binding-#{subject}",
-        absolute_expires_at: 1.hour.from_now, contract_epoch: (subject == "subject-a") ? 2 : 1,
+        absolute_expires_at: 1.hour.from_now,
       ).session
       now = Time.current.to_i
       token = JWT.encode(
@@ -129,7 +129,6 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
           "client_id" => "core-app-jp",
           "jti" => "wrong-binding",
           "scope" => "openid",
-          "umx_contract_epoch" => 1,
           "authn_ctx" => "normal", },
         @key, "ES384", { "kid" => "k1", "typ" => "at+jwt" },
       )
@@ -140,7 +139,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       OidcOpTokenClient.stub(:refresh, response) do
         result = RpRefreshCommitter.call(
           cell: @cell, local_session_id: session.public_id, refresh_token: "refresh-plain", issuer: ISSUER,
-          contract_epoch: 1, jwks_client: jwks, token_url: "#{ISSUER}/oauth/token",
+          jwks_client: jwks, token_url: "#{ISSUER}/oauth/token",
           query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
         )
 
@@ -155,7 +154,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
     [:binding, :principal].each do |cohort|
       session = RpCallbackCommitter.call(
         cell: @cell, issuer: ISSUER, subject: "ended-#{cohort}", sid: "ended-#{cohort}",
-        absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+        absolute_expires_at: 1.hour.from_now,
       ).session
       anchor = RpCoreAppOpSessionBinding.includes(identity_binding: :principal).find(session.op_session_binding_id)
       if cohort == :binding
@@ -166,7 +165,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       OidcOpTokenClient.stub(:refresh, ->(**) { flunk("ended local authority must not dispatch") }) do
         result = RpRefreshCommitter.call(
           cell: @cell, local_session_id: session.public_id, refresh_token: "refresh-plain", issuer: ISSUER,
-          contract_epoch: 1, jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
+          jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
           query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
         )
 
@@ -181,7 +180,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       OidcOpTokenClient.stub(:refresh, ->(**) { flunk("only the opaque enrolled session can refresh") }) do
         result = RpRefreshCommitter.call(
           cell: @cell, local_session_id: locator, refresh_token: "refresh-plain", issuer: ISSUER,
-          contract_epoch: 1, jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
+          jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
           query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
         )
 
@@ -197,7 +196,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       RpCoreAppRecord.connected_to(role: :reading) do
         result = RpRefreshCommitter.call(
           cell: @cell, local_session_id: @session.public_id, refresh_token: "refresh-plain", issuer: ISSUER,
-          contract_epoch: 1, jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
+          jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
           query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
         )
 
@@ -221,7 +220,6 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
         "client_id" => "core-app-jp",
         "jti" => "recovered",
         "scope" => "openid",
-        "umx_contract_epoch" => 1,
         "authn_ctx" => "normal", },
       @key, "ES384", { "kid" => "k1", "typ" => "at+jwt" },
     )
@@ -234,7 +232,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       local_session_id: @session.public_id,
       refresh_token: "refresh-plain",
       issuer: ISSUER,
-      contract_epoch: 1,
+
       jwks_client: jwks,
       token_url: "#{ISSUER}/oauth/token",
       query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
@@ -269,14 +267,14 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
     [:dependency, :invalid_remote].each do |outcome|
       session = RpCallbackCommitter.call(
         cell: @cell, issuer: ISSUER, subject: "subject-#{outcome}", sid: "sid-#{outcome}",
-        absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+        absolute_expires_at: 1.hour.from_now,
       ).session
       arguments = {
         cell: @cell,
         local_session_id: session.public_id,
         refresh_token: "refresh-plain",
         issuer: ISSUER,
-        contract_epoch: 1,
+
         jwks_client: nil,
         token_url: "#{ISSUER}/oauth/token",
         query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
@@ -306,7 +304,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       local_session_id: @session.public_id,
       refresh_token: "refresh-plain",
       issuer: ISSUER,
-      contract_epoch: 1,
+
       jwks_client: nil,
       token_url: "#{ISSUER}/oauth/token",
       query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
@@ -333,7 +331,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
     [-Rational(1, 1_000_000), 0, Rational(1, 1_000_000)].each_with_index do |offset, index|
       session = RpCallbackCommitter.call(
         cell: @cell, issuer: ISSUER, subject: "subject-deadline", sid: "deadline-#{index}",
-        absolute_expires_at: base + 1.hour, contract_epoch: 1,
+        absolute_expires_at: base + 1.hour,
       ).session
       access = JWT.encode(
         { "iss" => ISSUER,
@@ -346,7 +344,6 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
           "client_id" => "core-app-jp",
           "jti" => "deadline-#{index}",
           "scope" => "openid",
-          "umx_contract_epoch" => 1,
           "authn_ctx" => "normal", },
         @key, "ES384", { "kid" => "k1", "typ" => "at+jwt" },
       )
@@ -368,7 +365,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
         ) do
           result = RpRefreshCommitter.call(
             cell: @cell, local_session_id: session.public_id, refresh_token: "refresh-plain", issuer: ISSUER,
-            contract_epoch: 1, jwks_client: jwks, token_url: "#{ISSUER}/oauth/token",
+            jwks_client: jwks, token_url: "#{ISSUER}/oauth/token",
             query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
           )
 
@@ -391,7 +388,6 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
         "client_id" => "core-app-jp",
         "jti" => "installed-response",
         "scope" => "openid",
-        "umx_contract_epoch" => 1,
         "authn_ctx" => "normal", },
       @key, "ES384", { "kid" => "k1", "typ" => "at+jwt" },
     )
@@ -404,7 +400,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       local_session_id: @session.public_id,
       refresh_token: "refresh-plain",
       issuer: ISSUER,
-      contract_epoch: 1,
+
       jwks_client: jwks,
       token_url: "#{ISSUER}/oauth/token",
       query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
@@ -440,7 +436,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
     [-0.001, 0.0, 0.001].each_with_index do |offset, index|
       session = RpCallbackCommitter.call(
         cell: @cell, issuer: ISSUER, subject: "budget-subject", sid: "budget-#{index}",
-        absolute_expires_at: 1.hour.from_now, contract_epoch: 1,
+        absolute_expires_at: 1.hour.from_now,
       ).session
       now = Time.current.to_i
       access = JWT.encode(
@@ -454,7 +450,6 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
           "client_id" => @cell.client_id,
           "jti" => "budget-#{index}",
           "scope" => "openid",
-          "umx_contract_epoch" => 1,
           "authn_ctx" => "normal", },
         @key, "ES384", { "kid" => "k1", "typ" => "at+jwt" },
       )
@@ -474,7 +469,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
         ) do
           result = RpRefreshCommitter.call(
             cell: @cell, local_session_id: session.public_id, refresh_token: "refresh-plain", issuer: ISSUER,
-            contract_epoch: 1, jwks_client: keys, token_url: "#{ISSUER}/oauth/token",
+            jwks_client: keys, token_url: "#{ISSUER}/oauth/token",
             query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
           )
 
@@ -506,7 +501,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
         ) do
           result = RpRefreshCommitter.call(
             cell: @cell, local_session_id: @session.public_id, refresh_token: "refresh-plain", issuer: ISSUER,
-            contract_epoch: 1, jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
+            jwks_client: nil, token_url: "#{ISSUER}/oauth/token",
             query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
           )
 
@@ -529,7 +524,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       local_session_id: @session.public_id,
       refresh_token: "refresh-plain",
       issuer: ISSUER,
-      contract_epoch: 1,
+
       jwks_client: keys,
       token_url: "#{ISSUER}/oauth/token",
       query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
@@ -565,7 +560,7 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       OidcOpTokenClient.stub(:query_delivery, query) do
         RpRefreshCommitter.call(
           cell: @cell, local_session_id: @session.public_id, refresh_token: "refresh-plain",
-          issuer: ISSUER, contract_epoch: 1,
+          issuer: ISSUER,
           jwks_client: jwks, token_url: "#{ISSUER}/oauth/token", query_url: "#{ISSUER}/oauth/refresh-deliveries/query",
         )
       end
@@ -601,7 +596,6 @@ class RpRefreshCommitterTest < ActiveSupport::TestCase
       "client_id" => "core-app-jp",
       "jti" => "jti-1",
       "scope" => "openid",
-      "umx_contract_epoch" => 1,
       "authn_ctx" => "normal",
     }
   end

@@ -81,8 +81,11 @@ class VisitorTokenTest < ActiveSupport::TestCase
   def setup
     ensure_visitor_reference_records!
     ensure_visitor_token_reference_records!
-    @visitor = Visitor.create!(id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000))
-    @token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    @visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      id: 1_000_000_000_000 + SecureRandom.random_number(1_000_000_000),
+    )
+    @token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
   end
 
   private
@@ -106,6 +109,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
     VisitorSignUpFlowStatus.ensure_defaults!
     VisitorSignUpFlowCleanupStatus.ensure_defaults!
     flow = VisitorSignUpFlow.create!(
+      auth_admission_binding: SignUpAdmissionTestFactory.binding_for!(VisitorSignUpFlow),
       token: @token,
       status_id: VisitorSignUpFlowStatus::CANCELLED,
       step: "cancelled",
@@ -138,7 +142,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
   end
 
   test "device session rejects a current token owned by another session" do
-    other_token = VisitorToken.create!(visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    other_token = VisitorToken.create!(authentication_epoch: 0, visitor: @visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
     session = @token.device_session
 
     error =
@@ -180,8 +184,8 @@ class VisitorTokenTest < ActiveSupport::TestCase
   end
 
   test "token device session must belong to the same visitor" do
-    other_visitor = Visitor.create!
-    other_token = VisitorToken.create!(visitor: other_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
+    other_visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
+    other_token = VisitorToken.create!(authentication_epoch: 0, visitor: other_visitor, visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB)
 
     error =
       assert_raises(ActiveRecord::InvalidForeignKey) do
@@ -240,7 +244,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
   end
 
   test "enforces maximum concurrent sessions per visitor" do
-    visitor = Visitor.create!
+    visitor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     token_status = VisitorTokenStatus.find(VisitorTokenStatus::ACTIVE)
     token_kind = VisitorTokenKind.find(VisitorTokenKind::BROWSER_WEB)
     binding_method = VisitorTokenBindingMethod.find(VisitorTokenBindingMethod::NOTHING)
@@ -248,6 +252,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
 
     VisitorToken::MAX_TOTAL_SESSIONS_PER_VISITOR.times do
       VisitorToken.create!(
+        authentication_epoch: 0,
         visitor: visitor,
         visitor_token_status: token_status,
         visitor_token_kind: token_kind,
@@ -257,6 +262,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
     end
 
     extra_token = VisitorToken.new(
+      authentication_epoch: 0,
       visitor: visitor,
       visitor_token_status: token_status,
       visitor_token_kind: token_kind,
@@ -284,6 +290,7 @@ class VisitorTokenTest < ActiveSupport::TestCase
   test "rotated replacement preserves forced logout window" do
     freeze_time do
       token = VisitorToken.create!(
+        authentication_epoch: 0,
         visitor: @visitor,
         visitor_token_kind_id: VisitorTokenKind::BROWSER_WEB,
         discard_at: 12.hours.from_now,
@@ -348,7 +355,6 @@ class VisitorTokenTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -373,7 +379,10 @@ class VisitorTokenTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -620,7 +629,6 @@ class VisitorTokenTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -636,7 +644,10 @@ class VisitorTokenTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

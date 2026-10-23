@@ -11,8 +11,11 @@ class ContactRegistrationRequirementTest < ActiveSupport::TestCase
     [Visitor, VisitorToken, VisitorTelephone, VisitorTelephonePolicy, :visitor_id, "com", "settings_telephone"],
   ].each do |owner_model, root_model, contact_model, policy_model, owner_key, surface, scope|
     test "#{surface} #{scope} policy owns the complete registration requirement and refuses foreign bindings" do
-      owner = owner_model.create!(status_id: (surface == "app") ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE)
-      root = root_model.create!(owner_key => owner.id, :discard_at => 1.day.from_now)
+      owner = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: (surface == "app") ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+      )
+      root = root_model.create!(:authentication_epoch => 0, owner_key => owner.id, :discard_at => 1.day.from_now)
       root.rotate_refresh_token!
       contact = contact_model.new(owner_key => owner.id)
       policy = policy_model.new(contact, user: owner)
@@ -35,8 +38,14 @@ class ContactRegistrationRequirementTest < ActiveSupport::TestCase
       assert_nil requirement.resource_ref
       assert_nil requirement.tenant_ref
 
-      other = owner_model.create!(status_id: (surface == "app") ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE)
-      foreign_root = root_model.create!(owner_key => other.id, :discard_at => 1.day.from_now)
+      other = owner_model.create!(
+        security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: (surface == "app") ? ClientStatus::ACTIVE : VisitorStatus::ACTIVE,
+      )
+      foreign_root = root_model.create!(
+        :authentication_epoch => 0, owner_key => other.id,
+        :discard_at => 1.day.from_now,
+      )
 
       [nil, foreign_root, Object.new].each do |invalid_root|
         assert_raises(ArgumentError) { policy.credential_registration_requirement(token: invalid_root) }

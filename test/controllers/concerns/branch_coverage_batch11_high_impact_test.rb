@@ -24,13 +24,13 @@ class BranchCoverageBatch11HighImpactTest < ActionDispatch::IntegrationTest
     patch "/verification/emails/missing", params: { ri: "jp", verification: { code: "012345" } }
 
     assert_response :bad_request
-    actor = Visitor.create!(status_id: VisitorStatus::ACTIVE)
+    actor = Visitor.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::ACTIVE)
     email = actor.visitor_emails.create!(
       address: "email-step-up-#{SecureRandom.hex(4)}@example.com",
       visitor_email_status_id: VisitorEmailStatus::VERIFIED,
     )
     email.finalize_binding!
-    token = VisitorToken.create!(visitor: actor)
+    token = VisitorToken.create!(authentication_epoch: 0, visitor: actor)
     issuance =
       begin
         admission_issuance = BaseStepUpAdmissionIssuer.call!(

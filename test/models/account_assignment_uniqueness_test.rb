@@ -4,8 +4,14 @@ require "test_helper"
 
 class PersonaAssignmentUniquenessTest < ActiveSupport::TestCase
   test "PersonaAssignment preserves distinct pairs revoked history and raw DB refusal" do
-    first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
+    second_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     ClientIdentityState.ensure_defaults!
     first_identity = ClientIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -47,8 +53,14 @@ class PersonaAssignmentUniquenessTest < ActiveSupport::TestCase
   end
 
   test "PersonaAssignment rejects only an active duplicate pair" do
-    first_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
-    second_principal = Client.create!(status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER)
+    first_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
+    second_principal = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: ClientStatus::ACTIVE, visibility_id: ClientVisibility::USER,
+    )
     ClientIdentityState.ensure_defaults!
     first_identity = ClientIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -79,8 +91,14 @@ end
 
 class IndividualAssignmentUniquenessTest < ActiveSupport::TestCase
   test "IndividualAssignment preserves distinct pairs revoked history and raw DB refusal" do
-    first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    first_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
+    second_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorIdentityState.ensure_defaults!
     first_identity = VisitorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -125,8 +143,14 @@ class IndividualAssignmentUniquenessTest < ActiveSupport::TestCase
   end
 
   test "IndividualAssignment rejects only an active duplicate pair" do
-    first_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
-    second_principal = Visitor.create!(status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR)
+    first_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
+    second_principal = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL,
+      status_id: VisitorStatus::ACTIVE, visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorIdentityState.ensure_defaults!
     first_identity = VisitorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -157,8 +181,14 @@ end
 
 class AgentAssignmentUniquenessTest < ActiveSupport::TestCase
   test "AgentAssignment preserves distinct pairs revoked history and raw DB refusal" do
-    first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    first_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    second_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     OperatorIdentityState.ensure_defaults!
     first_identity = OperatorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",
@@ -200,8 +230,14 @@ class AgentAssignmentUniquenessTest < ActiveSupport::TestCase
   end
 
   test "AgentAssignment rejects only an active duplicate pair" do
-    first_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
-    second_principal = Operator.create!(status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF)
+    first_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
+    second_principal = Operator.create!(
+      security_mode_id: SecurityModeConfigurable::ADVANCED,
+      status_id: OperatorStatus::ACTIVE, visibility_id: OperatorVisibility::STAFF,
+    )
     OperatorIdentityState.ensure_defaults!
     first_identity = OperatorIdentity.create!(
       issuer: "https://grants.example.test", subject: "first",

@@ -8,7 +8,7 @@ class PasskeyRegistrationOperationConcurrencyTest < ActiveSupport::TestCase
   self.use_transactional_tests = false
 
   setup do
-    @client = Client.create!
+    @client = Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL)
     9.times do |index|
       @client.client_passkeys.create!(webauthn_id: SecureRandom.uuid, public_key: "existing-key-#{index}")
     end

@@ -15,7 +15,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "new redirects to the confirmation page without mutation" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.update!(last_used_at: 10.minutes.ago)
     last_used_at = token.reload.last_used_at
 
@@ -28,7 +28,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "edit sign out renders confirmation without mutation" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     token.update!(last_used_at: 10.minutes.ago)
     last_used_at = token.reload.last_used_at
 
@@ -48,7 +48,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "edit does not rotate a refresh token when the access cookie is absent" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     refresh_plain = token.rotate_refresh_token!
     refresh_digest = token.refresh_token_digest
     cookies[AuthenticationBase::REFRESH_COOKIE_KEY] = refresh_plain
@@ -62,7 +62,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "receiver-local logout revokes authority before one-shot completion and Home" do
-    token = ClientToken.create!(user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
+    token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     https!
     rp_headers = session_headers(token)
     rp_headers.fetch("Cookie").split("; ").each do |pair|
@@ -174,6 +174,7 @@ class Base::App::SignOutsControllerTest < ActionDispatch::IntegrationTest
         unless @base_rp_fixture_credentials[fixture_key]
           fixture_now = OpAppGrant.database_now
           fixture_rp = OpAppGrant.create!(
+            authentication_epoch: 0,
             client_token: fixture_root, oidc_client_id: fixture_client.client_id,
             oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid,
             oidc_nonce: SecureRandom.hex(16), oidc_auth_time: fixture_now,
@@ -232,7 +233,6 @@ class Base::App::SignOutsControllerTest
   def ensure_user_reference_records!
     ClientStatus.find_or_create_by!(id: ClientStatus::NOTHING)
     ClientVisibility.find_or_create_by!(id: ClientVisibility::USER)
-    ClientMfaLevel.find_or_create_by!(id: ClientMfaLevel::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::NOTHING)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::ACTIVE)
     ClientMfaStatus.find_or_create_by!(id: ClientMfaStatus::UNCONFIGURED)
@@ -264,7 +264,10 @@ class Base::App::SignOutsControllerTest
 
   def create_verified_user_with_email(email_address: "user-#{SecureRandom.hex(4)}@example.com")
     ensure_user_reference_records!
-    user = Client.create!(status_id: ClientStatus::NOTHING, visibility_id: ClientVisibility::USER)
+    user = Client.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
+      visibility_id: ClientVisibility::USER,
+    )
     insert_verified_user_email!(user_id: user.id, address: email_address)
     user.reload
   end
@@ -518,7 +521,6 @@ class Base::App::SignOutsControllerTest
   def ensure_visitor_reference_records!
     VisitorStatus.find_or_create_by!(id: VisitorStatus::NOTHING)
     VisitorVisibility.find_or_create_by!(id: VisitorVisibility::VISITOR)
-    VisitorMfaLevel.find_or_create_by!(id: VisitorMfaLevel::NOTHING)
     VisitorMfaStatus.find_or_create_by!(id: VisitorMfaStatus::UNCONFIGURED)
     VisitorEmailStatus.find_or_create_by!(id: VisitorEmailStatus::VERIFIED)
     VisitorTelephoneStatus.find_or_create_by!(id: VisitorTelephoneStatus::VERIFIED)
@@ -527,7 +529,10 @@ class Base::App::SignOutsControllerTest
 
   def create_verified_visitor_with_email(email_address: "visitor-#{SecureRandom.hex(4)}@example.com")
     ensure_visitor_reference_records!
-    visitor = Visitor.create!(status_id: VisitorStatus::NOTHING, visibility_id: VisitorVisibility::VISITOR)
+    visitor = Visitor.create!(
+      security_mode_id: SecurityModeConfigurable::NORMAL, status_id: VisitorStatus::NOTHING,
+      visibility_id: VisitorVisibility::VISITOR,
+    )
     VisitorEmail.create!(
       visitor_id: visitor.id, address: email_address,
       address_digest: IdentifierBlindIndex.bidx_for_email(email_address, realm: :com),

@@ -10,7 +10,7 @@ class Base::App::Identity::Mfa::ResetsControllerTest < ActionDispatch::Integrati
     @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     host! @host
     @client = clients(:one)
-    @client.update!(mfa_level_id: ClientMfaLevel::FULL, mfa_level_enabled: true)
+    @client.update!(security_mode_id: SecurityModeConfigurable::ADVANCED)
     @headers =
       begin
         rp_headers = as_user_headers(@client, host: @host)
@@ -41,6 +41,7 @@ class Base::App::Identity::Mfa::ResetsControllerTest < ActionDispatch::Integrati
             rp_token.rotate_refresh_token! unless rp_token.device_session_record.current_refresh_token_id
             rp_now = Time.current
             rp_session = OpAppGrant.create!(
+              authentication_epoch: 0,
               client_token: rp_token, oidc_client_id: rp_client.client_id, oidc_scope: "openid profile",
               oidc_jti: SecureRandom.uuid, oidc_nonce: SecureRandom.hex(16), oidc_auth_time: rp_now,
               refresh_token_expires_at: rp_now + 10.minutes,

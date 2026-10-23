@@ -9,7 +9,7 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
 
   test "TOTP ceremony transaction factory issues separate NanoID references" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     generated = ["a" * 21, "b" * 21]
 
     transaction =
@@ -26,7 +26,7 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
 
   test "enrollment retries a child transaction reference collision in a savepoint" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
@@ -65,7 +65,7 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
 
   test "pending encrypted enrollment retains its exact permission and never creates a credential" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "credential_registration",
       required_scope: "settings_totp", step_up_required: false, allowed_methods: ["totp"],
@@ -107,7 +107,7 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
 
   test "enrollment accepts expiry one microsecond after the database clock and rejects at or before it" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     now = ClientStepUpCeremonyTransaction.database_now + 1.second
     [-1, 0, 1].each do |microseconds|
       transaction = ClientStepUpCeremonyTransaction.create_transaction!(
@@ -136,7 +136,7 @@ class IdentityTotpEnrollmentIssuerTest < ActiveSupport::TestCase
 
   test "ordinary step-up permission and a different root session cannot start enrollment" do
     actor = clients(:one)
-    token = ClientToken.create!(user: actor)
+    token = ClientToken.create!(authentication_epoch: 0, user: actor)
     transaction = ClientStepUpCeremonyTransaction.create_transaction!(
       actor_ref: actor.public_id, session_ref: token.public_id, purpose: "step_up",
       required_scope: "settings_totp", required_aal: "none", allowed_methods: ["totp"],

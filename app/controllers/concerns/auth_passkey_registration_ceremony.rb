@@ -31,7 +31,7 @@ module AuthPasskeyRegistrationCeremony
     options = Webauthn::RegistrationVerifier.options_for(
       config: config,
       user_id: @step_up_ceremony_actor.webauthn_user_handle,
-      user_name: passkey_resource_display_name(@step_up_ceremony_actor),
+      user_name: webauthn_surface.account_label,
       exclude_ids: webauthn_credential_ids(registration_passkey_scope),
       surface: webauthn_surface.key,
     )

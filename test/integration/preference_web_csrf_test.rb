@@ -290,6 +290,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     user = Client.first
     session_record = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -306,6 +307,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     registered_rp = OidcClientRegistry.find!("base-app-ww")
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: session_record, oidc_client_id: registered_rp.client_id,
       oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,
@@ -401,6 +403,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     user = Client.first
     session_record = ClientToken.create!(
+      authentication_epoch: 0,
       user: user,
       user_token_status_id: ClientTokenStatus::ACTIVE,
       user_token_kind_id: ClientTokenKind::BROWSER_WEB,
@@ -417,6 +420,7 @@ class PreferenceWebCsrfTest < ActionDispatch::IntegrationTest
 
     registered_rp = OidcClientRegistry.find!("base-app-ww")
     rp_session = OpAppGrant.create!(
+      authentication_epoch: 0,
       client_token: session_record, oidc_client_id: registered_rp.client_id,
       oidc_scope: "openid profile", oidc_jti: SecureRandom.uuid, oidc_auth_time: Time.current,
       refresh_token_expires_at: 10.minutes.from_now,
