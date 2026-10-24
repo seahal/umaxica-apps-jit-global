@@ -18,8 +18,7 @@ module SignInPhaseBindingControllerSupport
     return true if current_flow.nil? && binding.nil?
 
     unless binding
-      log_sign_in_phase_binding_refusal("missing_binding", flow: current_flow)
-      return refuse_sign_in_phase_request!
+      return refuse_sign_in_phase_request!(reason_code: "missing_binding")
     end
 
     return refuse_sign_in_binding!("surface_mismatch", current_flow) unless
@@ -42,8 +41,8 @@ module SignInPhaseBindingControllerSupport
   end
 
   def refuse_sign_in_binding!(reason_code, flow)
-    log_sign_in_phase_binding_refusal(reason_code, flow: flow)
-    refuse_sign_in_phase_request!
+    _ = flow
+    refuse_sign_in_phase_request!(reason_code:)
   end
 
   def sign_in_binding_current?(flow, binding)
@@ -65,7 +64,7 @@ module SignInPhaseBindingControllerSupport
       requested_phase: binding.phase,
       request_id: request.request_id,
     )
-    refuse_sign_in_phase_request!
+    refuse_sign_in_phase_request!(reason_code: sign_in_binding_reason_code(flow, binding))
   end
 
   def sign_in_binding_reason_code(flow, binding)
@@ -81,21 +80,9 @@ module SignInPhaseBindingControllerSupport
     "phase_violation"
   end
 
-  def log_sign_in_phase_binding_refusal(reason_code, flow: nil)
-    Rails.logger.info(
-      JitLogEvent.format(
-        "auth.sign_in.phase_binding.refused",
-        surface: sign_in_phase_binding_surface,
-        flow_public_id: flow&.public_id,
-        reason_code: reason_code,
-        request_id: request.request_id,
-      ),
-    )
-  end
-
-  def refuse_sign_in_phase_request!
+  def refuse_sign_in_phase_request!(reason_code: "wrong_binding")
     response.headers["Cache-Control"] = "private, no-store"
-    render plain: I18n.t("errors.messages.phase_violation_refused", locale: :ja), status: :conflict
+    refuse_sign_in_path!(reason_code)
     false
   end
 

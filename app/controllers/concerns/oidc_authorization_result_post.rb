@@ -1,59 +1,17 @@
 # typed: false
 # frozen_string_literal: true
 
-# Auth navigates to the matching Base host with a non-authorizing result lookup.
-# Base renders its own confirmation form; only a receiver-local POST with standard
-# Rails forgery protection accepts the stored evidence. Durable transaction binding
-# and finalization state live in PostgreSQL.
-# Neither an Auth Origin nor a null Origin substitutes for Base's CSRF protection.
+# Auth navigates to the matching Visa host with a non-authorizing result lookup.
+# Continuation resources call the private jobs below after their own GET and browser
+# binding checks. Durable transaction binding and finalization state live in PostgreSQL.
+# Neither an Auth Origin nor a null Origin substitutes for the continuation contract.
 module OidcAuthorizationResultPost
   extend ActiveSupport::Concern
 
-  public
-
-  def render_oidc_result_continuation!
-    apply_base_browser_continuation_headers!
-    return render_oidc_exit_continuation! if params[:cancellation_ref].present? || params[:switch_handoff].present?
-
-    result_reference = params[:result_ref]
-    transaction_reference = params[:transaction_ref]
-    unless result_reference.is_a?(String) &&
-        result_reference.match?(AuthAdmissionBinding::REFERENCE_PATTERN) &&
-        transaction_reference.is_a?(String) && transaction_reference.present?
-      raise ArgumentError, "invalid authorization result reference"
-    end
-
-    transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-      surface: oidc_result_surface, transaction_id: transaction_reference,
-    )
-    validate_base_result_browser_binding!(transaction)
-
-    render "base/shared/result_continuation", layout: false,
-                                              locals: { action_url: request.path,
-                                                        result_ref: result_reference,
-                                                        transaction_ref: transaction_reference,
-                                                        ri: params[:ri], }
-  end
-
-  # FIXME: POST /oauth/authorize dispatches four unrelated operations on parameter presence:
-  # ceremony start, Cancel, Switch and Auth-to-Base result completion. None of them is part of the
-  # OIDC authorization endpoint. Give each its own resource, and remove the intermediate
-  # "Continue" POST so the browser no longer needs a click or JavaScript to proceed.
   def create
-    if params[:ceremony_action].present?
-      return start_authorization_from_post!
-    end
+    raise ArgumentError, "authorization start is required" unless params[:ceremony_action].present?
 
-    return cancel_authorization_from_post! if params[:cancellation_ref].present?
-    return switch_authorization_from_post! if params[:switch_handoff].present?
-
-    if params[:result_ref].present? || params[:transaction_ref].present?
-      return complete_authorization_from_post!
-    end
-
-    raise ArgumentError, "result reference is required" if params[:result].present?
-
-    raise ArgumentError, "authorization start is required"
+    start_authorization_from_post!
   rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound,
          OidcClientRegistry::ClientNotFound, OidcClientRegistry::InvalidRedirectUri,
          FlowInvalidTransition, ArgumentError
@@ -106,39 +64,13 @@ module OidcAuthorizationResultPost
     resume_authorization!(transaction, result_generation: payload.fetch("result_generation"))
   end
 
-  # D09/D06: Auth's first-page Cancel or Switch arrives as a cross-site GET; Base commits it only
-  # through this same-origin POST from the browser that started the parent authorization.
-  #
-  # FIXME: Cancel and Switch fail here. This page is served with `Referrer-Policy: no-referrer`
-  # (apply_base_browser_continuation_headers!) after a cross-site Jump redirect, and its form POST
-  # arrives with `Origin: null`, which the Rails origin check refuses with 422 (observed on APP and
-  # COM in development on 2026-10-21). The ceremony binding confirmation page uses the same headers
-  # and its POST succeeds; the difference is not yet explained. Fix by removing this intermediate
-  # POST, not by relaxing `forgery_protection_origin_check` or accepting a null Origin.
-  def render_oidc_exit_continuation!
-    fields =
-      if params[:switch_handoff].present?
-        { "switch_handoff" => params.expect(:switch_handoff) }
-      else
-        transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
-          surface: oidc_result_surface, transaction_id: params.expect(:transaction_ref),
-        )
-        validate_base_result_browser_binding!(transaction)
-        { "cancellation_ref" => params.expect(:cancellation_ref), "transaction_ref" => transaction.transaction_id }
-      end
-    region = RequestContextContract.normalize_region(params[:ri])
-    fields = fields.merge("ri" => region) if region.present?
-    render "base/shared/authorization_exit_continuation", layout: false,
-                                                          locals: { action_url: request.path, fields: fields }
-  end
-
   def cancel_authorization_from_post!
     raise ArgumentError unless params[:cancellation_ref].is_a?(String) && params[:transaction_ref].is_a?(String)
 
     transaction = OidcAuthorizationTransactionCoordinator.find_by_transaction_id!(
       surface: oidc_result_surface, transaction_id: params[:transaction_ref],
     )
-    validate_base_result_browser_binding!(transaction)
+    validate_base_result_browser_binding!(transaction, cancellation: true)
     validate_authorization_request!(transaction.authorize_params)
     handoff = transaction.cancellation_handoff_ciphertext
     raise ArgumentError, "cancellation reference mismatch" unless
@@ -167,17 +99,6 @@ module OidcAuthorizationResultPost
       transaction:, base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token, target:,
     )
     redirect_to_jump_url(authorization_switch_url(target:, entry_ref: handoff.reference), status: :see_other)
-  end
-
-  def render_authorization_ceremony_start!
-    # The region is display context, not an authorization input, but the start POST builds the
-    # Auth entry URL from it; dropping it here sends the ceremony to the credential gateway
-    # region-less.
-    region = RequestContextContract.normalize_region(params[:ri])
-    fields = authorize_params.to_h
-    fields = fields.merge("ri" => region) if region.present?
-    render "base/shared/authorization_ceremony_start", layout: false,
-                                                       locals: { action_url: request.path, fields: fields }
   end
 
   def current_resource_for_oidc_authorization

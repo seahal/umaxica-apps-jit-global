@@ -340,6 +340,35 @@ module AuthenticationRedirects
 
   alias dashboard_return_path? welcome_return_path?
 
+  # Base is the RP after OIDC completion. It may follow only a path-target token issued for this
+  # browser session and this RP surface; the OP's Welcome gate is deliberately not consulted here.
+  # A sign-in destination is refused as well so the RP cannot loop back into its entry sequence.
+  def rp_welcome_return_path(token, surface:)
+    session_nonce = session[:authentication_pt_nonce].to_s
+    return if session_nonce.blank?
+
+    payload = verified_signed_target_payload(
+      token,
+      purpose: PATH_TARGET_TOKEN_PURPOSE,
+      salt: PATH_TARGET_TOKEN_SALT,
+      expected_flow: PATH_TARGET_TOKEN_FLOW,
+      expected_surface: surface.to_s,
+      session_nonce: session_nonce,
+    )
+    return if payload.blank?
+
+    path = safe_internal_path(signed_target_internal_path(payload["pt"]))
+    return if path.blank?
+
+    destination = URI.parse(path).path
+    return if destination == "/welcome" || destination.start_with?("/welcomes/")
+    return if destination == "/sign" || destination.start_with?("/sign/")
+
+    path
+  rescue URI::InvalidURIError
+    nil
+  end
+
   def issue_authentication_path_target_token(return_to)
     destination = signed_target_internal_path(return_to)
     if destination.blank?
@@ -419,5 +448,5 @@ module AuthenticationRedirects
     )
   end
 
-  private :verify_authentication_pt_path
+  private :verify_authentication_pt_path, :rp_welcome_return_path
 end

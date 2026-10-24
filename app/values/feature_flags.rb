@@ -53,16 +53,28 @@ module FeatureFlags
         effect: "Stops the irreversible deletes and anonymization in RetentionPurgeJob.",
       ),
       Flag.new(
-        name: :sign_up_suspended_app, polarity: :suspension,
-        effect: "Closes new registration on the app surface. Sign-in is unaffected.",
+        name: :sign_in_available_app, polarity: :availability,
+        effect: "Permits new sign-in ceremonies on the app surface.",
       ),
       Flag.new(
-        name: :sign_up_suspended_com, polarity: :suspension,
-        effect: "Closes new registration on the com surface. Sign-in is unaffected.",
+        name: :sign_up_available_app, polarity: :availability,
+        effect: "Permits new sign-up ceremonies on the app surface.",
       ),
       Flag.new(
-        name: :sign_up_suspended_org, polarity: :suspension,
-        effect: "Closes new registration on the org surface. Sign-in is unaffected.",
+        name: :sign_in_available_com, polarity: :availability,
+        effect: "Permits new sign-in ceremonies on the com surface.",
+      ),
+      Flag.new(
+        name: :sign_up_available_com, polarity: :availability,
+        effect: "Permits new sign-up ceremonies on the com surface.",
+      ),
+      Flag.new(
+        name: :sign_in_available_org, polarity: :availability,
+        effect: "Permits new sign-in ceremonies on the org surface.",
+      ),
+      Flag.new(
+        name: :sign_up_available_org, polarity: :availability,
+        effect: "Permits new sign-up ceremonies on the org surface.",
       ),
       Flag.new(
         name: :turnstile_degraded_mode, polarity: :suspension,

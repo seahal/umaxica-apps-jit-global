@@ -42,11 +42,12 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
     assert_empty owners - RuntimeRole::ALL
   end
 
-  test "Base identity, credential and Step-Up pages belong to the realm OP" do
-    assert_equal "op-base-app", RuntimeRole.route_owner("base/app/identity/birthdates")
-    assert_equal "op-base-com", RuntimeRole.route_owner("base/com/verification/setups")
-    assert_equal "op-base-org", RuntimeRole.route_owner("base/org/identity/secret_credentials")
-    assert_equal "op-base-org", RuntimeRole.route_owner("base/org/oauth/tokens")
+  test "Base identity and credential pages belong to the realm RP" do
+    assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/identity/birthdates")
+    assert_equal "rp-base-com-ww", RuntimeRole.route_owner("base/com/verification/setups")
+    assert_equal "rp-base-org-ww", RuntimeRole.route_owner("base/org/identity/secret_credentials")
+    assert_equal "op-base-app", RuntimeRole.route_owner("base/app/ceremony_binding_confirmations")
+    assert_equal "op-base-org", RuntimeRole.route_owner("visa/org/oauth/tokens")
   end
 
   test "receipt recovery logout completion and root credential endpoints are OP owned in every realm" do
@@ -85,7 +86,7 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
 
   test "a prefix matches whole path segments only" do
     # `identities` is its own entry; `identityx` shares the characters of `identity` but no segment.
-    assert_equal "op-base-app", RuntimeRole.route_owner("base/app/identities")
+    assert_equal "rp-base-app-ww", RuntimeRole.route_owner("base/app/identities")
     assert_raises(RuntimeRole::UnownedRoute) { RuntimeRole.route_owner("base/app/identityx") }
   end
 
@@ -100,7 +101,8 @@ class RuntimeRoleRouteOwnershipTest < ActiveSupport::TestCase
     assert RuntimeRole.serves?("core/app/roots", "rp-core-app-jp")
     assert RuntimeRole.serves?("base/app/healths", "rp-core-app-jp")
     assert_not RuntimeRole.serves?("core/com/roots", "rp-core-app-jp")
-    assert_not RuntimeRole.serves?("base/app/identity/birthdates", "rp-base-app-ww")
+    assert RuntimeRole.serves?("base/app/identity/birthdates", "rp-base-app-ww")
+    assert_not RuntimeRole.serves?("base/app/ceremony_binding_confirmations", "rp-base-app-ww")
     assert_not RuntimeRole.serves?("base/app/avatars", "op-base-app")
     assert_not RuntimeRole.serves?("unknown/app/roots", "op-base-app")
   end

@@ -38,19 +38,19 @@ and `ActionController::API`) answers `404` with no body and no cookie before any
 runs. An unclassified controller raises `RuntimeRole::UnownedRoute` and is refused, so a new route
 needs an explicit owner. The `shared` role serves every controller.
 
-- Base identity, credential, Step-Up verification, withdrawal, recovery, selector, welcome and OP
-  protocol paths belong to the realm OP role (`op-base-<realm>`) on the shared public host. They
-  read the canonical actor, which only the OP may read (user decision 2026-10-17).
-- Base Self-RP entry, callback, Refresh, logout receivers and relay pages belong to
+- Visa identity, credential, Step-Up verification, withdrawal, recovery, selector, welcome and OP
+  protocol paths belong to the realm OP role (`op-base-<realm>`) on the Visa public host. They read
+  the canonical actor, which only the OP may read (user decision 2026-10-17).
+- Base Self-RP entry, callback, RP credential refresh, logout receivers and relay pages belong to
   `rp-base-<realm>-ww`; owner APIs belong to their domain or OP role.
 - An `rp-*` process authenticates only from its own cell: the Access JWT verified against the OP
   JWKS plus the opaque `rp-session` cookie naming a live local session bound to the token's
   `sid`/`sub`/epoch (`RpCellLocalSession`, `RpRequestAuthenticator`). Callback and Refresh write the
   cell store (`RpCallbackCommitter`, `RpRefreshCommitter`). Base cells read the selected
-  account/organization from the OP (`GET /api/v0/identity/selection`).
-Core session API (`GET /api/v0/session`) in a cell process: the actor is the local principal, so
-`actor.id` is the cell principal's public ID and `display_name` falls back to it. This external
-contract change was approved by the user on 2026-10-17.
+  account/organization from the OP (`GET /api/v0/identity/selection`). Core session API
+  (`GET /api/v0/session`) in a cell process: the actor is the local principal, so `actor.id` is the
+  cell principal's public ID and `display_name` falls back to it. This external contract change was
+  approved by the user on 2026-10-17.
 
 ## Private keys held by an RP cell process (R5-WU18A finding)
 

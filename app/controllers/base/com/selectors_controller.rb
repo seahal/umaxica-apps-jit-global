@@ -4,12 +4,8 @@
 module Base
   module Com
     class SelectorsController < Base::Com::PreAccessController
-      include ::SignInPhaseBindingControllerSupport
-
       AUTHENTICATION_MODE = :private
       declare_authentication_mode! :private
-
-      before_action -> { enforce_sign_in_phase_binding!(expected_phase: "SELECTOR_PENDING") }
 
       def show
         authorize!(current_visitor, to: :show?)

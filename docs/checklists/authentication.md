@@ -5,11 +5,13 @@ surface-specific. These are durable requirements, not current verification resul
 
 - AUTH-1: State-changing browser requests retain Rails CSRF, Origin and Fetch Metadata protection;
   ceremony binding adds protection rather than replacing it. Scoped exceptions: the Sign-in path
-  continuation GETs of `adr/sign-in-path-continuation-protocol.md` (six conditions) and the
-  Back-Channel Logout receiver (`ActionController::API`, Logout Token signature only).
+  continuation GETs of `adr/sign-in-path-continuation-protocol.md` (the six D-100/D-101 conditions)
+  and the Back-Channel Logout receiver (`ActionController::API`, Logout Token signature only).
 - AUTH-2: A browser-bound ceremony refuses stale, mismatched, cross-browser and replayed admission.
-  A continuation GET consumes only after the host-only browser binding is verified, and a
-  same-browser repeat within issuance + 10 s returns the same next redirect without a second effect.
+  A Design D continuation GET requires Fetch Metadata navigation/document, verifies the host-only
+  browser binding before touching the one-time record, consumes atomically, returns the same next
+  redirect for a same-browser repeat within issuance + 10 s, sends `no-store` and `no-referrer`, and
+  leaves a clean final URL. HEAD and all other non-navigation requests are refused.
 - AUTH-3: Missing or contradictory authentication evidence produces an explicit refusal, without
   inferring another actor, credential, browser or assurance level.
 - AUTH-4: Auth supplies ceremony continuity, not an independent general login session or authority
@@ -82,29 +84,31 @@ surface-specific. These are durable requirements, not current verification resul
   result receipt whenever the sign-in or sign-up relay components change. See
   [Base/Auth authority](../../adr/base-auth-ceremony-and-seven-rp-boundary.md).
 
-- AUTH-20: APP/COM email and telephone sign-up entry requires explicit policy consent (`"1"` or
-  JSON `true`); telephone entry also requires explicit MFA-use consent. Missing, null, empty,
-  unchecked and unsupported consent values refuse before creating registration or OTP artifacts.
+- AUTH-20: APP/COM email and telephone sign-up entry requires explicit policy consent (`"1"` or JSON
+  `true`); telephone entry also requires explicit MFA-use consent. Missing, null, empty, unchecked
+  and unsupported consent values refuse before creating registration or OTP artifacts.
 - AUTH-21: APP/COM contact-entry replacement validates Turnstile and submitted inputs before
   superseding the browser's active sign-up. A rejected replacement preserves the flow, locator,
   pending contact and principal and queues no OTP. An accepted replacement retains the existing
-  HALTED and cleanup semantics. See [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement).
+  HALTED and cleanup semantics. See
+  [contact entry](../security/sign-up-sequence.md#contact-entry-validation-and-replacement).
 
 - AUTH-22: Protected CAPTCHA entry points reject missing and failed tokens server-side. Enabling
-  outage degradation still refuses missing/empty tokens, failed challenges and missing secrets;
-  only explicitly upstream-unavailable results may pass under the incident flag. See
+  outage degradation still refuses missing/empty tokens, failed challenges and missing secrets; only
+  explicitly upstream-unavailable results may pass under the incident flag. See
   [Turnstile](../security/turnstile.md).
 - AUTH-23: APP/COM email sign-in resend requires confirmed admission, original browser/surface
-  binding and an unexpired authenticated state. Cross-browser, expired and retargeted states
-  cannot dispatch; destination cooldown and verification budgets remain effective. This bound
-  continuation needs no fresh CAPTCHA. See
+  binding and an unexpired authenticated state. Cross-browser, expired and retargeted states cannot
+  dispatch; destination cooldown and verification budgets remain effective. This bound continuation
+  needs no fresh CAPTCHA. See
   [resend exception](../security/turnstile.md#email-sign-in-resend-exception).
 - AUTH-24: APP/COM unbound email candidates cannot select an actor or receive login/recovery OTP,
-  even if their email status says VERIFIED. Rejected attempts preserve the candidate and issue
-  no login credentials. See [binding contract](../security/identity-resolution-and-credential-binding.md).
-- AUTH-25: APP/COM security-lock recovery requires the existing verified effective email OTP
-  proof and an eligible account lock. Recovery authority is scoped to lock recovery and does not
-  itself issue a login session or reset a password. See
+  even if their email status says VERIFIED. Rejected attempts preserve the candidate and issue no
+  login credentials. See
+  [binding contract](../security/identity-resolution-and-credential-binding.md).
+- AUTH-25: APP/COM security-lock recovery requires the existing verified effective email OTP proof
+  and an eligible account lock. Recovery authority is scoped to lock recovery and does not itself
+  issue a login session or reset a password. See
   [recovery scope](../security/credential-gateway.md#current-security-lock-recovery-scope).
 
 - AUTH-26: First-party Auth/Preference access and OIDC token verification applies the fixed
@@ -116,10 +120,10 @@ surface-specific. These are durable requirements, not current verification resul
 - AUTH-27: Known and unknown Secret identifiers use the same normalized identifier attempt
   partition. Distributing requests across IPs never reveals lookup success through the account
   attempt limit. Independent IP limits remain enforced.
-- AUTH-28: Org Emergency options disclose no real credential descriptors, including across
-  repeated requests. Challenge cookies use fixed-length selected-Operator binding or a
-  non-authenticating sentinel. Missing, disabled, wrong-owner and invalid-signature Passkey
-  assertions share the generic credential refusal and verification response floor.
+- AUTH-28: Org Emergency options disclose no real credential descriptors, including across repeated
+  requests. Challenge cookies use fixed-length selected-Operator binding or a non-authenticating
+  sentinel. Missing, disabled, wrong-owner and invalid-signature Passkey assertions share the
+  generic credential refusal and verification response floor.
 - AUTH-29: APP/COM withdrawal and security-lock recovery keep real/dummy session payload lengths
   equal, cover complete OTP issuance with the response floor, and never authenticate dummy state.
 - AUTH-30: Closed Org invitation provisioning refuses every invitation state before code lookup,
@@ -128,8 +132,8 @@ surface-specific. These are durable requirements, not current verification resul
 
 - AUTH-31: APP/COM/ORG authorization-code coordination preserves the request validator's protocol
   error classification: an unsupported response type is `unsupported_response_type`, an inactive
-  resource is `access_denied`, and a disallowed scope is `invalid_scope`. Refused requests return
-  no success redirect; missing required parameters remain `invalid_request`. See
+  resource is `access_denied`, and a disallowed scope is `invalid_scope`. Refused requests return no
+  success redirect; missing required parameters remain `invalid_request`. See
   [authorization request profile](../../adr/oidc-authorization-request-profile.md).
 
 Sources:

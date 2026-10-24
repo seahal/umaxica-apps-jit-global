@@ -13,15 +13,15 @@ transport role, not the logical credential kind.
 | Preference access   | `__Host-preference_access`  | `preference_access`    |
 | Preference refresh  | `__Host-preference_refresh` | `preference_refresh`   |
 | Preference DBSC     | `__Host-preference_dbsc`    | `preference_dbsc`      |
-| RP access            | `__Host-rp-access`          | `rp-access`            |
-| RP refresh           | `__Host-rp-refresh`         | `rp-refresh`           |
+| RP access           | `__Host-rp-access`          | `rp-access`            |
+| RP refresh          | `__Host-rp-refresh`         | `rp-refresh`           |
 
 New credential cookie writes are host-only. They use `Path=/`; secure contexts use `Secure` and the
 `__Host-` prefix. They never carry a `Domain` attribute.
 
 Cookie names must not include `global`, `regional`, `app`, `com`, `org`, `core`, or `palm`. For
-example, Auth's `__Host-auth_access` and a Core RP's `__Host-rp-access` are separate cookies
-because the browser stores them per host.
+example, Auth's `__Host-auth_access` and a Core RP's `__Host-rp-access` are separate cookies because
+the browser stores them per host.
 
 ## JS-Readable Preference Mirrors
 
@@ -70,9 +70,9 @@ Application code must not add new direct references to `app_preference_access`,
 Credential kind is enforced by issuer, audience, validator contract, client classification, and
 transport binding:
 
-- Base is the only physical Authorization Server and token authority.
+- Visa is the only physical Authorization Server and token authority; Base is the browser RP.
 - Auth is ceremony-only. It does not own issuer, token, Browser Session, or RP Session authority.
-- Core/Warp/Edit RP callbacks store Base-issued credentials in the RP cookie slots above. The exact
+- Core/Warp/Edit RP callbacks store Visa-issued credentials in the RP cookie slots above. The exact
   RP client ID, issuer, audience, and resource type are checked before the cookie is used.
 - `SignRefreshTokenService` is a legacy compatibility subclass; new refresh authority references
   should use `AcmeRefreshTokenService`.
@@ -81,7 +81,8 @@ transport binding:
   host-only RP cookies.
 - Palm and Core RP cookie validators reject sibling RP client bindings. Palm's former native bearer
   API is retired, and no bearer-to-browser-cookie bridge exists.
-- Acme/Sign do not issue or consume Core/Base regional browser cookies.
+- Auth does not issue or consume Core/Base regional browser cookies; Visa and each RP keep their
+  host-only authority and RP cookie boundaries.
 
 Because `__Host-` requires `Path=/`, refresh cookies are not path-restricted. Refresh endpoint
 exclusivity is a server-side transport and endpoint contract.

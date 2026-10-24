@@ -1,45 +1,70 @@
 # Sign-in failure convergence table (WU-33, D-91)
 
-Research note, static reading of the working tree based on commit `6e4d70d0b` (2026-10-23), with the
-uncommitted changes of the authentication cycle. Nothing was executed for this table. It extends the
-first pass in `two.md` 5.4. Implementation of any change waits for WU-27 (D-91).
+This is the WU-33 static investigation deliverable. It describes the current working tree as read on
+2026-10-24 at commit `ba570a0007b1d40eabe32990a34831317fd98a93`; the worktree already contained
+uncommitted authentication-cycle changes. No test or runtime probe was used to produce this table.
+The table records the response currently observable at each method boundary, not the target
+contract. The six classes are those in D-73.
 
-D-73 classes: **O** ownership mismatch, **R** retryable, **D** definitive refusal of the owner's own
-attempt, **F** dependency failure, **I** internal inconsistency, **P** OIDC protocol refusal.
+## Notation
 
-## Shared mapping
+`O` is ownership mismatch, `R` retryable, `D` definitive refusal of the owner's own attempt, `F`
+dependency failure, `I` internal inconsistency and `P` OIDC protocol refusal. The suffix is the
+current HTTP result where the controller has a fixed result; `redirect` or `page` means that the
+current path hands the browser to another ceremony or renders a method-specific page. A semicolon
+means that more than one current branch is reachable from that outcome.
 
-`SignInResult` terminal statuses map to HTTP in `app/values/sign_in_result.rb:4-15`:
-`session_limit_conflict` 503 (F), `guardrail_blocked` / `login_forbidden` / `access_locked` 403 (D),
-`credential_rejected` / `identity_unavailable` / `credential_failed` 401 (D),
-`transaction_expired` 410 (D), `failure` / `invalid_request` 400 (D or I, cause-dependent).
-Non-terminal: `success`, `session_limit_pending`, `authentication_evidence_recorded`, `mfa_required`.
-`SessionLimitGate#render_sign_in_refusal` (`session_limit_gate.rb:141`) renders plain text, default
-403, and **defaults the message to the session-limit text for every refusal**.
+The shared result mapping is in `app/values/sign_in_result.rb:4-18`. The shared refusal boundary is
+`app/controllers/concerns/sign_in_path_refusal.rb:10-72`; method-specific callers still retain some
+older pages and status choices, which is the convergence work recorded here.
 
-## Table (surface × method × outcome → class, HTTP today)
+## Surface × method × outcome
 
-| Surface / method | Credential failure | Actor not allowed | Issuance failure | MFA pending | Session-limit pending | OIDC handoff failure |
-|---|---|---|---|---|---|---|
-| APP Email OTP (`auth/app/sign/in/emails_controller.rb:396-412`) | D, 422 invalid code (OTP budget R) | D, 403 via `render_sign_in_refusal` | F 503 (`session_limit_conflict`) / D 400 | redirect to challenge | evidence recorded, Base resolves | D 400 (binding) |
-| COM Email OTP (`auth/com/sign/in/emails_controller.rb`) | same as APP | same | same | same | same | same |
-| APP Telephone (sign-in by SMS OTP) | not a sign-in method on Auth today (sign-up only) | — | — | — | — | — |
-| APP Secret (`auth/app/sign/in/secrets_controller.rb:53-80`) | D, 422 "invalid secret" | **D shown as 422 "invalid secret"** (cooldown, guardrail, `login_forbidden` share the credential message) | **same 422** | redirect | evidence recorded | D 400 |
-| APP Passkey (`in/passkey/verifications_controller.rb`) | D, 401 `verification_failed` (one message, nondisclosure ADR) | D 403 via `render_sign_in_refusal` | F 503 / D | n/a (passkey bypasses MFA) | evidence recorded | D 400 |
-| COM Passkey | D, 401 | D 403 — **through `establish_signed_in_session!` directly**, not `AuthenticationSessionCommitter` | same | n/a | evidence recorded | D 400 |
-| ORG Passkey Normal (`SignOrgNormalPasskeyCeremony`) | D, 401 | D, 409 + HALT on binding mismatch (WU-32 audit) | F / D | n/a | evidence recorded | D 400 |
-| ORG Emergency (`SignOrgStandbyPasskeyCeremony`) | D, 401 | D 403 | F / D | n/a | — | D 400 |
-| APP TOTP / MFA Passkey (`in/challenge/*`) | D 422 / 401 | D 403 via `render_sign_in_refusal` | F 503 / D | — | evidence recorded | D 400 |
-| APP Google / Apple (`auth/app/omniauth/omniauth_callbacks_controller.rb:499-515`) | P (provider error) → D generic error | D (L2/L3/L5 per D-48) | F / D | n/a | evidence recorded | D 400 |
-| ORG Entra (`auth/org/omniauth/omniauth_callbacks_controller.rb:168`) | **one generic 422 error page for every refusal** | same page | same page | n/a | — | same page |
+| Surface / method    | Credential failure                                                                                                                            | Actor not allowed                                                                                        | Issuance failure                                                                  | MFA pending                                | Session-limit pending                                         | OIDC handoff failure                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| APP email OTP       | D/422 invalid-code page (`auth/app/sign/in/emails_controller.rb:402-480`)                                                                     | D/403 or caller result status through `render_sign_in_refusal` (`:180-183`)                              | F/503 for `session_limit_conflict`; D/400 for other terminal results (`:402-417`) | redirect to MFA (`:406-408`)               | evidence recorded, then Base/Visa resolves the pending result | O/400 from binding/continuation refusal (`sign_in_phase_binding_controller_support.rb`) |
+| APP telephone       | — (telephone is sign-up only)                                                                                                                 | —                                                                                                        | —                                                                                 | —                                          | —                                                             | —                                                                                       |
+| APP passkey         | D/401 generic WebAuthn failure (`auth/app/sign/in/passkey/verifications_controller.rb:55-68`)                                                 | D/403 or the result status through `:80-91`                                                              | F/503 for session-limit conflict; D/400/401 for other terminal results            | not applicable to the primary passkey path | evidence recorded                                             | O/400 from the shared binding/continuation boundary                                     |
+| APP TOTP            | D/422 or redirect to retry (`auth/app/sign/in/challenge/totps_controller.rb`)                                                                 | D/403 through the shared refusal boundary                                                                | F/503 or method-specific 422                                                      | — (TOTP is the MFA step)                   | evidence recorded                                             | O/400 from the shared binding/continuation boundary                                     |
+| APP secret          | D/422 `invalid secret` for credential and non-credential branches (`auth/app/sign/in/secrets_controller.rb:48-72`)                            | **D/422, indistinguishable from a bad secret**                                                           | **F/D rendered as the same 422** except rate-limit backend F/503                  | redirect to the MFA step                   | evidence recorded                                             | O/400 from the shared binding/continuation boundary                                     |
+| APP Google          | P/page from the provider callback; login result then uses the shared committer (`auth/app/omniauth/omniauth_callbacks_controller.rb:419-436`) | D/page for provider/identity policy refusal                                                              | F/D provider or session result; callback maps provider errors to a generic page   | not applicable                             | evidence recorded when a login result is committed            | O/400 or callback error from the ceremony binding                                       |
+| APP Apple           | P/page from the provider callback; login result then uses the shared committer (`auth/app/omniauth/omniauth_callbacks_controller.rb:419-436`) | D/page for provider/identity policy refusal                                                              | F/D provider or session result; callback maps provider errors to a generic page   | not applicable                             | evidence recorded when a login result is committed            | O/400 or callback error from the ceremony binding                                       |
+| COM email OTP       | D/422 invalid-code page (`auth/com/sign/in/emails_controller.rb:130-166,337-340`)                                                             | D/403 or caller result status through `render_sign_in_refusal` (`:153-160`)                              | F/503 for session-limit conflict; D/400 for other terminal results                | redirect to MFA (`:153-168`)               | evidence recorded, then Base/Visa resolves the pending result | O/400 from binding/continuation refusal                                                 |
+| COM telephone       | — (telephone is sign-up only)                                                                                                                 | —                                                                                                        | —                                                                                 | —                                          | —                                                             | —                                                                                       |
+| COM passkey         | D/401 generic WebAuthn failure (`auth/com/sign/in/passkey/verifications_controller.rb:51-64`)                                                 | D/403 or the result status through `:76-88`; session establishment bypasses the APP committer (`:68-74`) | F/503 or D/400/401                                                                | not applicable to the primary passkey path | evidence recorded                                             | O/400 from the shared binding/continuation boundary                                     |
+| COM TOTP            | — (no ordinary COM TOTP sign-in path)                                                                                                         | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 if a foreign TOTP continuation is presented                                       |
+| COM secret          | — (no ordinary COM secret sign-in controller)                                                                                                 | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| COM Google          | — (provider is not an enabled COM sign-in method)                                                                                             | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| COM Apple           | — (provider is not an enabled COM sign-in method)                                                                                             | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| ORG email OTP       | — (ORG sign-in is Entra followed by Passkey)                                                                                                  | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| ORG telephone       | —                                                                                                                                             | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| ORG passkey, Normal | D/401 generic WebAuthn failure (`auth/org/sign/in/passkey/verifications_controller.rb` and `sign_org_normal_passkey_ceremony.rb`)             | O/409 + halt on binding mismatch in the normal ceremony; other actor refusals are D/403                  | F/D from the ceremony result boundary                                             | not applicable                             | evidence recorded when admission is pending                   | O/400 from the shared binding/continuation boundary                                     |
+| ORG TOTP            | —                                                                                                                                             | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| ORG secret          | —                                                                                                                                             | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| ORG Google          | —                                                                                                                                             | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| ORG Apple           | —                                                                                                                                             | —                                                                                                        | —                                                                                 | —                                          | —                                                             | O/400 from the shared binding/continuation boundary                                     |
+| ORG Entra           | D/page for provider or callback failure (`auth/org/omniauth/omniauth_callbacks_controller.rb:83-168`)                                         | **D/page, same generic 422 error page**                                                                  | **F/D/page, same generic 422 error page**                                         | not applicable; Entra hands off to Passkey | —                                                             | **P/OIDC or callback error, same generic 422 error page**                               |
 
-Cross-cutting: Turnstile refusal is R (same page, new challenge, OTP not consumed: WU-04, WU-40);
-foreign-browser and stale-binding refusals are O (nothing of the victim consumed: G-8); RP callback
-failures land on `/sign/interruption` (D-153, WU-43); OP authorization-request errors are P (WU-42).
+## Cross-cutting findings
 
-## Findings to fix after WU-27
+1. APP Secret maps cooldown, guardrail, login-forbidden and credential failure to the same
+   `invalid secret` 422. The response class is not recoverable from the body or status.
+2. COM Passkey establishes a session directly instead of using the APP-style
+   `AuthenticationSessionCommitter`, so the issuance boundary is not structurally shared.
+3. ORG Entra maps provider, identity, dependency and protocol failures to one HTML 422 page. The
+   page intentionally avoids disclosure, but it does not expose the D-73 class to the server-side
+   observability contract.
+4. The shared refusal boundary now owns the reason-code catalogue and one-event guard, but legacy
+   method-specific branches remain in the rows above. WU-07 covers the common responder; this table
+   remains the inventory for any future convergence change.
+5. Turnstile and correctable input are R: the current method page is retained and a new challenge is
+   issued. Foreign-browser and stale-binding cases are O: the requester's continuity is the only
+   state eligible for cleanup. RP callback failures remain separate P/OIDC handling until the RP
+   interruption contract is implemented.
 
-1. APP Secret: non-credential refusals reuse the "invalid secret" 422; split by class.
-2. COM Passkey bypasses `AuthenticationSessionCommitter`; route it through the committer like APP.
-3. ORG Entra renders one page for every refusal; map to the classes.
-4. `render_sign_in_refusal` defaults to the session-limit message; callers must pass the class text.
+## Scope boundary
+
+This file is an investigation record, not an authorization to normalize every method in one change.
+The WU-33 deliverable is complete when each required surface/method/outcome partition is listed with
+its current owner and response. Behavioral convergence belongs to the owning work unit and must add
+boundary tests for success, refusal, dependency failure and authorization ownership.

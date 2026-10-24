@@ -33,6 +33,7 @@ module PreferenceBrowserControlsRegistry
     "warp" => { "app" => API_V0, "com" => API_V0, "org" => API_V0 }.freeze,
     "palm" => { "app" => NONE }.freeze,
     "edit" => { "org" => NONE }.freeze,
+    "visa" => { "app" => NONE, "com" => NONE, "org" => NONE }.freeze,
   }.freeze
 
   module_function

@@ -8,12 +8,18 @@
 - `app`: end-user application; Palm is its browser relying party
 - `org`: staff and organization surface; Tech is its global operator relying party
 - `com`: public and corporate surface
+- `visa`: OpenID Provider and browser-bound authority for the three UMAXICA realms
+- `www`: Base browser relying party and identity/session-management surface for each realm
 - `net`: network-facing surface supporting other TLDs (`app`/`com`/`org`), including
   cookie-authentication-less access
 - `dev`: support and status surface
 
 Multi-domain Rails application serving these audience surfaces. Routing is host-constrained, so
 domain and subdomain matter in both development and production.
+
+The OIDC authority is hosted by Visa (`visa.umaxica.app`, `.com`, `.org`). Base is the separate
+browser RP and identity/session surface (`www.umaxica.app`, `.com`, `.org`); its host-only cookies
+are never shared with Visa.
 
 ## Stack
 
@@ -167,6 +173,7 @@ can use them; containers continue to use Compose DNS names. See
 | Surface                    | URL                                                                                                              |
 | :------------------------- | :--------------------------------------------------------------------------------------------------------------- |
 | Base                       | `http://base.{app,com,org}.localhost:3000`                                                                       |
+| Visa (OIDC authority)      | `http://visa.{app,com,org}.localhost:3000`                                                                       |
 | Base (developer / network) | `http://base.{dev,net}.localhost:3000`                                                                           |
 | Auth                       | `http://auth.{app,com,org}.localhost:3000`                                                                       |
 | Core                       | `http://core.{app,com,org,net,dev}.localhost:3000`                                                               |

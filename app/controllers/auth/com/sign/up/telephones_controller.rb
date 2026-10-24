@@ -18,14 +18,11 @@ module Auth
 
           include EnforcementIdentifierGate
 
-          include SignUpSuspensionGuard
           include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
           before_action :require_sign_up_ceremony_admission!
-          before_action :reject_suspended_sign_up!
-
           def new
             @visitor_telephone = VisitorTelephone.new
             session[:visitor_telephone_registration] = nil

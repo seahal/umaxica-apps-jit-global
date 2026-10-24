@@ -3,11 +3,12 @@ stateDiagram-v2
     state "pending" as pending
     state "consumed" as consumed
     [*] --> pending
-    pending --> consumed: consume_result! / Base final committer
+    pending --> consumed: consume_result! / no writer since WU-05g
     pending --> pending: App link completion / expires_at set to now
     consumed --> [*]
     note right of pending
-        Auth result returns to Base final committer.
+        Google and Apple sign-up no longer return a result to Base:
+        Auth finalizes the registration (adr/sign-up-finalization-in-auth.md).
         Provider browser state, email and display name never resolve
         an actor; only verified issuer and subject are authoritative.
         Release history prevents stale callback reattachment.

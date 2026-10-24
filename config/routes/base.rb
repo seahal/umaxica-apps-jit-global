@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# Base owns identity, OP/Authorization Server, and Rails control-plane surfaces.
+# Base owns identity, browser-RP and Rails control-plane surfaces. Visa owns the OIDC authority.
 # Auth surfaces handle credential ceremonies and do not own RP authority.
 scope(module: :base, as: :base) do
   # User authority gateway host. Hosts listed declaratively (DRY intentionally broken).
@@ -70,10 +70,6 @@ scope(module: :base, as: :base) do
 
       # Paths fixed by OIDC Discovery spec; resource names stay nouns.
       namespace(:well_known, path: ".well-known") do
-        resource(
-          :openid_configuration, only: :show, path: "openid-configuration", controller: :discoveries,
-                                 format: false,
-        )
         resource(:jwks, only: :show, path: "jwks.json", format: false)
       end
 
@@ -160,38 +156,20 @@ scope(module: :base, as: :base) do
 
       # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
-        # R5-WU16 OP logout completion bound to this browser's one-time receipt.
-        resource :bye, only: %i(show create), path: "bye", controller: :sign_byes, as: :sign_bye
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
         resource :out_completion, only: %i(show create), path: "out/completion",
                                   controller: :sign_outs, as: :sign_out_completion
       end
 
-      # Base is both the authority and a first-party browser RP on this host.
+      # Base is a first-party browser RP on this host; Visa is the OIDC authority.
 
-      # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
-      # OIDC Core; resource names stay nouns.
-      namespace(:oauth) do
-        resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
-        resource(:token, only: :create, controller: :tokens)
-        # R5-WU08 read-only recovery of an indeterminate Refresh (one.md section 6.4).
-        resource(
-          :refresh_delivery_query, only: :create, path: "refresh-deliveries/query",
-                                   controller: :refresh_delivery_queries,
-        )
-        resource(:userinfo, only: %i(show create), controller: :userinfos)
-        resource(:revocation, only: :create, path: "revoke", controller: :revocations)
-      end
-
-      # OIDC AS end-session and the self-RP callback.
-      # R5-WU16 matching-session RP cookie purge after OP logout.
+      # The Base RP callback and back-channel logout receiver stay on this host.
       post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
         resources(:closures, only: :create)
-        resource(:logout, only: %i(show create), controller: :logouts)
       end
 
       # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
@@ -233,11 +211,10 @@ scope(module: :base, as: :base) do
       end
 
       namespace(:social) do
-        # Base-side ceremony endpoints: continuation hands the browser to the
-        # Auth host; completion consumes the signed ceremony result.
+        # Base-side ceremony endpoint: the continuation hands the browser to the Auth host. Sign-up
+        # finalizes in Auth (adr/sign-up-finalization-in-auth.md).
         namespace :authentication do
           resource :continuation, only: :create
-          resource :completion, only: %i(show create)
         end
 
         # Non-resourceful exception: OmniAuth middleware owns these fixed provider callback paths.
@@ -359,12 +336,6 @@ scope(module: :base, as: :base) do
         # D-153: one generic landing for expected abnormal endings of the sign flow.
         resource :interruption, only: :show, module: :sign
       end
-      namespace :sign do
-        namespace :in do
-          resource :limitation, only: %i(show update destroy), controller: :limitations
-          post "limitation", to: "limitations#update", as: :limitation_continue
-        end
-      end
       get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
                                                          as: :ceremony_binding_confirmation
       post "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#create"
@@ -404,12 +375,7 @@ scope(module: :base, as: :base) do
         resource :timezone, only: %i(edit update)
       end
 
-      # Paths fixed by OIDC Discovery spec; resource names stay nouns.
       namespace(:well_known, path: ".well-known") do
-        resource(
-          :openid_configuration, only: :show, path: "openid-configuration", controller: :discoveries,
-                                 format: false,
-        )
         resource(:jwks, only: :show, path: "jwks.json", format: false)
       end
 
@@ -471,38 +437,19 @@ scope(module: :base, as: :base) do
 
       # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
-        # R5-WU16 OP logout completion bound to this browser's one-time receipt.
-        resource :bye, only: %i(show create), path: "bye", controller: :sign_byes, as: :sign_bye
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
         resource :out_completion, only: %i(show create), path: "out/completion",
                                   controller: :sign_outs, as: :sign_out_completion
       end
 
-      # Base is both the authority and a first-party browser RP on this host.
+      # Base is a first-party browser RP on this host; Visa is the OIDC authority.
 
-      # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
-      # OIDC Core; resource names stay nouns.
-      namespace(:oauth) do
-        resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
-        resource(:token, only: :create, controller: :tokens)
-        # R5-WU08 read-only recovery of an indeterminate Refresh (one.md section 6.4).
-        resource(
-          :refresh_delivery_query, only: :create, path: "refresh-deliveries/query",
-                                   controller: :refresh_delivery_queries,
-        )
-        resource(:userinfo, only: %i(show create), controller: :userinfos)
-        resource(:revocation, only: :create, path: "revoke", controller: :revocations)
-      end
-
-      # OIDC AS end-session and the self-RP callback.
-      # R5-WU16 matching-session RP cookie purge after OP logout.
       post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
         resources(:closures, only: :create)
-        resource(:logout, only: %i(show create), controller: :logouts)
       end
 
       # Browser preference API for this host's own chrome controls (theme, cookie consent). Same
@@ -610,12 +557,6 @@ scope(module: :base, as: :base) do
         # D-153: one generic landing for expected abnormal endings of the sign flow.
         resource :interruption, only: :show, module: :sign
       end
-      namespace :sign do
-        namespace :in do
-          resource :limitation, only: %i(show update destroy), controller: :limitations
-          post "limitation", to: "limitations#update", as: :limitation_continue
-        end
-      end
       get "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#show",
                                                          as: :ceremony_binding_confirmation
       post "ceremony_bindings/:binding_ref/confirmation", to: "ceremony_binding_confirmations#create"
@@ -665,12 +606,7 @@ scope(module: :base, as: :base) do
         resource :timezone, only: %i(edit update)
       end
 
-      # Paths fixed by OIDC Discovery spec; resource names stay nouns.
       namespace(:well_known, path: ".well-known") do
-        resource(
-          :openid_configuration, only: :show, path: "openid-configuration", controller: :discoveries,
-                                 format: false,
-        )
         resource(:jwks, only: :show, path: "jwks.json", format: false)
       end
 
@@ -834,38 +770,19 @@ scope(module: :base, as: :base) do
 
       # Base owns the post-authentication sign-out confirmation and completion resources.
       scope path: :sign do
-        # R5-WU16 OP logout completion bound to this browser's one-time receipt.
-        resource :bye, only: %i(show create), path: "bye", controller: :sign_byes, as: :sign_bye
         resource :termination, path: "out", controller: :sign_outs, as: :sign_out,
                                only: %i(show new edit create)
         resource :out_completion, only: %i(show create), path: "out/completion",
                                   controller: :sign_outs, as: :sign_out_completion
       end
 
-      # Base is both the authority and a first-party browser RP on this host.
+      # Base is a first-party browser RP on this host; Visa is the OIDC authority.
 
-      # OAuth/OIDC protocol endpoints. Paths are fixed by RFC 6749/7009 and
-      # OIDC Core; resource names stay nouns.
-      namespace(:oauth) do
-        resource(:authorization, only: %i(show create), path: "authorize", controller: :authorizations)
-        resource(:token, only: :create, controller: :tokens)
-        # R5-WU08 read-only recovery of an indeterminate Refresh (one.md section 6.4).
-        resource(
-          :refresh_delivery_query, only: :create, path: "refresh-deliveries/query",
-                                   controller: :refresh_delivery_queries,
-        )
-        resource(:userinfo, only: %i(show create), controller: :userinfos)
-        resource(:revocation, only: :create, path: "revoke", controller: :revocations)
-      end
-
-      # OIDC AS end-session and the self-RP callback.
-      # R5-WU16 matching-session RP cookie purge after OP logout.
       post("sign/out/purge", to: "sign/cookie_purges#create", as: :sign_out_purge)
       namespace(:oidc) do
         resource(:callback, only: :show)
         # R5-WU10 server-to-server OIDC Back-Channel Logout receiver for this RP cell.
         resources(:closures, only: :create)
-        resource(:logout, only: %i(show create), controller: :logouts)
       end
 
       # Browser preference API for this host's own chrome controls (theme, cookie consent). Same

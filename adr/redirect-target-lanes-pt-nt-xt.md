@@ -4,10 +4,10 @@
 
 Accepted (2026-05-26)
 
-> **Amendment (2026-10-23):** for the first-party **RP** lane only, `pt` is replaced by the path-only
-> `target_link_uri` carried in the RP's signed OIDC `state`
-> ([RP OIDC state and return target](rp-oidc-state-and-return-target.md)). Auth's own signed `pt`, and
-> the `nt` / `xt` lanes, are unchanged.
+> **Amendment (2026-10-23):** for the first-party **RP** lane only, `pt` is replaced by the
+> path-only `target_link_uri` carried in the RP's signed OIDC `state`
+> ([RP OIDC state and return target](rp-oidc-state-and-return-target.md)). Auth's own signed `pt`,
+> and the `nt` / `xt` lanes, are unchanged.
 
 ## Context
 
@@ -79,3 +79,14 @@ The statement above that Jump-link redirects remain a reviewed external redirect
 by the "Deprecation of Jump RT External Destinations" amendment in
 `adr/secure-jump-link-redirector.md`: Jump RT external destinations are deprecated for new use, Jump
 RT carries approved first-party cross-origin handoffs, and `xt` owns external website destinations.
+
+## RP OIDC target amendment (2026-10-24, D-149–D-153)
+
+The first-party browser RP lane no longer uses `pt`. `target_link_uri` is a path-only value carried
+inside the RP's signed OIDC `state`; it is validated at both `GET /sign` and `POST /sign`, never
+accepts a query or fragment, and is not allowed under `/sign` or `/oidc`. The target is discarded on
+Cancel or any callback interruption. This partially supersedes D-137, D-42, D-109 and the RP-lane
+portion of D-145 §7. Auth's own signed `pt`, and the `nt`/`xt` lanes, are unchanged.
+
+The OP returns Cancel as `access_denied` with the registered callback, unchanged `state` and `iss`;
+the RP consumes the pending entry and sends the browser to `GET /sign/interruption` (D-152/D-153).

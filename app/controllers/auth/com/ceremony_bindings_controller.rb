@@ -12,21 +12,26 @@ module Auth
 
       public
 
+      def show
+        apply_admission_transport_headers!
+        return render_invalid_admission_request! if request.head?
+
+        binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: entry_ref)
+        return render_invalid_admission_request! unless
+          AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
+        return if enforce_sign_entry_sentry_for_binding!(binding)
+
+        attach_and_redirect!(binding, VisitorAuthCeremonySession)
+      rescue BaseAuthAdmissionCoordinator::Denied, AuthAdmissionBinding::InvalidTransition,
+             ActiveRecord::RecordNotFound, ArgumentError
+        render_invalid_admission_request!
+      end
+
       def create
         binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "com", reference: entry_ref)
-        model = VisitorAuthCeremonySession
-        raw_sid =
-          BaseAuthAdmissionCoordinator.with_admission_binding_lock!(binding) do |locked_binding|
-            attach_current_auth_session!(locked_binding, model)
-          end
-        write_auth_ceremony_sid_cookie!(raw_sid) if raw_sid
+        return if enforce_sign_entry_sentry_for_binding!(binding)
 
-        redirect_to(
-          base_com_ceremony_binding_confirmation_url(
-            binding_ref: binding.confirmation_ref, ri: params[:ri], lx: normalized_locale(params[:lx]),
-            host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https",
-          ), status: :see_other, allow_other_host: true,
-        )
+        attach_and_redirect!(binding, VisitorAuthCeremonySession)
       rescue BaseAuthAdmissionCoordinator::Denied, AuthAdmissionBinding::InvalidTransition,
              ActiveRecord::RecordNotFound, ArgumentError
         render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request,
@@ -34,6 +39,26 @@ module Auth
       end
 
       private
+
+      def render_invalid_admission_request!
+        render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request,
+               content_type: "text/plain"
+      end
+
+      def apply_admission_transport_headers!
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+      end
+
+      def attach_and_redirect!(binding, model)
+        raw_sid =
+          BaseAuthAdmissionCoordinator.with_admission_binding_lock!(binding) do |locked_binding|
+            attach_current_auth_session!(locked_binding, model)
+          end
+        write_auth_ceremony_sid_cookie!(raw_sid) if raw_sid
+
+        redirect_to(ceremony_binding_confirmation_url(binding), status: :see_other, allow_other_host: true)
+      end
 
       def attach_current_auth_session!(binding, model)
         raw_sid = nil
@@ -70,6 +95,22 @@ module Auth
         return if raw_sid.blank?
 
         model.find_active_by_raw_sid(raw_sid)
+      end
+
+      def ceremony_binding_confirmation_url(binding)
+        query = { binding_ref: binding.confirmation_ref, ri: params[:ri], lx: normalized_locale(params[:lx]) }.compact
+        case binding.purpose
+        when *AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction)
+          visa_com_ceremony_binding_confirmation_url(
+            **query, host: visa_authority_host, protocol: "https",
+          )
+        when *AuthAdmissionBinding::PARENT_PURPOSES.fetch(:step_up_ceremony_transaction)
+          base_com_ceremony_binding_confirmation_url(
+            **query, host: base_rp_host, protocol: "https",
+          )
+        else
+          raise ArgumentError, "unsupported ceremony binding purpose"
+        end
       end
     end
   end

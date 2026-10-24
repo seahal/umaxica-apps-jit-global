@@ -136,7 +136,10 @@ module CommonRedirect
     allowed_hosts += %w(
       auth.app.localhost auth.com.localhost auth.org.localhost
       base.app.localhost base.com.localhost base.org.localhost
+      visa.app.localhost visa.com.localhost visa.org.localhost
     )
+    boot_hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+    allowed_hosts.concat([boot_hosts.visa_service.host, boot_hosts.visa_corporate.host, boot_hosts.visa_staff.host])
     allowed_hosts.include?(CommonRedirect.normalize_host(host))
   end
 

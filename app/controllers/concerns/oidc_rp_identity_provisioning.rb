@@ -20,7 +20,7 @@ module OidcRpIdentityProvisioning
     result = OidcAccessTokenAuthenticator.call(
       access_token: access_token,
       resource_type: rp_actor_resource_type,
-      host: oidc_base_authority_host,
+      host: oidc_visa_authority_host,
       authorization_scheme: "Bearer",
     )
     return result.resource if result.success? && access_token_client_id(result) == oidc_client_id

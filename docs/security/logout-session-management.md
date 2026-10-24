@@ -13,9 +13,9 @@
 ## Browser RP logout implementation
 
 The accepted Browser RP sign-out flow starts at the surface's protected `POST /sign/out`, uses
-Base's `/oidc/logout` authority flow and returns to the initiating surface with a durable logout
-challenge. Every registered first-party Browser RP registers exact `post_logout_redirect_uri` values
-for `GET/POST /sign/out/completion?ri=jp` and `?ri=us` on its own host; direct `/sign/out` is
+Visa's `/oidc/logout` authority flow and returns to the initiating Base RP surface with a durable
+logout challenge. Every registered first-party Browser RP registers exact `post_logout_redirect_uri`
+values for `GET/POST /sign/out/completion?ri=jp` and `?ri=us` on its own host; direct `/sign/out` is
 rejected as a return URI. GET displays the continuation without advancing it; POST validates the
 Rails authenticity token and advances cleanup. Base/Auth unsafe requests require the token even for
 same-origin requests. The challenge continuation has no DELETE cancellation route. Core, Warp, Edit

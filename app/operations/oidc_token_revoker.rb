@@ -7,7 +7,9 @@ class OidcTokenRevoker < ApplicationService
       def success? = success
     end
 
-  def initialize(token:, client_id:, client_secret:, token_type_hint: nil, host: nil, expected_resource_type: nil)
+  def initialize(token:, client_id:, client_secret: nil, token_type_hint: nil, host: nil,
+                 expected_resource_type: nil, client_assertion_type: nil, client_assertion: nil,
+                 revocation_endpoint_uri: nil)
     super()
     @token = token
     @client_id = client_id
@@ -15,6 +17,9 @@ class OidcTokenRevoker < ApplicationService
     @token_type_hint = token_type_hint
     @host = host
     @expected_resource_type = expected_resource_type
+    @client_assertion_type = client_assertion_type
+    @client_assertion = client_assertion
+    @revocation_endpoint_uri = revocation_endpoint_uri
   end
 
   def call
@@ -26,16 +31,43 @@ class OidcTokenRevoker < ApplicationService
 
   private
 
-  attr_reader :token, :client_id, :client_secret, :token_type_hint, :host, :expected_resource_type
+  attr_reader :token, :client_id, :client_secret, :token_type_hint, :host, :expected_resource_type,
+              :client_assertion_type, :client_assertion, :revocation_endpoint_uri
 
   def authenticated_client?
+    client = OidcClientRegistry.find(client_id)
     if expected_resource_type.present?
-      client = OidcClientRegistry.find(client_id)
       return false unless client
       return false if OidcIssuer.resource_type_for_client(client) != expected_resource_type.to_s
     end
 
-    OidcClientRegistry.authenticate(client_id, client_secret)
+    # Direct operation callers used by maintenance code and existing domain tests do not have an
+    # HTTP endpoint URI.  The public Visa controllers always provide it and therefore take the
+    # registered-method branch below; the endpoint URI is the boundary that prevents an internal
+    # caller from accidentally being mistaken for an OAuth revocation request.
+    return OidcClientRegistry.authenticate(client_id, client_secret) if revocation_endpoint_uri.blank?
+    return false unless client
+
+    case client.registered_token_endpoint_auth_method
+    when "private_key_jwt"
+      return false if client_secret.present?
+      return false unless client_assertion_type == OidcClientAssertionJwt::ASSERTION_TYPE
+      return false if client_assertion.blank?
+
+      OidcClientRegistry.authenticate_assertion(
+        client_id,
+        client_assertion,
+        token_url: revocation_endpoint_uri,
+      )
+    when "client_secret_post"
+      return false if client_assertion.present? || client_assertion_type.present?
+
+      OidcClientRegistry.authenticate(client_id, client_secret)
+    when "none"
+      client_secret.blank? && client_assertion.blank? && client_assertion_type.blank?
+    else
+      false
+    end
   end
 
   def revoke_refresh_token

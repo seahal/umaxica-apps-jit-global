@@ -93,12 +93,12 @@ module Warp
         ENV.fetch("PRIVATE_AUTH_STAFF_URL")
       end
 
-      def oidc_base_authority_host
-        ENV.fetch("PUBLIC_BASE_STAFF_URL")
+      def oidc_visa_authority_host
+        Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host
       end
 
       def oidc_acme_host
-        oidc_base_authority_host
+        oidc_visa_authority_host
       end
     end
   end

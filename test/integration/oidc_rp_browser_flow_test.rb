@@ -12,19 +12,19 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   SURFACES = [
     { host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
       client_id: "core-app-jp",
-      acme_host: ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      acme_host: ENV.fetch("PUBLIC_VISA_SERVICE_URL"),
       resource: -> {
         clients(:one)
       }, },
     { host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
       client_id: "core-org-jp",
-      acme_host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+      acme_host: ENV.fetch("PUBLIC_VISA_STAFF_URL"),
       resource: -> {
         operators(:one)
       }, },
     { host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
       client_id: "core-com-jp",
-      acme_host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+      acme_host: ENV.fetch("PUBLIC_VISA_CORPORATE_URL"),
       resource: -> {
         create_visitor!
       }, },
@@ -60,7 +60,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "acme app session-limit limitation revokes one session and resumes authorization" do
     with_core_oidc_client_key do
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
       client = OidcClientRegistry.find!("core-app-jp")
       code_verifier = SecureRandom.urlsafe_base64(48)
       user = clients(:one)
@@ -119,7 +119,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-      get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+      get visa_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
                                                       headers: browser_headers
       received_gate = request.session[:session_limit_gate]
       decision_time = ClientSignInFlow.database_now
@@ -152,7 +152,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       active_session_count = ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
       host! acme_host
-      patch acme_app_sign_in_limitation_path,
+      patch visa_app_sign_in_limitation_path,
             params: {
               resolution_challenge: resolution.challenge,
               session_ref: SessionLimitResolutionTokenRef.issue(selected),
@@ -174,7 +174,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       assert_not_nil resolution.transaction.finalized_at
       assert_equal 2, ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
 
-      token_url = acme_app_oauth_token_url(host: acme_host)
+      token_url = visa_app_oauth_token_url(host: acme_host)
       client_assertion = OidcClientAssertionJwt.issue(client_id: "core-app-jp", token_url: token_url)
       post token_url,
            params: {
@@ -201,7 +201,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     with_core_oidc_client_key do
       TurnstileVerifierStub.challenge_enabled = true
-      acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
       sign_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
       user = clients(:one)
@@ -246,58 +246,18 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
       assert_predicate core_continuity_cookies["session"], :present?
       host!(acme_host)
-      get(authorize_uri.request_uri, headers: browser_headers)
+      get(authorize_uri.request_uri, headers: oidc_navigation_headers(acme_host, site: "same-origin"))
 
-      assert_response :success
-      form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+      follow_oidc_admission_redirects!(initial_host: acme_host, sign_host: sign_host)
 
-      assert_not_nil form
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{acme_host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-
-      assert_response :redirect
-      sign_uri = URI.parse(jump_rt_url_from_location(response.location))
-      sign_query = Rack::Utils.parse_nested_query(sign_uri.query.to_s)
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
-        surface: "app", reference: sign_query.fetch("entry_ref"),
+        surface: "app", reference: @oidc_admission_entry_ref,
       )
       transaction = authorization_transaction_for_test(binding)
       original_transaction_id = transaction.id
 
-      host!(sign_host)
-      get(sign_uri.request_uri, params: { ri: "jp" })
-      3.times do |index|
-        assert_equal 200, response.status, "Admission continuation #{index} must render successfully"
-        html_response = response.media_type == "text/html"
-
-        assert html_response, "Admission continuation must render an HTML form"
-        form = response.parsed_body.at_css("form")
-
-        assert_not_nil form
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{host}", "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-
-        assert_response :see_other
-        next if index == 2
-
-        target = URI.parse(response.location)
-        host!(target.host)
-        get(target.request_uri, params: { ri: "jp" })
-      end
-
       assert_predicate binding.reload, :redeemed?
       assert_equal original_transaction_id, binding.authorization_transaction_id
-
-      assert_response :see_other
-      follow_redirect!
 
       assert_response :success
 
@@ -351,21 +311,20 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       end
 
       assert_equal URI.parse(auth_app_sign_in_check_path(ri: "jp")).path, URI.parse(response.location).path
-      follow_redirect!
-      follow_redirect!
-
-      assert_response :success
+      2.times do
+        target = URI.parse(response.location.to_s)
+        target = URI.parse("https://#{host}#{target}") if target.host.blank?
+        host!(target.host)
+        get(target.request_uri, headers: oidc_navigation_headers(target.host, site: "same-origin"))
+      end
 
       auth_token_count_before_handoff =
         ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count
-      post(auth_app_sign_oidc_handoff_path(ri: "jp"), headers: browser_headers)
-
-      # The result travels as an opaque reference: Auth redirects to Base, whose own document posts it.
       assert_response :see_other
       handoff_uri = URI.parse(response.location)
 
       assert_equal acme_host, handoff_uri.host
-      assert_equal "/oauth/authorize", handoff_uri.path
+      assert_equal "/oidc/result", handoff_uri.path
       assert_equal auth_token_count_before_handoff,
                    ClientToken.not_revoked.where(user_id: user.id, rotated_at: nil).count,
                    "Auth must hand off authentication evidence without creating a Base Browser Session"
@@ -374,28 +333,12 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
       # Host header alone does not update the jar's host context, so Base-issued host-only
       # credentials would be omitted from the subsequent resolution request.
       host!(acme_host)
-      get(handoff_uri.request_uri, headers: browser_headers)
-
-      assert_response :success
-      result_form = css_select("form#oidc-authorization-result-form").first
-      result_ref = result_form.at_css(%(input[name="result_ref"]))["value"]
-      transaction_ref = result_form.at_css(%(input[name="transaction_ref"]))["value"]
-
-      assert_predicate result_ref, :present?
-      assert_predicate transaction_ref, :present?
-
-      post(
-        result_form["action"],
-        params: { result_ref: result_ref, transaction_ref: transaction_ref, ri: "jp" },
-        headers: browser_headers.merge(
-          "Origin" => "https://#{acme_host}",
-          "Sec-Fetch-Site" => "same-origin",
-        ),
-      )
+      get(handoff_uri.request_uri, headers: oidc_navigation_headers(acme_host, site: "same-origin"))
 
       assert_response :see_other
-      resume_uri = URI.parse(response.location)
+      resume_uri = URI.parse(jump_rt_url_from_location(response.location))
       resume_query = Rack::Utils.parse_nested_query(resume_uri.query.to_s)
+      transaction_ref = transaction.transaction_id
 
       assert_equal acme_host, resume_uri.host
       assert_equal "/sign/in/limitation", resume_uri.path
@@ -535,7 +478,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation rejects another actor session" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     user = clients(:one)
     other = clients(:two)
     ClientToken.where(user_id: [user.id, other.id]).delete_all
@@ -592,7 +535,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+    get visa_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
                                                     headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
@@ -623,7 +566,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_equal 200, response.status
 
     host! acme_host
-    patch acme_app_sign_in_limitation_path,
+    patch visa_app_sign_in_limitation_path,
           params: {
             resolution_challenge: resolution.challenge,
             session_ref: SessionLimitResolutionTokenRef.issue(other_token),
@@ -637,7 +580,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation fails closed when active sessions exceed the limit" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
@@ -688,7 +631,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+    get visa_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
                                                     headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
@@ -720,7 +663,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     host!(acme_host)
     assert_no_difference -> { ClientToken.where(user_id: user.id).count } do
       patch(
-        acme_app_sign_in_limitation_path,
+        visa_app_sign_in_limitation_path,
         params: {
           resolution_challenge: resolution.challenge,
           session_ref: SessionLimitResolutionTokenRef.issue(token),
@@ -737,7 +680,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation rejects tampered challenge without revoking" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(
@@ -748,7 +691,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     )
 
     host! acme_host
-    patch acme_app_sign_in_limitation_path,
+    patch visa_app_sign_in_limitation_path,
           params: {
             resolution_challenge: "tampered",
             session_ref: SessionLimitResolutionTokenRef.issue(token),
@@ -762,7 +705,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   # The retired signed social_resolution URL token is not a grant: without this browser's pending
   # flow or an OIDC resolution challenge, nothing is listed, revoked, or issued.
   test "acme app session-limit limitation ignores a social_resolution token in the request" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_status_id: ClientTokenStatus::ACTIVE)
@@ -772,7 +715,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     host! acme_host
     assert_no_difference(-> { ClientToken.where(user_id: user.id).count }) do
-      patch acme_app_sign_in_limitation_path,
+      patch visa_app_sign_in_limitation_path,
             params: { social_resolution: social_token, session_ref: SessionLimitResolutionTokenRef.issue(token) },
             headers: browser_headers
     end
@@ -780,7 +723,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_response :gone
     assert_not token.reload.revoked?
 
-    delete acme_app_sign_in_limitation_path,
+    delete visa_app_sign_in_limitation_path,
            params: { social_resolution: social_token },
            headers: browser_headers.merge("X-Inertia" => "true")
 
@@ -788,15 +731,15 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation rejects missing payload" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! ENV.fetch("PUBLIC_VISA_SERVICE_URL")
 
-    get acme_app_sign_in_limitation_path(ri: "jp"), headers: browser_headers
+    get visa_app_sign_in_limitation_path(ri: "jp"), headers: browser_headers
 
     assert_response :gone
   end
 
   test "acme app session-limit limitation cancel does not issue login or consume oidc transaction" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
@@ -840,7 +783,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+    get visa_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
                                                     headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
@@ -872,7 +815,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     host! acme_host
     assert_no_difference -> { ClientToken.where(user_id: user.id).count } do
-      delete acme_app_sign_in_limitation_path,
+      delete visa_app_sign_in_limitation_path,
              params: { resolution_challenge: resolution.challenge },
              headers: browser_headers
     end
@@ -883,7 +826,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
   end
 
   test "acme app session-limit limitation cancel from an inertia visit leaves the app via inertia location" do
-    acme_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    acme_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
     user = clients(:one)
     ClientToken.where(user_id: user.id).delete_all
     issuance = issue_authenticated_app_oidc_transaction(user, auth_method: "email")
@@ -927,7 +870,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
     assert cookie_installed, "The gate cookie must be installed on the original Base host"
 
-    get acme_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
+    get visa_app_sign_in_limitation_path(ri: "jp"), params: { resolution_challenge: resolution.challenge },
                                                     headers: browser_headers
     received_gate = request.session[:session_limit_gate]
     decision_time = ClientSignInFlow.database_now
@@ -958,7 +901,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     assert_equal 200, response.status
 
     host! acme_host
-    delete acme_app_sign_in_limitation_path,
+    delete visa_app_sign_in_limitation_path,
            params: { resolution_challenge: resolution.challenge },
            headers: browser_headers.merge("X-Inertia" => "true")
 
@@ -966,7 +909,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     # The neutral Base entry is on this host, so the visit needs no Jump gateway.
     location = URI.parse(response.headers["X-Inertia-Location"])
 
-    assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_BASE_SERVICE_URL")}").host, location.host
+    assert_equal URI.parse("https://#{ENV.fetch("PUBLIC_VISA_SERVICE_URL")}").host, location.host
     assert_equal "/sign", location.path
     assert_nil response.headers["Location"]
     assert_predicate resolution.transaction.reload, :cancelled?
@@ -993,31 +936,28 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
           }, headers: browser_headers,
         )
 
-        # Each surface has its own registered RP identity and exact callback.
-        assert_equal 200, session.response.status, surface[:client_id]
-        form = session.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-
-        assert_not_nil form
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        session.post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{surface[:acme_host]}", "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-
-        # A POST that hands the browser on to a GET answers 303.
+        # Visa creates the Auth admission on the authorization GET and sends the browser to the
+        # surface-specific Sentry. Each surface still has its own registered RP identity and
+        # exact callback; the old Base/OP form is intentionally gone.
         assert_equal 303, session.response.status, surface[:client_id]
+        sentry_uri = URI.parse(jump_rt_url_from_location(session.response.location))
+        expected_auth_host =
+          case surface[:client_id]
+          when "core-app-jp" then ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+          when "core-com-jp" then ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
+          when "core-org-jp" then ENV.fetch("PUBLIC_AUTH_STAFF_URL")
+          else raise ArgumentError, "unsupported test client"
+          end
 
-        session.get("/oauth/authorization", headers: browser_headers)
-
-        assert_equal 404, session.response.status, surface[:client_id]
+        assert_equal expected_auth_host, sentry_uri.host, surface[:client_id]
+        assert_equal "/sign/in/sentry", sentry_uri.path, surface[:client_id]
       end
     end
   end
 
   test "app com and org old sign entry routes are not exposed" do
     SURFACES.each do |surface|
-      host! surface[:host]
+      host! surface[:acme_host]
 
       get "/sign/in", headers: browser_headers
 
@@ -1031,7 +971,7 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
 
   test "logout clears only RP session and redirects locally with Acme session-management guidance" do
     SURFACES.each do |surface|
-      host! surface[:host]
+      host! surface[:acme_host]
 
       post "/oidc/logout", headers: browser_headers
 
@@ -1069,6 +1009,41 @@ class OidcRpBrowserFlowTest < ActionDispatch::IntegrationTest
     OidcClientRegistry.find!("core-app-jp").redirect_uris.find do |uri|
       URI.parse(uri).host == host
     end
+  end
+
+  def oidc_navigation_headers(host, site:)
+    {
+      "Host" => host,
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => site,
+    }
+  end
+
+  def follow_oidc_admission_redirects!(initial_host:, sign_host:)
+    jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+    current_host = initial_host
+
+    12.times do
+      break unless response.redirect?
+
+      target = URI.parse(response.location.to_s)
+      target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
+      target = URI.parse(jump_rt_url_from_location_for_test(target.to_s)) if target.host == jump_host
+      query = Rack::Utils.parse_nested_query(target.query.to_s)
+      @oidc_admission_entry_ref ||= query["entry_ref"] if query["entry_ref"].present?
+
+      unless [initial_host, sign_host].include?(target.host)
+        raise "unexpected OIDC admission host: #{target.host.inspect}"
+      end
+
+      host!(target.host)
+      https!
+      get(target.request_uri, headers: oidc_navigation_headers(target.host, site: "cross-site"))
+      current_host = target.host
+    end
+
+    raise "OIDC admission did not reach Auth" unless host == sign_host && response.successful?
   end
 
   def create_visitor!

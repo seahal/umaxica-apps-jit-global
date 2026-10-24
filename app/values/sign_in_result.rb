@@ -9,6 +9,7 @@ TERMINAL_HTTP_STATUSES = {
   credential_rejected: :unauthorized,
   identity_unavailable: :unauthorized,
   transaction_expired: :gone,
+  sign_entry_blocked: :service_unavailable,
   failure: :bad_request,
   credential_failed: :unauthorized,
   invalid_request: :bad_request,

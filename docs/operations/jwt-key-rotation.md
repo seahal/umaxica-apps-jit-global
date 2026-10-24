@@ -1,9 +1,9 @@
 # JWT Key Rotation
 
-> **Partially superseded by Identity Authority inversion:** JWT key rotation remains required, but
-> token authority belongs to `acme/www`. `sign/id` is ceremony-only and must not issue sessions,
-> refresh tokens, downstream tokens, or step-up freshness. Existing sign-side physical tables/models
-> do not imply sign-side authority.
+> **Authority boundary:** JWT key rotation remains required. Visa is the OpenID Provider and token
+> authority on `visa.umaxica.*`; Auth is ceremony-only and must not issue sessions, refresh tokens,
+> downstream tokens, or step-up freshness. Base and the other browser RPs own their local RP keys
+> and sessions. Existing Auth-side physical tables/models do not imply token authority.
 
 ## Scope
 
@@ -85,7 +85,8 @@ gem option names. The explicit expired-access decoder exempts only `exp` for log
 identification and retains signature and other claim checks.
 
 Apple's upstream signature algorithm behavior and the separate Rails `secret_key_base` compromise
-response are recorded in [JWT validation and key risk decisions](../../adr/jwt-validation-and-key-risk-decisions.md).
+response are recorded in
+[JWT validation and key risk decisions](../../adr/jwt-validation-and-key-risk-decisions.md).
 
 Preference:
 
@@ -136,13 +137,20 @@ Current old-kid verification windows are:
 - OIDC ID Token:
   `Security::TokenLifetimes::OIDC_ID_TOKEN_TTL + JWKS_ROTATION_LEEWAY + CDN_STALE_LEEWAY`.
 - JumpRT: `Security::TokenLifetimes::JUMP_RT_TTL + JWKS_ROTATION_LEEWAY + CDN_STALE_LEEWAY`.
-- RP OIDC `state` (decided, applies once WU-43 signs `state` with the RP `oidc_client:<namespace>`
-  key): keep the old public key for at least 30 minutes plus `CLOCK_SKEW_LEEWAY_SECONDS`, so
-  in-flight `state` values still verify (`adr/rp-oidc-state-and-return-target.md`).
+- RP OIDC `state`: after rotating an RP `oidc_client:<namespace>` key, keep the old public key
+  verifiable for at least 30 minutes plus `CLOCK_SKEW_LEEWAY_SECONDS`, so every in-flight signed
+  `state` can finish or fail closed (`adr/rp-oidc-state-and-return-target.md`, D-150).
 
-Publication lead time (decided, applies once WU-11 caches RP JWKS with the shared refetch limit):
-publish a new OP signing key in the JWKS at least `CACHE_TTL + MAX_STALE_TTL` (1 h 5 min) before it
-signs anything, so every RP cache already holds it.
+Publication lead time (D-144): publish a new Visa OP signing key in the JWKS at least
+`CACHE_TTL + MAX_STALE_TTL` (1 h 5 min) before it signs anything, so every RP cache already holds
+it. The same lead time applies to any OP namespace that is still deployed during a staged rollout.
+
+Before removing an old RP state key, confirm that the last issued state is older than
+`30.minutes + CLOCK_SKEW_LEEWAY_SECONDS`, all RP callback workers have reloaded the new public key,
+and the RP callback's unknown-`kid` path is fail-closed. Before removing an old Visa signing key,
+confirm the 1 h 5 min publication interval and a successful Discovery/JWKS read from every
+participating RP. Record the exact key IDs, deployment revision and verification time in the release
+evidence; never delete a key solely because the active signer changed.
 
 Old verification keys should be public JWKs only. Do not keep old private keys in production runtime
 unless rollback still requires the previous signer.

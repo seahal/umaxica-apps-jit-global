@@ -4716,9 +4716,88 @@ ALTER TABLE ONLY public.client_tokens
 -- PostgreSQL database dump complete
 --
 
+--
+-- PostgreSQL database dump
+--
+
+
+-- Dumped from database version 18.6 (Debian 18.6-1.pgdg12+2)
+-- Dumped by pg_dump version 18.6 (Debian 18.6-1.pgdg13+2)
+
+
+
+
+--
+-- Name: op_app_grant_logout_hints; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.op_app_grant_logout_hints (
+    id bigint NOT NULL,
+    grant_id bigint NOT NULL,
+    id_token text NOT NULL,
+    created_at timestamp(6) with time zone NOT NULL,
+    updated_at timestamp(6) with time zone NOT NULL
+);
+
+
+--
+-- Name: op_app_grant_logout_hints_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.op_app_grant_logout_hints_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: op_app_grant_logout_hints_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.op_app_grant_logout_hints_id_seq OWNED BY public.op_app_grant_logout_hints.id;
+
+
+--
+-- Name: op_app_grant_logout_hints id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_grant_logout_hints ALTER COLUMN id SET DEFAULT nextval('public.op_app_grant_logout_hints_id_seq'::regclass);
+
+
+--
+-- Name: op_app_grant_logout_hints op_app_grant_logout_hints_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_grant_logout_hints
+    ADD CONSTRAINT op_app_grant_logout_hints_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: index_op_app_grant_logout_hints_on_grant_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_op_app_grant_logout_hints_on_grant_id ON public.op_app_grant_logout_hints USING btree (grant_id);
+
+
+--
+-- Name: op_app_grant_logout_hints fk_rails_cdfc332d97; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.op_app_grant_logout_hints
+    ADD CONSTRAINT fk_rails_cdfc332d97 FOREIGN KEY (grant_id) REFERENCES public.op_app_grants(id) ON DELETE CASCADE;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261024143000'),
 ('20261023191141'),
 ('20261023190906'),
 ('20261023130003'),
@@ -4886,4 +4965,3 @@ INSERT INTO "schema_migrations" (version) VALUES
 ('20260508135006'),
 ('20260507010001'),
 ('20260501000000');
-

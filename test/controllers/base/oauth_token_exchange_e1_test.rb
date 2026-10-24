@@ -14,7 +14,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     @code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(@code_verifier), padding: false)
     @client = OidcClientRegistry.find("core-app-jp")
     @redirect_uri = @client.redirect_uris.first
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
+    @host = visa_host_for_test_surface(:app)
   end
 
   test "public token endpoint exchanges a bound code and rejects a different same-realm client replay" do
@@ -25,7 +25,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
       :authenticate_assertion,
       ->(cid, assertion, token_url:) { cid == "core-app-jp" && assertion.present? && token_url.present? },
     ) do
-      post base_app_oauth_token_url(host: @host),
+      post visa_app_oauth_token_url(host: @host),
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
@@ -62,7 +62,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
       :authenticate_assertion,
       ->(cid, assertion, token_url:) { cid == "warp-app-jp" && assertion.present? && token_url.present? },
     ) do
-      post base_app_oauth_token_url(host: @host),
+      post visa_app_oauth_token_url(host: @host),
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
@@ -93,7 +93,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
       :authenticate_assertion,
       ->(cid, assertion, token_url:) { cid == "core-app-jp" && assertion.present? && token_url.present? },
     ) do
-      post base_app_oauth_token_url(host: @host),
+      post visa_app_oauth_token_url(host: @host),
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
@@ -106,7 +106,7 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
 
       assert_response :ok
 
-      post base_app_oauth_token_url(host: @host),
+      post visa_app_oauth_token_url(host: @host),
            params: {
              grant_type: "authorization_code",
              code: code_record.code,
@@ -131,8 +131,8 @@ class BaseOauthTokenExchangeE1Test < ActionDispatch::IntegrationTest
     root_token = operator_tokens(:one)
     root_token.update!(authentication_context: AuthenticationContextValue::STANDBY_KEY)
     client = OidcClientRegistry.find!("core-org-jp")
-    base_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
-    token_url = base_org_oauth_token_url(host: base_host)
+    base_host = visa_host_for_test_surface(:org)
+    token_url = visa_org_oauth_token_url(host: base_host)
     redirect_uri = client.redirect_uris_by_realm.fetch("operator").first
     code_verifier = SecureRandom.urlsafe_base64(32)
     code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(code_verifier), padding: false)

@@ -320,6 +320,10 @@ module AuthenticationBase
              oidc_authorization_transaction: nil, session_limit_resolution: nil,
              session_limit_resolution_challenge: nil, session_limit_resolution_binding: nil)
     validate_login_establishment!(resource, establishment, established_authentication_method, sign_in_flow)
+    if establishment == :root_login && !sign_entry_sentry_allows_root_login?
+      return { status: :sign_entry_blocked, http_status: :service_unavailable }
+    end
+
     validate_session_limit_resolution_arguments!(
       session_limit_resolution: session_limit_resolution,
       challenge: session_limit_resolution_challenge,
@@ -1073,6 +1077,34 @@ module AuthenticationBase
     return if SESSION_ESTABLISHMENTS.include?(establishment)
 
     raise ArgumentError, "unsupported session establishment: #{establishment.inspect}"
+  end
+
+  # The root-login boundary is shared by the three Visa authority controllers.
+  # RP-session issuance, refresh, sign-out and ticket ceremonies never call
+  # this check because they use a different establishment or no log_in call.
+  def sign_entry_sentry_allows_root_login?
+    surface =
+      case resource_type.to_s
+      when "client" then "app"
+      when "visitor" then "com"
+      when "operator" then "org"
+      else raise ArgumentError, "unsupported Sign Entry Sentry resource type: #{resource_type.inspect}"
+      end
+    state = SignEntrySentryResolver.call(surface:, flow: "sign_in")
+    return true if state.allowed?
+
+    Rails.logger.info(
+      JitLogEvent.format(
+        "sign.refused",
+        refusal_class: "retryable",
+        reason_code: "sentry_blocked",
+        surface:,
+        flow: "sign_in",
+        state: "BLOCKED",
+        enforcement_point: "root_login",
+      ),
+    )
+    false
   end
 
   # D-163: the eligibility checked before the lock is only an early refusal; the decision is made
@@ -2996,12 +3028,12 @@ module AuthenticationBase
         cycle.class.connection_class_for_self.connected_to(role: :writing) do
           cycle.with_lock do
             ceremony.lock!
-            return { status: :invalid_request } unless oidc_flow_evidence_open?(resource, cycle, ceremony)
+            return { status: :invalid_request } unless oidc_flow_evidence_open?(resource, cycle, ceremony, method)
 
             cycle.record_authentication_evidence!(
               method: method, authentication_context: authentication_context || AuthenticationContextValue::NORMAL_KEY,
             )
-            ceremony.record_authentication_evidence!(method: method)
+            ceremony.record_authentication_evidence!(method: method) unless ceremony.authentication_evidence_recorded?
           end
         end
       end
@@ -3009,11 +3041,16 @@ module AuthenticationBase
     nil
   end
 
-  def oidc_flow_evidence_open?(resource, cycle, ceremony)
+  # The Google/Apple callback records the provider ceremony's evidence before a social sign-up
+  # finalizes (adr/sign-up-finalization-in-auth.md S3); its Sign In handoff then adds the Sign In
+  # flow's evidence for that same method. Any other recorded ceremony evidence closes the attempt.
+  def oidc_flow_evidence_open?(resource, cycle, ceremony, method)
     now = cycle.class.database_now
+    ceremony_open = !ceremony.authentication_evidence_recorded? ||
+      (%w(google apple).include?(method) && ceremony.authentication_method == method)
     (cycle.sign_in_primary_pending? || cycle.sign_in_mfa_pending?) && cycle.principal_id == resource.id &&
       !cycle.expired?(now) && ceremony.active?(now: now) && ceremony.admitted? && !cycle.authentication_event_at &&
-      !ceremony.authentication_evidence_recorded?
+      ceremony_open
   end
 
   def oidc_authentication_ceremony?

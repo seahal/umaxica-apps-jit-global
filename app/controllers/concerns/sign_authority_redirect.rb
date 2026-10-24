@@ -23,7 +23,7 @@ module SignAuthorityRedirect
     redirect_to_surface_url(
       URI::Generic.build(
         scheme: "https",
-        host: base_authority_host,
+        host: base_rp_host,
         path: path,
         query: sign_authority_query(query),
       ).to_s,
@@ -50,7 +50,7 @@ module SignAuthorityRedirect
     end
   end
 
-  def base_authority_host
+  def base_rp_host
     case self.class.name
     when /\AAuth::App::/ then ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     when /\AAuth::Com::/ then ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
@@ -65,6 +65,6 @@ module SignAuthorityRedirect
   end
 
   def acme_authority_host
-    base_authority_host
+    base_rp_host
   end
 end

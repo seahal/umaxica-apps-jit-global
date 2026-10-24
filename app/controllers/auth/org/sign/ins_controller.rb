@@ -70,7 +70,7 @@ module Auth
             registration_link: if @oidc_authorization_intent.blank?
                                  {
                                    label: t("sign.org.authentication.new.links.registration"),
-                                   href: auth_org_sign_up_path(pt: pt, ri: region),
+                                   href: auth_org_sign_up_sentry_path(pt: pt, ri: region),
                                  }
                                end,
             # D09 Cancel only: Org has no public Sign Up, so no Switch is offered.

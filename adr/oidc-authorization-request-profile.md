@@ -2,8 +2,9 @@
 
 ## Status
 
-**Accepted (2026-10-23), not implemented.** Owner decisions D-145, D-146, D-147, D-148, D-149 of the
-2026-10 authentication cycle; implementation in its work units WU-42 and WU-43.
+**Accepted (2026-10-23); amended 2026-10-24 for WU-39.** Owner decisions D-145, D-146, D-147, D-148,
+D-149 of the 2026-10 authentication cycle remain implementation work in WU-42 and WU-43; this record
+is the current request-validation contract and does not by itself certify runtime conformance.
 
 Flow-selection rationale and reconsideration criteria are extended by
 [OIDC Authorization Code Only](oidc-authorization-code-only-implicit-and-hybrid-non-adoption.md)
@@ -15,15 +16,15 @@ Flow-selection rationale and reconsideration criteria are extended by
    `redirect_uri`, `scope` containing `openid`, `state`, `nonce`, `code_challenge`,
    `code_challenge_method=S256`. Requiring `state` and `nonce` is a UMAXICA profile restriction the
    specifications permit; every RP is first-party.
-2. **`redirect_uri`** (OIDC Core 1.0 §3.1.2.1, RFC 6749 §3.1.2, RFC 9700 §2.1, §4.1): compared with the
-   URIs registered for the `client_id` by simple string comparison — no prefix, suffix, wildcard,
-   normalization or added query. A missing, unregistered or mismatched `redirect_uri`, or an unknown
-   `client_id`, is refused locally and **no error is redirected to it** (RFC 6749 §3.1.2.4,
-   §4.1.2.1). The authorization code is bound to `client_id` and `redirect_uri`; the token endpoint
-   requires the same value.
+2. **`redirect_uri`** (OIDC Core 1.0 §3.1.2.1, RFC 6749 §3.1.2, RFC 9700 §2.1, §4.1): compared with
+   the URIs registered for the `client_id` by simple string comparison — no prefix, suffix,
+   wildcard, normalization or added query. A missing, unregistered or mismatched `redirect_uri`, or
+   an unknown `client_id`, is refused locally and **no error is redirected to it** (RFC 6749
+   §3.1.2.4, §4.1.2.1). The authorization code is bound to `client_id` and `redirect_uri`; the token
+   endpoint requires the same value.
 3. **Errors after a valid client and `redirect_uri`** are returned to the registered `redirect_uri`
-   with `error`, optional `error_description`, `state` when the request carried one, and `iss`
-   (RFC 6749 §4.1.2.1, OIDC Core §3.1.2.6, RFC 9207). The registered URI is kept as is and response
+   with `error`, optional `error_description`, `state` when the request carried one, and `iss` (RFC
+   6749 §4.1.2.1, OIDC Core §3.1.2.6, RFC 9207). The registered URI is kept as is and response
    parameters are appended to any registered query.
 4. **`prompt`:** Discovery advertises `prompt_values_supported` per realm — APP/COM `none`, `login`,
    `create`; ORG `none`, `login`. An unsupported value or any combination of values gets a direct
@@ -44,3 +45,4 @@ Flow-selection rationale and reconsideration criteria are extended by
 
 - [RP OIDC state and return target](rp-oidc-state-and-return-target.md)
 - [OIDC RP scope](oidc-rp-scope-umaxica-tlds-only.md)
+- [Authentication checklist](../docs/checklists/authentication.md#auth-31)

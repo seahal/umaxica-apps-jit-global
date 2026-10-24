@@ -28,7 +28,7 @@ class ViteEntrypointContractTest < ActiveSupport::TestCase
   test "every Inertia layout loads the entrypoint belonging to its own surface" do
     layouts = inertia_layouts
 
-    assert_equal 13, layouts.size, "expected one Inertia layout per user-facing FQDN"
+    assert_equal 16, layouts.size, "expected one Inertia layout per user-facing FQDN"
 
     layouts.each do |layout|
       family, surface = layout.relative_path_from(LAYOUT_ROOT).each_filename.first(2)

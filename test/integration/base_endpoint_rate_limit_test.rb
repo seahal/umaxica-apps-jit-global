@@ -36,27 +36,27 @@ class BaseEndpointRateLimitTest < ActionDispatch::IntegrationTest
   ENTRA_CALLBACK_QUOTA = 10
 
   test "the app OAuth revocation endpoint bounds revocation probing per source" do
-    host! ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host! visa_host_for_test_surface(:app)
 
     OAUTH_REVOCATION_QUOTA.times do
-      post base_app_oauth_revocation_path, params: { token: "probe", client_id: "unknown" }
+      post visa_app_oauth_revocation_path, params: { token: "probe", client_id: "unknown" }
     end
 
     assert_not_equal 429, response.status
 
-    post base_app_oauth_revocation_path, params: { token: "probe", client_id: "unknown" }
+    post visa_app_oauth_revocation_path, params: { token: "probe", client_id: "unknown" }
 
     assert_response :too_many_requests
     assert_equal "60", response.headers["Retry-After"]
   end
 
   {
-    "app" => ["PUBLIC_BASE_SERVICE_URL", :base_app_oauth_userinfo_path],
-    "com" => ["PUBLIC_BASE_CORPORATE_URL", :base_com_oauth_userinfo_path],
-    "org" => ["PUBLIC_BASE_STAFF_URL", :base_org_oauth_userinfo_path],
-  }.each do |surface, (env_name, helper)|
+    "app" => [:app, :visa_app_oauth_userinfo_path],
+    "com" => [:com, :visa_com_oauth_userinfo_path],
+    "org" => [:org, :visa_org_oauth_userinfo_path],
+  }.each do |surface, (host_surface, helper)|
     test "the #{surface} OAuth userinfo endpoint bounds bearer-token probing per source" do
-      host! ENV.fetch(env_name)
+      host! visa_host_for_test_surface(host_surface)
 
       OAUTH_USERINFO_QUOTA.times do
         get public_send(helper), headers: { "Authorization" => "Bearer probe" }

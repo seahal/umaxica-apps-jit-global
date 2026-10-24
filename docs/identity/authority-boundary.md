@@ -1,23 +1,23 @@
 # Identity Authority Boundary
 
-> **Current Rails contract note (2026-09-22):** The migration context in this document is retained
-> for historical reference. Its `acme/www` and `sign/id` authority descriptions do not supersede
-> the current Rails OIDC contract in
-> `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical IdP/AS, Auth is a
-> ceremony-only service, and browser RP registrations are surface-specific.
+> **Current Rails contract note (2026-10-24):** The migration context in this document is retained
+> for historical reference. Its `acme/www` and `sign/id` authority descriptions do not supersede the
+> current Rails OIDC contract in `adr/visa-op-host.md`: Visa is the sole physical IdP/AS, Auth is a
+> ceremony-only service, Base is the `www.umaxica.*` browser RP, and browser RP registrations are
+> surface-specific.
 
 > **Participation update (2026-10-13):** The current first-party browser RP set also includes Palm
 > (`palm-app`) and Tech (`tech-org`). Palm's native RP and bearer API roles are retired. Tech is an
-> operator RP that requires `tech.access`. See
-> `adr/tech-and-palm-browser-rp-participation.md` for the accepted contract and its implementation
-> status; this document's older Palm-native and RP-launcher statements are historical.
+> operator RP that requires `tech.access`. See `adr/tech-and-palm-browser-rp-participation.md` for
+> the accepted contract and its implementation status; this document's older Palm-native and
+> RP-launcher statements are historical.
 
-> **Historical component model (2026-06-12; superseded for Palm on 2026-10-13):** The target component model was
-> `docs/architecture/acme-sign-core-base-port.md` and `adr/acme-sign-core-base-port-boundary.md`.
-> Acme is the only IdP / Authorization Server, Sign is a special RP, Core is the Next.js web RP/BFF,
-> Base is the Rails foundation/control-plane subdomain, and Palm is the native bearer-token API
-> Resource Server. This document remains historical Rails migration context where it describes
-> `acme/www` and `sign/id`.
+> **Historical component model (2026-06-12; superseded for Palm on 2026-10-13):** The target
+> component model was `docs/architecture/acme-sign-core-base-port.md` and
+> `adr/acme-sign-core-base-port-boundary.md`. Acme is the only IdP / Authorization Server, Sign is a
+> special RP, Core is the Next.js web RP/BFF, Base is the Rails foundation/control-plane subdomain,
+> and Palm is the native bearer-token API Resource Server. This document remains historical Rails
+> migration context where it describes `acme/www` and `sign/id`.
 
 > **Settings ownership update (2026-07-01):** For Auth settings to Base identity migration work,
 > `adr/identity-authority-boundary.md` and `docs/architecture/sign-settings-to-acme-identity.md`
@@ -51,29 +51,29 @@ renaming accepted `/sign/up/*` or `/social/*` paths.
 
 ## Historical Migration Status
 
-This section describes the historical migration boundary. The implementation was still being inverted
-when this record was written.
-Some existing `sign/id` routes and controllers may remain reachable as compatibility routes until
-the active implementation slices move or redirect them.
+This section describes the historical migration boundary. The implementation was still being
+inverted when this record was written. Some existing `sign/id` routes and controllers may remain
+reachable as compatibility routes until the active implementation slices move or redirect them.
 
 That compatibility allowance does not apply to the Auth settings to Base identity migration.
 Non-exception Auth settings routes for emails, telephones, birthdate, secrets, secret credentials,
 sessions, revocations, activities, and withdrawal must become unroutable. Auth settings may retain
-only app passkeys/TOTP/Google/Apple, com passkeys, and org passkeys/Entra. TOTP is app-only;
-com and org do not expose TOTP enrollment, sign-in, Step-Up, or settings routes.
+only app passkeys/TOTP/Google/Apple, com passkeys, and org passkeys/Entra. TOTP is app-only; com and
+org do not expose TOTP enrollment, sign-in, Step-Up, or settings routes.
 
 Compatibility routes must not be treated as new authority assignments. If implementation currently
 mutates session, refresh, preference, dashboard, withdrawal, token, account, or step-up freshness
 state from a sign-side route, that behavior is a migration gap tracked by the Identity Authority
 inversion plans, not a competing source of truth.
 
-Current Rails browser identity contract uses Base as the sole OP/AS and Auth as the credential
-ceremony surface. Core, Warp, Edit, Palm and Tech have host-local relying-party entry and callback
-routes at `/sign` and `/oidc/callback`; the POST `/sign` start requires a valid Rails authenticity
-token even when Fetch Metadata reports `same-origin`. Tech additionally requires `tech.access` for
-protected content. Palm's native registration, bearer API and app-scheme callback are retired.
-RP-local sign-out routes use `/sign/out` and `/sign/out/completion`; implementation of the shared
-parent-and-RP revocation transaction remains incomplete and is tracked in
+Current Rails browser identity contract uses Visa as the sole OP/AS, Base as the browser RP, and
+Auth as the credential ceremony surface. Core, Warp, Edit, Palm and Tech have host-local
+relying-party entry and callback routes at `/sign` and `/oidc/callback`; the POST `/sign` start
+requires a valid Rails authenticity token even when Fetch Metadata reports `same-origin`. Tech
+additionally requires `tech.access` for protected content. Palm's native registration, bearer API
+and app-scheme callback are retired. RP-local sign-out routes use `/sign/out` and
+`/sign/out/completion`; implementation of the shared parent-and-RP revocation transaction remains
+incomplete and is tracked in
 `adr/first-party-sign-out-shared-database-without-backchannel-logout.md`. Social login entry points
 use `/social/:provider/sign/in`, `/social/:provider/sign/up`, and `/social/:provider/callback`.
 `google` and `apple` are canonical provider names; `google_app` is retained only in historical or
@@ -106,10 +106,10 @@ trust sign-issued session, access, or downstream tokens.
 
 ## Current Rails Result Boundary
 
-The active Rails implementation uses Auth as a credential-ceremony service and Base as the sole
-OIDC Identity Provider / Authorization Server. The Auth-to-Base result is a short-lived opaque
-Valkey transport capability. The matching surface-local PostgreSQL authorization transaction is
-the durable authority for its digest, generation, expiry, and Base finalization state.
+The active Rails implementation uses Auth as a credential-ceremony service and Base as the sole OIDC
+Identity Provider / Authorization Server. The Auth-to-Base result is a short-lived opaque Valkey
+transport capability. The matching surface-local PostgreSQL authorization transaction is the durable
+authority for its digest, generation, expiry, and Base finalization state.
 
 Base reads the result only after validating the surface and transaction binding, then rechecks the
 generation while holding the PostgreSQL transaction-row lock. A valid result may be retried while

@@ -22,12 +22,13 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
       )
 
       assert_equal first.transaction.id, successor.transaction.id
-      assert_equal parent_deadline, successor.transaction.reload.expires_at
       assert_not_equal first.reference, successor.reference
       assert_predicate binding.reload, :retired?
       replacement = BaseAuthAdmissionCoordinator.find_admission_binding!(
         surface: surface, reference: successor.reference,
       )
+      # WU-06: the parent is never shortened and reaches at least the replacement's curfew.
+      assert_equal [parent_deadline, replacement.curfew_at].max, successor.transaction.reload.expires_at
 
       assert_predicate replacement, :live?
       assert_operator replacement.expires_at, :<=, parent_deadline

@@ -10,7 +10,7 @@ module Auth
             class BirthdatesController < ::Auth::App::ApplicationController
               include SignUpExplicitStepControllerSupport
 
-              include SignUpSocialBirthdateSupport
+              include SignUpSocialPendingClientSupport
 
               include SignUpSocialCheckBirthdateControllerSupport
 

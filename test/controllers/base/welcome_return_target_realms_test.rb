@@ -121,7 +121,7 @@ class Base::Com::WelcomeReturnTargetControllerTest < ActionController::TestCase
     assert_equal "/dashboard?ri=jp", response.parsed_body.dig("props", "next_link", "href")
   end
 
-  test "com skips the page without its own gate even when the app gate is present" do
+  test "com ignores the OP gate namespace and keeps the RP page available" do
     @request.session[:app_sign_in_welcome] = @request.session.delete(:com_sign_in_welcome)
 
     get :show, params: { ri: "jp",
@@ -144,7 +144,8 @@ class Base::Com::WelcomeReturnTargetControllerTest < ActionController::TestCase
                            )
                          end, }
 
-    assert_redirected_to "/dashboard?ri=jp"
+    assert_response :success
+    assert_equal "/identity?ri=jp", response.parsed_body.dig("props", "next_link", "href")
   end
 
   private
@@ -267,7 +268,7 @@ class Base::Org::WelcomeReturnTargetControllerTest < ActionController::TestCase
     assert_equal "/dashboard?ri=jp", response.parsed_body.dig("props", "next_link", "href")
   end
 
-  test "org skips the page without its own gate even when the com gate is present" do
+  test "org ignores the OP gate namespace and keeps the RP page available" do
     @request.session[:com_sign_in_welcome] = @request.session.delete(:org_sign_in_welcome)
 
     get :show, params: { ri: "jp",
@@ -290,7 +291,8 @@ class Base::Org::WelcomeReturnTargetControllerTest < ActionController::TestCase
                            )
                          end, }
 
-    assert_redirected_to "/dashboard?ri=jp"
+    assert_response :success
+    assert_equal "/identity?ri=jp", response.parsed_body.dig("props", "next_link", "href")
   end
 
   private

@@ -16,15 +16,15 @@ App/Com Sign Up
               guardrail / MFA / selector / limits
                          |
                          v
-                 Base Session and OIDC result
+                 Visa Root Session and OIDC result
                          |
                          v
                     RP-local Session
 ```
 
-Auth owns credential ceremonies and authentication evidence. Base owns the Browser Session, OIDC
-authorization transaction and authorization code. An Auth flow that happens to be called from Sign
-In is not a second Session issuer.
+Auth owns credential ceremonies and authentication evidence. Visa owns the Root Session, OIDC
+authorization transaction and authorization code. Base receives the browser-RP result and owns only
+its RP session. An Auth flow that happens to be called from Sign In is not a second Session issuer.
 
 The handoff is a trusted internal transition bound to the completed registration operation, actor,
 browser, ceremony and evidence. It is not an HTTP request that lets the browser choose an actor,
@@ -33,14 +33,14 @@ must not create another session or bind a different actor.
 
 The canonical Sign In policy remains authoritative after registration. A normal eligible
 registration can feel like automatic login, but guardrails, MFA, checkpoints, selector rules,
-cooldowns, and session limits still apply. If those rules reject the login or Base cannot commit a
-Session, the Identity remains registered and follows the normal Sign In recovery/refusal route.
+cooldowns, and session limits still apply. If those rules reject the login or Visa cannot commit a
+Root Session, the Identity remains registered and follows the normal Sign In recovery/refusal route.
 
 User switching and system completion are different:
 
 | Event                      | Required behavior                                                                 |
 | -------------------------- | --------------------------------------------------------------------------------- |
-| Initial-page user switch   | End the current flow through Base and issue a fresh Admission for the other flow. |
+| Initial-page user switch   | End the current flow through Visa and issue a fresh Admission for the other flow. |
 | Switch after progress      | Refuse without cancelling another flow or changing a Session.                     |
 | Durable Sign Up completion | Enter ordinary Sign In admission through an operation-bound handoff.              |
 

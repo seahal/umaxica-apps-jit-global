@@ -240,33 +240,6 @@ module Auth
           end
         end
 
-        def handle_social_sign_up_intent(user, _provider_name, identity, pt: nil)
-          # Two callbacks for the same social identity (provider + uid) can
-          # arrive simultaneously (e.g. user double-clicks the consent button
-          # or replays a stale tab). Without serialization, both pass the
-          # "no existing account" check, both fall into this branch, both
-          # try to create a sign_up_flow, and the second loser hits the
-          # unique constraint on Client during finalization. The advisory
-          # lock collapses the second arrival into a no-op
-          # cycle-already-issued.
-          with_social_sign_up_lock(identity) do
-            cycle = current_social_sign_up_flow || create_social_sign_up_flow!(user, identity, pt: pt)
-            bind_social_sign_up_flow!(cycle, user, identity)
-          end
-
-          redirect_to(
-            public_send(
-              :"auth_app_sign_up_guard_#{SocialIdentifiable.normalize_provider(identity.provider)}_path",
-              ri: params[:ri].presence || current_social_auth_ri,
-              pt: pt.presence,
-            ),
-          )
-        end
-
-        def social_sign_up_required?(_user, existing_account)
-          !existing_account
-        end
-
         def handle_pending_social_sign_up_intent(_provider_name, pt: nil)
           callback_result = @external_authentication_callback_result
           unless callback_result.is_a?(ExternalAuthentication::CallbackResult) && callback_result.verified?
@@ -276,7 +249,10 @@ module Auth
           provider = callback_result.principal.provider
 
           with_pending_social_sign_up_lock(provider, callback_result.principal.subject) do
-            cycle = current_social_sign_up_flow || create_pending_social_sign_up_flow!(provider, pt: pt)
+            # WU-05c (R2-A): the sign-up entry created the attempt's one Flow; the callback never creates one.
+            cycle = current_social_sign_up_flow
+            raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent") if cycle.nil?
+
             store_pending_social_signup_evidence!(cycle, callback_result)
             if cycle.step == "checkpoint"
               return redirect_pending_social_signup_confirmation(provider, pt: pt)
@@ -303,26 +279,6 @@ module Auth
               model_class: OpBaseAppRecord,
               &
             )
-          end
-        end
-
-        def create_pending_social_sign_up_flow!(provider, pt: nil)
-          OpBaseAppRecord.connected_to(role: :writing) do
-            cycle = ClientSignUpFlow.create!(
-              auth_admission_binding: auth_sign_up_admission_binding!,
-              principal_id: nil,
-              status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
-              step: "social_callback",
-              nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-              issued_at: Time.current,
-              expires_at: ClientSignUpFlow.default_ttl.from_now,
-              entry_method: provider,
-              social_provider: provider,
-              return_to: path_from_signed_pt(signed_pt_token(pt)),
-            )
-            sign_up_flow_locator.issue!(cycle)
-            session[:auth_app_up_sequence_id] = cycle.public_id
-            cycle
           end
         end
 
@@ -432,6 +388,7 @@ module Auth
         end
 
         def social_signup_ceremony_grant_for(cycle, provider)
+          issuer_id = IdentitySocialCeremonyContract.visa_issuer_id("app")
           issuance = IdentitySocialCeremonyGrantIssuer.issue!(
             surface: "app",
             actor_ref: cycle.public_id,
@@ -440,50 +397,12 @@ module Auth
             provider: provider,
             resource_ref: "sign_up",
             return_to: cycle.return_to,
+            issuer_id: issuer_id,
           )
           IdentitySocialCeremonyGrant.decode(
             issuance.grant,
-            issuer_id: IdentitySocialCeremonyContract.acme_issuer_id("app"),
+            issuer_id: issuer_id,
           )
-        end
-
-        def with_social_sign_up_lock(identity, &)
-          if identity&.respond_to?(:uid) && identity.respond_to?(:provider) &&
-              identity.uid.present? && identity.provider.present?
-            digest = "#{SocialIdentifiable.normalize_provider(identity.provider)}:#{identity.uid}"
-            OpBaseAppRecord.connected_to(role: :writing) do
-              SignUpEmailPendingGuard.with_lock(
-                namespace: "sign_up:social_callback",
-                address_digest: digest,
-                model_class: OpBaseAppRecord,
-                &
-              )
-            end
-          else
-            yield
-          end
-        end
-
-        def create_social_sign_up_flow!(user, identity, pt: nil)
-          raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless user && identity
-
-          OpBaseAppRecord.connected_to(role: :writing) do
-            cycle = ClientSignUpFlow.create!(
-              auth_admission_binding: auth_sign_up_admission_binding!,
-              principal_id: nil,
-              status_id: ClientSignUpFlowStatus::SOCIAL_CALLBACK_PENDING,
-              step: "social_callback",
-              nonce_digest: ClientSignUpFlow.digest_nonce(SecureRandom.urlsafe_base64(32)),
-              issued_at: Time.current,
-              expires_at: ClientSignUpFlow.default_ttl.from_now,
-              entry_method: SocialIdentifiable.normalize_provider(identity.provider),
-              social_provider: SocialIdentifiable.normalize_provider(identity.provider),
-              return_to: path_from_signed_pt(signed_pt_token(pt)),
-            )
-            sign_up_flow_locator.issue!(cycle)
-            session[:auth_app_up_sequence_id] = cycle.public_id
-            cycle
-          end
         end
 
         def handle_link_intent(_provider_name)
@@ -525,40 +444,6 @@ module Auth
           redirect_to(
             auth_app_sign_in_path(ri: params[:ri].presence || current_social_auth_ri),
           )
-        end
-
-        def bind_social_sign_up_flow!(cycle, user, identity)
-          raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless identity
-          unless identity.persisted? && identity.id.present?
-            raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
-          end
-          raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless identity.user_id == user.id
-          unless SocialIdentifiable.normalize_provider(identity.provider) == cycle.social_provider
-            raise SocialAuth::ProviderError.new("errors.social_auth.provider_error")
-          end
-
-          OpBaseAppRecord.connected_to(role: :writing) do
-            cycle.update!(
-              principal_id: user.id,
-              pending_contact_type: "social_identity",
-              pending_contact_id: identity&.id,
-              social_provider: SocialIdentifiable.normalize_provider(identity.provider),
-            )
-            SignUpStateMachine.call(
-              ticket: cycle,
-              event: :complete_social_callback,
-              actor_context: Actor.authn,
-            ).tap do |result|
-              raise SocialAuth::ProviderError.new("errors.social_auth.provider_error") unless result.status == :advanced
-            end
-          end
-          store_social_sign_up_sequence_id(cycle)
-        end
-
-        def store_social_sign_up_sequence_id(cycle)
-          session[:auth_app_up_sequence_id] = cycle.public_id
-        rescue ActionDispatch::Request::Session::DisabledSessionError
-          nil
         end
 
         # E1 (WU-24h): the Flow is the one bound to this admission; the locator is only a hint.

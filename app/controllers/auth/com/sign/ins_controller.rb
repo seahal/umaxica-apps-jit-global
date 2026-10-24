@@ -54,7 +54,7 @@ module Auth
           {
             key: "registration",
             label: t("sign.com.authentication.new.links.registration"),
-            href: auth_com_sign_up_path(ri: params[:ri], pt: pt),
+            href: auth_com_sign_up_sentry_path(ri: params[:ri], pt: pt),
           }
         end
 

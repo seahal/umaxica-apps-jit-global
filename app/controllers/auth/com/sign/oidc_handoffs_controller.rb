@@ -28,9 +28,7 @@ module Auth
 
         def oidc_result_handoff_surface = "com"
 
-        def oidc_result_handoff_create_path(**) = auth_com_sign_oidc_handoff_path(**)
-
-        def oidc_result_base_completion_url(**) = base_com_oauth_authorization_url(**)
+        def oidc_result_base_completion_url(**) = visa_com_oidc_result_url(**)
       end
     end
   end

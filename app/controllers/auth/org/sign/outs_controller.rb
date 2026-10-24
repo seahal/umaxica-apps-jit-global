@@ -50,8 +50,8 @@ module Auth
           return render_coordinated_sign_out_unavailable unless result.success?
 
           render_cross_origin_sign_out_handoff(
-            target_url: base_org_oidc_logout_url(
-              host: base_authority_host,
+            target_url: visa_org_oidc_logout_url(
+              host: visa_authority_host,
               protocol: "https",
             ),
             transaction: transaction,
@@ -61,7 +61,7 @@ module Auth
         def redirect_to_base_sign_out!
           redirect_to_jump_url(
             base_org_sign_out_url(
-              host: base_authority_host,
+              host: base_rp_host,
               protocol: "https",
               ri: params[:ri],
             ),

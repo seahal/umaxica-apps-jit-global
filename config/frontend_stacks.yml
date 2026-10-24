@@ -9,6 +9,9 @@ stacks:
     - base/app/application
     - base/com/application
     - base/org/application
+    - visa/app/application
+    - visa/com/application
+    - visa/org/application
     - core/app/application
     - core/com/application
     - core/org/application
@@ -26,6 +29,9 @@ stacks:
     - base/app/inertia
     - base/com/inertia
     - base/org/inertia
+    - visa/app/inertia
+    - visa/com/inertia
+    - visa/org/inertia
     - core/app/inertia
     - core/com/inertia
     - core/org/inertia

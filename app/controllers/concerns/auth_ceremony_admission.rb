@@ -28,6 +28,27 @@ module AuthCeremonyAdmission
     return render_invalid_admission_request! if params[:admission].present?
     return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
     if request.get? && admission_reference_param.present?
+      binding =
+        begin
+          BaseAuthAdmissionCoordinator.find_admission_binding!(
+            surface: auth_ceremony_surface, reference: admission_reference_param,
+          )
+        rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+          return render_invalid_admission_request!
+        end
+      if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
+        return redeem_admission_reference_and_redirect!(expected_intent:) if binding.attached? && binding.confirmed?
+
+        return redirect_to(
+          auth_ceremony_admission_action_url(
+            entry_ref: admission_reference_param,
+            ri: params[:ri],
+            lx: normalized_locale(params[:lx]),
+          ),
+          status: :see_other,
+        )
+      end
+
       return render_admission_continuation!(expected_intent:)
     end
 
@@ -244,11 +265,11 @@ module AuthCeremonyAdmission
     render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
   end
 
-  def auth_ceremony_admission_action_url
+  def auth_ceremony_admission_action_url(**query)
     case auth_ceremony_surface
-    when "app" then auth_app_ceremony_bindings_path
-    when "com" then auth_com_ceremony_bindings_path
-    when "org" then auth_org_ceremony_bindings_path
+    when "app" then auth_app_ceremony_bindings_path(**query)
+    when "com" then auth_com_ceremony_bindings_path(**query)
+    when "org" then auth_org_ceremony_bindings_path(**query)
     else raise ArgumentError, "unsupported Auth ceremony surface"
     end
   end

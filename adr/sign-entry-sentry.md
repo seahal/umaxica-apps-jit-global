@@ -2,11 +2,12 @@
 
 ## Status
 
-**Accepted (2026-10-22), Owner decisions only; not implemented.** This ADR records only what the
-Owner decided: the original decisions (items 1–16), the Sentry GET placement and paths (item 9),
-and, later on 2026-10-22, enforcement points, names, callbacks, ORG scope, the transition, the OIDC
-behavior and refusal classes (items 17–23; item 16 is amended by item 21). What remains open is
-listed under [Not decided](#not-decided). The implementation plan is
+**Accepted (2026-10-22); implemented in the current Rails slice 2026-10-24 (WU-29).** This ADR
+records the Owner decisions and the current implementation: the original decisions (items 1–16), the
+Sentry GET placement and paths (item 9), and, later on 2026-10-22, enforcement points, names,
+callbacks, ORG scope, the transition, the OIDC behavior and refusal classes (items 17–23; item 16 is
+amended by item 21). What remains open is listed under [Not decided](#not-decided). The
+implementation plan is
 [the backlog plan](../plans/backlog/2026-10-22-sign-entry-sentry-implementation.md); its remaining
 proposals are not accepted by this record. The investigation behind it is
 [research/2026-10-22-sign-entry-sentry-investigation.md](../research/2026-10-22-sign-entry-sentry-investigation.md).
@@ -17,10 +18,11 @@ monitoring SDK (`sentry-ruby`, `sentry-rails`, `config/initializers/sentry.rb`),
 
 ## Context
 
-Operators can currently close new registration per surface through `sign_up_suspended_{app,com,org}`
-(`:suspension` polarity, fail-open, `SignUpSuspension` and `SignUpSuspensionGuard`). There is no
-equivalent switch for Sign In, and the Sign Up switch has the opposite polarity from the
-`:availability` flags that gate authentication ceremonies (`social_ceremony_*`, FQDN availability).
+Before WU-29, operators could close new registration per surface through
+`sign_up_suspended_{app,com,org}` (`:suspension` polarity, `SignUpSuspension` and
+`SignUpSuspensionGuard`). The current implementation replaces that path with the six explicit
+`:availability` flags below, which gate both new Sign In and new Sign Up without changing the
+per-provider switches or FQDN availability controls.
 
 ## Decision
 
@@ -59,11 +61,11 @@ equivalent switch for Sign In, and the Sign Up switch has the opposite polarity 
    existing GET page; `BLOCKED` answers HTTP 503 with `Cache-Control: no-store`. The Sentry GET does
    not authenticate, issue sessions or create flows.
 
-   **Placement (Owner decision, 2026-10-22).** The Sentry GET lives on the Auth host of each
-   surface (APP, COM, ORG), not on Base. The paths are `GET /sign/in/sentry` and
-   `GET /sign/up/sentry`. On `ALLOWED`, `/sign/in/sentry` redirects to `/sign/in` and
-   `/sign/up/sentry` redirects to `/sign/up` on the same Auth host. The redirect target is fixed by
-   the server for each Sentry and is never taken from the request.
+   **Placement (Owner decision, 2026-10-22).** The Sentry GET lives on the Auth host of each surface
+   (APP, COM, ORG), not on Base. The paths are `GET /sign/in/sentry` and `GET /sign/up/sentry`. On
+   `ALLOWED`, `/sign/in/sentry` redirects to `/sign/in` and `/sign/up/sentry` redirects to
+   `/sign/up` on the same Auth host. The redirect target is fixed by the server for each Sentry and
+   is never taken from the request.
 
    Consequence, from the current code: Auth `/sign/in` and `/sign/up` refuse a request without a
    Base-issued `entry_ref` or an already admitted ceremony. Base's ceremony start and Switch
@@ -77,6 +79,7 @@ equivalent switch for Sign In, and the Sign Up switch has the opposite polarity 
    includes. `pt` is carried by the existing `AuthenticationRedirects#signed_pt_param`, which passes
    only a verified signed target. The Admission reference is the only parameter the Sentry passes
    explicitly.
+
 10. **Existing boundaries stay intact.** Sentry is added without merging, short-circuiting or
     bypassing Sign In First, Base's Session/OIDC/Token authority, Auth's ceremony-only role, the
     APP/COM/ORG separation, the independent Sign In and Sign Up state machines, the Base → Auth
@@ -102,20 +105,20 @@ equivalent switch for Sign In, and the Sign Up switch has the opposite polarity 
     at that instant.
 16. **Migration discipline.** The existing `sign_up_suspended_*` flags are not silently
     reinterpreted. Before Sentry is enforced, all six availability flags are written as `true` and
-    verified in each environment. *(Amended by item 21: the old flags are removed in the same change
-    that introduces Sentry.)*
+    verified in each environment. _(Amended by item 21: the old flags are removed in the same change
+    that introduces Sentry.)_
 17. **Enforcement points** (2026-10-22). Sentry is checked, through one resolver, at: (1) the OP's
-    ceremony-start and Switch redirects, which select `/sign/in/sentry` or `/sign/up/sentry` from the
-    server-side effective intent (Switch target, else `prompt=create` → Sign Up, else Sign In); (2)
-    Auth Admission redemption (`POST /sign/in`, `POST /sign/up`, `POST /ceremony_bindings`) and the
-    admitted-entry `show`; (3) every Sign In and Sign Up evidence-recording and registration POST;
-    (4) provider callbacks (item 19); (5) the OP root-login commit, for
+    ceremony-start and Switch redirects, which select `/sign/in/sentry` or `/sign/up/sentry` from
+    the server-side effective intent (Switch target, else `prompt=create` → Sign Up, else Sign In);
+    (2) Auth Admission redemption (`POST /sign/in`, `POST /sign/up`, `POST /ceremony_bindings`) and
+    the admitted-entry `show`; (3) every Sign In and Sign Up evidence-recording and registration
+    POST; (4) provider callbacks (item 19); (5) the OP root-login commit, for
     `log_in(establishment: :root_login)` only, returning a refusal before the commit and never
     raising inside a caller's transaction. `:rp_session`, Refresh, Sign Out, SSO code issuance,
     `prompt=none` and the ticket ceremonies (Step-Up, reauthentication, credential registration and
-    change, bootstrap) are not checked. Each point only calls the resolver; Sentry is not merged into
-    `AuthCeremonyAdmission`, Guardrail or Checkpoint. The Sign Up → Sign In First handoff is not
-    checked inside the sign-up cycle lock; point (5) refuses its session and the Identity stays.
+    change, bootstrap) are not checked. Each point only calls the resolver; Sentry is not merged
+    into `AuthCeremonyAdmission`, Guardrail or Checkpoint. The Sign Up → Sign In First handoff is
+    not checked inside the sign-up cycle lock; point (5) refuses its session and the Identity stays.
 18. **Names** (2026-10-22). `SignEntrySentryResolver` in `app/resolvers/` holds the explicit
     six-entry (surface, flow) table, reads through `FeatureFlags`, raises `ArgumentError` for any
     other pair, and returns `SignEntrySentryStateValue` in `app/values/`. Controllers
@@ -142,7 +145,8 @@ equivalent switch for Sign In, and the Sign Up switch has the opposite polarity 
 
 ## Not decided
 
-These items are open. The backlog plan holds proposals; none is accepted here.
+These items remain open for future product decisions. The backlog plan holds proposals; none is
+accepted here.
 
 - The in-flight user experience, response bodies, `Retry-After`, logging event names and i18n keys.
 - Whether a Sentry decision is recorded as an audit or telemetry event.

@@ -85,12 +85,7 @@ module SignEntryExit
   end
 
   def refuse_sign_entry_exit!(reason)
-    Rails.logger.warn(
-      JitLogEvent.format(
-        "auth.sign_entry_exit.refused", surface: auth_ceremony_surface, action: controller_name, reason: reason,
-                                        request_id: request.request_id,
-      ),
-    )
-    render plain: I18n.t("errors.messages.invalid_request"), status: :unprocessable_content
+    refusal_reason = (reason.to_s == "not_on_first_page") ? "not_on_first_page" : "exit_unavailable"
+    refuse_sign_in_path!(refusal_reason)
   end
 end

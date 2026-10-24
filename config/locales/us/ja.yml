@@ -2247,6 +2247,8 @@ ja:
       not_authorized: この操作を行う権限がありません。
       odd: は奇数にしてください
       operation_not_permitted: この操作は許可されていません。
+      sign_in_unavailable: 現在サインインをご利用いただけません。しばらくしてからお試しください。
+      sign_up_unavailable: 現在新規登録をご利用いただけません。しばらくしてからお試しください。
       other_than: は%{count}以外の値にしてください
       password_too_long: が長すぎます
       phase_violation_refused: 戻るはだめです
@@ -2255,7 +2257,6 @@ ja:
       required: を入力してください
       session_limit_exceeded: セッション数の上限に達しました
       sign_count_mismatch: パスキーのセキュリティ検証に失敗しました
-      sign_up_suspended: 新規登録は一時的にご利用いただけません。しばらくしてからお試しください。
       taken: はすでに存在します
       too_long: は%{count}文字以内で入力してください
       too_short: は%{count}文字以上で入力してください

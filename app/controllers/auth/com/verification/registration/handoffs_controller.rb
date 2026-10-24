@@ -30,6 +30,6 @@ class Auth::Com::Verification::Registration::HandoffsController < ::Auth::Com::A
   def ceremony_result_layout = "auth/com/application"
 
   def ceremony_result_completion_url(**)
-    base_com_verification_completion_url(**, host: base_authority_host, protocol: "https")
+    base_com_verification_completion_url(**, host: base_rp_host, protocol: "https")
   end
 end

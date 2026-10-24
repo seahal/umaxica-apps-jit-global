@@ -99,12 +99,12 @@ module Core
         ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
       end
 
-      def oidc_base_authority_host
-        ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      def oidc_visa_authority_host
+        Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
       end
 
       def oidc_acme_host
-        oidc_base_authority_host
+        oidc_visa_authority_host
       end
 
       private

@@ -32,14 +32,14 @@
     <nav aria-label="<%= t("ui_presentation.navigation.footer") %>">
       <ul>
         <% if logged_in? %>
-          <li><%= link_to t("sign.com.preferences.footer.dashboard"), base_com_root_url(ri: current_region_identifier, host: base_authority_host) %></li>
+          <li><%= link_to t("sign.com.preferences.footer.dashboard"), base_com_root_url(ri: current_region_identifier, host: base_rp_host) %></li>
         <% end %>
-        <li><%= link_to t("sign.com.preferences.footer.preference"), base_com_preference_url(ri: current_region_identifier, host: base_authority_host) %></li>
+        <li><%= link_to t("sign.com.preferences.footer.preference"), base_com_preference_url(ri: current_region_identifier, host: base_rp_host) %></li>
       </ul>
     </nav>
     <aside aria-label="<%= t("ui_presentation.navigation.preferences") %>">
       <% preference_controls = PreferenceBrowserControlsRegistry.fetch(family: "auth", surface: "com") %>
-      <%= render "layouts/shared/footer_cookie_controls", scope: :com, endpoint_url: preference_controls.cookie_endpoint_path, base_host: base_authority_host %>
+      <%= render "layouts/shared/footer_cookie_controls", scope: :com, endpoint_url: preference_controls.cookie_endpoint_path, base_host: base_rp_host %>
       <%= render "layouts/shared/footer_theme_controls", scope: :com, endpoint_url: preference_controls.theme_endpoint_path %>
     </aside>
     <div>

@@ -31,8 +31,10 @@ module SignFlow
       OpenSSL::Digest::SHA256.hexdigest(nonce.to_s)
     end
 
+    # A Flow is created after its Admission Binding, so this lifetime reaches past the Binding's
+    # 30-minute curfew (WU-06); the curfew, not this expiry, ends the attempt.
     def default_ttl
-      15.minutes
+      AuthAdmissionBinding::CURFEW_DURATION
     end
   end
 

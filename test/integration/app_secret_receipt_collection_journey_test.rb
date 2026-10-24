@@ -153,6 +153,9 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
                     ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                     ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                     ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                   }.fetch(fv5043)
                 end
               fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -333,10 +336,19 @@ class AppSecretReceiptCollectionJourneyTest < ActionDispatch::IntegrationTest
 
     assert credentials.none? { |credential| ClientSecretCredential.exists?(credential.id) }
     ClientSecretAuditDeliveryJob.perform_now(batch_size: 500, retention_seconds: 3600)
-    deadline = transactions.flat_map do |transaction|
-      [transaction.expires_at, transaction.login_challenge_expires_at,
-       ClientSignInFlow.find(transaction.secret_sign_in_flow_id).expires_at,]
-    end.max + 1.second
+    # The parents now live until the curfew (WU-06); end them and their Flows directly.
+    past = ClientSignInFlow.database_now - 1.second
+    transactions.each do |transaction|
+      transaction.update_columns(expires_at: past, login_challenge_expires_at: past)
+      ClientSignInFlow.where(id: transaction.secret_sign_in_flow_id).update_all(expires_at: past)
+    end
+    # Commit facts and the audit delivery just made are the last proof times the purger waits on.
+    proof_times =
+      receipts.map { |receipt|
+        [receipt.reload.committed_at, ClientSignInFlow.find(receipt.sign_in_flow_id).completed_at].max
+      }
+    retention = ClientSecretLifetimesValue.proof_retention
+    deadline = (proof_times + [ClientSignInFlow.database_now]).max + retention + 1.second
     Timeout.timeout(15) { sleep 0.01 while ClientSignInFlow.database_now < deadline }
     hold = ClientRetentionHold.create!(client: clients(:one), hold_kind: "legal_hold", reason_code: "legal_hold")
     assert_enqueued_with(

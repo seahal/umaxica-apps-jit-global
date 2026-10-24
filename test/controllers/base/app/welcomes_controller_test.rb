@@ -14,7 +14,7 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
     @token = ClientToken.create!(authentication_epoch: 0, user: @user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
   end
 
-  test "welcome sequence redirects to the configured after welcome path" do
+  test "RP Welcome renders with the configured dashboard as its default next link" do
     BaseSelectorBootstrapAuthority.call(surface: :app, principal: @user)
     BaseSelectorAuthority.prepare(surface: :app, principal: @user, session: @token)
 
@@ -82,7 +82,8 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
     get base_app_welcome_url(ri: "jp", host: @host),
         headers: http_headers_0
 
-    assert_redirected_to base_app_dashboard_path(ri: "jp")
+    assert_response :success
+    assert_includes response.body, base_app_dashboard_path(ri: "jp")
   end
 
   private
@@ -119,9 +120,9 @@ class Base::App::WelcomesControllerTest < ActionDispatch::IntegrationTest
   end
 end
 
-# The self-RP Welcome page is reachable only after the root sign-in completed. Its one-shot gate
-# decides whether the page renders, and "Next" returns to the page the browser was heading to only
-# when a path-target token issued by this browser session's own sign-in for this surface says so.
+# The self-RP Welcome page is reachable only after the RP session is established. Its "Next" link
+# follows only a path-target token issued by this browser session for this RP surface; an OP-side
+# Welcome gate, if present in the session, is not consulted.
 class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
   tests Base::App::WelcomesController
 
@@ -496,7 +497,7 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
     end
   end
 
-  test "without the gate the page is skipped and no return target is followed" do
+  test "without the OP gate the RP page still follows its verified return target" do
     @request.session.delete(:app_sign_in_welcome)
 
     get :show, params: { ri: "jp",
@@ -524,13 +525,14 @@ class Base::App::WelcomeReturnTargetControllerTest < ActionController::TestCase
                            )
                          end, }
 
-    assert_redirected_to "/dashboard?ri=jp"
+    assert_response :success
+    assert_equal "/identity?ri=jp", response.parsed_body.dig("props", "next_link", "href")
   end
 
-  test "the gate is spent one use at a time and never extended" do
+  test "the RP page does not read or mutate the OP Welcome gate" do
     get :show, params: { ri: "jp" }
 
-    assert_equal 4, session[:app_sign_in_welcome]["remaining"]
+    assert_equal 5, session[:app_sign_in_welcome]["remaining"]
   end
 
   private

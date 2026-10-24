@@ -6,15 +6,15 @@ require "test_helper"
 # RFC 6749 section 4.1.2.1 expects spec-level descriptions for a malformed authorization request,
 # and the controller deliberately answers RecordNotFound with a fixed description so a bad
 # result code cannot be used to probe stored data. Both halves are asserted here.
-class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::IntegrationTest
+class Visa::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::IntegrationTest
   include OidcAuthorizationResponseHelper
 
   setup do
-    @host = configured_host(:base_corporate)
+    @host = visa_host_for_test_surface(:com)
   end
 
   test "a request with no parameters is refused as an invalid request" do
-    get base_com_oauth_authorization_url(host: @host), headers: host_headers(@host)
+    get visa_com_oauth_authorization_url(host: @host), headers: host_headers(@host)
 
     assert_response :bad_request
     assert_equal "invalid_request", response.parsed_body["error"]
@@ -23,7 +23,7 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   # D-147 N-1: after a valid client and redirect_uri, errors go back to the RP.
   test "a response_type other than code is returned to the RP as unsupported_response_type" do
     params = authorize_params(response_type: "token")
-    get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
+    get visa_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
     assert_oidc_error_redirect(
       error: "unsupported_response_type", redirect_uri: params[:redirect_uri],
@@ -34,27 +34,27 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   test "a missing code challenge is returned to the RP as invalid_request" do
     params = authorize_params.except(:code_challenge)
 
-    get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
+    get visa_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
     assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: params[:state])
   end
 
   test "a code challenge method other than S256 is returned to the RP as invalid_request" do
     params = authorize_params(code_challenge_method: "plain")
-    get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
+    get visa_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
     assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: params[:state])
   end
 
   test "a scope without openid is returned to the RP as invalid_request" do
     params = authorize_params(scope: "profile")
-    get base_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
+    get visa_com_oauth_authorization_url(host: @host, **params), headers: host_headers(@host)
 
     assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: params[:state])
   end
 
   test "an unregistered client is refused without naming what was looked up" do
-    get base_com_oauth_authorization_url(host: @host, **authorize_params(client_id: "not-a-registered-client")),
+    get visa_com_oauth_authorization_url(host: @host, **authorize_params(client_id: "not-a-registered-client")),
         headers: host_headers(@host)
 
     assert_response :bad_request
@@ -65,14 +65,14 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   # model or primary key that was looked up.
   test "a region identifier on the request is ignored rather than treated as unpermitted" do
     assert_no_difference -> { VisitorOidcAuthorizationTransaction.pending.count } do
-      get base_com_oauth_authorization_url(host: @host, **authorize_params),
+      get visa_com_oauth_authorization_url(host: @host, **authorize_params),
           params: { ri: "jp" }, headers: host_headers(@host)
     end
 
     assert_response :success
     fields = response.parsed_body.css("form input[name]").to_h { |input| [input["name"], input["value"]] }
     assert_difference -> { VisitorOidcAuthorizationTransaction.pending.count }, +1 do
-      post base_com_oauth_authorization_url(host: @host), params: fields,
+      post visa_com_oauth_authorization_url(host: @host), params: fields,
                                                           headers: host_headers(@host).merge(
                                                             "Origin" => "https://#{@host}",
                                                             "Sec-Fetch-Site" => "same-origin",
@@ -83,7 +83,7 @@ class Base::Com::Oauth::AuthorizationsControllerTest < ActionDispatch::Integrati
   end
 
   test "an unknown result code is refused with a fixed description" do
-    post base_com_oauth_authorization_url(host: @host),
+    post visa_com_oauth_authorization_url(host: @host),
          params: { result: SecureRandom.uuid },
          headers: host_headers(@host).merge(
            "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")}",

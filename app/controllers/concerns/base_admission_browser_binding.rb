@@ -23,12 +23,38 @@ module BaseAdmissionBrowserBinding
     )
   end
 
+  # An explicit restart must first prove the existing admission with the marker that
+  # was bound on its read-only restart form. Only a new admission rotates the marker.
+  def base_admission_browser_nonce_for_request!
+    return ensure_base_admission_browser_nonce! if params[:restart_of].blank?
+
+    nonce = base_admission_browser_nonce
+    raise BaseAuthAdmissionCoordinator::Denied.new(
+      "browser binding is missing", code: "session_binding_mismatch",
+    ) if nonce.blank?
+
+    nonce
+  end
+
   def base_admission_browser_nonce
     value = session[BROWSER_NONCE_SESSION_KEY].to_s.presence
     return if value.blank?
     return value if value.match?(/\A[A-Za-z0-9_-]{43}\z/)
 
     nil
+  end
+
+  # A continuation of an already-issued Base admission must use the marker that
+  # was bound when the admission was created. Rotation is only valid at a new
+  # admission boundary; silently replacing it would make the existing binding
+  # unverifiable.
+  def require_base_admission_browser_nonce!
+    nonce = base_admission_browser_nonce
+    raise BaseAuthAdmissionCoordinator::Denied.new(
+      "browser binding is missing", code: "session_binding_mismatch",
+    ) if nonce.blank?
+
+    nonce
   end
 
   def base_admission_browser_digest(entry_ref)
@@ -49,10 +75,12 @@ module BaseAdmissionBrowserBinding
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
   end
 
-  def validate_base_result_browser_binding!(transaction)
+  # cancellation: the Cancel exit stays open after the curfew; it is how the attempt ends (WU-06).
+  def validate_base_result_browser_binding!(transaction, cancellation: false)
     BaseAuthAdmissionCoordinator.validate_result_browser_binding!(
       transaction:, surface: self.class.base_admission_surface_name,
       base_browser_nonce: base_admission_browser_nonce, base_token: current_session_token,
+      cancellation:,
     )
   end
 

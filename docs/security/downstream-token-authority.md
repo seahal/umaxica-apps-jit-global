@@ -7,31 +7,39 @@
 > with the Acme / Sign / Core / Base / Palm boundary.
 
 > **Current Rails-contract supersession (2026-09-23):** The later Base/Auth decision supersedes the
-> physical Acme authority wording above. Base is the sole physical OIDC IdP/Authorization Server;
-> Auth is ceremony-only. The Acme vocabulary below is historical and must not be used to introduce
-> an additional issuer, shared browser session, or retired RP registration.
+> physical Acme authority wording above. The current sole physical OIDC IdP/Authorization Server is
+> Visa; Auth is ceremony-only and Base is a browser RP. The Acme vocabulary below is historical and
+> must not be used to introduce an additional issuer, shared browser session, or retired RP
+> registration.
 
 > **Participation update (2026-10-13):** Palm is now a first-party browser RP using the `palm-app`
 > audience; its former native bearer API is retired. Tech is an operator browser RP using
 > `tech-org`. The accepted contract and local implementation status are recorded in
 > `adr/tech-and-palm-browser-rp-participation.md`.
 
+> **Current OIDC boundary (2026-10-24):** Visa is the Rails OIDC authority on `visa.umaxica.*`; Base
+> is the browser RP on `www.umaxica.*`. Visa-issued authority and downstream tokens use the Visa
+> issuer/key namespace. Base-issued browser RP credentials remain local to the RP and must not be
+> treated as Visa authority tokens. See `adr/visa-op-host.md`.
+
 ## Authority
 
-`acme/www` is the downstream-token Authority.
+The historical `acme/www` downstream-token Authority is now represented by Visa's OIDC authority
+boundary.
 
-`core`, `line`, and future downstream services must trust acme-issued downstream tokens only. They
-must not trust sign-issued session, access, refresh, or downstream tokens.
+`core`, `line`, and future downstream services must trust authority-issued downstream tokens only.
+They must not trust sign-issued session, access, refresh, or downstream tokens.
 
 ## Requirements
 
 Downstream tokens must be:
 
-- issued by acme;
+- issued by Visa's configured authority;
 - audience-bound to the downstream service;
 - purpose-bound to the downstream action or API family where applicable;
 - short-lived;
-- verifiable by the downstream service through acme JWKS or the current acme verification channel.
+- verifiable by the downstream service through the Visa JWKS or the current authority verification
+  channel.
 
 ## Non-Goals
 
@@ -45,11 +53,11 @@ Downstream tokens must be:
 
 ## Delivered reconciliation (2026-10-06)
 
-Base-issued credentials are the only downstream browser/RP token authority in this cycle. Issuer,
-audience, subject and RP-session binding are checked before a token is accepted; Auth ceremony
-results are not downstream access tokens. A parent security context can authorize an explicitly
-bound RP operation but never authenticates a missing RP credential. Legacy Sign/Acme wording above
-is migration history and is superseded by the Base/Warp registry.
+Visa-issued authority credentials and each RP's local credentials are the only active browser/RP
+token contracts in this cycle. Issuer, audience, subject and RP-session binding are checked before a
+token is accepted; Auth ceremony results are not downstream access tokens. A parent security context
+can authorize an explicitly bound RP operation but never authenticates a missing RP credential.
+Legacy Sign/Acme wording above is migration history and is superseded by the Base/Warp registry.
 
 ## Browser RP participation update (2026-10-13)
 

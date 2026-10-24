@@ -2,9 +2,11 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../support/oidc_rp_logout_hint_helper"
 # require "helpers/global_test_support"
 
 class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
+  include OidcRpLogoutHintHelper
   fixtures :clients, :client_token_kinds
 
   setup do
@@ -25,7 +27,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate token.reload, :currently_usable?
   end
 
-  test "sign-out launch leaves the parent and RP session unchanged" do
+  test "sign-out launch revokes the RP session before the Visa authority phase" do
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
@@ -35,7 +37,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_nil response.headers["Clear-Site-Data"]
     assert_predicate token.reload, :currently_usable?
-    assert_predicate @rp_session.reload, :active?
+    assert_not_predicate @rp_session.reload, :active?
   end
 
   test "a write that creates the browser preference synchronizes the client preference mirror" do
@@ -53,7 +55,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_not_nil mirror.call
   end
 
-  test "post sign out redirects to the registered base authority" do
+  test "post sign out redirects to the registered Visa end-session endpoint" do
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
@@ -63,15 +65,8 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
-    transaction = AcmeLogoutTransaction.find_by!(public_id: query.fetch("logout_challenge"))
-
-    assert_equal "warp", transaction.origin_surface
-
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
-    assert_equal "/oidc/logout", location.path
-    assert_equal "jp", query["ri"]
-    assert_predicate query["logout_challenge"], :present?
-    assert_predicate @rp_session.reload, :active?
+    assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "jp")
+    assert_not_predicate @rp_session.reload, :active?
   end
 
   test "post sign out accepts us region" do
@@ -85,11 +80,8 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
-    assert_equal "/oidc/logout", location.path
-    assert_equal "us", query["ri"]
-    assert_predicate query["logout_challenge"], :present?
-    assert_predicate @rp_session.reload, :active?
+    assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "us")
+    assert_not_predicate @rp_session.reload, :active?
   end
 
   test "post sign out canonicalizes unsupported region to default" do
@@ -103,25 +95,19 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
 
-    assert_equal RequestContextContract.default_region, query["ri"]
-    assert_predicate query["logout_challenge"], :present?
-    assert_predicate @rp_session.reload, :active?
+    redirect_uri = query.fetch("post_logout_redirect_uri")
+    assert_equal RequestContextContract.default_region,
+                 Rack::Utils.parse_nested_query(URI.parse(redirect_uri).query).fetch("ri")
+    assert_visa_end_session_redirect(query, location, client_id: "warp-app-jp", region: "jp")
   end
 
-  test "transaction issuance failure does not render success completion" do
+  test "sign-out without a stored ID Token hint fails closed" do
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, user_token_kind_id: ClientTokenKind::BROWSER_WEB)
     authenticate_rp!(user, token)
-    rejected = AcmeLogoutTransactionCoordinator::Result.new(
-      transaction: nil,
-      status: :rejected,
-      error: "invalid_request",
-      error_description: "completion destination is not allowlisted",
-    )
+    @rp_session.logout_hint.destroy!
 
-    AcmeLogoutTransactionCoordinator.stub(:issue!, rejected) do
-      post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
-    end
+    post warp_app_sign_out_url(ri: "us"), headers: app_session_headers(user, token)
 
     assert_response :unprocessable_content
     assert_predicate token.reload, :currently_usable?
@@ -140,7 +126,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     location = URI.parse(response.location)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_SERVICE_URL"), location.host
+    assert_equal OidcIssuer.host_for_resource_type("client"), location.host
     assert_equal "/oidc/logout", location.path
     assert_not_equal ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), location.host
   end
@@ -159,6 +145,7 @@ class Warp::App::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
+    store_oidc_rp_logout_hint!(@rp_session, user, oidc_client)
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
       user,
       host: @host,

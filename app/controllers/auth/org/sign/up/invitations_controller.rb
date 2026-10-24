@@ -7,14 +7,12 @@ module Auth
       module Up
         class InvitationsController < ::Auth::Org::ApplicationController
           include CloudflareTurnstile
-          include SignUpSuspensionGuard
           include ::TurnstilePageProps
           include ::SurfaceInertiaPage
           include ::MinimumResponseBudget
 
           AUTHENTICATION_MODE = :guest
 
-          before_action :reject_suspended_sign_up!
           before_action :start_minimum_response_budget, only: :create
           after_action :enforce_minimum_response_budget, only: :create
 
@@ -60,18 +58,6 @@ module Auth
 
           def sign_up_surface = :org
 
-          def render_suspended_sign_up!
-            render inertia: "auth/org/sign/ups/show",
-                   props: {
-                     title: t("sign.org.ups.new.heading"),
-                     description: nil,
-                     suspended_notice: t("errors.messages.sign_up_suspended"),
-                     recruit: nil,
-                     sign_in_link: nil,
-                     back_to_root: nil,
-                   },
-                   status: :service_unavailable
-          end
         end
       end
     end

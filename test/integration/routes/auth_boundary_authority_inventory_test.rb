@@ -11,6 +11,7 @@ class AuthBoundaryAuthorityInventoryTest < ActionDispatch::IntegrationTest
 
   BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
   AUTH_APP_HOST = ENV.fetch("PRIVATE_AUTH_SERVICE_URL")
+  VISA_APP_HOST = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
 
   test "authority map lists nine independent RPs and three separate Base self RPs without retired clients" do
     assert_equal %w(base-app-ww base-com-ww base-org-ww), AuthBoundaryAuthorityMap.base_self_rp_client_ids
@@ -26,22 +27,22 @@ class AuthBoundaryAuthorityInventoryTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "base preserves global OAuth authorization token and discovery JWKS" do
+  test "Visa preserves the global OAuth authority while Base keeps RP JWKS" do
     assert_recognizes(
-      { controller: "base/app/oauth/authorizations", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/oauth/authorize", method: :get },
+      { controller: "visa/app/oauth/authorizations", action: "show" },
+      { path: "http://#{VISA_APP_HOST}/oauth/authorize", method: :get },
     )
     assert_recognizes(
-      { controller: "base/app/oauth/tokens", action: "create" },
-      { path: "http://#{BASE_APP_HOST}/oauth/token", method: :post },
+      { controller: "visa/app/oauth/tokens", action: "create" },
+      { path: "http://#{VISA_APP_HOST}/oauth/token", method: :post },
     )
     assert_recognizes(
       { controller: "base/app/well_known/jwks", action: "show" },
       { path: "http://#{BASE_APP_HOST}/.well-known/jwks.json", method: :get },
     )
     assert_recognizes(
-      { controller: "base/app/well_known/discoveries", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/.well-known/openid-configuration", method: :get },
+      { controller: "visa/app/well_known/discoveries", action: "show" },
+      { path: "http://#{VISA_APP_HOST}/.well-known/openid-configuration", method: :get },
     )
   end
 

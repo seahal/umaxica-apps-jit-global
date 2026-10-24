@@ -100,6 +100,9 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
                     ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                     ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                     ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                   }.fetch(fv5318)
                 end
               fv5288 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -346,6 +349,9 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
                     ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                     ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                     ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                   }.fetch(fv5250)
                 end
               fv5220 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -595,6 +601,9 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
                     ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                     ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                     ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                   }.fetch(fv5182)
                 end
               fv5152 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -841,6 +850,9 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5114)
                   end
                 fv5084 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1085,6 +1097,9 @@ class Auth::Org::SignUpsControllerTest < ActionDispatch::IntegrationTest
                     ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                     ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                     ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                    ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                    ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                    ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                   }.fetch(fv5046)
                 end
               fv5016 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(

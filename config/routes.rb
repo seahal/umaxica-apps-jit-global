@@ -2,11 +2,14 @@
 # frozen_string_literal: true
 
 Rails.application.routes.draw do
-  # Base owns the OP/Authorization Server and durable identity/session authority.
+  # Base owns the browser-RP, identity and session-management surfaces.
   draw :base
 
   # Auth owns the credential gateway for sign-in/sign-up ceremonies.
   draw :auth
+
+  # Visa owns the OpenID Provider and its browser-bound authority flows.
+  draw :visa
 
   # Info owns public informational content.
   draw :info

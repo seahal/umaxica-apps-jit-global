@@ -28,6 +28,10 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://www.umaxica.com", values.base_corporate.to_s
     assert_equal "https://www.umaxica.org", values.base_staff.to_s
 
+    assert_equal "https://visa.app.localhost", values.visa_service.to_s
+    assert_equal "https://visa.com.localhost", values.visa_corporate.to_s
+    assert_equal "https://visa.org.localhost", values.visa_staff.to_s
+
     assert_equal "https://www-jp.umaxica.app", values.warp_service.to_s
     assert_equal "https://www-jp.umaxica.com", values.warp_corporate.to_s
     assert_equal "https://www-jp.umaxica.org", values.warp_staff.to_s
@@ -59,6 +63,9 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal 3, values.base_origins.size
     assert_equal [values.base_service, values.base_corporate, values.base_staff], values.base_origins
 
+    assert_equal 3, values.visa_origins.size
+    assert_equal [values.visa_service, values.visa_corporate, values.visa_staff], values.visa_origins
+
     assert_equal 3, values.warp_origins.size
     assert_equal [values.warp_service, values.warp_corporate, values.warp_staff], values.warp_origins
 
@@ -82,6 +89,9 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
+      "VISA_SERVICE_URL" => "visa.example.test",
+      "VISA_CORPORATE_URL" => "visa-com.example.test",
+      "VISA_STAFF_URL" => "visa-org.example.test",
       "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
       "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
       "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",
@@ -108,6 +118,7 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
     assert_equal "https://warp.example.test", values.warp_service.to_s
     assert_equal "https://info-org.example.test", values.info_staff.to_s
     assert_equal "https://guid.example.test", values.guid_service.to_s
+    assert_equal "https://visa.example.test", values.visa_service.to_s
     assert_equal "https://edit-org.example.test", values.edit_staff.to_s
     assert_not values.acme_origins.any?(&:nil?)
   end
@@ -251,6 +262,9 @@ class ConfigValuesHostFamilyValuesTest < ActiveSupport::TestCase
       "BASE_SERVICE_URL" => "base.example.test",
       "BASE_CORPORATE_URL" => "base-com.example.test",
       "BASE_STAFF_URL" => "base-org.example.test",
+      "VISA_SERVICE_URL" => "visa.example.test",
+      "VISA_CORPORATE_URL" => "visa-com.example.test",
+      "VISA_STAFF_URL" => "visa-org.example.test",
       "PUBLIC_WARP_SERVICE_URL" => "warp.example.test",
       "PUBLIC_WARP_CORPORATE_URL" => "warp-com.example.test",
       "PUBLIC_WARP_STAFF_URL" => "warp-org.example.test",

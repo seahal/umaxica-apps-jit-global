@@ -1,12 +1,10 @@
 # Sign-In Session Limit
 
-> **Deprecated / partially superseded by Identity Authority inversion:** `acme/www` is the Session,
-> Token, Account, Preference, Authorization, and downstream-token Authority. `sign/id` is
-> ceremony-only: it may host credential entry points and execute delegated credential ceremonies,
-> but it must not own sessions, refresh tokens, preference writes, dashboards, account lifecycle,
-> token issuance, logout, or step-up freshness. Existing sign-side physical tables/models do not
-> imply sign-side authority. Do not use this document to reintroduce sign-side sessions, refresh,
-> preference, dashboard, account lifecycle, token issuance, logout, or step-up freshness.
+> **Current authority boundary (2026-10-24):** Visa is the OIDC authority and owns Root Session
+> issuance and session-limit resolution on `visa.umaxica.*`. Auth remains ceremony-only. Base is the
+> `www.umaxica.*` browser RP and does not read or write Visa's OP session state. Historical
+> `acme/www` and `sign/id` wording below must not be used to reintroduce a shared session or an
+> authority endpoint on Base; see `adr/visa-op-host.md`.
 
 This document records the session-limit behavior for sign-in flows across the `app`, `com`, and
 `org` surfaces.
@@ -89,13 +87,13 @@ result with HTTP 403; the existing flow and lease remain unchanged.
 
 - Auth: none. An Auth host runs credential ceremonies and issues no session, so it never holds a
   resolution; its former `/sign/in/session` page is removed.
-- Base app, OIDC resume: `/sign/in/limitation` with the `ClientSessionLimitResolutionTransaction`
+- Visa app, OIDC resume: `/sign/in/limitation` with the `ClientSessionLimitResolutionTransaction`
   challenge.
-- Base app, social completion: `/sign/in/limitation` on the Base host that ran the completion,
-  located through that host's flow locator. The URL carries no grant.
+- Google and Apple sign-up have no separate path: they reach the limit through the canonical Sign In
+  and the OIDC resume above (`adr/sign-up-finalization-in-auth.md`).
 
-The show action is read-only. The existing update path accepts PATCH/PUT to select a candidate and
-an explicit POST with `continue=1` to continue the same browser-bound flow. All three Base
+The show action is read-only. The existing Visa update path accepts PATCH/PUT to select a candidate
+and an explicit POST with `continue=1` to continue the same browser-bound flow. All three Visa
 limitation routes expose that POST mapping without adding a new action surface. Selection records a
 candidate; it does not revoke a session. The final `log_in` call obtains the actor, parent-flow and
 resolution locks in the canonical order and calls
@@ -111,8 +109,8 @@ on the actor; the first eligible final commit wins, and no GET, polling or backg
 promotes a waiting flow.
 
 Cancelling fails only the waiting flow; no existing session is touched. com and org use the same
-ceremony at `/sign/in/limitation` on their Base host (`Base::Com::Sign::In::LimitationsController`,
-`Base::Org::Sign::In::LimitationsController`).
+ceremony at `/sign/in/limitation` on their Visa host (`Visa::Com::Sign::In::LimitationsController`,
+`Visa::Org::Sign::In::LimitationsController`).
 
 ## Sign-In Families
 

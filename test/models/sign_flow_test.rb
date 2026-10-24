@@ -74,11 +74,12 @@ class SignFlowTest < ActiveSupport::TestCase
   end
 
   test "sign-in cycle defaults expose the configured ttl and expiry window" do
-    assert_equal 15.minutes, ClientSignInFlow.default_ttl
+    # WU-06: a Flow lives at least as long as its Admission's 30-minute curfew.
+    assert_equal 30.minutes, ClientSignInFlow.default_ttl
 
     flow = ClientSignInFlow.new(cycle_attrs(ClientSignInFlow))
 
-    assert_in_delta 15.minutes, flow.default_expires_at - Time.current, 2.seconds
+    assert_in_delta 30.minutes, flow.default_expires_at - Time.current, 2.seconds
   end
 
   test "sign-up cycles reject unknown statuses" do

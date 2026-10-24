@@ -13,7 +13,6 @@ module Auth
           include SignEmailRegistrable
           include EnforcementIdentifierGate
 
-          include SignUpSuspensionGuard
           include AppSignUpEntryPage
           include SignUpFlowEntry
 
@@ -22,7 +21,6 @@ module Auth
           REGISTRATION_EMAIL_PERMITTED_KEYS = %i(raw_address address confirm_policy promotional notifiable).freeze
 
           before_action :require_sign_up_ceremony_admission!
-          before_action :reject_suspended_sign_up!
           before_action :enforce_email_flow!
 
           declare_authentication_mode! :guest, status: :unauthorized,

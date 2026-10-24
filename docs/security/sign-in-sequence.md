@@ -5,12 +5,12 @@ failure-domain contract are documented in
 [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md) and
 [ADR D13](../../adr/sign-in-first-and-sign-up-handoff.md).
 
-> **Authority-boundary supersession (2026-09-22):** This document retains the earlier
+> **Authority-boundary supersession (2026-10-24):** This document retains the earlier
 > `sign/id`–`acme/www` migration vocabulary for historical context. The current Rails contract is
-> defined by `adr/base-auth-ceremony-and-seven-rp-boundary.md`: Base is the sole physical OIDC
-> IdP/Authorization Server, Auth performs credential ceremony only, and each first-party browser RP
-> uses its own registered client. In particular, do not reintroduce `base-rails-rp`, `sign-rp`, or
-> `side-rails-rp` from the historical examples below.
+> Visa as the sole OIDC Provider/authority on `visa.umaxica.*`, Auth as the credential ceremony
+> surface, and Base as the `www.umaxica.*` browser RP. Each first-party browser RP uses its own
+> registered client. In particular, do not reintroduce `base-rails-rp`, `sign-rp`, or
+> `side-rails-rp` from the historical examples below. See `adr/visa-op-host.md`.
 
 > **Reading rule:** The sections below retain the earlier `sign/id`–`acme/www` vocabulary as a
 > migration record. They are not a description of the current Rails authority boundary. For the
@@ -19,21 +19,23 @@ failure-domain contract are documented in
 > **Lifecycle vocabulary:** Status, event, and result names in this document are current runtime
 > vocabulary. Future canonical lifecycle terminology (`ACTIVE`, `COMPLETED`, `CANCELLED`, `EXPIRED`,
 > `HALTED`, and the canonical events) is defined in `docs/security/idp-flow-lifecycle.md` and
-> `adr/idp-flow-lifecycle-vocabulary.md`; it is not implemented yet.
+> `adr/idp-flow-lifecycle-vocabulary.md`; future canonical naming remains a documentation concern
+> unless the owning lifecycle axis is changed.
 
 ## Current Rails result contract
 
-Auth owns credential ceremony continuity and authentication evidence only. Base owns the OIDC
-authorization transaction, Base Browser Session, authorization code, and token authority. Each RP
-owns its own RP Session and local state; Base's self-RP participates through its registered client
-without acquiring authority over other RPs' databases.
+Auth owns credential ceremony continuity and authentication evidence only. Visa owns the OIDC
+authorization transaction, Root Session, authorization code, and authority token issuance. Base owns
+its browser RP callback, RP Session and local state; each other RP owns its own RP Session and local
+state. Base's self-RP participates through its registered client without acquiring authority over
+other RPs' databases.
 
-The Auth-to-Base result is a short-lived opaque Valkey transport capability. Its digest, generation,
-expiry, and Base finalization references are stored on the matching surface-local PostgreSQL
-authorization transaction. Base reads the transport only after validating the transaction, then
+The Auth-to-Visa result is a short-lived opaque Valkey transport capability. Its digest, generation,
+expiry, and Visa finalization references are stored on the matching surface-local PostgreSQL
+authorization transaction. Visa reads the transport only after validating the transaction, then
 rechecks the generation under the locked PostgreSQL row before finalizing. A current result may be
-retried while its transport TTL remains; `base_finalized_at` makes Browser Session finalization
-idempotent and a transaction creates at most one Browser Session.
+retried while its transport TTL remains; the authority finalization timestamp makes Root Session
+finalization idempotent and a transaction creates at most one Root Session.
 
 The transport is not the authorization grant. Authorization-code aliases may be issued for the same
 durable transaction, while `authorization_grant_redeemed_at` is claimed atomically in the same
@@ -172,18 +174,18 @@ adapter. The current result shape includes `success`, `mfa_required`, `session_l
 `session_limit_conflict`, `credential_rejected`, `identity_unavailable`, `transaction_expired`,
 `failure`, and `invalid_request`.
 
-## One RP sign-in per browser (decided; implemented by WU-43)
+## One RP sign-in per browser (D-155; current RP contract)
 
-Decided 2026-10-22 (D-155, `adr/rp-oidc-state-and-return-target.md`); the RP code does not do this
-yet. A browser runs one sign-in at a time per RP: the RP cookie session holds one pending entry, and
-each `POST /sign` replaces it, so the last start wins. An earlier tab is not told; it can continue
-through Auth and the OP (OTP mails, Passkey, even an issued authorization code) and is refused only
-at the RP callback, which lands on `GET /sign/interruption`. This is the intended behavior, not a
-defect. When the earlier tab was a Sign Up, its registration is still saved and only its sign-in
-handoff is refused — at the OP, because the browser already holds a Root Session, or at the RP; the
-person signs in with the new account later. The rule is per browser: different browsers have
-separate cookies and are independent; only the account's session limit applies
-(`ClientToken::MAX_SESSIONS_PER_USER` 2, `VisitorToken` 1, `OperatorToken` 1).
+Decided 2026-10-22 (D-155, `adr/rp-oidc-state-and-return-target.md`) and represented by the RP
+pending-flow limit. A browser runs one sign-in at a time per RP: the RP cookie session holds one
+pending entry, and each `POST /sign` replaces it, so the last start wins. An earlier tab is not
+told; it can continue through Auth and the OP (OTP mails, Passkey, even an issued authorization
+code) and is refused only at the RP callback, which lands on `GET /sign/interruption`. This is the
+intended behavior, not a defect. When the earlier tab was a Sign Up, its registration is still saved
+and only its sign-in handoff is refused — at the OP, because the browser already holds a Root
+Session, or at the RP; the person signs in with the new account later. The rule is per browser:
+different browsers have separate cookies and are independent; only the account's session limit
+applies (`ClientToken::MAX_SESSIONS_PER_USER` 2, `VisitorToken` 1, `OperatorToken` 1).
 
 ## Timing And Enumeration Mitigation
 

@@ -237,6 +237,13 @@ module SignUpSequenceControllerSupport
             next
           end
 
+          # D-105 / D-131: the deadline is decided on the Binding's OP clock under the Flow lock;
+          # at or after it nothing is registered.
+          unless sign_up_flow_within_curfew?
+            finalized = SignUpResult.build(status: :expired, ticket: @sign_up_ticket, errors: ["curfew passed"])
+            next
+          end
+
           finalization_result = finalize_sign_up_side_effect!
           finalized = perform_sign_up_event(
             :finalize, payload: { finalization_result: finalization_result },
@@ -251,8 +258,12 @@ module SignUpSequenceControllerSupport
           end
           complete = perform_sign_up_event(:complete)
           next unless complete.success?
+          # REQ-CURFEW 7: a registration committed across the deadline is kept; only its Sign In
+          # handoff is refused, and the person signs in normally later.
+          next @sign_up_handoff_after_curfew = true unless sign_up_flow_within_curfew?
 
-          sign_in_result = handoff_to_sign_in_flow!(context.pending_actor)
+          # The actor read before Finalization still carries its unfinished status in memory.
+          sign_in_result = handoff_to_sign_in_flow!(context.pending_actor.reload)
         end
       end
 
@@ -267,7 +278,14 @@ module SignUpSequenceControllerSupport
     end
 
     sign_up_session_state.clear_all!
+    return exit_attempt_after_curfew!(admitted_auth_ceremony_session) if @sign_up_handoff_after_curfew
+
     redirect_after_sign_up_handoff!(sign_in_result, json: json)
+  end
+
+  def sign_up_flow_within_curfew?
+    binding = @sign_up_ticket.association(:auth_admission_binding).scope.take
+    binding.present? && AdmissionCurfewValue.for(binding).within?
   end
 
   def sign_up_session_state
@@ -472,29 +490,30 @@ module SignUpSequenceControllerSupport
         telephone: telephone, actor_context: current_actor, operation_ref: @sign_up_ticket.public_id,
         flow: @sign_up_ticket, session_nonce: session.dig(:app_sign_up_flow_locator, "nonce"),
       )
-    when "email", "social_identity"
-      # Email and social sign-up only need the actor promoted into the
-      # verified-with-sign-up state before the durable graph is provisioned.
+    when "email"
+      # Email sign-up only needs the actor promoted into the verified-with-sign-up state before the
+      # durable graph is provisioned.
       actor.with_lock do
         raise ActiveRecord::RecordNotSaved, "Contact owner is unavailable" unless actor.active?
 
-        if @sign_up_ticket.pending_contact_type == "email"
-          email = ClientEmail.lock.find(@sign_up_ticket.pending_contact_id)
-          raise ActiveRecord::RecordNotFound unless email.user_id == actor.id
+        email = ClientEmail.lock.find(@sign_up_ticket.pending_contact_id)
+        raise ActiveRecord::RecordNotFound unless email.user_id == actor.id
 
-          finalize_sign_up_email_binding!(actor, email)
-          actor.finalize_email_sign_up!(email: email, flow: @sign_up_ticket)
-        elsif actor.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
-          actor.update!(status_id: ClientStatus::VERIFIED_WITH_SIGN_UP)
-        end
+        finalize_sign_up_email_binding!(actor, email)
+        actor.finalize_email_sign_up!(email: email, flow: @sign_up_ticket)
       end
+    when "social_identity"
+      # Google and Apple (adr/sign-up-finalization-in-auth.md F3): the External Identity and the
+      # registered status commit together; only the social check controllers reach this branch.
+      finalize_social_sign_up_identity!(actor)
     else
       return :failed
     end
 
     :accepted
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved,
-         SignAppUpTelephoneRegistrationFinalizer::PasskeyMissingError
+         SignAppUpTelephoneRegistrationFinalizer::PasskeyMissingError,
+         SocialAuth::ProviderError, IdentitySocialCeremonyContract::Error
     :failed
   end
 
@@ -519,6 +538,8 @@ module SignUpSequenceControllerSupport
         raise ActiveRecord::RecordNotFound unless email.visitor_id == actor.id
 
         finalize_sign_up_email_binding!(actor, email)
+        # D-128 / D-131: the registered status is the decisive commit.
+        actor.promote_finished_registration!
       end
     else
       return :failed

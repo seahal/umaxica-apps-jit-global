@@ -6,7 +6,7 @@ class IdentitySocialCeremonyGrantIssuer
 
   def self.issue!(surface:, actor_ref:, session_ref:, operation:, provider:, resource_ref: nil, return_to: nil,
                   provider_subject_ref: nil,
-                  provider_subject_digest: nil, expires_at: nil, now: Time.current)
+                  provider_subject_digest: nil, expires_at: nil, issuer_id: nil, now: Time.current)
     transaction =
       IdentitySocialCeremonyReplayStore.for(surface).create_transaction!(
         surface: surface,
@@ -21,7 +21,7 @@ class IdentitySocialCeremonyGrantIssuer
         expires_at: expires_at,
         now: now,
       )
-    Issuance.new(transaction: transaction, grant: new(transaction: transaction, now: now).call)
+    Issuance.new(transaction: transaction, grant: new(transaction:, issuer_id:, now:).call)
   end
 
   def initialize(transaction:, issuer_id: nil, now: Time.current)

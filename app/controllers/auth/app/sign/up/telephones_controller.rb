@@ -16,15 +16,12 @@ module Auth
 
           include EnforcementIdentifierGate
 
-          include SignUpSuspensionGuard
           include AppSignUpEntryPage
           include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
           before_action :require_sign_up_ceremony_admission!
-          before_action :reject_suspended_sign_up!
-
           declare_authentication_mode! :guest, status: :unauthorized,
                                                message: I18n.t("errors.messages.already_authenticated"),
                                                no_redirect: true

@@ -9,9 +9,9 @@ require "test_helper"
 # real Base POST with a real IdP access credential.
 class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
   REALMS = {
-    "client" => { base_env: "PUBLIC_BASE_SERVICE_URL", path: :base_app_oidc_logout_path },
-    "visitor" => { base_env: "PUBLIC_BASE_CORPORATE_URL", path: :base_com_oidc_logout_path },
-    "operator" => { base_env: "PUBLIC_BASE_STAFF_URL", path: :base_org_oidc_logout_path },
+    "client" => { visa_surface: :app, path: :visa_app_oidc_logout_path },
+    "visitor" => { visa_surface: :com, path: :visa_com_oidc_logout_path },
+    "operator" => { visa_surface: :org, path: :visa_org_oidc_logout_path },
   }.freeze
 
   setup { https! }
@@ -203,7 +203,7 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
   end
 
   def authority_headers(actor, root_token)
-    base_host = ENV.fetch(@realm.fetch(:base_env))
+    base_host = visa_host_for_test_surface(@realm.fetch(:visa_surface))
     device_session = root_token.device_session_record
     access_token = AuthenticationToken.encode(
       actor,
@@ -220,7 +220,7 @@ class OidcRpLogoutRegisteredRpMatrixTest < ActionDispatch::IntegrationTest
   end
 
   def confirm(headers)
-    host!(ENV.fetch(@realm.fetch(:base_env)))
+    host!(visa_host_for_test_surface(@realm.fetch(:visa_surface)))
     origin = URI.parse(@transaction.completion_url)
     post(
       public_send(@realm.fetch(:path), logout_challenge: @transaction.logout_challenge, ri: "jp"),

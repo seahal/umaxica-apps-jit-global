@@ -1,9 +1,9 @@
 # Social Callback Boundary
 
-> **Legacy Sign/Acme vocabulary:** The signed result handoff in this document is historical
-> context for the former delegation model. In the current Rails OIDC architecture, Auth remains
-> ceremony-only and Base remains the OIDC and session authority; use the current Base/Auth result
-> contract for new work.
+> **Legacy Sign/Acme vocabulary:** The signed result handoff in this document is historical context
+> for the former delegation model. In the current Rails OIDC architecture, Auth remains
+> ceremony-only, Visa is the OIDC and Root Session authority, and Base is the browser RP; use the
+> current Auth/Visa result contract for new work.
 
 ## Boundary
 
@@ -23,11 +23,11 @@ authorization, token, or freshness decision.
 - bind callback evidence to an acme transaction;
 - return a signed ceremony result.
 
-`acme/www` owns:
+Visa owns:
 
 - account lookup and account linking decisions;
 - sign-up finalization;
-- session issuance;
+- Root Session issuance;
 - authorization and policy decisions;
 - downstream token issuance.
 

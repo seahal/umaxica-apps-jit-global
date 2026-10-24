@@ -52,108 +52,8 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the sign-in entry stores the authorization transaction in Auth continuity" do
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5147 = @base_browser
-      fv5149 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5148 = fv5147.response.cookies[fv5149]
-      if fv5148.nil?
-        fv5152 = fv5147.response.headers["Set-Cookie"] || fv5147.response.headers["set-cookie"]
-        fv5151 =
-          if fv5152.is_a?(String) && fv5152.start_with?("[")
-            JSON.parse(fv5152)
-          else
-            Array(fv5152)
-          end
-        fv5150 =
-          fv5151.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5149}=")
-          end
-        if fv5150
-
-          _, fv5148 = fv5150.split(";", 2).first.to_s.split("=", 2)
-          fv5148 = Rack::Utils.unescape(fv5148.to_s)
-        end
-      end
-
-      unless fv5148.nil?
-        fv5147.cookies.delete(fv5149)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5147.cookies.merge(
-          "#{fv5149}=#{Rack::Utils.escape(fv5148)}",
-          URI.parse("https://#{fv5147.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5141 = @base_browser
-      fv5143 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5142 = fv5141.response.cookies[fv5143]
-      if fv5142.nil?
-        fv5146 = fv5141.response.headers["Set-Cookie"] || fv5141.response.headers["set-cookie"]
-        fv5145 =
-          if fv5146.is_a?(String) && fv5146.start_with?("[")
-            JSON.parse(fv5146)
-          else
-            Array(fv5146)
-          end
-        fv5144 =
-          fv5145.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5143}=")
-          end
-        if fv5144
-
-          _, fv5142 = fv5144.split(";", 2).first.to_s.split("=", 2)
-          fv5142 = Rack::Utils.unescape(fv5142.to_s)
-        end
-      end
-
-      unless fv5142.nil?
-        fv5141.cookies.delete(fv5143)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5141.cookies.merge(
-          "#{fv5143}=#{Rack::Utils.escape(fv5142)}",
-          URI.parse("https://#{fv5141.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
 
     assert_response :success
     record = ClientAuthCeremonySession.order(created_at: :desc).first
@@ -165,108 +65,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the primary factor sends the ceremony to the sign-in checkpoint" do
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5135 = @base_browser
-      fv5137 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5136 = fv5135.response.cookies[fv5137]
-      if fv5136.nil?
-        fv5140 = fv5135.response.headers["Set-Cookie"] || fv5135.response.headers["set-cookie"]
-        fv5139 =
-          if fv5140.is_a?(String) && fv5140.start_with?("[")
-            JSON.parse(fv5140)
-          else
-            Array(fv5140)
-          end
-        fv5138 =
-          fv5139.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5137}=")
-          end
-        if fv5138
-
-          _, fv5136 = fv5138.split(";", 2).first.to_s.split("=", 2)
-          fv5136 = Rack::Utils.unescape(fv5136.to_s)
-        end
-      end
-
-      unless fv5136.nil?
-        fv5135.cookies.delete(fv5137)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5135.cookies.merge(
-          "#{fv5137}=#{Rack::Utils.escape(fv5136)}",
-          URI.parse("https://#{fv5135.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5129 = @base_browser
-      fv5131 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5130 = fv5129.response.cookies[fv5131]
-      if fv5130.nil?
-        fv5134 = fv5129.response.headers["Set-Cookie"] || fv5129.response.headers["set-cookie"]
-        fv5133 =
-          if fv5134.is_a?(String) && fv5134.start_with?("[")
-            JSON.parse(fv5134)
-          else
-            Array(fv5134)
-          end
-        fv5132 =
-          fv5133.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5131}=")
-          end
-        if fv5132
-
-          _, fv5130 = fv5132.split(";", 2).first.to_s.split("=", 2)
-          fv5130 = Rack::Utils.unescape(fv5130.to_s)
-        end
-      end
-
-      unless fv5130.nil?
-        fv5129.cookies.delete(fv5131)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5129.cookies.merge(
-          "#{fv5131}=#{Rack::Utils.escape(fv5130)}",
-          URI.parse("https://#{fv5129.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
 
     token_count = ClientToken.where(user_id: @user.id).count
     submit_email_otp!
@@ -286,108 +87,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     credential = client_secret_credentials(:one)
 
     assert_equal credential.id, ClientSecretLookupQuery.call(client: @user, secret: "a" * 32).id
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5123 = @base_browser
-      fv5125 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5124 = fv5123.response.cookies[fv5125]
-      if fv5124.nil?
-        fv5128 = fv5123.response.headers["Set-Cookie"] || fv5123.response.headers["set-cookie"]
-        fv5127 =
-          if fv5128.is_a?(String) && fv5128.start_with?("[")
-            JSON.parse(fv5128)
-          else
-            Array(fv5128)
-          end
-        fv5126 =
-          fv5127.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5125}=")
-          end
-        if fv5126
-
-          _, fv5124 = fv5126.split(";", 2).first.to_s.split("=", 2)
-          fv5124 = Rack::Utils.unescape(fv5124.to_s)
-        end
-      end
-
-      unless fv5124.nil?
-        fv5123.cookies.delete(fv5125)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5123.cookies.merge(
-          "#{fv5125}=#{Rack::Utils.escape(fv5124)}",
-          URI.parse("https://#{fv5123.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5117 = @base_browser
-      fv5119 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5118 = fv5117.response.cookies[fv5119]
-      if fv5118.nil?
-        fv5122 = fv5117.response.headers["Set-Cookie"] || fv5117.response.headers["set-cookie"]
-        fv5121 =
-          if fv5122.is_a?(String) && fv5122.start_with?("[")
-            JSON.parse(fv5122)
-          else
-            Array(fv5122)
-          end
-        fv5120 =
-          fv5121.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5119}=")
-          end
-        if fv5120
-
-          _, fv5118 = fv5120.split(";", 2).first.to_s.split("=", 2)
-          fv5118 = Rack::Utils.unescape(fv5118.to_s)
-        end
-      end
-
-      unless fv5118.nil?
-        fv5117.cookies.delete(fv5119)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5117.cookies.merge(
-          "#{fv5119}=#{Rack::Utils.escape(fv5118)}",
-          URI.parse("https://#{fv5117.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     deadline = ClientOidcAuthorizationTransaction.database_now + 10.seconds
     @transaction.update!(expires_at: deadline, login_challenge_expires_at: deadline)
 
@@ -410,7 +112,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
-    assert_response :success
+    assert_response :see_other
     flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
 
     assert_equal ["passcode", "secret", @user.public_id, nil, nil, "SELECTOR_PENDING"],
@@ -422,18 +124,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
                  [flow.authentication_context, flow.principal_id, ceremony.authorization_transaction_ref]
     action = @oidc_result_action
     assert_difference("ClientToken.count", 1) do
-      begin
-        fv5116 = action
-        post(
-          fv5116, params: {
-            result_ref: @oidc_result_ref,
-            transaction_ref: @oidc_result_transaction_ref,
-          }, headers: {
-            "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-            "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      end
+      get_oidc_result!
 
       assert_response :redirect, response.body
     end
@@ -445,20 +136,11 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     root_token_ref = @transaction.reload.browser_session_ref
     consumed_at = credential.consumed_at
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      begin
-        fv5115 = action
-        post(
-          fv5115, params: {
-            result_ref: @oidc_result_ref,
-            transaction_ref: @oidc_result_transaction_ref,
-          }, headers: {
-            "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-            "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      end
+      get_oidc_result!
     end
-    assert_response :redirect
+    # WU-27/D-104: a finalized result is terminal; a lost-response replay must not
+    # issue another root or reissue the retained credentials.
+    assert_response :bad_request
     assert_equal [root_token_ref, consumed_at], [@transaction.reload.browser_session_ref, credential.reload.consumed_at]
     ChronicleRetentionPolicy.find_by(code: "security") ||
       ChronicleRetentionPolicy.create!(code: "security", name: "Security", duration_days: 365, permanent: false)
@@ -532,108 +214,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "expired OIDC Secret flow rejects a delayed result without releasing its claim" do
     credential = client_secret_credentials(:one)
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5105 = @base_browser
-      fv5107 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5106 = fv5105.response.cookies[fv5107]
-      if fv5106.nil?
-        fv5110 = fv5105.response.headers["Set-Cookie"] || fv5105.response.headers["set-cookie"]
-        fv5109 =
-          if fv5110.is_a?(String) && fv5110.start_with?("[")
-            JSON.parse(fv5110)
-          else
-            Array(fv5110)
-          end
-        fv5108 =
-          fv5109.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5107}=")
-          end
-        if fv5108
-
-          _, fv5106 = fv5108.split(";", 2).first.to_s.split("=", 2)
-          fv5106 = Rack::Utils.unescape(fv5106.to_s)
-        end
-      end
-
-      unless fv5106.nil?
-        fv5105.cookies.delete(fv5107)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5105.cookies.merge(
-          "#{fv5107}=#{Rack::Utils.escape(fv5106)}",
-          URI.parse("https://#{fv5105.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5099 = @base_browser
-      fv5101 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5100 = fv5099.response.cookies[fv5101]
-      if fv5100.nil?
-        fv5104 = fv5099.response.headers["Set-Cookie"] || fv5099.response.headers["set-cookie"]
-        fv5103 =
-          if fv5104.is_a?(String) && fv5104.start_with?("[")
-            JSON.parse(fv5104)
-          else
-            Array(fv5104)
-          end
-        fv5102 =
-          fv5103.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5101}=")
-          end
-        if fv5102
-
-          _, fv5100 = fv5102.split(";", 2).first.to_s.split("=", 2)
-          fv5100 = Rack::Utils.unescape(fv5100.to_s)
-        end
-      end
-
-      unless fv5100.nil?
-        fv5099.cookies.delete(fv5101)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5099.cookies.merge(
-          "#{fv5101}=#{Rack::Utils.escape(fv5100)}",
-          URI.parse("https://#{fv5099.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -642,25 +225,14 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
-    assert_response :success
+    assert_response :see_other
     action = @oidc_result_action
     flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
     flow.update!(expires_at: ClientSignInFlow.database_now)
     operation_id = credential.reload.claim_operation_id
 
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      begin
-        fv5098 = action
-        post(
-          fv5098, params: {
-            result_ref: @oidc_result_ref,
-            transaction_ref: @oidc_result_transaction_ref,
-          }, headers: {
-            "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-            "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      end
+      get_oidc_result!
     end
     assert_response :bad_request
     assert_equal operation_id, credential.reload.claim_operation_id
@@ -680,18 +252,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_nil credential.consumed_at
     assert_equal operation_id, credential.claim_operation_id
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      begin
-        fv5097 = action
-        post(
-          fv5097, params: {
-            result_ref: @oidc_result_ref,
-            transaction_ref: @oidc_result_transaction_ref,
-          }, headers: {
-            "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-            "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      end
+      get_oidc_result!
     end
     assert_response :bad_request
     ChronicleRetentionPolicy.find_by(code: "security") ||
@@ -743,108 +304,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "terminally failed OIDC Secret flow rejects delayed result before its deadline" do
     credential = client_secret_credentials(:one)
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5087 = @base_browser
-      fv5089 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5088 = fv5087.response.cookies[fv5089]
-      if fv5088.nil?
-        fv5092 = fv5087.response.headers["Set-Cookie"] || fv5087.response.headers["set-cookie"]
-        fv5091 =
-          if fv5092.is_a?(String) && fv5092.start_with?("[")
-            JSON.parse(fv5092)
-          else
-            Array(fv5092)
-          end
-        fv5090 =
-          fv5091.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5089}=")
-          end
-        if fv5090
-
-          _, fv5088 = fv5090.split(";", 2).first.to_s.split("=", 2)
-          fv5088 = Rack::Utils.unescape(fv5088.to_s)
-        end
-      end
-
-      unless fv5088.nil?
-        fv5087.cookies.delete(fv5089)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5087.cookies.merge(
-          "#{fv5089}=#{Rack::Utils.escape(fv5088)}",
-          URI.parse("https://#{fv5087.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5081 = @base_browser
-      fv5083 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5082 = fv5081.response.cookies[fv5083]
-      if fv5082.nil?
-        fv5086 = fv5081.response.headers["Set-Cookie"] || fv5081.response.headers["set-cookie"]
-        fv5085 =
-          if fv5086.is_a?(String) && fv5086.start_with?("[")
-            JSON.parse(fv5086)
-          else
-            Array(fv5086)
-          end
-        fv5084 =
-          fv5085.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5083}=")
-          end
-        if fv5084
-
-          _, fv5082 = fv5084.split(";", 2).first.to_s.split("=", 2)
-          fv5082 = Rack::Utils.unescape(fv5082.to_s)
-        end
-      end
-
-      unless fv5082.nil?
-        fv5081.cookies.delete(fv5083)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5081.cookies.merge(
-          "#{fv5083}=#{Rack::Utils.escape(fv5082)}",
-          URI.parse("https://#{fv5081.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -853,24 +315,13 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
-    assert_response :success
+    assert_response :see_other
     action = @oidc_result_action
     flow = ClientSignInFlow.find(@transaction.reload.secret_sign_in_flow_id)
     flow.halt_sign_in!
 
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      begin
-        fv5080 = action
-        post(
-          fv5080, params: {
-            result_ref: @oidc_result_ref,
-            transaction_ref: @oidc_result_transaction_ref,
-          }, headers: {
-            "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-            "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      end
+      get_oidc_result!
     end
     assert_response :bad_request
     assert_nil flow.reload.token_id
@@ -884,108 +335,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "expired OIDC Secret limitation refuses session revocation" do
     client_secret_credentials(:one)
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5074 = @base_browser
-      fv5076 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5075 = fv5074.response.cookies[fv5076]
-      if fv5075.nil?
-        fv5079 = fv5074.response.headers["Set-Cookie"] || fv5074.response.headers["set-cookie"]
-        fv5078 =
-          if fv5079.is_a?(String) && fv5079.start_with?("[")
-            JSON.parse(fv5079)
-          else
-            Array(fv5079)
-          end
-        fv5077 =
-          fv5078.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5076}=")
-          end
-        if fv5077
-
-          _, fv5075 = fv5077.split(";", 2).first.to_s.split("=", 2)
-          fv5075 = Rack::Utils.unescape(fv5075.to_s)
-        end
-      end
-
-      unless fv5075.nil?
-        fv5074.cookies.delete(fv5076)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5074.cookies.merge(
-          "#{fv5076}=#{Rack::Utils.escape(fv5075)}",
-          URI.parse("https://#{fv5074.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5068 = @base_browser
-      fv5070 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5069 = fv5068.response.cookies[fv5070]
-      if fv5069.nil?
-        fv5073 = fv5068.response.headers["Set-Cookie"] || fv5068.response.headers["set-cookie"]
-        fv5072 =
-          if fv5073.is_a?(String) && fv5073.start_with?("[")
-            JSON.parse(fv5073)
-          else
-            Array(fv5073)
-          end
-        fv5071 =
-          fv5072.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5070}=")
-          end
-        if fv5071
-
-          _, fv5069 = fv5071.split(";", 2).first.to_s.split("=", 2)
-          fv5069 = Rack::Utils.unescape(fv5069.to_s)
-        end
-      end
-
-      unless fv5069.nil?
-        fv5068.cookies.delete(fv5070)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5068.cookies.merge(
-          "#{fv5070}=#{Rack::Utils.escape(fv5069)}",
-          URI.parse("https://#{fv5068.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -994,21 +346,10 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
-    assert_response :success
+    assert_response :see_other
     action = @oidc_result_action
     Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
-    begin
-      fv5067 = action
-      post(
-        fv5067, params: {
-          result_ref: @oidc_result_ref,
-          transaction_ref: @oidc_result_transaction_ref,
-        }, headers: {
-          "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-          "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-    end
+    get_oidc_result!
 
     assert_response :see_other
     limitation = response.location
@@ -1033,108 +374,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "canceling OIDC Secret session limit ends its flow and rejects old results" do
     credential = client_secret_credentials(:one)
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5060 = @base_browser
-      fv5062 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5061 = fv5060.response.cookies[fv5062]
-      if fv5061.nil?
-        fv5065 = fv5060.response.headers["Set-Cookie"] || fv5060.response.headers["set-cookie"]
-        fv5064 =
-          if fv5065.is_a?(String) && fv5065.start_with?("[")
-            JSON.parse(fv5065)
-          else
-            Array(fv5065)
-          end
-        fv5063 =
-          fv5064.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5062}=")
-          end
-        if fv5063
-
-          _, fv5061 = fv5063.split(";", 2).first.to_s.split("=", 2)
-          fv5061 = Rack::Utils.unescape(fv5061.to_s)
-        end
-      end
-
-      unless fv5061.nil?
-        fv5060.cookies.delete(fv5062)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5060.cookies.merge(
-          "#{fv5062}=#{Rack::Utils.escape(fv5061)}",
-          URI.parse("https://#{fv5060.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5054 = @base_browser
-      fv5056 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5055 = fv5054.response.cookies[fv5056]
-      if fv5055.nil?
-        fv5059 = fv5054.response.headers["Set-Cookie"] || fv5054.response.headers["set-cookie"]
-        fv5058 =
-          if fv5059.is_a?(String) && fv5059.start_with?("[")
-            JSON.parse(fv5059)
-          else
-            Array(fv5059)
-          end
-        fv5057 =
-          fv5058.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5056}=")
-          end
-        if fv5057
-
-          _, fv5055 = fv5057.split(";", 2).first.to_s.split("=", 2)
-          fv5055 = Rack::Utils.unescape(fv5055.to_s)
-        end
-      end
-
-      unless fv5055.nil?
-        fv5054.cookies.delete(fv5056)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5054.cookies.merge(
-          "#{fv5056}=#{Rack::Utils.escape(fv5055)}",
-          URI.parse("https://#{fv5054.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -1143,21 +385,10 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
-    assert_response :success
+    assert_response :see_other
     action = @oidc_result_action
     Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
-    begin
-      fv5053 = action
-      post(
-        fv5053, params: {
-          result_ref: @oidc_result_ref,
-          transaction_ref: @oidc_result_transaction_ref,
-        }, headers: {
-          "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-          "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-    end
+    get_oidc_result!
 
     assert_response :see_other
     limitation = response.location
@@ -1177,18 +408,7 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     assert_nil ClientSecretLookupQuery.call(client: @user, secret: "a" * 32)
     assert_predicate admitted_resolution.reload, :cancelled?
     assert_no_difference ["ClientToken.count", "ClientSecretSignInReceipt.count"] do
-      begin
-        fv5051 = action
-        post(
-          fv5051, params: {
-            result_ref: @oidc_result_ref,
-            transaction_ref: @oidc_result_transaction_ref,
-          }, headers: {
-            "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-            "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      end
+      get_oidc_result!
     end
     assert_response :bad_request
     assert_equal "flow_canceled", ClientSecretAuditOutbox.find_by!(
@@ -1198,108 +418,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
 
   test "OIDC Secret session limit continuation preserves claim and commits its receipt" do
     credential = client_secret_credentials(:one)
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5045 = @base_browser
-      fv5047 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5046 = fv5045.response.cookies[fv5047]
-      if fv5046.nil?
-        fv5050 = fv5045.response.headers["Set-Cookie"] || fv5045.response.headers["set-cookie"]
-        fv5049 =
-          if fv5050.is_a?(String) && fv5050.start_with?("[")
-            JSON.parse(fv5050)
-          else
-            Array(fv5050)
-          end
-        fv5048 =
-          fv5049.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5047}=")
-          end
-        if fv5048
-
-          _, fv5046 = fv5048.split(";", 2).first.to_s.split("=", 2)
-          fv5046 = Rack::Utils.unescape(fv5046.to_s)
-        end
-      end
-
-      unless fv5046.nil?
-        fv5045.cookies.delete(fv5047)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5045.cookies.merge(
-          "#{fv5047}=#{Rack::Utils.escape(fv5046)}",
-          URI.parse("https://#{fv5045.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5039 = @base_browser
-      fv5041 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5040 = fv5039.response.cookies[fv5041]
-      if fv5040.nil?
-        fv5044 = fv5039.response.headers["Set-Cookie"] || fv5039.response.headers["set-cookie"]
-        fv5043 =
-          if fv5044.is_a?(String) && fv5044.start_with?("[")
-            JSON.parse(fv5044)
-          else
-            Array(fv5044)
-          end
-        fv5042 =
-          fv5043.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5041}=")
-          end
-        if fv5042
-
-          _, fv5040 = fv5042.split(";", 2).first.to_s.split("=", 2)
-          fv5040 = Rack::Utils.unescape(fv5040.to_s)
-        end
-      end
-
-      unless fv5040.nil?
-        fv5039.cookies.delete(fv5041)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5039.cookies.merge(
-          "#{fv5041}=#{Rack::Utils.escape(fv5040)}",
-          URI.parse("https://#{fv5039.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     post auth_app_sign_in_secret_path(ri: "jp"), params: {
       identifier: @email_record.address, secret: "a" * 32, "cf-turnstile-response": "test_token",
     }
@@ -1308,22 +429,11 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
-    assert_response :success
+    assert_response :see_other
     action = @oidc_result_action
     existing_tokens = Array.new(ClientToken::MAX_SESSIONS_PER_USER) { ClientToken.create!(authentication_epoch: 0, user: @user) }
     assert_no_difference "ClientToken.count" do
-      begin
-        fv5038 = action
-        post(
-          fv5038, params: {
-            result_ref: @oidc_result_ref,
-            transaction_ref: @oidc_result_transaction_ref,
-          }, headers: {
-            "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")),
-            "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      end
+      get_oidc_result!
     end
     assert_response :see_other
     limitation = response.location
@@ -1353,108 +463,9 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the local handoff POST binds the signed-in actor to the authorization transaction" do
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5030 = @base_browser
-      fv5032 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5031 = fv5030.response.cookies[fv5032]
-      if fv5031.nil?
-        fv5035 = fv5030.response.headers["Set-Cookie"] || fv5030.response.headers["set-cookie"]
-        fv5034 =
-          if fv5035.is_a?(String) && fv5035.start_with?("[")
-            JSON.parse(fv5035)
-          else
-            Array(fv5035)
-          end
-        fv5033 =
-          fv5034.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5032}=")
-          end
-        if fv5033
-
-          _, fv5031 = fv5033.split(";", 2).first.to_s.split("=", 2)
-          fv5031 = Rack::Utils.unescape(fv5031.to_s)
-        end
-      end
-
-      unless fv5031.nil?
-        fv5030.cookies.delete(fv5032)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5030.cookies.merge(
-          "#{fv5032}=#{Rack::Utils.escape(fv5031)}",
-          URI.parse("https://#{fv5030.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5024 = @base_browser
-      fv5026 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5025 = fv5024.response.cookies[fv5026]
-      if fv5025.nil?
-        fv5029 = fv5024.response.headers["Set-Cookie"] || fv5024.response.headers["set-cookie"]
-        fv5028 =
-          if fv5029.is_a?(String) && fv5029.start_with?("[")
-            JSON.parse(fv5029)
-          else
-            Array(fv5029)
-          end
-        fv5027 =
-          fv5028.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5026}=")
-          end
-        if fv5027
-
-          _, fv5025 = fv5027.split(";", 2).first.to_s.split("=", 2)
-          fv5025 = Rack::Utils.unescape(fv5025.to_s)
-        end
-      end
-
-      unless fv5025.nil?
-        fv5024.cookies.delete(fv5026)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5024.cookies.merge(
-          "#{fv5026}=#{Rack::Utils.escape(fv5025)}",
-          URI.parse("https://#{fv5024.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     submit_email_otp!
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
@@ -1468,230 +479,26 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   test "the local handoff POST hands the browser to the Base authorization endpoint" do
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5018 = @base_browser
-      fv5020 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5019 = fv5018.response.cookies[fv5020]
-      if fv5019.nil?
-        fv5023 = fv5018.response.headers["Set-Cookie"] || fv5018.response.headers["set-cookie"]
-        fv5022 =
-          if fv5023.is_a?(String) && fv5023.start_with?("[")
-            JSON.parse(fv5023)
-          else
-            Array(fv5023)
-          end
-        fv5021 =
-          fv5022.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5020}=")
-          end
-        if fv5021
-
-          _, fv5019 = fv5021.split(";", 2).first.to_s.split("=", 2)
-          fv5019 = Rack::Utils.unescape(fv5019.to_s)
-        end
-      end
-
-      unless fv5019.nil?
-        fv5018.cookies.delete(fv5020)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5018.cookies.merge(
-          "#{fv5020}=#{Rack::Utils.escape(fv5019)}",
-          URI.parse("https://#{fv5018.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5012 = @base_browser
-      fv5014 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5013 = fv5012.response.cookies[fv5014]
-      if fv5013.nil?
-        fv5017 = fv5012.response.headers["Set-Cookie"] || fv5012.response.headers["set-cookie"]
-        fv5016 =
-          if fv5017.is_a?(String) && fv5017.start_with?("[")
-            JSON.parse(fv5017)
-          else
-            Array(fv5017)
-          end
-        fv5015 =
-          fv5016.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5014}=")
-          end
-        if fv5015
-
-          _, fv5013 = fv5015.split(";", 2).first.to_s.split("=", 2)
-          fv5013 = Rack::Utils.unescape(fv5013.to_s)
-        end
-      end
-
-      unless fv5013.nil?
-        fv5012.cookies.delete(fv5014)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5012.cookies.merge(
-          "#{fv5014}=#{Rack::Utils.escape(fv5013)}",
-          URI.parse("https://#{fv5012.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     submit_email_otp!
 
     follow_redirect_to_oidc_handoff!
     post_oidc_handoff!
 
-    assert_response :success
-    assert_select "form#oidc-authorization-result-form[method=post]", 1
-    assert_select "input[name=result_ref][value]", 1
-    assert_select "form#oidc-authorization-result-form" do |forms|
-      result_uri = URI.parse(forms.first.attributes.fetch("action").value)
-      base_uri = URI.parse(OidcIssuer.absolute_url(ENV.fetch("PUBLIC_BASE_SERVICE_URL")))
-
-      assert_equal "/oauth/authorize", result_uri.path
-      resolved_result_uri = URI.join(base_uri.to_s, result_uri.to_s)
-
-      assert_equal base_uri.host, resolved_result_uri.host
-    end
+    assert_response :see_other
+    result_uri = URI.parse(@oidc_result_action)
+    assert_equal "/oidc/result", result_uri.path
+    assert_equal ENV.fetch("PUBLIC_VISA_SERVICE_URL"), result_uri.host
+    assert @oidc_result_ref.present?
+    assert_equal @transaction.transaction_id, @oidc_result_transaction_ref
   end
 
   test "the checkpoint clears the login challenge from the session" do
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     parameters = oidc_authorize_params(realm: "client").merge(ri: "jp")
-    @base_browser = open_session
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/oauth/authorize", params: parameters)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    base_headers = { "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin" }
-    @base_browser.post(
-      "/oauth/authorize", params: parameters.merge(ceremony_action: "start", authenticity_token: csrf),
-                          headers: base_headers,
-    )
-    begin
-      fv5006 = @base_browser
-      fv5008 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5007 = fv5006.response.cookies[fv5008]
-      if fv5007.nil?
-        fv5011 = fv5006.response.headers["Set-Cookie"] || fv5006.response.headers["set-cookie"]
-        fv5010 =
-          if fv5011.is_a?(String) && fv5011.start_with?("[")
-            JSON.parse(fv5011)
-          else
-            Array(fv5011)
-          end
-        fv5009 =
-          fv5010.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5008}=")
-          end
-        if fv5009
-
-          _, fv5007 = fv5009.split(";", 2).first.to_s.split("=", 2)
-          fv5007 = Rack::Utils.unescape(fv5007.to_s)
-        end
-      end
-
-      unless fv5007.nil?
-        fv5006.cookies.delete(fv5008)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5006.cookies.merge(
-          "#{fv5008}=#{Rack::Utils.escape(fv5007)}",
-          URI.parse("https://#{fv5006.host}/"),
-        )
-      end
-    end
-    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
-    binding = ClientAuthAdmissionBinding.find_by!(authorization_transaction_id: @transaction.id)
-    host!(@host)
-    auth_headers = { "Origin" => "https://#{@host}", "Sec-Fetch-Site" => "same-origin" }
-    get("/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp" })
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/ceremony_bindings", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf },
-                            headers: auth_headers,
-    )
-    confirmation = URI.parse(response.location)
-    @base_browser.get(confirmation.request_uri)
-    csrf = @base_browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    @base_browser.post(confirmation.request_uri, params: { authenticity_token: csrf }, headers: base_headers)
-    begin
-      fv5000 = @base_browser
-      fv5002 = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-      fv5001 = fv5000.response.cookies[fv5002]
-      if fv5001.nil?
-        fv5005 = fv5000.response.headers["Set-Cookie"] || fv5000.response.headers["set-cookie"]
-        fv5004 =
-          if fv5005.is_a?(String) && fv5005.start_with?("[")
-            JSON.parse(fv5005)
-          else
-            Array(fv5005)
-          end
-        fv5003 =
-          fv5004.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-            entry.split(";", 2).first.to_s.start_with?("#{fv5002}=")
-          end
-        if fv5003
-
-          _, fv5001 = fv5003.split(";", 2).first.to_s.split("=", 2)
-          fv5001 = Rack::Utils.unescape(fv5001.to_s)
-        end
-      end
-
-      unless fv5001.nil?
-        fv5000.cookies.delete(fv5002)
-        # Rack::Test's []= uses its default host. The current request may target a
-        # different surface, so install the cookie against the browser's active host.
-        fv5000.cookies.merge(
-          "#{fv5002}=#{Rack::Utils.escape(fv5001)}",
-          URI.parse("https://#{fv5000.host}/"),
-        )
-      end
-    end
-    entry = URI.parse(@base_browser.response.location)
-    host!(@host)
-    get(entry.request_uri)
-    csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-    post(
-      "/sign/in", params: { entry_ref: binding.entry_ref, ri: "jp", authenticity_token: csrf }, headers: auth_headers,
-    )
-
-    assert_response :see_other
-    follow_redirect!
+    start_oidc_authorization!(parameters)
+    assert_response :success
     submit_email_otp!
 
     follow_redirect!
@@ -1767,35 +574,126 @@ class OidcInitiatedSignInCompletionTest < ActionDispatch::IntegrationTest
   end
 
   def post_oidc_handoff!
-    csrf = css_select("input[name=authenticity_token]").first&.[]("value")
-    post(
-      auth_app_sign_oidc_handoff_path(ri: "jp"),
-      params: { authenticity_token: csrf }.compact,
-      headers: { "Host" => @host },
-    )
-    return unless response.redirect?
+    target = URI.parse(@oidc_result_action)
+    @oidc_result_ref = Rack::Utils.parse_nested_query(target.query.to_s).fetch("result_ref")
+    @oidc_result_transaction_ref = Rack::Utils.parse_nested_query(target.query.to_s).fetch("transaction_ref")
+  end
 
-    target = URI.parse(response.location)
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-    cookies.delete(cookie_name)
-    installed = cookies.merge(
-      "#{cookie_name}=#{Rack::Utils.escape(@base_browser.cookies[cookie_name])}", URI.parse("https://#{base_host}/"),
+  def start_oidc_authorization!(parameters)
+    base_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+    @base_browser = open_session
+    @base_browser.host!(base_host)
+    @base_browser.https!
+    @base_browser.get(
+      "/oauth/authorize",
+      params: parameters,
+      headers: oidc_navigation_headers(base_host, site: "same-origin"),
     )
 
-    assert_equal ["#{cookie_name}=#{Rack::Utils.escape(@base_browser.cookies[cookie_name])}"], installed
-    host!(target.host)
-    https!
-    get(target.request_uri, headers: { "Host" => base_host })
-    form = css_select("form#oidc-authorization-result-form").first
-    @oidc_result_action = form["action"]
-    @oidc_result_ref = form.at_css('input[name="result_ref"]')["value"]
-    @oidc_result_transaction_ref = form.at_css('input[name="transaction_ref"]')["value"]
+    jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+    current_browser = @base_browser
+    current_host = base_host
+
+    12.times do
+      break unless current_browser.response.redirect?
+
+      target = URI.parse(current_browser.response.location.to_s)
+      target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
+      if target.host == jump_host
+        namespace = current_host == base_host ? "VISA_APP" : "AUTH_APP"
+        target, = decode_oidc_jump_target!(target, issuer_namespace: namespace, issuer_host: current_host)
+      end
+
+      case target.host
+      when base_host
+        @base_browser.host!(base_host)
+        @base_browser.https!
+        @base_browser.get(target.request_uri, headers: oidc_navigation_headers(base_host, site: "cross-site"))
+        current_browser = @base_browser
+        current_host = base_host
+      when @host
+        host!(@host)
+        https!
+        get(target.request_uri, headers: oidc_navigation_headers(@host, site: "cross-site"))
+        current_browser = self
+        current_host = @host
+      else
+        raise "unexpected OIDC bootstrap host: #{target.host.inspect}"
+      end
+    end
+
+    raise "OIDC authorization bootstrap did not reach Auth" unless current_browser.equal?(self)
+    raise "OIDC authorization bootstrap did not render Auth entry" unless response.successful?
+
+    @transaction = ClientOidcAuthorizationTransaction.find_by!(state: parameters.fetch(:state))
+  end
+
+  def decode_oidc_jump_target!(uri, issuer_namespace:, issuer_host:)
+    token = Rack::Utils.parse_query(uri.query.to_s).fetch("rt")
+    issuer = JitSecurityJwtRegistry.surface(issuer_namespace)
+    payload, = JWT.decode(
+      token,
+      JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid),
+      true,
+      algorithms: ["ES384"],
+      verify_iss: true,
+      iss: "https://#{issuer_host}",
+      verify_aud: true,
+      aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
+    )
+    URI.parse(payload.fetch("url"))
+  end
+
+  def oidc_navigation_headers(host, site:)
+    {
+      "Host" => host,
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+      "Sec-Fetch-Site" => site,
+    }
+  end
+
+  def base_result_headers
+    cookie_header = @base_browser.cookies.to_hash.map { |name, value|
+      "#{name}=#{Rack::Utils.escape(value)}"
+    }.join("; ")
+    {
+      "Origin" => OidcIssuer.absolute_url(ENV.fetch("PUBLIC_VISA_SERVICE_URL")),
+      "Sec-Fetch-Site" => "same-origin",
+      "Cookie" => cookie_header,
+      "HTTP_COOKIE" => cookie_header,
+    }
   end
 
   def follow_redirect_to_oidc_handoff!
-    follow_redirect!
-    follow_redirect!
+    target = URI.parse(response.location)
+    3.times do
+      raise "OIDC handoff redirect is not on Auth" unless target.host == @host
+
+      host!(@host)
+      https!
+      get(target.request_uri, headers: oidc_navigation_headers(@host, site: "same-origin"))
+      break unless response.redirect?
+
+      next_target = URI.parse(response.location)
+      break if next_target.host != @host
+
+      target = next_target
+    end
+    raise "OIDC handoff did not redirect away from Auth" unless response.redirect?
+
+    @oidc_result_action = response.location
+  end
+
+  def get_oidc_result!
+    target = URI.parse(@oidc_result_action)
+    visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL")
+    host!(target.host)
+    https!
+    get(
+      target.request_uri,
+      headers: oidc_navigation_headers(visa_host, site: "cross-site").merge(base_result_headers),
+    )
   end
 
   def oidc_authorize_params(realm:)

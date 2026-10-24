@@ -13,7 +13,7 @@ module OidcAuthorizationTransactionable
   CANCELLATION_HANDOFF_REFERENCE = /\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   CANCELLATION_HANDOFF_DIGEST = /\A[0-9a-f]{64}\z/
   RETENTION_PERIOD = 15.minutes
-  RESULT_TTL = 60.seconds
+  RESULT_TTL = 10.seconds
 
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do

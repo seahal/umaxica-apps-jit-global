@@ -32,14 +32,14 @@ module AuthenticationSequenceGate
     default_path
   end
 
-  # Not an Auth path: only Base issues a root session, so only Base ever holds a resolution.
+  # Not an Auth path: Visa issues the root session, so resolution is handled on the Visa OP host.
   def sign_in_session_limit_path
     attrs = { ri: current_region_identifier }
 
     case sign_in_sequence_surface.to_s
-    when "app" then base_app_sign_in_limitation_path(**attrs)
-    when "com" then base_com_sign_in_limitation_path(**attrs)
-    when "org" then base_org_sign_in_limitation_path(**attrs)
+    when "app" then visa_app_sign_in_limitation_path(**attrs)
+    when "com" then visa_com_sign_in_limitation_path(**attrs)
+    when "org" then visa_org_sign_in_limitation_path(**attrs)
     else raise ArgumentError, "unsupported sign-in surface: #{sign_in_sequence_surface.inspect}"
     end
   end
@@ -444,6 +444,10 @@ module AuthenticationSequenceGate
       return { status: :invalid_request, reason: :flow_expired } if outcome.is_a?(FlowTransitionResult)
 
       sign_in_flow_locator_for(actor: resource).issue!(cycle.reload)
+    when :sign_entry_blocked
+      # Sentry is retryable. A temporary availability refusal must not turn a
+      # still-owned sign-in flow into a durable HALTED state.
+      nil
     else
       cycle.halt_sign_in! unless cycle.sign_in_completed? || cycle.sign_in_failed? || cycle.sign_in_expired? ||
         cycle.sign_in_cancelled? || cycle.sign_in_halted?

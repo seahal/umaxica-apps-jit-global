@@ -165,7 +165,7 @@ class Base::App::WelcomeDashboardAuthoritySlice1CTest < ActionDispatch::Integrat
     assert_not labelled.key?(dashboard_label(:selector))
     assert_includes hrefs, new_base_app_sign_out_path(ri: "jp")
     # The dashboard links to pages; it never posts a logout itself.
-    assert_select "form[action^=?]", base_app_oidc_logout_path, count: 0
+    assert_select "form[action^=?]", visa_app_oidc_logout_path, count: 0
     assert_not hrefs.any? { |href| href.include?("/sign/in") || href.include?("/sign/up") }
     assert_empty labelled.keys & [
       dashboard_label(:oidc_discovery), dashboard_label(:jwks), dashboard_label(:userinfo),

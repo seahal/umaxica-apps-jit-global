@@ -41,7 +41,11 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
-      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
+      resource(
+        :ceremony_binding,
+        only: %i(show create), path: "ceremony_bindings",
+        controller: :ceremony_bindings, as: :ceremony_bindings,
+      )
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -58,11 +62,17 @@ scope(module: :auth, as: :auth) do
       namespace :sign do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
-        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :oidc_handoff, only: :show, path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
         resource :cancellation, only: :create
         resource :switch, only: :create
+        namespace :in do
+          resource :sentry, only: :show
+        end
+        namespace :up do
+          resource :sentry, only: :show
+        end
       end
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
@@ -285,7 +295,11 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
-      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
+      resource(
+        :ceremony_binding,
+        only: %i(show create), path: "ceremony_bindings",
+        controller: :ceremony_bindings, as: :ceremony_bindings,
+      )
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -298,11 +312,17 @@ scope(module: :auth, as: :auth) do
       namespace :sign do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
-        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :oidc_handoff, only: :show, path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D05/D06/D09: first-page Cancel to the RP and Sign In/Up Switch.
         resource :cancellation, only: :create
         resource :switch, only: :create
+        namespace :in do
+          resource :sentry, only: :show
+        end
+        namespace :up do
+          resource :sentry, only: :show
+        end
       end
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.
@@ -453,7 +473,11 @@ scope(module: :auth, as: :auth) do
       resources(:robots, only: :index, path: "robots.txt")
       resource(:sitemap, only: :show, path: "sitemap.xml")
       resource(:csp_violation_report, only: :create, path: "csp-violation-report")
-      post "ceremony_bindings", to: "ceremony_bindings#create", as: :ceremony_bindings
+      resource(
+        :ceremony_binding,
+        only: %i(show create), path: "ceremony_bindings",
+        controller: :ceremony_bindings, as: :ceremony_bindings,
+      )
 
       # PWA offline fallback. This is the route form Rails' own application generator emits, kept
       # verbatim except for the leading slash on the controller, which escapes the enclosing
@@ -475,10 +499,16 @@ scope(module: :auth, as: :auth) do
       namespace :sign do
         resource :registration, only: %i(show create), path: "up", controller: :ups, as: :up
         resource :session, only: %i(show create), path: "in", controller: :ins, as: :in
-        resource :oidc_handoff, only: %i(show create), path: "oidc/handoff", controller: :oidc_handoffs
+        resource :oidc_handoff, only: :show, path: "oidc/handoff", controller: :oidc_handoffs
         resource :termination, only: %i(show new edit create destroy), path: "out", controller: :outs, as: :out
         # D09: first-page Cancel to the RP. Org has no public Sign Up, so no Switch.
         resource :cancellation, only: :create
+        namespace :in do
+          resource :sentry, only: :show
+        end
+        namespace :up do
+          resource :sentry, only: :show
+        end
       end
 
       # Auth is ceremony-only: no OIDC RP callback/authorization/backchannel routes.

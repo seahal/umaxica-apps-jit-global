@@ -24,6 +24,9 @@ module OidcDiscoveryDocument
       id_token_signing_alg_values_supported: [AuthenticationTokenService::JWT_ALGORITHM],
       token_endpoint_auth_signing_alg_values_supported: [AuthenticationTokenService::JWT_ALGORITHM],
       token_endpoint_auth_methods_supported: %w(private_key_jwt client_secret_post none),
+      revocation_endpoint_auth_methods_supported: OidcClientRegistry.revocation_endpoint_auth_methods_for(
+        resource_type,
+      ),
       code_challenge_methods_supported: ["S256"],
       # Prompt Create 1.0 4.2 (D-148): from the same per-realm table the authorize resolver enforces.
       prompt_values_supported: OidcAuthorizeRequestResolver.prompt_values_supported(resource_type),

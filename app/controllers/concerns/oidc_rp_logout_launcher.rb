@@ -63,31 +63,39 @@ module OidcRpLogoutLauncher
     completion_region = rp_logout_region
     session_record = oidc_rp_logout_session
     resource_type = oidc_rp_logout_resource_type
-    existing_transaction = reusable_browser_rp_logout_transaction(
-      session_record: session_record,
-      client_id: client_id,
-      resource_type: resource_type,
-    )
-    return redirect_to_browser_rp_logout_authority(existing_transaction, client_id:, region: completion_region) if
-      existing_transaction
+    # WU-14: a grant whose callback stored no verified ID Token has no hint and cannot start logout.
+    hint = session_record&.association(:logout_hint)&.scope&.take
+    return render_oidc_rp_logout_unavailable unless hint
 
-    origin_intent_proof = SecureRandom.random_bytes(32)
-    transaction_result = issue_browser_rp_logout_transaction(
-      client_id:,
-      completion_region:,
-      session_record:,
-      resource_type:,
-      origin_intent_proof:,
-    )
-    return render_oidc_rp_logout_unavailable unless transaction_result.success?
+    id_token = hint.id_token
 
-    transaction = transaction_result.transaction
-    store_browser_rp_logout_intent_proof!(transaction, origin_intent_proof)
-    log_browser_rp_logout_issued!(transaction)
-    redirect_to_browser_rp_logout_authority(transaction, client_id:, region: completion_region)
-  rescue RpSession::IssuanceRejected => e
+    post_logout_redirect_uri = registered_rp_logout_redirect_uri(
+      client_id:, resource_type:, region: completion_region,
+    )
+    state = SecureRandom.urlsafe_base64(32)
+    prepare_oidc_rp_sign_out_notice!(state:, session_record:)
+    revoke_oidc_rp_session_before_redirect!(session_record)
+    clear_oidc_rp_logout_cookies!
+    reset_session_and_clear_inertia_history!
+    Actor.clear if defined?(Actor)
+    @current_resource = nil
+    @oidc_rp_logout_session = nil
+    @oidc_rp_logout_access_payload = nil
+    redirect_to(
+      oidc_rp_end_session_url(
+        resource_type:,
+        id_token:,
+        client_id:,
+        post_logout_redirect_uri:,
+        state:,
+      ),
+      allow_other_host: true,
+      status: :see_other,
+    )
+  rescue OidcClientRegistry::ClientNotFound, OidcRpLogoutError, URI::InvalidURIError,
+         RpSession::IssuanceRejected, ActiveRecord::ActiveRecordError => e
     Rails.logger.warn(
-      "auth.sign_out.browser_rp_binding_rejected " \
+      "auth.sign_out.rp_initiated_logout_rejected " \
       "error_class=#{e.class.name} result=unavailable",
     )
     render_oidc_rp_logout_unavailable
@@ -504,6 +512,8 @@ module OidcRpLogoutLauncher
   end
 
   def resolve_oidc_rp_logout_credentials
+    return resolve_rp_cell_logout_credentials if rp_cell_process?
+
     resource_type = oidc_rp_logout_resource_type
     access_plain, refresh_plain = oidc_rp_logout_cookie_values
     return if access_plain.blank? && refresh_plain.blank?
@@ -534,6 +544,19 @@ module OidcRpLogoutLauncher
 
     [session_record, resource, access_payload]
   rescue ArgumentError, ActiveRecord::RecordNotFound, URI::InvalidURIError
+    nil
+  end
+
+  def resolve_rp_cell_logout_credentials
+    access_plain = cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE].to_s.presence
+    return if access_plain.blank?
+
+    access_state = resolve_rp_cell_access(access_plain)
+    return unless access_state.status == :valid
+    return unless access_state.rp_session&.active?
+
+    [access_state.rp_session, access_state.resource, access_state.payload]
+  rescue ActiveRecord::ActiveRecordError, ArgumentError
     nil
   end
 
@@ -655,12 +678,15 @@ module OidcRpLogoutLauncher
 
   def oidc_rp_logout_session_current?(session_record)
     return false unless session_record
+    return session_record.active? if rp_cell_process?
     return false if session_record.revoked?
 
     session_record.parent_token_active?
   end
 
   def oidc_rp_logout_resource_for(session_record)
+    return @oidc_rp_logout_resource if rp_cell_process?
+
     case session_record
     when OpOrgGrant then session_record.staff
     when OpComGrant then session_record.visitor
@@ -685,6 +711,61 @@ module OidcRpLogoutLauncher
       OidcRpBrowserCredentialContract::REFRESH_COOKIE,
       OidcRpBrowserCredentialContract.refresh_cookie_deletion_options,
     )
+    clear_rp_cell_session_cookie! if rp_cell_process?
+    @current_access_token_payload = nil
+  end
+
+  def prepare_oidc_rp_sign_out_notice!(state:, session_record:)
+    @sign_out_actor_ref = oidc_rp_logout_resource.try(:public_id)
+    @sign_out_session_public_id = session_record.public_id
+    @sign_out_state = state
+  end
+
+  def revoke_oidc_rp_session_before_redirect!(session_record)
+    if rp_cell_process?
+      session_record.class.connection_class.connected_to(role: :writing) do
+        session_record.with_lock do
+          if session_record.revoked_at.blank?
+            session_record.update!(revoked_at: session_record.class.database_now)
+          end
+        end
+      end
+      return
+    end
+
+    result = RpSessionRevoker.call(scope: :rp_session, record: session_record, status: "success")
+    raise RpSession::IssuanceRejected, "RP Session revoke failed" unless result.success?
+  end
+
+  def registered_rp_logout_redirect_uri(client_id:, resource_type:, region:)
+    client = OidcClientRegistry.find!(client_id)
+    candidate =
+      client.post_logout_redirect_uris.find do |uri|
+        parsed = URI.parse(uri)
+        parsed.host == request.host &&
+          parsed.path == AuthBoundaryAuthorityMap::CANONICAL_RP_SIGN_OUT_PATH &&
+          Rack::Utils.parse_nested_query(parsed.query.to_s) == { "ri" => region.to_s }
+      end
+    unless candidate && OidcClientRegistry.valid_post_logout_redirect_uri?(
+      client_id:, uri: candidate, resource_type:,
+    )
+      raise OidcRpLogoutError, "registered post_logout_redirect_uri is unavailable"
+    end
+
+    candidate
+  end
+
+  def oidc_rp_end_session_url(resource_type:, id_token:, client_id:, post_logout_redirect_uri:, state:)
+    uri = URI.parse(OidcIssuer.end_session_endpoint(resource_type))
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    query.merge!(
+      "id_token_hint" => id_token,
+      "client_id" => client_id,
+      "post_logout_redirect_uri" => post_logout_redirect_uri,
+      "state" => state,
+    )
+    uri.query = query.to_query
+    uri.to_s
   end
 
   def render_oidc_rp_logout_unavailable

@@ -7,11 +7,11 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
     protection = ActionController::Base.allow_forgery_protection
     ActionController::Base.allow_forgery_protection = true
     [
-      ["app", "core-app-jp", "client", ENV.fetch("PUBLIC_BASE_SERVICE_URL"),
+      ["app", "core-app-jp", "client", ENV.fetch("PUBLIC_VISA_SERVICE_URL"),
        ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), Client, ClientToken,],
-      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
+      ["com", "core-com-jp", "visitor", ENV.fetch("PUBLIC_VISA_CORPORATE_URL"),
        ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), Visitor, VisitorToken,],
-      ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_BASE_STAFF_URL"),
+      ["org", "core-org-jp", "operator", ENV.fetch("PUBLIC_VISA_STAFF_URL"),
        ENV.fetch("PUBLIC_AUTH_STAFF_URL"), Operator, OperatorToken,],
     ].each do |surface, client_id, realm, base_host, auth_host, actor_model, token_model|
       parameters = {
@@ -200,11 +200,16 @@ class OidcResultBrowserBindingTest < ActionDispatch::IntegrationTest
           )
         end
       end
-      owner.get("/")
-      csrf = owner.response.parsed_body.at_css('meta[name="csrf-token"]')["content"]
+      owner.get(
+        "/oauth/authorize",
+        params: parameters.merge(state: SecureRandom.urlsafe_base64(32), nonce: SecureRandom.urlsafe_base64(32)),
+      )
+      csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       owner.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers:)
 
-      assert_equal 303, owner.response.status
+      # WU-27/D-104: a finalized result is terminal; a browser replay cannot
+      # obtain another redirect or Root Session.
+      assert_equal 400, owner.response.status
       assert_equal finalized_root, parent.reload.browser_session_ref
     end
   ensure

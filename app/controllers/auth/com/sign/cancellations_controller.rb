@@ -24,9 +24,9 @@ module Auth
           )
           ceremony.cancel!
           redirect_to_jump_url(
-            base_com_oauth_authorization_url(
+            visa_com_oidc_cancellation_url(
               cancellation_ref: issuance.reference, transaction_ref: transaction.transaction_id, ri: params[:ri],
-              host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https",
+              host: visa_authority_host, protocol: "https",
             ), status: :see_other,
           )
         rescue BaseAuthAdmissionCoordinator::Denied, AuthCeremonySession::InvalidTransition, ArgumentError

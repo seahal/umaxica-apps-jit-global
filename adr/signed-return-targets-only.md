@@ -4,10 +4,10 @@
 
 Accepted (2026-05-25)
 
-> **Amendment (2026-10-23):** for the first-party **RP** lane only, `pt` is replaced by the path-only
-> `target_link_uri` carried in the RP's signed OIDC `state`
-> ([RP OIDC state and return target](rp-oidc-state-and-return-target.md)). Auth's own signed `pt`, and
-> the `nt` / `xt` lanes, are unchanged.
+> **Amendment (2026-10-23):** for the first-party **RP** lane only, `pt` is replaced by the
+> path-only `target_link_uri` carried in the RP's signed OIDC `state`
+> ([RP OIDC state and return target](rp-oidc-state-and-return-target.md)). Auth's own signed `pt`,
+> and the `nt` / `xt` lanes, are unchanged.
 
 ## Context
 
@@ -90,3 +90,13 @@ not that boundary.
 - Tests for migrated flows should assert that legacy Base64 `rt` input is rejected or ignored.
 - Tests for the next return-target redesign should assert that ordinary `rt` continuation cannot
   redirect to an external host, even when the input is signed.
+
+## RP OIDC target amendment (2026-10-24, D-149–D-153)
+
+For a first-party browser RP, the `pt` lane is abolished. The RP uses path-only `target_link_uri`
+inside its signed OIDC `state`, with validation at the neutral RP entry and at the start POST. The
+target is not an authorization claim and is discarded on Cancel, provider error, invalid state,
+failed code exchange or nonce/ID Token verification. The OP sends the validated callback error and
+the RP lands on `GET /sign/interruption`; the RP never treats `state` or the target as Rails CSRF.
+This partially supersedes D-137, D-42, D-109 and the RP portion of D-145 §7. Auth's signed `pt`
+remains a separate lane.

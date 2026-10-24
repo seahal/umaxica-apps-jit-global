@@ -30,6 +30,6 @@ class Auth::Org::Verification::Registration::HandoffsController < ::Auth::Org::A
   def ceremony_result_layout = "auth/org/application"
 
   def ceremony_result_completion_url(**)
-    base_org_verification_completion_url(**, host: base_authority_host, protocol: "https")
+    base_org_verification_completion_url(**, host: base_rp_host, protocol: "https")
   end
 end

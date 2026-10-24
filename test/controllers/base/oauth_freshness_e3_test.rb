@@ -9,9 +9,9 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   setup { Rails.configuration.x.rate_limit.fetch(:store).clear }
 
   test "anonymous prompt=none returns login_required to the RP without starting a ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
 
-    get base_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "none")),
+    get visa_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "none")),
         headers: { "Host" => host }
 
     assert_oidc_error_redirect(
@@ -21,7 +21,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   end
 
   test "prompt=login with an existing session starts a fresh ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
     user = clients(:one)
 
     http_headers_1 =
@@ -85,7 +85,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
-    get base_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "login")),
+    get visa_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "login")),
         headers: http_headers_1
 
     assert_response :success
@@ -101,7 +101,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   end
 
   test "stale max_age with an existing session starts a fresh ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
     user = clients(:one)
     token = ClientToken.create!(authentication_epoch: 0, user: user, authentication_event_at: 1.hour.ago)
 
@@ -166,7 +166,7 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
-    get base_app_oauth_authorization_url(host: host, **authorize_params.merge(max_age: "60")),
+    get visa_app_oauth_authorization_url(host: host, **authorize_params.merge(max_age: "60")),
         headers: http_headers_0
 
     assert_response :success
@@ -182,10 +182,10 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   end
 
   test "com anonymous prompt=none returns login_required" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     client = OidcClientRegistry.find!("core-com-jp")
 
-    get base_com_oauth_authorization_url(
+    get visa_com_oauth_authorization_url(
       host: host,
       response_type: "code",
       client_id: "core-com-jp",
@@ -205,10 +205,10 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   end
 
   test "org anonymous prompt=none returns login_required" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     client = OidcClientRegistry.find!("core-org-jp")
 
-    get base_org_oauth_authorization_url(
+    get visa_org_oauth_authorization_url(
       host: host,
       response_type: "code",
       client_id: "core-org-jp",
@@ -228,9 +228,9 @@ class BaseOauthFreshnessE3Test < ActionDispatch::IntegrationTest
   end
 
   test "unsupported prompt is rejected as an invalid request" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
 
-    get base_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "consent")),
+    get visa_app_oauth_authorization_url(host: host, **authorize_params.merge(prompt: "consent")),
         headers: { "Host" => host }
 
     assert_response :bad_request

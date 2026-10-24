@@ -27,23 +27,18 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
       target = URI.parse(@base_browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless target.host == base_host
-        rt = Rack::Utils.parse_query(target.query).fetch("rt")
-        payload, = JWT.decode(
-          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(payload.fetch("url"))
+        target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
       end
       if index.zero?
-        raise RuntimeError, "Base authorization host mismatch" unless target.host == base_host
+        raise RuntimeError, "Base authorization host mismatch" unless target.host == visa_host_for_test_base_host(base_host)
 
+        @base_browser.host!(target.host)
         @base_browser.get(target.request_uri)
         form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
         fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
         @base_browser.post(
           form["action"], params: fields, headers: {
-            "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+            "Origin" => "https://#{visa_host_for_test_base_host(base_host)}", "Sec-Fetch-Site" => "same-origin",
           },
         )
       else
@@ -60,7 +55,7 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
       fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       sender.post(
         form["action"], params: fields, headers: {
-          "Origin" => "https://#{(index == 1) ? base_host : auth_host}", "Sec-Fetch-Site" => "same-origin",
+          "Origin" => "https://#{(index == 1) ? visa_host_for_test_base_host(base_host) : auth_host}", "Sec-Fetch-Site" => "same-origin",
         },
       )
       raise RuntimeError, "Social admission failed at step #{index}" unless sender.response.status == 303
@@ -108,6 +103,36 @@ class Auth::App::Social::CeremonyEntryTest < ActionDispatch::IntegrationTest
       assert_equal "social_callback", cycle.step
       assert_equal cycle.public_id, session[:auth_app_up_sequence_id]
     end
+  end
+
+  # WU-05c (R2-A, A05-3/A05-4): the entry creates the attempt's one Flow; a callback whose Flow is
+  # gone is refused and never creates a replacement.
+  test "a sign-up callback without its entry Flow is refused and creates no Flow" do
+    previous_test_mode = OmniAuth.config.test_mode
+    OmniAuth.config.test_mode = true
+    OmniAuth.config.mock_auth[:google] = OmniAuth::AuthHash.new(
+      provider: "google", uid: "entry-flow-#{SecureRandom.hex(4)}", info: { name: "Fixture" },
+      credentials: { token: "fixture", expires_at: 1.hour.from_now.to_i },
+    )
+    switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+    post(auth_app_social_google_registration_path(ri: "jp"))
+
+    assert_response :temporary_redirect
+    state = session.fetch(SocialCallbackGuard::SOCIAL_STATE_SESSION_KEY)
+    ClientSignUpFlow.order(:id).last.destroy!
+
+    assert_no_difference(["ClientSignUpFlow.count", "Client.count"]) do
+      get(
+        auth_app_social_google_callback_path, params: { state: state, ri: "jp" }, headers: {
+          "Origin" => "https://#{ENV.fetch("PUBLIC_AUTH_SERVICE_URL")}", "Sec-Fetch-Site" => "same-origin",
+        },
+      )
+    end
+    # D-73: the browser's hint names a Flow its Binding no longer owns, so the uniform error ends nothing.
+    assert_response :bad_request
+  ensure
+    OmniAuth.config.mock_auth[:google] = nil
+    OmniAuth.config.test_mode = previous_test_mode
   end
 
   # The provider comes from a route default, so an unsupported one is not

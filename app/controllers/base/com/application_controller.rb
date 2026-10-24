@@ -111,8 +111,6 @@ module Base
         handle_unverified_request
       end
 
-      def sign_in_phase_binding_surface = "com"
-
       def browser_rp_client_id
         "base-com-ww"
       end
@@ -140,8 +138,8 @@ module Base
         ENV.fetch("PUBLIC_AUTH_CORPORATE_URL")
       end
 
-      def oidc_base_authority_host
-        ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+      def oidc_visa_authority_host
+        Rails.configuration.x.boot_config.fetch(:hosts).visa_corporate.host
       end
 
       private

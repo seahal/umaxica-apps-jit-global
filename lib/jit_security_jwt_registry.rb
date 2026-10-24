@@ -22,6 +22,7 @@ module JitSecurityJwtRegistry
     WARP_APP WARP_COM WARP_ORG
     PALM_APP
     BASE_APP BASE_COM BASE_ORG
+    VISA_APP VISA_COM VISA_ORG
   ).freeze
   MAX_JUMP_PUBLISHED_JWKS_KEYS = 4
   MAX_JUMP_PUBLISHED_JWKS_BYTES = 65_536
@@ -64,6 +65,9 @@ module JitSecurityJwtRegistry
     "BASE_APP" => "https://www.umaxica.app",
     "BASE_COM" => "https://www.umaxica.com",
     "BASE_ORG" => "https://www.umaxica.org",
+    "VISA_APP" => "https://visa.umaxica.app",
+    "VISA_COM" => "https://visa.umaxica.com",
+    "VISA_ORG" => "https://visa.umaxica.org",
   }.freeze
 
   ConfigurationError = Class.new(StandardError)

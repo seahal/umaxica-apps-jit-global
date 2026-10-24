@@ -39,23 +39,18 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       target = URI.parse(@base_browser.response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless target.host == base_host
-        rt = Rack::Utils.parse_query(target.query).fetch("rt")
-        payload, = JWT.decode(
-          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(payload.fetch("url"))
+        target = URI.parse(jump_rt_url_from_location_for_test(target.to_s))
       end
       if index.zero?
-        raise RuntimeError, "Base authorization host mismatch" unless target.host == base_host
+        raise RuntimeError, "Base authorization host mismatch" unless target.host == visa_host_for_test_base_host(base_host)
 
+        @base_browser.host!(target.host)
         @base_browser.get(target.request_uri)
         form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
         fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
         @base_browser.post(
           form["action"], params: fields, headers: {
-            "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
+            "Origin" => "https://#{visa_host_for_test_base_host(base_host)}", "Sec-Fetch-Site" => "same-origin",
           },
         )
       else
@@ -72,7 +67,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
       sender.post(
         form["action"], params: fields, headers: {
-          "Origin" => "https://#{(index == 1) ? base_host : auth_host}", "Sec-Fetch-Site" => "same-origin",
+          "Origin" => "https://#{(index == 1) ? visa_host_for_test_base_host(base_host) : auth_host}", "Sec-Fetch-Site" => "same-origin",
         },
       )
       raise RuntimeError, "Social admission failed at step #{index}" unless sender.response.status == 303
@@ -310,6 +305,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf0_intent.to_s == "link" && lf0_token
             lf0_headers = lf0_headers.merge(lf0_user_headers)
           end
+          if lf0_entry.to_s == "sign_up" && lf0_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf0_host)
+          end
           post(lf0_continue_path, headers: lf0_headers)
           social_auth_state_from_response
         end
@@ -416,13 +415,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow0_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow0_callback_uri.host == flow0_base_host
-        flow0_rt = Rack::Utils.parse_query(flow0_callback_uri.query).fetch("rt")
-        flow0_payload, = JWT.decode(
-          flow0_rt, JitSecurityJwtRegistry.public_key_for(flow0_issuer.id, flow0_issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow0_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow0_callback_uri = URI.parse(flow0_payload.fetch("url"))
+        flow0_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow0_callback_uri.to_s))
       end
       flow0_protocol_browser = open_session
       flow0_protocol_browser.host!(flow0_base_host)
@@ -769,6 +762,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf2_intent.to_s == "link" && lf2_token
             lf2_headers = lf2_headers.merge(lf2_user_headers)
           end
+          if lf2_entry.to_s == "sign_up" && lf2_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf2_host)
+          end
           post(lf2_continue_path, headers: lf2_headers)
           social_auth_state_from_response
         end
@@ -874,16 +871,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow1_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow1_callback_uri.host == flow1_base_host
-        flow1_rt = Rack::Utils.parse_query(flow1_callback_uri.query).fetch("rt")
-        flow1_payload, = JWT.decode(
-          flow1_rt, JitSecurityJwtRegistry.public_key_for(
-            flow1_issuer.id,
-            flow1_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow1_callback_uri = URI.parse(flow1_payload.fetch("url"))
+        flow1_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow1_callback_uri.to_s))
       end
       flow1_protocol_browser = open_session
       flow1_protocol_browser.host!(flow1_base_host)
@@ -1187,6 +1175,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf3_intent.to_s == "link" && lf3_token
             lf3_headers = lf3_headers.merge(lf3_user_headers)
           end
+          if lf3_entry.to_s == "sign_up" && lf3_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf3_host)
+          end
           post(lf3_continue_path, headers: lf3_headers)
           social_auth_state_from_response
         end
@@ -1320,16 +1312,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
         flow2_callback_uri = URI.parse(response.location)
         # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
         unless flow2_callback_uri.host == flow2_base_host
-          flow2_rt = Rack::Utils.parse_query(flow2_callback_uri.query).fetch("rt")
-          flow2_payload, = JWT.decode(
-            flow2_rt, JitSecurityJwtRegistry.public_key_for(
-              flow2_issuer.id,
-              flow2_issuer.current_kid,
-            ), true,
-            algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow2_base_host}",
-            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-          )
-          flow2_callback_uri = URI.parse(flow2_payload.fetch("url"))
+          flow2_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow2_callback_uri.to_s))
         end
         flow2_protocol_browser = open_session
         flow2_protocol_browser.host!(flow2_base_host)
@@ -1665,6 +1648,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf4_intent.to_s == "link" && lf4_token
             lf4_headers = lf4_headers.merge(lf4_user_headers)
           end
+          if lf4_entry.to_s == "sign_up" && lf4_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf4_host)
+          end
           post(lf4_continue_path, headers: lf4_headers)
           social_auth_state_from_response
         end
@@ -1922,6 +1909,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf5_intent.to_s == "link" && lf5_token
             lf5_headers = lf5_headers.merge(lf5_user_headers)
           end
+          if lf5_entry.to_s == "sign_up" && lf5_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf5_host)
+          end
           post(lf5_continue_path, headers: lf5_headers)
           social_auth_state_from_response
         end
@@ -2040,16 +2031,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow3_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow3_callback_uri.host == flow3_base_host
-        flow3_rt = Rack::Utils.parse_query(flow3_callback_uri.query).fetch("rt")
-        flow3_payload, = JWT.decode(
-          flow3_rt, JitSecurityJwtRegistry.public_key_for(
-            flow3_issuer.id,
-            flow3_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow3_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow3_callback_uri = URI.parse(flow3_payload.fetch("url"))
+        flow3_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow3_callback_uri.to_s))
       end
       flow3_protocol_browser = open_session
       flow3_protocol_browser.host!(flow3_base_host)
@@ -2344,6 +2326,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf6_intent.to_s == "link" && lf6_token
             lf6_headers = lf6_headers.merge(lf6_user_headers)
           end
+          if lf6_entry.to_s == "sign_up" && lf6_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf6_host)
+          end
           post(lf6_continue_path, headers: lf6_headers)
           social_auth_state_from_response
         end
@@ -2459,16 +2445,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow4_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow4_callback_uri.host == flow4_base_host
-        flow4_rt = Rack::Utils.parse_query(flow4_callback_uri.query).fetch("rt")
-        flow4_payload, = JWT.decode(
-          flow4_rt, JitSecurityJwtRegistry.public_key_for(
-            flow4_issuer.id,
-            flow4_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow4_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow4_callback_uri = URI.parse(flow4_payload.fetch("url"))
+        flow4_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow4_callback_uri.to_s))
       end
       flow4_protocol_browser = open_session
       flow4_protocol_browser.host!(flow4_base_host)
@@ -2559,10 +2536,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     cycle = ClientSignUpFlow.order(:id).last
     patch auth_app_sign_up_check_google_confirmation_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     ),
@@ -2574,10 +2548,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     follow_redirect! while response.redirect?
     patch auth_app_sign_up_check_google_birthdate_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     ),
@@ -3017,6 +2988,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf7_intent.to_s == "link" && lf7_token
             lf7_headers = lf7_headers.merge(lf7_user_headers)
           end
+          if lf7_entry.to_s == "sign_up" && lf7_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf7_host)
+          end
           post(lf7_continue_path, headers: lf7_headers)
           social_auth_state_from_response
         end
@@ -3254,10 +3229,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     cycle = ClientSignUpFlow.order(:id).last
     patch auth_app_sign_up_check_google_confirmation_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     ),
@@ -3272,10 +3244,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     [current_version - 1, "not-a-number"].each do |submitted|
       patch auth_app_sign_up_check_google_birthdate_url(
         ri: "jp", fb: SignFlowBindingCodec.encode(
-          flow: SignUpCycleLocator.new(
-            session,
-            surface: :app,
-          ).current,
+          flow: session_sign_up_flow(session, surface: :app),
           surface: :app,
         ),
       ),
@@ -3286,7 +3255,9 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       assert_equal "stale_checkpoint", response.body
     end
 
-    assert_equal user_count_before, Client.count
+    # WU-05d: the confirmation created one pending Client; it stays unfinished and unregistered.
+    assert_equal user_count_before + 1, Client.count
+    assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, Client.order(:id).last.status_id
     assert_nil ClientGoogleIdentity.find_by(uid: new_uid)
     assert_equal current_version, cycle.reload.checkpoint_version
   end
@@ -3490,6 +3461,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if lf8_intent.to_s == "link" && lf8_token
             lf8_headers = lf8_headers.merge(lf8_user_headers)
+          end
+          if lf8_entry.to_s == "sign_up" && lf8_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf8_host)
           end
           post(lf8_continue_path, headers: lf8_headers)
           social_auth_state_from_response
@@ -3728,10 +3703,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     cycle = ClientSignUpFlow.order(:id).last
     patch auth_app_sign_up_check_google_confirmation_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     ),
@@ -3743,10 +3715,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     follow_redirect! while response.redirect?
     patch auth_app_sign_up_check_google_birthdate_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     ),
@@ -3759,7 +3728,9 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     assert_includes CGI.unescapeHTML(response.body), I18n.t("sign.app.registration.checkpoint.age_restricted")
     assert_includes response.headers["Cache-Control"].to_s.split(", "), "no-store"
-    assert_equal user_count_before, Client.count
+    # WU-05d: the confirmation created one pending Client; the age halt leaves it unregistered.
+    assert_equal user_count_before + 1, Client.count
+    assert_equal ClientStatus::UNVERIFIED_WITH_SIGN_UP, Client.order(:id).last.status_id
     assert_nil ClientGoogleIdentity.find_by(uid: new_uid)
 
     get auth_app_sign_up_check_google_birthdate_url(
@@ -3770,8 +3741,9 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     ), headers: browser_headers.merge(@callback_headers)
     follow_redirect! while response.redirect? && URI.parse(response.location).host == @host
 
-    assert_includes CGI.unescapeHTML(response.body), I18n.t("sign.app.registration.checkpoint.age_restricted")
-    assert_equal user_count_before, Client.count, "revisiting the step must not reopen the sign-up"
+    # D-73: the halted attempt ended its admission, so a revisit gets the uniform error.
+    assert_response :bad_request
+    assert_equal user_count_before + 1, Client.count, "revisiting the step must not reopen the sign-up"
   end
 
   test "Apple sign up entry without an existing identity creates the client, identity and ceremony" do
@@ -3973,6 +3945,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf9_intent.to_s == "link" && lf9_token
             lf9_headers = lf9_headers.merge(lf9_user_headers)
           end
+          if lf9_entry.to_s == "sign_up" && lf9_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf9_host)
+          end
           post(lf9_continue_path, headers: lf9_headers)
           social_auth_state_from_response
         end
@@ -3989,10 +3965,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     patch auth_app_sign_up_check_apple_confirmation_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     ),
@@ -4004,10 +3977,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     follow_redirect! while response.redirect?
     patch auth_app_sign_up_check_apple_birthdate_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     ),
@@ -4461,6 +4431,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf10_intent.to_s == "link" && lf10_token
             lf10_headers = lf10_headers.merge(lf10_user_headers)
           end
+          if lf10_entry.to_s == "sign_up" && lf10_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf10_host)
+          end
           post(lf10_continue_path, headers: lf10_headers)
           social_auth_state_from_response
         end
@@ -4909,6 +4883,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if lf11_intent.to_s == "link" && lf11_token
             lf11_headers = lf11_headers.merge(lf11_user_headers)
+          end
+          if lf11_entry.to_s == "sign_up" && lf11_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf11_host)
           end
           post(lf11_continue_path, headers: lf11_headers)
           social_auth_state_from_response
@@ -5364,6 +5342,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf12_intent.to_s == "link" && lf12_token
             lf12_headers = lf12_headers.merge(lf12_user_headers)
           end
+          if lf12_entry.to_s == "sign_up" && lf12_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf12_host)
+          end
           post(lf12_continue_path, headers: lf12_headers)
           social_auth_state_from_response
         end
@@ -5502,16 +5484,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow11_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow11_callback_uri.host == flow11_base_host
-        flow11_rt = Rack::Utils.parse_query(flow11_callback_uri.query).fetch("rt")
-        flow11_payload, = JWT.decode(
-          flow11_rt, JitSecurityJwtRegistry.public_key_for(
-            flow11_issuer.id,
-            flow11_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow11_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow11_callback_uri = URI.parse(flow11_payload.fetch("url"))
+        flow11_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow11_callback_uri.to_s))
       end
       flow11_protocol_browser = open_session
       flow11_protocol_browser.host!(flow11_base_host)
@@ -5835,6 +5808,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf13_intent.to_s == "link" && lf13_token
             lf13_headers = lf13_headers.merge(lf13_user_headers)
           end
+          if lf13_entry.to_s == "sign_up" && lf13_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf13_host)
+          end
           post(lf13_continue_path, headers: lf13_headers)
           social_auth_state_from_response
         end
@@ -5973,16 +5950,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
                   flow12_callback_uri = URI.parse(response.location)
                   # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
                   unless flow12_callback_uri.host == flow12_base_host
-                    flow12_rt = Rack::Utils.parse_query(flow12_callback_uri.query).fetch("rt")
-                    flow12_payload, = JWT.decode(
-                      flow12_rt, JitSecurityJwtRegistry.public_key_for(
-                        flow12_issuer.id,
-                        flow12_issuer.current_kid,
-                      ), true,
-                      algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow12_base_host}",
-                      verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                    )
-                    flow12_callback_uri = URI.parse(flow12_payload.fetch("url"))
+                    flow12_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow12_callback_uri.to_s))
                   end
                   flow12_protocol_browser = open_session
                   flow12_protocol_browser.host!(flow12_base_host)
@@ -6083,10 +6051,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to sign_app_sign_up_check_google_confirmation_url(
       ri: "jp", fb: SignFlowBindingCodec.encode(
-        flow: SignUpCycleLocator.new(
-          session,
-          surface: :app,
-        ).current,
+        flow: session_sign_up_flow(session, surface: :app),
         surface: :app,
       ),
     )
@@ -6103,7 +6068,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
     assert_predicate inertia_props.fetch("confirm_label"), :present?
     assert_select "script:not([nonce])", false
 
-    cycle = SignUpCycleLocator.new(session, surface: :app, cycle_class: ClientSignUpFlow).current
+    cycle = session_sign_up_flow(session, surface: :app)
 
     assert_predicate cycle, :present?
 
@@ -6115,10 +6080,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
               assert_no_difference("ClientToken.count") do
                 patch auth_app_sign_up_check_google_birthdate_path(
                   ri: "jp", fb: SignFlowBindingCodec.encode(
-                    flow: SignUpCycleLocator.new(
-                      session,
-                      surface: :app,
-                    ).current,
+                    flow: session_sign_up_flow(session, surface: :app),
                     surface: :app,
                   ),
                 ),
@@ -6343,6 +6305,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf14_intent.to_s == "link" && lf14_token
             lf14_headers = lf14_headers.merge(lf14_user_headers)
           end
+          if lf14_entry.to_s == "sign_up" && lf14_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf14_host)
+          end
           post(lf14_continue_path, headers: lf14_headers)
           social_auth_state_from_response
         end
@@ -6475,16 +6441,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow13_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow13_callback_uri.host == flow13_base_host
-        flow13_rt = Rack::Utils.parse_query(flow13_callback_uri.query).fetch("rt")
-        flow13_payload, = JWT.decode(
-          flow13_rt, JitSecurityJwtRegistry.public_key_for(
-            flow13_issuer.id,
-            flow13_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow13_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow13_callback_uri = URI.parse(flow13_payload.fetch("url"))
+        flow13_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow13_callback_uri.to_s))
       end
       flow13_protocol_browser = open_session
       flow13_protocol_browser.host!(flow13_base_host)
@@ -6775,6 +6732,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
           ) if lf15_intent.to_s == "link" && lf15_token
           lf15_headers = lf15_headers.merge(lf15_user_headers)
         end
+        if lf15_entry.to_s == "sign_up" && lf15_intent.to_s != "link"
+          switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+          host!(lf15_host)
+        end
         post(lf15_continue_path, headers: lf15_headers)
         social_auth_state_from_response
       end
@@ -6977,6 +6938,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             scope: SocialAuth::SOCIAL_LINK_SCOPE,
           ) if lf16_intent.to_s == "link" && lf16_token
           lf16_headers = lf16_headers.merge(lf16_user_headers)
+        end
+        if lf16_entry.to_s == "sign_up" && lf16_intent.to_s != "link"
+          switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+          host!(lf16_host)
         end
         post(lf16_continue_path, headers: lf16_headers)
         social_auth_state_from_response
@@ -7207,6 +7172,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf18_intent.to_s == "link" && lf18_token
             lf18_headers = lf18_headers.merge(lf18_user_headers)
           end
+          if lf18_entry.to_s == "sign_up" && lf18_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf18_host)
+          end
           post(lf18_continue_path, headers: lf18_headers)
           social_auth_state_from_response
         end
@@ -7339,16 +7308,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow14_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow14_callback_uri.host == flow14_base_host
-        flow14_rt = Rack::Utils.parse_query(flow14_callback_uri.query).fetch("rt")
-        flow14_payload, = JWT.decode(
-          flow14_rt, JitSecurityJwtRegistry.public_key_for(
-            flow14_issuer.id,
-            flow14_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow14_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow14_callback_uri = URI.parse(flow14_payload.fetch("url"))
+        flow14_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow14_callback_uri.to_s))
       end
       flow14_protocol_browser = open_session
       flow14_protocol_browser.host!(flow14_base_host)
@@ -7670,6 +7630,10 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
             ) if lf19_intent.to_s == "link" && lf19_token
             lf19_headers = lf19_headers.merge(lf19_user_headers)
           end
+          if lf19_entry.to_s == "sign_up" && lf19_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(lf19_host)
+          end
           post(lf19_continue_path, headers: lf19_headers)
           social_auth_state_from_response
         end
@@ -7802,16 +7766,7 @@ class SocialAuthLoginTest < ActionDispatch::IntegrationTest
       flow15_callback_uri = URI.parse(response.location)
       # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
       unless flow15_callback_uri.host == flow15_base_host
-        flow15_rt = Rack::Utils.parse_query(flow15_callback_uri.query).fetch("rt")
-        flow15_payload, = JWT.decode(
-          flow15_rt, JitSecurityJwtRegistry.public_key_for(
-            flow15_issuer.id,
-            flow15_issuer.current_kid,
-          ), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow15_base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        flow15_callback_uri = URI.parse(flow15_payload.fetch("url"))
+        flow15_callback_uri = URI.parse(jump_rt_url_from_location_for_test(flow15_callback_uri.to_s))
       end
       flow15_protocol_browser = open_session
       flow15_protocol_browser.host!(flow15_base_host)

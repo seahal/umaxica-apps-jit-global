@@ -4,6 +4,9 @@
 class OpAppGrant < OpBaseAppRecord
   include RpSession
 
+  has_one :logout_hint, class_name: "OpAppGrantLogoutHint", foreign_key: :grant_id, inverse_of: :grant,
+                        dependent: :destroy
+
   belongs_to :client_device_session, class_name: "ClientDeviceSession", foreign_key: :device_session_id,
                                      inverse_of: :op_app_grants
   # FIXME: The checker requests a token FK deliberately removed for stable device-session

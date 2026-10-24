@@ -36,6 +36,6 @@ class Auth::App::Settings::Totps::HandoffsController < Auth::App::ApplicationCon
   def ceremony_result_layout = "auth/app/application"
 
   def ceremony_result_completion_url(**)
-    base_app_verification_completion_url(**, host: base_authority_host, protocol: "https")
+    base_app_verification_completion_url(**, host: base_rp_host, protocol: "https")
   end
 end

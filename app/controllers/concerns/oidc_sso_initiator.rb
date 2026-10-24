@@ -191,6 +191,9 @@ module OidcSsoInitiator
       hosts.base_service.host,
       hosts.base_corporate.host,
       hosts.base_staff.host,
+      hosts.visa_service.host,
+      hosts.visa_corporate.host,
+      hosts.visa_staff.host,
     ].map { |configured_host| configured_host.to_s.downcase }
   end
 
@@ -206,31 +209,31 @@ module OidcSsoInitiator
     raise NotImplementedError, "controller must define oidc_sign_host"
   end
 
-  def oidc_base_authority_host
-    raise NotImplementedError, "controller must define oidc_base_authority_host"
+  def oidc_visa_authority_host
+    raise NotImplementedError, "controller must define oidc_visa_authority_host"
   end
 
-  def oidc_base_service_origin
-    @oidc_base_service_origin ||=
+  def oidc_visa_service_origin
+    @oidc_visa_service_origin ||=
       Oidc::AcmeServiceOrigin.from(
-        oidc_base_authority_host,
-        default_scheme: oidc_base_default_scheme,
+        oidc_visa_authority_host,
+        default_scheme: oidc_visa_default_scheme,
       )
   end
 
-  def oidc_base_default_scheme
-    host = Oidc::AcmeServiceOrigin.host_from(oidc_base_authority_host)
+  def oidc_visa_default_scheme
+    host = Oidc::AcmeServiceOrigin.host_from(oidc_visa_authority_host)
     return request.ssl? ? "https" : "http" if host.present? && host.end_with?(".localhost")
 
     "https"
   end
 
   def oidc_acme_host
-    oidc_base_authority_host
+    oidc_visa_authority_host
   end
 
   def oidc_acme_service_origin
-    oidc_base_service_origin
+    oidc_visa_service_origin
   end
 
   def log_oidc_redirect_decision(decision)

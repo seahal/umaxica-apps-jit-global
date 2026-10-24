@@ -5,11 +5,11 @@ require "test_helper"
 # require "helpers/global_test_support"
 # require "helpers/auth_helpers"
 
-class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
+class Visa::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
   # include AuthHelpers
 
   setup do
-    @host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @host = visa_host_for_test_surface(:app)
     @client = OidcClientRegistry.find!("core-app-jp")
     @user = clients(:one)
     @token = ClientToken.create!(
@@ -30,11 +30,11 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     get_route = Rails.application.routes.recognize_path("https://#{@host}/oidc/logout", method: :get)
     post_route = Rails.application.routes.recognize_path("https://#{@host}/oidc/logout", method: :post)
 
-    assert_equal "base/app/oidc/logouts", get_route[:controller]
+    assert_equal "visa/app/oidc/logouts", get_route[:controller]
     assert_equal "show", get_route[:action]
-    assert_equal "base/app/oidc/logouts", post_route[:controller]
+    assert_equal "visa/app/oidc/logouts", post_route[:controller]
     assert_equal "create", post_route[:action]
-    assert_equal "/oidc/logout", base_app_oidc_logout_path
+    assert_equal "/oidc/logout", visa_app_oidc_logout_path
   end
 
   test "get without params renders confirmation without mutation" do
@@ -115,7 +115,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx0_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host), params: { ri: "jp" }, headers: http_headers_30
+    get visa_app_oidc_logout_url(host: @host), params: { ri: "jp" }, headers: http_headers_30
 
     assert_response :ok
     assert_not_predicate @token.reload, :revoked?
@@ -203,12 +203,12 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx1_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "xyz", ri: "jp" },
         headers: http_headers_29
 
     assert_response :see_other
-    assert_equal "/sign/out/edit", URI.parse(jump_rt_url_from_location(response.location)).path
+    assert_equal "/oidc/logout", URI.parse(jump_rt_url_from_location(response.location)).path
 
     follow_redirect!
 
@@ -291,7 +291,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx2_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), headers: http_headers_28
+    post visa_app_oidc_logout_url(host: @host), headers: http_headers_28
 
     assert_response :see_other
     assert_predicate @token.reload, :revoked?
@@ -383,7 +383,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx3_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host),
+    post visa_app_oidc_logout_url(host: @host),
          params: { logout_challenge: "no-such-logout-challenge", ri: "jp" },
          headers: http_headers_27
 
@@ -470,7 +470,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx4_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { logout_challenge: "no-such-logout-challenge", ri: "jp" },
         headers: http_headers_26
 
@@ -556,7 +556,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx5_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), params: { ri: "jp" }, headers: http_headers_25
+    post visa_app_oidc_logout_url(host: @host), params: { ri: "jp" }, headers: http_headers_25
 
     assert_response :success
     assert_not_predicate @token.reload, :revoked?
@@ -641,7 +641,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx6_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host),
+    post visa_app_oidc_logout_url(host: @host),
          params: {
            id_token_hint: id_token,
            post_logout_redirect_uri: "https://attacker.example/signed-out",
@@ -739,7 +739,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx7_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host),
+    post visa_app_oidc_logout_url(host: @host),
          params: { id_token_hint: id_token, post_logout_redirect_uri: cross_realm_uri, state: "xyz", ri: "jp" },
          headers: http_headers_23
 
@@ -828,7 +828,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx8_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { logout_challenge: "does-not-exist", ri: "jp" },
         headers: http_headers_22
 
@@ -927,7 +927,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx9_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { logout_challenge: transaction.logout_challenge, ri: "jp" },
         headers: http_headers_21
 
@@ -1025,7 +1025,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx10_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { logout_challenge: transaction.logout_challenge, ri: "jp" },
         headers: http_headers_20
 
@@ -1033,7 +1033,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     page = response.parsed_body.at_css("script[data-page='app'][type='application/json']")
     props = JSON.parse(page.text).fetch("props")
 
-    assert_equal base_app_oidc_logout_path, props.fetch("form").fetch("action")
+    assert_equal visa_app_oidc_logout_path, props.fetch("form").fetch("action")
     assert_equal transaction.logout_challenge, props.fetch("form").fetch("logout_challenge")
     assert_not_predicate @token.reload, :revoked?
     assert_not_predicate transaction.reload, :finalized?
@@ -1053,7 +1053,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       ).transaction
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
 
-    post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+    post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
          headers: begin
            fx11_harness =
              begin
@@ -1160,7 +1160,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "acme_cleared")
 
-    post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+    post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
          headers: begin
            fx12_harness =
              begin
@@ -1269,7 +1269,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "acme_cleared")
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "sign_cleared")
 
-    post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+    post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
          headers: begin
            fx13_harness =
              begin
@@ -1448,7 +1448,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx14_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host, format: :json),
+    post visa_app_oidc_logout_url(host: @host, format: :json),
          params: {
            id_token_hint: id_token,
            post_logout_redirect_uri: "https://attacker.example/signed-out",
@@ -1547,7 +1547,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx15_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host, format: :json),
+    post visa_app_oidc_logout_url(host: @host, format: :json),
          params: { id_token_hint: id_token, ri: "jp" },
          headers: http_headers_18
 
@@ -1638,7 +1638,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx16_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "xyz", ri: "jp" },
         headers: http_headers_17
 
@@ -1721,7 +1721,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx17_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host), params: { ri: "jp" }, headers: http_headers_16
+    get visa_app_oidc_logout_url(host: @host), params: { ri: "jp" }, headers: http_headers_16
 
     assert_response :ok
     assert_not_predicate @token.reload, :revoked?
@@ -1809,7 +1809,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx18_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "xyz", ri: "jp" },
         headers: http_headers_15
 
@@ -1893,7 +1893,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           end
           browser_headers.merge(fx19_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
         end
-      post base_app_oidc_logout_url(host: @host), headers: http_headers_14
+      post visa_app_oidc_logout_url(host: @host), headers: http_headers_14
 
       assert_response :ok
       assert_not_predicate @token.reload, :revoked?
@@ -1906,7 +1906,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     before_count = AcmeLogoutTransaction.count
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: {
             id_token_hint: id_token,
             post_logout_redirect_uri: redirect_uri,
@@ -1931,7 +1931,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     before_count = AcmeLogoutTransaction.count
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host, format: :json),
+      get visa_app_oidc_logout_url(host: @host, format: :json),
           params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
           headers: browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
     end
@@ -1970,12 +1970,12 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
           headers: unauthenticated_headers
       follow_redirect!(headers: unauthenticated_headers) if response.redirect?
 
-      post base_app_oidc_logout_url(host: @host), headers: unauthenticated_headers
+      post visa_app_oidc_logout_url(host: @host), headers: unauthenticated_headers
     end
 
     assert_not_predicate other_token.reload, :revoked?
@@ -1996,7 +1996,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
           headers: begin
             fx20_harness =
@@ -2087,7 +2087,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_nil response.location
       assert_includes response.headers["Cache-Control"].to_s, "no-store"
 
-      post base_app_oidc_logout_url(host: @host),
+      post visa_app_oidc_logout_url(host: @host),
            params: { id_token_hint: other_hint, post_logout_redirect_uri: redirect_uri, ri: "jp" },
            headers: begin
              fx21_harness =
@@ -2188,7 +2188,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: {
             id_token_hint: id_token(sid: sibling_token.public_id), post_logout_redirect_uri: redirect_uri, ri: "jp",
           },
@@ -2281,7 +2281,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_nil response.location
       assert_includes response.headers["Cache-Control"].to_s, "no-store"
 
-      post base_app_oidc_logout_url(host: @host), headers: begin
+      post visa_app_oidc_logout_url(host: @host), headers: begin
         fx23_harness =
           begin
             f23_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
@@ -2371,13 +2371,13 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       user_token_status_id: ClientTokenStatus::ACTIVE,
     )
     cookies[AuthenticationBase::ACCESS_COOKIE_KEY] = AuthenticationToken.encode(
-      @user, host: @host, resource_type: "client", jwt_issuer_id: "surface:BASE_APP",
+      @user, host: @host, resource_type: "client", jwt_issuer_id: "surface:VISA_APP",
     )
     headers = browser_headers.merge("Host" => @host, "Sec-Fetch-Site" => "same-origin")
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: {
             id_token_hint: id_token(sid: sibling_token.public_id), post_logout_redirect_uri: redirect_uri, ri: "jp",
           },
@@ -2386,7 +2386,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_response :bad_request
       assert_equal I18n.t("sign.shared.sign_out.idp_session_error"), response.body
       assert_nil session[SignOidcLogout::OIDC_LOGOUT_REQUEST_SESSION_KEY]
-      post base_app_oidc_logout_url(host: @host), headers: headers
+      post visa_app_oidc_logout_url(host: @host), headers: headers
     end
 
     assert_not_predicate sibling_token.reload, :revoked?
@@ -2406,7 +2406,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
           headers: begin
             fx24_harness =
@@ -2491,7 +2491,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             end
             browser_headers.merge(fx24_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
           end.merge("Sec-Fetch-Site" => "same-origin")
-      post base_app_oidc_logout_url(host: @host),
+      post visa_app_oidc_logout_url(host: @host),
            params: { id_token_hint: other_hint },
            headers: begin
              fx25_harness =
@@ -2666,7 +2666,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx26_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
         headers: http_headers_13
 
@@ -2748,7 +2748,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx27_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), headers: http_headers_12
+    post visa_app_oidc_logout_url(host: @host), headers: http_headers_12
 
     assert_response :see_other
     assert_predicate @token.reload, :revoked?
@@ -2836,7 +2836,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx28_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
         headers: http_headers_11
 
@@ -2918,7 +2918,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx29_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), headers: http_headers_10
+    post visa_app_oidc_logout_url(host: @host), headers: http_headers_10
 
     assert_response :ok
     assert_not_predicate @token.reload, :revoked?
@@ -3004,7 +3004,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx30_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
         headers: http_headers_9
     http_headers_8 =
@@ -3084,7 +3084,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx31_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), headers: http_headers_8
+    post visa_app_oidc_logout_url(host: @host), headers: http_headers_8
 
     assert_predicate @token.reload, :revoked?
 
@@ -3172,7 +3172,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx32_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), headers: http_headers_7
+    post visa_app_oidc_logout_url(host: @host), headers: http_headers_7
 
     assert_response :ok
     assert_not_predicate new_token.reload, :revoked?
@@ -3267,7 +3267,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           end
           browser_headers.merge(fx33_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
         end
-      get base_app_oidc_logout_url(host: @host), params: params, headers: http_headers_6
+      get visa_app_oidc_logout_url(host: @host), params: params, headers: http_headers_6
       http_headers_5 =
         begin
           fx34_harness =
@@ -3345,7 +3345,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
           end
           browser_headers.merge(fx34_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
         end
-      post base_app_oidc_logout_url(host: @host), headers: http_headers_5
+      post visa_app_oidc_logout_url(host: @host), headers: http_headers_5
 
       assert_not_predicate @token.reload, :revoked?, "revoked for #{params[:id_token_hint].inspect}"
     end
@@ -3431,7 +3431,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx35_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "first", ri: "jp" },
         headers: http_headers_4
     http_headers_3 =
@@ -3512,7 +3512,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx36_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "second", ri: "jp" },
         headers: http_headers_3
 
@@ -3595,7 +3595,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx37_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), headers: http_headers_2
+    post visa_app_oidc_logout_url(host: @host), headers: http_headers_2
 
     assert_response :see_other
     assert_predicate @token.reload, :revoked?
@@ -3694,7 +3694,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx38_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    get base_app_oidc_logout_url(host: @host),
+    get visa_app_oidc_logout_url(host: @host),
         params: { id_token_hint: foreign_hint,
                   post_logout_redirect_uri: @client.post_logout_redirect_uris.first,
                   ri: "jp", },
@@ -3776,7 +3776,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
         end
         browser_headers.merge(fx39_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
       end
-    post base_app_oidc_logout_url(host: @host), headers: http_headers_0
+    post visa_app_oidc_logout_url(host: @host), headers: http_headers_0
 
     assert_not_predicate @token.reload, :revoked?
   end
@@ -3792,7 +3792,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, state: "s1", ri: "jp" },
           headers: begin
             fx40_harness =
@@ -3969,7 +3969,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 
       csrf_token = response.parsed_body.at_css("meta[name='csrf-token']")&.[]("content")
       assert_withheld("logout confirmation must include a CSRF token") { csrf_token.present? }
-      post base_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
+      post visa_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
         fx42_harness =
           begin
             f42_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
@@ -4070,7 +4070,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+      get visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
           headers: begin
             fx43_harness =
               begin
@@ -4159,7 +4159,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_not_predicate @token.reload, :revoked?
       assert_not_predicate transaction.reload, :finalized?
       csrf = response.parsed_body.at_css("meta[name='csrf-token']")["content"]
-      post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+      post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
            params: { authenticity_token: csrf },
            headers: begin
              fx44_harness =
@@ -4267,7 +4267,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     AcmeLogoutTransactionCoordinator.advance!(logout_challenge: transaction.logout_challenge, step: "origin_cleared")
 
     with_forgery_protection do
-      post base_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
+      post visa_app_oidc_logout_url(host: @host, logout_challenge: transaction.logout_challenge, ri: "jp"),
            headers: begin
              fx45_harness =
                begin
@@ -4363,7 +4363,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
           headers: begin
             fx46_harness =
@@ -4448,7 +4448,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
             end
             browser_headers.merge(fx46_harness.except("Cookie", "HTTP_COOKIE", "Authorization"))
           end.merge("Sec-Fetch-Site" => "same-origin")
-      post base_app_oidc_logout_url(host: @host),
+      post visa_app_oidc_logout_url(host: @host),
            headers: begin
              fx47_harness =
                begin
@@ -4541,7 +4541,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
     redirect_uri = @client.post_logout_redirect_uris.first
 
     with_forgery_protection do
-      get base_app_oidc_logout_url(host: @host),
+      get visa_app_oidc_logout_url(host: @host),
           params: { id_token_hint: id_token, post_logout_redirect_uri: redirect_uri, ri: "jp" },
           headers: begin
             fx48_harness =
@@ -4631,7 +4631,7 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
       assert_response :success
       csrf_token = response.parsed_body.at_css("meta[name='csrf-token']")&.[]("content")
       assert_withheld("logout confirmation must include a CSRF token") { csrf_token.present? }
-      post base_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
+      post visa_app_oidc_logout_url(host: @host), params: { authenticity_token: csrf_token }, headers: begin
         fx49_harness =
           begin
             f49_headers = as_user_headers(@user, host: @host, session_public_id: @session_public_id)
@@ -4739,12 +4739,12 @@ class Base::App::Oidc::LogoutsControllerTest < ActionDispatch::IntegrationTest
 end
 
 # DAMP auth header helpers for this test class.
-class Base::App::Oidc::LogoutsControllerTest
+class Visa::App::Oidc::LogoutsControllerTest
   private
 end
 
 # DAMP local helper copy on the test class.
-class Base::App::Oidc::LogoutsControllerTest
+class Visa::App::Oidc::LogoutsControllerTest
   TEST_BROWSER_USER_AGENT =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " \
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" unless const_defined?(
@@ -4902,7 +4902,7 @@ class Base::App::Oidc::LogoutsControllerTest
     @jump_rt_env_originals ||= {}
     jump_rt_key = Base64.strict_encode64(OpenSSL::PKey::EC.generate("secp384r1").to_der)
     %w(AUTH_APP AUTH_ORG AUTH_COM ACME_APP ACME_ORG ACME_COM CORE_APP CORE_ORG CORE_COM BASE_APP BASE_ORG
-       BASE_COM).each do |namespace|
+       BASE_COM VISA_APP VISA_ORG VISA_COM).each do |namespace|
       ENV["JWT_#{namespace}_ACTIVE_KID"] = "#{namespace.downcase.tr("_", "-")}-test"
       ENV["JWT_#{namespace}_PRIVATE_KEY"] = jump_rt_key
     end
@@ -4975,16 +4975,18 @@ end
 # redirecting to /oauth/authorize. This final reopening overrides any earlier
 # helper definitions in this file so every "logged in" request carries a valid
 # access token cookie for the correct actor and surface.
-class Base::App::Oidc::LogoutsControllerTest
+class Visa::App::Oidc::LogoutsControllerTest
   private
 
-  # Derive the issuer id from the test host. Base RP hosts (www.umaxica.app/.org/.com)
-  # must resolve to surface:BASE_* so the access token issuer matches the surface the
+  # Derive the issuer id from the test host. Visa OP hosts resolve to surface:VISA_* so
+  # the access token issuer matches the surface the
   # controller validates against.
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
     service =
-      if normalized.include?("acme")
+      if normalized.include?("visa")
+        "VISA"
+      elsif normalized.include?("acme")
         "ACME"
       elsif normalized.include?("core")
         "CORE"

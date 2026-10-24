@@ -3,10 +3,8 @@
 
 # The `auth/app` sign-up entry page, as Inertia props.
 #
-# Two callers render it: `Auth::App::Sign::UpsController`, which is the page's own route, and
-# `SignUpSuspensionGuard`, which answers a suspended registration with the same page carrying the
-# notice instead of the entry points. Both need the identical payload, and neither may compute it in
-# a view any more, so it lives here.
+# The page controller owns this payload. Availability refusal is handled by
+# Sign Entry Sentry before this page is rendered.
 #
 # Every label is translated and every destination is generated here: the page receives finished
 # strings and finished paths. The Apple artwork is included only when the official files are in the
@@ -20,13 +18,13 @@ module AppSignUpEntryPage
 
   private
 
-  def sign_up_entry_page_props(suspended_notice: nil)
+  def sign_up_entry_page_props
     {
       title: t("sign.app.registration.new.page_title"),
-      suspended_notice: suspended_notice,
-      methods: suspended_notice ? [] : sign_up_entry_methods,
-      social_providers: suspended_notice ? [] : sign_up_entry_social_providers,
-      links: (suspended_notice || sign_entry_parent_bound?) ? [] : sign_up_entry_links,
+      suspended_notice: nil,
+      methods: sign_up_entry_methods,
+      social_providers: sign_up_entry_social_providers,
+      links: sign_entry_parent_bound? ? [] : sign_up_entry_links,
       **sign_entry_exit_forms(switch_to: "sign_in", switch_label: t("sign.app.registration.new.links.sign_in")),
     }
   end
@@ -81,11 +79,4 @@ module AppSignUpEntryPage
     ]
   end
 
-  # `SignUpSuspensionGuard` renders the surface's own entry page; on this surface that page is an
-  # Inertia component rather than a template, and the 503 stays exactly as it was.
-  def render_suspended_sign_up!
-    render inertia: SIGN_UP_ENTRY_COMPONENT,
-           props: sign_up_entry_page_props(suspended_notice: t("errors.messages.sign_up_suspended")),
-           status: :service_unavailable
-  end
 end

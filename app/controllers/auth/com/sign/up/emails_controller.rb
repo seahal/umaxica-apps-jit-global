@@ -18,15 +18,12 @@ module Auth
 
           include EnforcementIdentifierGate
 
-          include SignUpSuspensionGuard
           include SignUpFlowEntry
 
           AUTHENTICATION_MODE = :guest
 
           SESSION_KEY = :auth_com_up_email_flow_state
           before_action :require_sign_up_ceremony_admission!
-          before_action :reject_suspended_sign_up!
-
           before_action :enforce_email_flow!
 
           # Defence-in-depth for sign-up entry. Tighten OTP fanout from a single

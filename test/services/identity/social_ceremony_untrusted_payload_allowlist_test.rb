@@ -15,8 +15,6 @@ class IdentitySocialCeremonyUntrustedPayloadAllowlistTest < ActiveSupport::TestC
   ALLOWLIST = %w(
     app/values/identity_social_ceremony_contract.rb
     app/values/identity_social_ceremony_grant.rb
-    app/values/identity_social_ceremony_result.rb
-    app/controllers/base/app/social/authentication/completions_controller.rb
   ).freeze
 
   test "untrusted routing decode is only referenced in allowlisted locations" do

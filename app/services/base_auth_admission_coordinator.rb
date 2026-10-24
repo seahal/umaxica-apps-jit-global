@@ -63,7 +63,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
   CANCELLATION_PURPOSE = "cancellation_handoff"
   SWITCH_HANDOFF_VERSION = 1
-  SWITCH_HANDOFF_TTL = 2.minutes
+  CONTINUATION_TTL = 10.seconds
+  SWITCH_HANDOFF_TTL = CONTINUATION_TTL
   SWITCH_TARGETS = %w(sign_in sign_up).freeze
   CANCELLATION_HANDOFF_VERSION = 1
 
@@ -116,7 +117,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       Issuance.new(transaction: transaction, code: code, reference: binding.entry_ref)
     end
 
-    def validate_result_browser_binding!(transaction:, surface:, base_browser_nonce:, base_token:)
+    def validate_result_browser_binding!(transaction:, surface:, base_browser_nonce:, base_token:, cancellation: false)
       unless transaction.surface == surface.to_s && base_browser_nonce.is_a?(String) && base_browser_nonce.present?
         raise Denied.new("result browser binding is missing", code: "return_binding_mismatch")
       end
@@ -127,6 +128,10 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       unless binding.redeemed? && ActiveSupport::SecurityUtils.secure_compare(binding.base_browser_digest, expected) &&
           result_root_context_matches?(binding, transaction, base_token)
         raise Denied.new("result browser binding mismatch", code: "return_binding_mismatch")
+      end
+      # WU-06 (A06-2): a result issued before the curfew is not accepted at or after it.
+      if !cancellation && binding.purpose == "authentication_handoff" && !AdmissionCurfewValue.for(binding).within?
+        raise Denied.new("sign-in path curfew has passed", code: "expired_admission")
       end
 
       binding
@@ -251,7 +256,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       )
       _locked_transaction, generation = transaction.prepare_result_delivery!(
         result_digest: result_digest,
-        ttl: Valkey::AuthState::OpaqueAdmissionStore::CODE_TTL,
+        ttl: OidcAuthorizationTransactionable::RESULT_TTL,
       )
       code = store.issue!(
         purpose: purpose,
@@ -272,7 +277,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("cancellation is unavailable", code: "transaction_unavailable")
       end
 
-      remaining = [transaction.expires_at - now, 1.second].max
+      remaining = [transaction.expires_at - now, CONTINUATION_TTL].min
+      remaining = 1.second if remaining <= 0
       reference = nil
       handoff = nil
       transaction.class.connection_owner.connected_to(role: :writing) do
@@ -712,11 +718,11 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       curfew_at = admission_curfew_at(redeemed:, now:, after_ended_ceremonies:)
 
       entry_ref = SecureRandom.uuid
-      expiry = [transaction_expiry(transaction), now + Valkey::AuthState::OpaqueAdmissionStore::CODE_TTL].compact.min
+      expiry = [transaction_expiry(transaction), now + admission_transport_ttl(purpose)].compact.min
       digest = AuthAdmissionBinding.browser_digest(
         surface: surface, entry_ref: entry_ref, nonce: base_browser_nonce,
       )
-      model.create!(
+      binding = model.create!(
         parent_attributes.merge(
           entry_ref: entry_ref,
           purpose: purpose,
@@ -729,8 +735,21 @@ class BaseAuthAdmissionCoordinator < ApplicationService
           updated_at: now,
         ),
       )
+      cover_sign_in_path_curfew!(transaction, curfew_at) if purpose == "authentication_handoff"
+      binding
     rescue ActiveRecord::RecordNotUnique
       retry
+    end
+
+    # WU-06 / REQ-CURFEW: the OIDC transaction and its login challenge never end the Sign-in path before
+    # the attempt's curfew, so the post-curfew exit still finds its redirect_uri. The curfew itself is
+    # enforced separately (AdmissionCurfewValue); this only removes the earlier end.
+    def cover_sign_in_path_curfew!(transaction, curfew_at)
+      attributes = {
+        expires_at: [transaction.expires_at, curfew_at].max,
+        login_challenge_expires_at: [transaction.login_challenge_expires_at, curfew_at].max,
+      }
+      transaction.update!(attributes) if attributes.any? { |name, value| transaction.public_send(name) != value }
     end
 
     def admission_entry_intent(transaction:, purpose:, entry_intent:)
@@ -813,11 +832,21 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         base_session_ref: base_token&.public_id,
         reference: binding.entry_ref,
       }
-      store.issue!(**arguments)
+      store.issue!(**arguments, ttl: admission_transport_ttl(purpose))
     rescue Umaxica::Valkey::OperationError => e
       raise unless e.message == "admission code key collision"
 
-      store.reissue_reference!(**arguments.except(:reference).merge(reference: binding.entry_ref))
+      store.reissue_reference!(
+        **arguments.except(:reference).merge(
+          reference: binding.entry_ref, ttl: admission_transport_ttl(purpose),
+        ),
+      )
+    end
+
+    def admission_transport_ttl(purpose)
+      return CONTINUATION_TTL if AuthAdmissionBinding::PARENT_PURPOSES.values.flatten.include?(purpose.to_s)
+
+      Valkey::AuthState::OpaqueAdmissionStore::CODE_TTL
     end
 
     def cancellation_handoff_encryptor

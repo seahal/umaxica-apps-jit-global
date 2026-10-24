@@ -13,14 +13,19 @@ class IdentitySocialCeremonyGrant
 
   attr_reader :payload, :kid
 
-  def initialize(payload, kid: nil, now: Time.current)
+  def initialize(payload, kid: nil, issuer_id: nil, now: Time.current)
     @payload = payload.stringify_keys
     @kid = kid
+    @issuer_id = issuer_id || IdentitySocialCeremonyContract.acme_issuer_id(@payload["surface"])
     validate!(now: now)
   end
 
   def self.issue(attributes, issuer_id:, now: Time.current)
-    grant = new(attributes.merge(default_claims(attributes, now: now)), now: now)
+    grant = new(
+      attributes.merge(default_claims(attributes, issuer_id: issuer_id, now: now)),
+      issuer_id: issuer_id,
+      now: now,
+    )
     JitSecurityJwtKeyring.encode(grant.payload, typ: TOKEN_TYPE, issuer_id: issuer_id)
   end
 
@@ -33,12 +38,12 @@ class IdentitySocialCeremonyGrant
     payload, header = IdentitySocialCeremonyContract.decode_verified_payload(
       token: token,
       issuer_id: issuer_id,
-      issuer: IdentitySocialCeremonyContract.acme_issuer(surface),
+      issuer: IdentitySocialCeremonyContract.issuer_for_id(surface, issuer_id),
       audience: IdentitySocialCeremonyContract.sign_audience(surface),
       expected_type: TOKEN_TYPE,
       required: REQUIRED_CLAIMS,
     )
-    new(payload, kid: header["kid"], now: now)
+    new(payload, kid: header["kid"], issuer_id: issuer_id, now: now)
   end
 
   public_class_method :issue, :decode
@@ -58,16 +63,19 @@ class IdentitySocialCeremonyGrant
       allowed: ALLOWED_CLAIMS,
       purpose: PURPOSE,
       audience: IdentitySocialCeremonyContract.sign_audience(payload["surface"]),
-      issuer: IdentitySocialCeremonyContract.acme_issuer(payload["surface"]),
+      issuer: IdentitySocialCeremonyContract.issuer_for_id(payload["surface"], @issuer_id),
       now: now,
     )
   end
 
-  def self.default_claims(attributes, now:)
+  def self.default_claims(attributes, issuer_id: nil, now:)
     surface = attributes.fetch(:surface, attributes["surface"]).to_s
     {
       "typ" => TOKEN_TYPE,
-      "iss" => IdentitySocialCeremonyContract.acme_issuer(surface),
+      "iss" => IdentitySocialCeremonyContract.issuer_for_id(
+        surface,
+        issuer_id || IdentitySocialCeremonyContract.acme_issuer_id(surface),
+      ),
       "aud" => IdentitySocialCeremonyContract.sign_audience(surface),
       "purpose" => PURPOSE,
       "iat" => now.to_i,

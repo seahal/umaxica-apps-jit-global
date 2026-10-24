@@ -100,10 +100,10 @@ class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
   end
 
   test "app token revocation rejects an unknown client without disclosing token state" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
     host! host
 
-    post base_app_oauth_revocation_url(host: host),
+    post visa_app_oauth_revocation_url(host: host),
          params: { token: "not-a-real-token", client_id: "unknown-client", client_secret: "wrong" }
 
     assert_response :unauthorized
@@ -111,10 +111,10 @@ class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
   end
 
   test "com token revocation rejects an unknown client without disclosing token state" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     host! host
 
-    post base_com_oauth_revocation_url(host: host),
+    post visa_com_oauth_revocation_url(host: host),
          params: { token: "not-a-real-token", client_id: "unknown-client", client_secret: "wrong" }
 
     assert_response :unauthorized
@@ -122,10 +122,10 @@ class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
   end
 
   test "org token revocation rejects an unknown client without disclosing token state" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     host! host
 
-    post base_org_oauth_revocation_url(host: host),
+    post visa_org_oauth_revocation_url(host: host),
          params: { token: "not-a-real-token", client_id: "unknown-client", client_secret: "wrong" }
 
     assert_response :unauthorized
@@ -133,11 +133,11 @@ class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
   end
 
   test "com token revocation answers 429 once the per-IP allowance is spent" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     host! host
 
     21.times do
-      post base_com_oauth_revocation_url(host: host),
+      post visa_com_oauth_revocation_url(host: host),
            params: { token: "not-a-real-token", client_id: "unknown-client", client_secret: "wrong" }
     end
 
@@ -145,11 +145,11 @@ class BaseSignOutAndOauthRevocationTest < ActionDispatch::IntegrationTest
   end
 
   test "org token revocation answers 429 once the per-IP allowance is spent" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     host! host
 
     21.times do
-      post base_org_oauth_revocation_url(host: host),
+      post visa_org_oauth_revocation_url(host: host),
            params: { token: "not-a-real-token", client_id: "unknown-client", client_secret: "wrong" }
     end
 

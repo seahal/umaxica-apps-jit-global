@@ -4,9 +4,9 @@
 require "test_helper"
 # require "helpers/global_test_support"
 
-module Base
+module Visa
   module App
-    # Base::App::BareController intentionally avoids the full application stack:
+    # Visa::App::BareController intentionally avoids the full application stack:
     # every controller below it must be a public, self-defending endpoint
     # (health, robots, sitemaps, csp-report, open, or an auth flow that
     # enforces its own pipeline). If a new controller is added under this
@@ -17,36 +17,33 @@ module Base
       self.fixture_table_names = []
 
       REQUIRED_DESCENDANTS = %w(
-        Base::App::Api::V0::HealthsController
-        Base::App::Api::V0::RevisionsController
-        Base::App::CspViolationReportsController
-        Base::App::Health::LivenessesController
-        Base::App::Health::ReadinessesController
-        Base::App::Health::StartupsController
-        Base::App::HealthsController
-        Base::App::McpsController
-        Base::App::Oauth::RevocationsController
-        Base::App::Oauth::UserinfosController
-        Base::App::WellKnown::DiscoveriesController
-        Base::App::WellKnown::JwksController
-        Base::App::Preference::EmailsController
-        Base::App::RevisionsController
-        Base::App::RobotsController
-        Base::App::SitemapsController
+        Visa::App::Api::V0::HealthsController
+        Visa::App::Api::V0::RevisionsController
+        Visa::App::CspViolationReportsController
+        Visa::App::Health::LivenessesController
+        Visa::App::Health::ReadinessesController
+        Visa::App::Health::StartupsController
+        Visa::App::HealthsController
+        Visa::App::Oauth::RevocationsController
+        Visa::App::Oauth::UserinfosController
+        Visa::App::WellKnown::DiscoveriesController
+        Visa::App::WellKnown::JwksController
+        Visa::App::RevisionsController
+        Visa::App::RobotsController
       ).freeze
       OPTIONAL_TEST_DESCENDANTS = %w(
         Base::App::TestCsrfController
       ).freeze
 
       test "bare boundary does not inherit the full application controller" do
-        assert_equal ActionController::Base, Base::App::BareController.superclass
-        assert_not_operator Base::App::BareController, :<, Base::App::ApplicationController
+        assert_equal ActionController::Base, Visa::App::BareController.superclass
+        assert_not_operator Visa::App::BareController, :<, Visa::App::AuthorityController
       end
 
       test "only the reviewed allowlist inherits the bare public boundary" do
         Rails.application.eager_load!
 
-        actual = Base::App::BareController.descendants.filter_map(&:name).grep(/\ABase::App::/).sort
+        actual = Visa::App::BareController.descendants.filter_map(&:name).grep(/\AVisa::App::/).sort
 
         assert_not_empty actual, "expected BareController descendants to be loaded after eager_load!"
 
@@ -55,7 +52,7 @@ module Base
         missing = REQUIRED_DESCENDANTS - actual
 
         assert_empty unexpected,
-                     "Controllers under Base::App::BareController changed. Each one inherits the bare " \
+                     "Controllers under Visa::App::BareController changed. Each one inherits the bare " \
                      "boundary; confirm the new/removed controller is a public, self-defending " \
                      "endpoint and update ALLOWED_DESCENDANTS deliberately.\n" \
                      "added:   #{unexpected.inspect}\n" \

@@ -39,8 +39,8 @@ physical Rails Identity Provider and Authorization Server implementation.
 > [OP, Auth, and RP responsibility separation](op-auth-rp-authentication-responsibility-separation.md)
 > separates the OP from application Base, which becomes an RP, and permits authenticated method
 > management and step-up directly through Auth. OP sessions and existing security contracts remain;
-> direct-path protocol details remain open. The combined-Base implementation described below is
-> not certified as migrated by this decision.
+> direct-path protocol details remain open. The combined-Base implementation described below is not
+> certified as migrated by this decision.
 
 ## Context
 
@@ -71,15 +71,15 @@ Exact independent client IDs, keys, faces, browser transactions, and RP Sessions
 `core-app`, `core-com`, `core-org`, `side-app`, `side-com`, `side-org`, `edit-org`
 
 Each exposes a neutral `GET /sign` entry page, CSRF-protected `POST /sign` flow starter, exact
-`GET /sign/callback` protocol callback, and `/sign/out`. The RP does not choose Sign in versus
-Sign up; Auth owns that internal ceremony choice. The obsolete shared browser registrations
-`sign-rp`, `base-rails-rp`, and `side-rails-rp` are retired from the local registry after the
-surface-specific flows work. `core-next-rp` remains a separately gated compatibility registration
-until its live `CoreRpBridge` path and external registration/key ownership are reconciled. Native
-clients use the approved Palm browser relay and fixed native completion delivery described in
-`adr/jump-directed-rails-handoff-contract.md`. The read-only `docs`, `news`, and `help`
-surfaces are Rails content/resource surfaces, not Rails-authenticated OIDC RPs; they have no
-content RP registrations in the current static client registry.
+`GET /sign/callback` protocol callback, and `/sign/out`. The RP does not choose Sign in versus Sign
+up; Auth owns that internal ceremony choice. The obsolete shared browser registrations `sign-rp`,
+`base-rails-rp`, and `side-rails-rp` are retired from the local registry after the surface-specific
+flows work. `core-next-rp` remains a separately gated compatibility registration until its live
+`CoreRpBridge` path and external registration/key ownership are reconciled. Native clients use the
+approved Palm browser relay and fixed native completion delivery described in
+`adr/jump-directed-rails-handoff-contract.md`. The read-only `docs`, `news`, and `help` surfaces are
+Rails content/resource surfaces, not Rails-authenticated OIDC RPs; they have no content RP
+registrations in the current static client registry.
 
 ### Session hierarchy
 
@@ -163,11 +163,11 @@ configuration, deployed callers, and legacy-session migration remain separately 
 ## Regional RP expansion amendment (2026-09-23)
 
 The prior seven-client target is superseded as the approved end-state for regional Core and Side
-RPs. The approved pre-deployment target is thirteen logical clients: `core-app-jp`,
-`core-app-us`, `core-com-jp`, `core-com-us`, `core-org-jp`, `core-org-us`, `side-app-jp`,
-`side-app-us`, `side-com-jp`, `side-com-us`, `side-org-jp`, `side-org-us`, and global `edit-org`.
-This is an expand-and-contract migration; the current seven-client registry and `core-next-rp`
-compatibility path remain until explicit caller, session, code, key, and retirement evidence exists.
+RPs. The approved pre-deployment target is thirteen logical clients: `core-app-jp`, `core-app-us`,
+`core-com-jp`, `core-com-us`, `core-org-jp`, `core-org-us`, `side-app-jp`, `side-app-us`,
+`side-com-jp`, `side-com-us`, `side-org-jp`, `side-org-us`, and global `edit-org`. This is an
+expand-and-contract migration; the current seven-client registry and `core-next-rp` compatibility
+path remain until explicit caller, session, code, key, and retirement evidence exists.
 
 Every regional client is independently bound to its client ID, existing audience semantics, exact
 redirect URI, post-logout URI, backchannel logout URI, private-key-JWT namespace, and RP Session
@@ -180,11 +180,11 @@ Production Base registration, real key fingerprints, deployed-caller migration, 
 deployment acceptance gates. This amendment authorizes only repository contracts and isolated
 pre-deployment verification.
 
-The pre-deployment contract is the following single logical matrix; it is not permission to
-activate incomplete registrations:
+The pre-deployment contract is the following single logical matrix; it is not permission to activate
+incomplete registrations:
 
-| Surface | JP | US |
-| --- | --- | --- |
+| Surface  | JP            | US            |
+| -------- | ------------- | ------------- |
 | Core App | `core-app-jp` | `core-app-us` |
 | Core Com | `core-com-jp` | `core-com-us` |
 | Core Org | `core-org-jp` | `core-org-us` |
@@ -196,9 +196,9 @@ activate incomplete registrations:
 ordering; it does not derive an audience from the client ID or derive a registration from an
 arbitrary Host header. Each cell must obtain its exact audience and URI bindings from a canonical
 repository source before it can become an active registry entry. A missing regional audience or
-canonical host is a fail-closed implementation gap, not a value to invent. The existing seven
-client registry and `core-next-rp` remain during expand-and-contract migration until caller,
-session, code, key, and retirement evidence is available.
+canonical host is a fail-closed implementation gap, not a value to invent. The existing seven client
+registry and `core-next-rp` remain during expand-and-contract migration until caller, session, code,
+key, and retirement evidence is available.
 
 `RegionalRpClientMatrix.expected_registry_contract` is the repository-side expected Base registry
 contract for these thirteen cells. It is derived from `AuthBoundaryAuthorityMap` and records the
@@ -233,9 +233,8 @@ fallback, a Rails-session pre-authentication map, or a compatibility `admission`
 
 The canonical first-party browser entry is now `GET /sign` followed by a CSRF-protected
 `POST /sign`; `GET /sign/callback` is protocol infrastructure. The former RP `/sign/in` and
-`/sign/in/callback` aliases are removed. Auth ceremony routes under `/sign/in/*` remain separate
-and are not RP entrypoints. This amendment does not alter the Jump RT cryptographic or key
-architecture.
+`/sign/in/callback` aliases are removed. Auth ceremony routes under `/sign/in/*` remain separate and
+are not RP entrypoints. This amendment does not alter the Jump RT cryptographic or key architecture.
 
 ## Already-authenticated RP-start amendment (2026-09-22)
 
@@ -254,20 +253,20 @@ renders a same-origin CSRF-protected form; its `POST /sign/oidc/handoff` issues 
 surface-bound result. The result is a short-lived Valkey transport capability, while its digest,
 generation, expiry, and finalization state are persisted on the surface-local PostgreSQL
 authorization transaction. Auth then renders a cross-surface form that submits the result in the
-body to the matching Base `POST /oauth/authorize` endpoint. The result is never placed in a
-redirect URL, query string, fragment, or Rails-session pre-authentication map.
+body to the matching Base `POST /oauth/authorize` endpoint. The result is never placed in a redirect
+URL, query string, fragment, or Rails-session pre-authentication map.
 
 Base accepts the result only from the exact configured Auth origin (plus the existing same-site
 null-origin proxy case), validates the result against the transaction before finalization, and
-checks the surface before resuming the pending authorization transaction. The result generation
-read from Valkey is passed into finalization and rechecked while the PostgreSQL transaction row is
-locked, so a result superseded by a newer generation cannot execute Browser Session finalization.
-A valid current result may be retried while its short Valkey TTL remains; PostgreSQL row locking
-and `base_finalized_at` make Browser Session finalization idempotent. `GET /oauth/authorize?result=...` is not a result
-consumer. Rails forgery protection remains enabled; no global CSRF configuration or normal Rails
-CSRF boundary is weakened for this transport. Auth remains ceremony-only and Base remains the
-authority for the authorization transaction and all resulting Browser Session, RP Session, and
-authorization-code state.
+checks the surface before resuming the pending authorization transaction. The result generation read
+from Valkey is passed into finalization and rechecked while the PostgreSQL transaction row is
+locked, so a result superseded by a newer generation cannot execute Browser Session finalization. A
+valid current result may be retried while its short Valkey TTL remains; PostgreSQL row locking and
+`base_finalized_at` make Browser Session finalization idempotent. `GET /oauth/authorize?result=...`
+is not a result consumer. Rails forgery protection remains enabled; no global CSRF configuration or
+normal Rails CSRF boundary is weakened for this transport. Auth remains ceremony-only and Base
+remains the authority for the authorization transaction and all resulting Browser Session, RP
+Session, and authorization-code state.
 
 The result transport is not the one-time authorization grant. Base creates one Browser Session per
 OIDC transaction, and authorization-code aliases reference that durable transaction. The
@@ -283,11 +282,10 @@ explicit roles on the same FQDN: an Authority role for protocol endpoints and a 
 control-plane UI, `/sign`, and `/oidc/callback`. Authority controllers do not use RP credentials as
 proof; self-RP controllers do not fall back to root cookies. Authority bases explicitly inherit
 `::ApplicationController`, avoiding Ruby's namespace-local resolution to the self-RP base and its
-authentication/refresh callbacks. Their root-session lifecycle remains independently declared.
-A valid Base Browser Session is OP
-login state and may satisfy OIDC SSO for `/oauth/authorize` without creating another Browser
-Session. `prompt=none`, `prompt=login`, and `max_age` are evaluated as explicit protocol
-conditions.
+authentication/refresh callbacks. Their root-session lifecycle remains independently declared. A
+valid Base Browser Session is OP login state and may satisfy OIDC SSO for `/oauth/authorize` without
+creating another Browser Session. `prompt=none`, `prompt=login`, and `max_age` are evaluated as
+explicit protocol conditions.
 
 The Browser RP layer is shared by Base self-RP, Warp, Edit, and Core. It owns state, nonce, PKCE,
 callback validation, UserInfo validation, OIDC identity binding, RP sessions, credentials, refresh,
@@ -295,73 +293,74 @@ and RP logout. Palm remains outside this layer. Base self-RP clients are `base-a
 `base-com-ww`, and `base-org-ww`, with private-key-JWT keys in the dedicated `BASE_RP_*_WW`
 namespaces; those keys are separate from OP signing keys.
 
-D-82 is the current admission contract. Base creates a host-only browser nonce at initiation,
-stores only its realm/entry reference digest, and requires Auth to attach an Auth-local sid through
-an Auth POST. Base confirmation records the binding before Auth can redeem the admission. Entry,
+D-82 is the current admission contract. Base creates a host-only browser nonce at initiation, stores
+only its realm/entry reference digest, and requires Auth to attach an Auth-local sid through an Auth
+POST. Base confirmation records the binding before Auth can redeem the admission. Entry,
 confirmation, and redemption are separate non-authorizing steps; invalid proofs do not consume the
 admission or rotate the Auth sid, while a committed redemption may be restarted only through the
 original Base browser and parent authority.
 
-OIDC and Step-Up result acceptance also checks the original browser nonce and root context
-against the retained redeemed admission before result lookup or finalization. Admission expiry
-does not erase that correlation. Successful OIDC root issuance rotates the Rails session against
-fixation and retains only the already-proven nonce for exact finalized-result retries.
+OIDC and Step-Up result acceptance also checks the original browser nonce and root context against
+the retained redeemed admission before result lookup or finalization. Admission expiry does not
+erase that correlation. Successful OIDC root issuance rotates the Rails session against fixation and
+retains only the already-proven nonce for exact finalized-result retries.
 
-Redeemed OIDC cancel-and-start remains unimplemented in this cycle by explicit user direction:
-the current OIDC parent has no cancellation transition. Its pending/authenticated/consumed
-lifecycle remains unchanged; no existing completed login is canceled or reopened.
+Redeemed OIDC cancel-and-start remains unimplemented in this cycle by explicit user direction: the
+current OIDC parent has no cancellation transition. Its pending/authenticated/consumed lifecycle
+remains unchanged; no existing completed login is canceled or reopened.
 
 Step-Up and credential-registration restart forms are rendered only on their owning Base surface
 after checking the original browser nonce/root and the exact persisted intent. GET remains read-only
-and retains the original scope and signed return target without adding authority.
-A redeemed registration is labeled cancel-and-start; its receiver-local POST supplies restart_of to
-the existing locked cancellation/issuance operation. A different browser, changed root, expired
-parent or substituted registration route receives the generic invalid-request response.
+and retains the original scope and signed return target without adding authority. A redeemed
+registration is labeled cancel-and-start; its receiver-local POST supplies restart_of to the
+existing locked cancellation/issuance operation. A different browser, changed root, expired parent
+or substituted registration route receives the generic invalid-request response.
 
 Step-Up issuance, cancellation and ordinary freshness finalization acquire source owner,
-DeviceSession and current root token before the ceremony parent. A revoked device or displaced
-root cannot initiate, cancel or grant freshness even if the token row itself remains unexpired.
-Ordinary issuance never creates another admission for a redeemed parent. Conflict forms retain
-scope and signed return target; an expired unredeemed admission is replaced only by an explicit
-restart_of submission, without extending its original parent deadline.
-After confirmed redemption, conflict continue returns to the clean Auth entry using the existing
-signed Jump navigation path only while the retained admitted continuity remains active. It issues
-no new admission and changes neither parent intent nor Base freshness.
+DeviceSession and current root token before the ceremony parent. A revoked device or displaced root
+cannot initiate, cancel or grant freshness even if the token row itself remains unexpired. Ordinary
+issuance never creates another admission for a redeemed parent. Conflict forms retain scope and
+signed return target; an expired unredeemed admission is replaced only by an explicit restart_of
+submission, without extending its original parent deadline. After confirmed redemption, conflict
+continue returns to the clean Auth entry using the existing signed Jump navigation path only while
+the retained admitted continuity remains active. It issues no new admission and changes neither
+parent intent nor Base freshness.
 
-Full reauthentication retains its distinct reauthentication_handoff/reauthentication_result
-purpose throughout Auth entry, admission, Base result lookup and continuity acceptance. The
-verification route admits that purpose only from its exact server-loaded binding or admitted
-parent, never a request-supplied purpose. Base replaces the current root once; a terminal retry
-uses the exact predecessor/current-device pair and cannot authorize a revoked DeviceSession.
+Full reauthentication retains its distinct reauthentication_handoff/reauthentication_result purpose
+throughout Auth entry, admission, Base result lookup and continuity acceptance. The verification
+route admits that purpose only from its exact server-loaded binding or admitted parent, never a
+request-supplied purpose. Base replaces the current root once; a terminal retry uses the exact
+predecessor/current-device pair and cannot authorize a revoked DeviceSession.
 
 The supported app/com email and telephone sign-up leaves explicitly require admitted sign-up
 continuity before rendering or mutating their workflow. Receiver-local CSRF or Turnstile alone
 cannot create a pending actor, contact, OTP or delivery before confirmed admission redemption.
 
-The existing seven-RP description is partially superseded by D-63's destructive Side-to-Warp
-rename, D-53's DeviceSession parent, and the explicit self-RP registrations above. Historical
-evidence remains unchanged. The Base/Auth separation, Auth ceremony-only boundary, Palm scope, and
-external deployment prerequisites are **retained**.
+The existing seven-RP description is partially superseded by D-63's destructive Side-to-Warp rename,
+D-53's DeviceSession parent, and the explicit self-RP registrations above. Historical evidence
+remains unchanged. The Base/Auth separation, Auth ceremony-only boundary, Palm scope, and external
+deployment prerequisites are **retained**.
 
-This amendment closes the Base/Auth OIDC finalization slice. It does not claim distributed
-atomicity across PostgreSQL and Valkey: after the durable token transaction commits, Valkey code
-cleanup is best-effort and no credential is returned from an unsuccessful database transaction.
+This amendment closes the Base/Auth OIDC finalization slice. It does not claim distributed atomicity
+across PostgreSQL and Valkey: after the durable token transaction commits, Valkey code cleanup is
+best-effort and no credential is returned from an unsuccessful database transaction.
 
 ### Result-purpose binding amendment (2026-09-21)
 
 Base resolves the expected result purpose from the server-side authorization transaction before
 attempting Valkey consumption. The result consumer no longer probes every result-purpose namespace
-until one happens to match. A result must therefore match the transaction's purpose, surface,
-actor type, and transaction reference at the atomic consume boundary; a mismatch is rejected
-without consuming the result. The existing `local_sign_in` and `local_sign_up` namespaces remain
-restricted to Base's own local landing entry and are not ordinary first-party RP result purposes.
+until one happens to match. A result must therefore match the transaction's purpose, surface, actor
+type, and transaction reference at the atomic consume boundary; a mismatch is rejected without
+consuming the result. The existing `local_sign_in` and `local_sign_up` namespaces remain restricted
+to Base's own local landing entry and are not ordinary first-party RP result purposes.
 
 ## RP credential authority amendment (2026-09-20)
 
 The seven first-party RP callbacks now use the Access and Refresh credentials returned by Base's
 token endpoint directly. Core, Side, and Edit store them only in the dedicated host-only RP cookie
 slots (`oidc_rp_access` and `oidc_rp_refresh`, or their `__Host-` names in secure contexts). They do
-not call generic root `log_in` and do not create a second ClientToken, VisitorToken, or OperatorToken.
+not call generic root `log_in` and do not create a second ClientToken, VisitorToken, or
+OperatorToken.
 
 The Core Browser API validates the Access JWT locally against the exact RP client binding and
 resource type, without a per-request RP Session lookup. Refresh, revocation, and logout return to
@@ -372,25 +371,25 @@ zero-cookie edge contract, or make TanStack an authentication authority.
 For OIDC UserInfo and the equivalent bearer validation boundary, `sid` remains the RP Session
 protocol identifier, while the private `umx_base_sid` claim binds the JWT to the parent Base Browser
 Session that issued it. Verification resolves the Base Browser Session and actor from those signed
-claims; it does not resolve an RP Session row or compare a persisted RP-session JTI on every request.
-The RP Session remains authoritative for refresh, revocation, and logout. Child-only revocation
-therefore prevents further issuance without retroactively invalidating an already-issued JWT before
-its natural expiry and verifier clock-skew boundary.
+claims; it does not resolve an RP Session row or compare a persisted RP-session JTI on every
+request. The RP Session remains authoritative for refresh, revocation, and logout. Child-only
+revocation therefore prevents further issuance without retroactively invalidating an already-issued
+JWT before its natural expiry and verifier clock-skew boundary.
 
 ## RP logout authority amendment (2026-09-20)
 
 The seven first-party browser RP sign-out controllers authenticate POST `/sign/out` with the
 surface-local RP Access/Refresh cookies. They require the registered client and resource realm,
 verify the Access JWT issuer/audience/client binding, bind `sid` and JTI to the exact RP Session,
-and verify the subject against the RP Session owner. A valid refresh cookie may identify the same
-RP Session when the Access JWT is expired; no root Browser Session or Bearer fallback is permitted.
+and verify the subject against the RP Session owner. A valid refresh cookie may identify the same RP
+Session when the Access JWT is expired; no root Browser Session or Bearer fallback is permitted.
 
 Successful logout uses the PostgreSQL RP-session revoke operation and clears only the browser's RP
 credential cookies as credentials. The parent Base Browser Session and sibling RP Sessions remain
-usable. GET sign-out pages do not perform authoritative mutation, and existing Rails CSRF
-protection remains in force for POST mutation. Revocation prevents refresh and new Access JWT
-issuance; it does not claim immediate invalidation of an Access JWT already issued, which remains
-usable until its natural expiry and verifier clock-skew boundary.
+usable. GET sign-out pages do not perform authoritative mutation, and existing Rails CSRF protection
+remains in force for POST mutation. Revocation prevents refresh and new Access JWT issuance; it does
+not claim immediate invalidation of an Access JWT already issued, which remains usable until its
+natural expiry and verifier clock-skew boundary.
 
 ## Rails surface naming amendment (2026-09-24)
 
@@ -399,18 +398,18 @@ controller, view, route, page, and entrypoint paths. This naming change does not
 persistent identifiers: OIDC client IDs and audiences remain `side-*`, OIDC client signing keys
 remain `OIDC_CLIENT_SIDE_*`, the MCP realm remains `side`, logout transaction rows retain
 `origin_surface = "side"`, and FQDN availability retains its existing `fqdn_available_side_*`
-Flipper keys. The public `www-jp.umaxica.app`, `www-jp.umaxica.com`, and `www-jp.umaxica.org`
-hosts and their route paths remain unchanged. Jump RT uses independent `WARP_APP`, `WARP_COM`, and
+Flipper keys. The public `www-jp.umaxica.app`, `www-jp.umaxica.com`, and `www-jp.umaxica.org` hosts
+and their route paths remain unchanged. Jump RT uses independent `WARP_APP`, `WARP_COM`, and
 `WARP_ORG` issuer namespaces.
 
 ## Registration evidence separation amendment (2026-10-04)
 
 The approved actor-specific step-up transactions also carry `bootstrap` and
 `credential_registration` permissions. A verified registration records `aal = none`,
-`phishing_resistant = false`, and no verified existing credential reference. The database constraints,
-normal verification API, and Base freshness consumer enforce this separation. Confirming an
-authenticator candidate authorizes its registration only; a separate assertion is required before
-the original protected operation can use normal step-up freshness.
+`phishing_resistant = false`, and no verified existing credential reference. The database
+constraints, normal verification API, and Base freshness consumer enforce this separation.
+Confirming an authenticator candidate authorizes its registration only; a separate assertion is
+required before the original protected operation can use normal step-up freshness.
 
 Base decides first-registration eligibility from writer credential state, including unavailable
 credential history. It issues the purpose-specific admission from a CSRF-protected POST. Auth GET
@@ -422,11 +421,11 @@ the ticket connection. Auth neither receives a root credential nor establishes f
 
 Principal creation and ticket consumption use different databases. The principal actor lock spans
 the ticket commit, but there is no distributed atomic commit. A principal failure after ticket
-consumption may leave a terminal ticket without a credential. Retrying that result returns only
-the same existing active owned credential and never recreates a missing or revoked credential.
-A fresh Base permission is required for a new enrollment after that safe refusal. This amendment
-does not declare Passkey registration, credential changes, audit/notification integration, or
-legacy retirement complete.
+consumption may leave a terminal ticket without a credential. Retrying that result returns only the
+same existing active owned credential and never recreates a missing or revoked credential. A fresh
+Base permission is required for a new enrollment after that safe refusal. This amendment does not
+declare Passkey registration, credential changes, audit/notification integration, or legacy
+retirement complete.
 
 ## Initial-contact and credential-history enforcement (2026-10-04)
 
@@ -435,23 +434,23 @@ bootstrap admission issuer. An empty set of currently configured methods does no
 bootstrap after credential loss, lockout or revocation. True first-contact registration remains
 Base-owned; a confirmed Email becomes an available Email OTP method and ends that exception.
 
-COM email confirmation explicitly invalidates step-up freshness and unfinished ceremonies across
-the actor's sessions while retaining their root sessions. The concrete surface chooses that policy;
-the shared registration hook does not copy APP's root-session revocation policy to COM or ORG.
-This is not a claim that every credential-management path has been connected.
+COM email confirmation explicitly invalidates step-up freshness and unfinished ceremonies across the
+actor's sessions while retaining their root sessions. The concrete surface chooses that policy; the
+shared registration hook does not copy APP's root-session revocation policy to COM or ORG. This is
+not a claim that every credential-management path has been connected.
 
 ## Credential removal and capacity serialization (2026-10-04)
 
 A removal inventory decision and its terminal-state transition hold the actor lock also used by
 Passkey insertion and Base credential confirmation. Principal credential rows remain as terminal
-history; existing APP/COM DELETED and ORG REVOKED states do not consume Passkey registration
-slots. Deleted TOTP rows also retain history without occupying slots. The existing four Passkey
-slots are checked on writer state and repeated during insertion under that actor lock.
+history; existing APP/COM DELETED and ORG REVOKED states do not consume Passkey registration slots.
+Deleted TOTP rows also retain history without occupying slots. The existing four Passkey slots are
+checked on writer state and repeated during insertion under that actor lock.
 
 Removal rechecks the current session under its ticket lock and invalidates freshness and unfinished
-ceremonies before the principal mutation. Separate databases remain separate commit boundaries;
-a failure may invalidate authority while retaining a credential, requiring safe reauthentication.
-The existing Auth caller wiring retains its policy and verification guards. Purpose-limited Base
+ceremonies before the principal mutation. Separate databases remain separate commit boundaries; a
+failure may invalidate authority while retaining a credential, requiring safe reauthentication. The
+existing Auth caller wiring retains its policy and verification guards. Purpose-limited Base
 permission and Auth credential-management context migration remain implementation requirements.
 
 ## Retained credential expiry in inventory (2026-10-04)
@@ -459,36 +458,36 @@ permission and Auth credential-management context migration remain implementatio
 An active/verified status alone does not make a retained APP/COM credential usable. The existing
 inventory decision reads the surface writer and applies one database-clock instant to discard_at;
 exact expiry is unavailable. UV Passkey fallback and contactability use the same retained-row
-condition. ORG records without that lifetime column remain governed by their existing statuses.
-This changes the authoritative source and classification of existing inventory reads, rather than
-adding credential checks to every ordinary page or API access.
+condition. ORG records without that lifetime column remain governed by their existing statuses. This
+changes the authoritative source and classification of existing inventory reads, rather than adding
+credential checks to every ordinary page or API access.
 
 ## Delivered reconciliation (2026-10-06)
 
 The `two.md` implementation is now the current contract for this ADR. Base has separate Authority
 and self-RP controller bases on the same FQDN; the Browser Session is OP state and is never an RP
 credential fallback. Auth remains ceremony-only, with D-82 as the narrow browser-bound admission
-exception. The Base finalization path owns passkey/Secret registration handoff, cancellation
-handoff and continuation, and all three realm boundaries use the same explicit result contract.
-Earlier Side/Wide and unfinished-transition passages above are historical and superseded where they
-conflict with the current routes, Warp identifiers, or lifecycle diagrams.
+exception. The Base finalization path owns passkey/Secret registration handoff, cancellation handoff
+and continuation, and all three realm boundaries use the same explicit result contract. Earlier
+Side/Wide and unfinished-transition passages above are historical and superseded where they conflict
+with the current routes, Warp identifiers, or lifecycle diagrams.
 
 ## OIDC Result URL and E1 amendment (2026-10-21)
 
-**Accepted (2026-10-21); URL change Not Implemented.** This amendment changes the Auth OIDC
-Result public path on the applicable APP, COM, and ORG Auth hosts only:
+**Accepted (2026-10-21); URL change Not Implemented.** This amendment changes the Auth OIDC Result
+public path on the applicable APP, COM, and ORG Auth hosts only:
 
-| Boundary | Before | Accepted target |
-| --- | --- | --- |
-| Auth OIDC Result | GET/POST `/sign/oidc/handoff` | GET/POST `/sign/result` |
-| Auth Local Result | GET/POST `/sign/handoff` | Unchanged |
-| Base OIDC Authorization | GET/POST `/oauth/authorize` | Unchanged |
-| Base Local Completion | GET/POST `/sign/completion` | Unchanged |
+| Boundary                | Before                        | Accepted target         |
+| ----------------------- | ----------------------------- | ----------------------- |
+| Auth OIDC Result        | GET/POST `/sign/oidc/handoff` | GET/POST `/sign/result` |
+| Auth Local Result       | GET/POST `/sign/handoff`      | Unchanged               |
+| Base OIDC Authorization | GET/POST `/oauth/authorize`   | Unchanged               |
+| Base Local Completion   | GET/POST `/sign/completion`   | Unchanged               |
 
-This partially supersedes only the old Auth OIDC Result path references in this ADR, including
-its OIDC result transport amendment. Existing Ruby Controller, Concern, Service, and Route Helper
-names are retained in principle. No old-path compatibility route or redirect is adopted. OIDC
-and Local internal authentication mechanisms remain separate.
+This partially supersedes only the old Auth OIDC Result path references in this ADR, including its
+OIDC result transport amendment. Existing Ruby Controller, Concern, Service, and Route Helper names
+are retained in principle. No old-path compatibility route or redirect is adopted. OIDC and Local
+internal authentication mechanisms remain separate.
 
 Because `/sign/result` does not name OIDC, the saved parent OIDC Authorization Transaction and
 expected Result Purpose MUST identify the permitted result. Local Results MUST be refused as OIDC
@@ -503,8 +502,8 @@ the opaque result to Base. Read-only local inspection on 2026-10-20 at
 `febec3225cc9a0cfa53b9cbe817d20d366aba5a2` instead found:
 
 1. `AuthOidcResultHandoff#show` renders an Auth-local continuation form.
-2. Its POST records/issues the result and sends a 303 to Base `/oauth/authorize` with
-   `result_ref` and `transaction_ref` lookup references.
+2. Its POST records/issues the result and sends a 303 to Base `/oauth/authorize` with `result_ref`
+   and `transaction_ref` lookup references.
 3. `OidcAuthorizationResultPost` renders the Base-local continuation on GET after checking the
    parent/browser binding. A receiver-local, Rails-CSRF-protected POST validates and accepts the
    stored result; GET does not finalize it. References are not the opaque result code or a grant.
@@ -525,3 +524,22 @@ redeemed OIDC cancel-and-start is unimplemented is historical for that cycle: cu
 has the bounded D06 first-page Switch (old Ceremony cancellation and new Admission under the same
 neutral parent). That does not settle progressed Sign-up restart or D14 distributed coordination.
 All new E1 association constraints remain implementation work.
+
+## Design D continuation amendment (2026-10-24)
+
+The 2026-09-21 Base-to-Auth admission transport amendment and the 2026-09-20 OIDC result transport
+amendment above are historical transport descriptions. They are amended by
+`adr/sign-in-path-continuation-protocol.md` (D-100/D-101): current Sign-in path system hops use
+303-to-GET continuation resources on the Visa/Auth hosts. The user still performs every decision in
+a CSRF-protected POST; the system continuation GET is allowed to consume only under the six
+conditions recorded in that ADR. These conditions do not change the rule for unrelated GETs and do
+not weaken Rails forgery protection.
+
+## RP target and interruption amendment (2026-10-24)
+
+The RP lane of the earlier `pt`/return-target decisions is partially superseded by
+`adr/rp-oidc-state-and-return-target.md` (D-149–D-153). A first-party RP carries only a validated
+path-only `target_link_uri` in its signed OIDC `state`; Auth's signed `pt` remains its own lane.
+Cancel is returned by the OP as `access_denied` with the unchanged `state` and `iss`, and the RP
+handles that and other callback failures at `GET /sign/interruption`. The OP never interprets RP
+state claims, and Rails CSRF remains independent of OIDC state.

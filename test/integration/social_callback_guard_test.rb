@@ -75,21 +75,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
             flow1_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow1_target.host == flow1_base_host
-              flow1_rt = Rack::Utils.parse_query(flow1_target.query).fetch("rt")
-              flow1_payload, = JWT.decode(
-                flow1_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow1_issuer.id,
-                  flow1_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow1_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow1_target = URI.parse(flow1_payload.fetch("url"))
+              flow1_target = URI.parse(jump_rt_url_from_location_for_test(flow1_target.to_s))
             end
             if flow1_index.zero?
               raise RuntimeError,
-                    "Base authorization host mismatch" unless flow1_target.host == flow1_base_host
+                    "Base authorization host mismatch" unless flow1_target.host == visa_host_for_test_base_host(flow1_base_host)
 
+              @base_browser.host!(flow1_target.host)
               @base_browser.get(flow1_target.request_uri)
               flow1_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
               flow1_fields =
@@ -101,7 +93,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                 }
               @base_browser.post(
                 flow1_form["action"], params: flow1_fields, headers: {
-                  "Origin" => "https://#{flow1_base_host}", "Sec-Fetch-Site" => "same-origin",
+                  "Origin" => "https://#{visa_host_for_test_base_host(flow1_base_host)}", "Sec-Fetch-Site" => "same-origin",
                 },
               )
             else
@@ -175,6 +167,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
             scope: SocialAuth::SOCIAL_LINK_SCOPE,
           ) if flow1_intent.to_s == "link" && flow1_token
           flow1_headers = flow1_headers.merge(flow1_user_headers)
+        end
+        if flow1_entry.to_s == "sign_up" && flow1_intent.to_s != "link"
+          switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+          host!(flow1_host)
         end
         post(flow1_continue_path, headers: flow1_headers)
         social_auth_state_from_response
@@ -298,21 +294,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
             flow3_target = URI.parse(@base_browser.response.location)
             # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
             unless flow3_target.host == flow3_base_host
-              flow3_rt = Rack::Utils.parse_query(flow3_target.query).fetch("rt")
-              flow3_payload, = JWT.decode(
-                flow3_rt, JitSecurityJwtRegistry.public_key_for(
-                  flow3_issuer.id,
-                  flow3_issuer.current_kid,
-                ), true,
-                algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow3_base_host}",
-                verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-              )
-              flow3_target = URI.parse(flow3_payload.fetch("url"))
+              flow3_target = URI.parse(jump_rt_url_from_location_for_test(flow3_target.to_s))
             end
             if flow3_index.zero?
               raise RuntimeError,
-                    "Base authorization host mismatch" unless flow3_target.host == flow3_base_host
+                    "Base authorization host mismatch" unless flow3_target.host == visa_host_for_test_base_host(flow3_base_host)
 
+              @base_browser.host!(flow3_target.host)
               @base_browser.get(flow3_target.request_uri)
               flow3_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
               flow3_fields =
@@ -324,7 +312,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                 }
               @base_browser.post(
                 flow3_form["action"], params: flow3_fields, headers: {
-                  "Origin" => "https://#{flow3_base_host}", "Sec-Fetch-Site" => "same-origin",
+                  "Origin" => "https://#{visa_host_for_test_base_host(flow3_base_host)}", "Sec-Fetch-Site" => "same-origin",
                 },
               )
             else
@@ -398,6 +386,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
             scope: SocialAuth::SOCIAL_LINK_SCOPE,
           ) if flow3_intent.to_s == "link" && flow3_token
           flow3_headers = flow3_headers.merge(flow3_user_headers)
+        end
+        if flow3_entry.to_s == "sign_up" && flow3_intent.to_s != "link"
+          switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+          host!(flow3_host)
         end
         post(flow3_continue_path, headers: flow3_headers)
         social_auth_state_from_response
@@ -521,21 +513,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               flow5_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
               unless flow5_target.host == flow5_base_host
-                flow5_rt = Rack::Utils.parse_query(flow5_target.query).fetch("rt")
-                flow5_payload, = JWT.decode(
-                  flow5_rt, JitSecurityJwtRegistry.public_key_for(
-                    flow5_issuer.id,
-                    flow5_issuer.current_kid,
-                  ), true,
-                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow5_base_host}",
-                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                )
-                flow5_target = URI.parse(flow5_payload.fetch("url"))
+                flow5_target = URI.parse(jump_rt_url_from_location_for_test(flow5_target.to_s))
               end
               if flow5_index.zero?
                 raise RuntimeError,
-                      "Base authorization host mismatch" unless flow5_target.host == flow5_base_host
+                      "Base authorization host mismatch" unless flow5_target.host == visa_host_for_test_base_host(flow5_base_host)
 
+                @base_browser.host!(flow5_target.host)
                 @base_browser.get(flow5_target.request_uri)
                 flow5_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
                 flow5_fields =
@@ -547,7 +531,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                   }
                 @base_browser.post(
                   flow5_form["action"], params: flow5_fields, headers: {
-                    "Origin" => "https://#{flow5_base_host}", "Sec-Fetch-Site" => "same-origin",
+                    "Origin" => "https://#{visa_host_for_test_base_host(flow5_base_host)}", "Sec-Fetch-Site" => "same-origin",
                   },
                 )
               else
@@ -621,6 +605,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if flow5_intent.to_s == "link" && flow5_token
             flow5_headers = flow5_headers.merge(flow5_user_headers)
+          end
+          if flow5_entry.to_s == "sign_up" && flow5_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(flow5_host)
           end
           post(flow5_continue_path, headers: flow5_headers)
           social_auth_state_from_response
@@ -746,21 +734,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               flow7_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
               unless flow7_target.host == flow7_base_host
-                flow7_rt = Rack::Utils.parse_query(flow7_target.query).fetch("rt")
-                flow7_payload, = JWT.decode(
-                  flow7_rt, JitSecurityJwtRegistry.public_key_for(
-                    flow7_issuer.id,
-                    flow7_issuer.current_kid,
-                  ), true,
-                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow7_base_host}",
-                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                )
-                flow7_target = URI.parse(flow7_payload.fetch("url"))
+                flow7_target = URI.parse(jump_rt_url_from_location_for_test(flow7_target.to_s))
               end
               if flow7_index.zero?
                 raise RuntimeError,
-                      "Base authorization host mismatch" unless flow7_target.host == flow7_base_host
+                      "Base authorization host mismatch" unless flow7_target.host == visa_host_for_test_base_host(flow7_base_host)
 
+                @base_browser.host!(flow7_target.host)
                 @base_browser.get(flow7_target.request_uri)
                 flow7_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
                 flow7_fields =
@@ -772,7 +752,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                   }
                 @base_browser.post(
                   flow7_form["action"], params: flow7_fields, headers: {
-                    "Origin" => "https://#{flow7_base_host}", "Sec-Fetch-Site" => "same-origin",
+                    "Origin" => "https://#{visa_host_for_test_base_host(flow7_base_host)}", "Sec-Fetch-Site" => "same-origin",
                   },
                 )
               else
@@ -846,6 +826,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if flow7_intent.to_s == "link" && flow7_token
             flow7_headers = flow7_headers.merge(flow7_user_headers)
+          end
+          if flow7_entry.to_s == "sign_up" && flow7_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(flow7_host)
           end
           post(flow7_continue_path, headers: flow7_headers)
           social_auth_state_from_response
@@ -1041,21 +1025,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               flow9_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
               unless flow9_target.host == flow9_base_host
-                flow9_rt = Rack::Utils.parse_query(flow9_target.query).fetch("rt")
-                flow9_payload, = JWT.decode(
-                  flow9_rt, JitSecurityJwtRegistry.public_key_for(
-                    flow9_issuer.id,
-                    flow9_issuer.current_kid,
-                  ), true,
-                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow9_base_host}",
-                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                )
-                flow9_target = URI.parse(flow9_payload.fetch("url"))
+                flow9_target = URI.parse(jump_rt_url_from_location_for_test(flow9_target.to_s))
               end
               if flow9_index.zero?
                 raise RuntimeError,
-                      "Base authorization host mismatch" unless flow9_target.host == flow9_base_host
+                      "Base authorization host mismatch" unless flow9_target.host == visa_host_for_test_base_host(flow9_base_host)
 
+                @base_browser.host!(flow9_target.host)
                 @base_browser.get(flow9_target.request_uri)
                 flow9_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
                 flow9_fields =
@@ -1067,7 +1043,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                   }
                 @base_browser.post(
                   flow9_form["action"], params: flow9_fields, headers: {
-                    "Origin" => "https://#{flow9_base_host}", "Sec-Fetch-Site" => "same-origin",
+                    "Origin" => "https://#{visa_host_for_test_base_host(flow9_base_host)}", "Sec-Fetch-Site" => "same-origin",
                   },
                 )
               else
@@ -1141,6 +1117,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if flow9_intent.to_s == "link" && flow9_token
             flow9_headers = flow9_headers.merge(flow9_user_headers)
+          end
+          if flow9_entry.to_s == "sign_up" && flow9_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(flow9_host)
           end
           post(flow9_continue_path, headers: flow9_headers)
           social_auth_state_from_response
@@ -1264,21 +1244,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               flow11_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
               unless flow11_target.host == flow11_base_host
-                flow11_rt = Rack::Utils.parse_query(flow11_target.query).fetch("rt")
-                flow11_payload, = JWT.decode(
-                  flow11_rt, JitSecurityJwtRegistry.public_key_for(
-                    flow11_issuer.id,
-                    flow11_issuer.current_kid,
-                  ), true,
-                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow11_base_host}",
-                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                )
-                flow11_target = URI.parse(flow11_payload.fetch("url"))
+                flow11_target = URI.parse(jump_rt_url_from_location_for_test(flow11_target.to_s))
               end
               if flow11_index.zero?
                 raise RuntimeError,
-                      "Base authorization host mismatch" unless flow11_target.host == flow11_base_host
+                      "Base authorization host mismatch" unless flow11_target.host == visa_host_for_test_base_host(flow11_base_host)
 
+                @base_browser.host!(flow11_target.host)
                 @base_browser.get(flow11_target.request_uri)
                 flow11_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
                 flow11_fields =
@@ -1290,7 +1262,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                   }
                 @base_browser.post(
                   flow11_form["action"], params: flow11_fields, headers: {
-                    "Origin" => "https://#{flow11_base_host}", "Sec-Fetch-Site" => "same-origin",
+                    "Origin" => "https://#{visa_host_for_test_base_host(flow11_base_host)}", "Sec-Fetch-Site" => "same-origin",
                   },
                 )
               else
@@ -1364,6 +1336,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if flow11_intent.to_s == "link" && flow11_token
             flow11_headers = flow11_headers.merge(flow11_user_headers)
+          end
+          if flow11_entry.to_s == "sign_up" && flow11_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(flow11_host)
           end
           post(flow11_continue_path, headers: flow11_headers)
           social_auth_state_from_response
@@ -1487,21 +1463,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               flow13_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
               unless flow13_target.host == flow13_base_host
-                flow13_rt = Rack::Utils.parse_query(flow13_target.query).fetch("rt")
-                flow13_payload, = JWT.decode(
-                  flow13_rt, JitSecurityJwtRegistry.public_key_for(
-                    flow13_issuer.id,
-                    flow13_issuer.current_kid,
-                  ), true,
-                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow13_base_host}",
-                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                )
-                flow13_target = URI.parse(flow13_payload.fetch("url"))
+                flow13_target = URI.parse(jump_rt_url_from_location_for_test(flow13_target.to_s))
               end
               if flow13_index.zero?
                 raise RuntimeError,
-                      "Base authorization host mismatch" unless flow13_target.host == flow13_base_host
+                      "Base authorization host mismatch" unless flow13_target.host == visa_host_for_test_base_host(flow13_base_host)
 
+                @base_browser.host!(flow13_target.host)
                 @base_browser.get(flow13_target.request_uri)
                 flow13_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
                 flow13_fields =
@@ -1513,7 +1481,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                   }
                 @base_browser.post(
                   flow13_form["action"], params: flow13_fields, headers: {
-                    "Origin" => "https://#{flow13_base_host}", "Sec-Fetch-Site" => "same-origin",
+                    "Origin" => "https://#{visa_host_for_test_base_host(flow13_base_host)}", "Sec-Fetch-Site" => "same-origin",
                   },
                 )
               else
@@ -1587,6 +1555,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if flow13_intent.to_s == "link" && flow13_token
             flow13_headers = flow13_headers.merge(flow13_user_headers)
+          end
+          if flow13_entry.to_s == "sign_up" && flow13_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(flow13_host)
           end
           post(flow13_continue_path, headers: flow13_headers)
           social_auth_state_from_response
@@ -1710,21 +1682,13 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               flow15_target = URI.parse(@base_browser.response.location)
               # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
               unless flow15_target.host == flow15_base_host
-                flow15_rt = Rack::Utils.parse_query(flow15_target.query).fetch("rt")
-                flow15_payload, = JWT.decode(
-                  flow15_rt, JitSecurityJwtRegistry.public_key_for(
-                    flow15_issuer.id,
-                    flow15_issuer.current_kid,
-                  ), true,
-                  algorithms: ["ES384"], verify_iss: true, iss: "https://#{flow15_base_host}",
-                  verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-                )
-                flow15_target = URI.parse(flow15_payload.fetch("url"))
+                flow15_target = URI.parse(jump_rt_url_from_location_for_test(flow15_target.to_s))
               end
               if flow15_index.zero?
                 raise RuntimeError,
-                      "Base authorization host mismatch" unless flow15_target.host == flow15_base_host
+                      "Base authorization host mismatch" unless flow15_target.host == visa_host_for_test_base_host(flow15_base_host)
 
+                @base_browser.host!(flow15_target.host)
                 @base_browser.get(flow15_target.request_uri)
                 flow15_form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
                 flow15_fields =
@@ -1736,7 +1700,7 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
                   }
                 @base_browser.post(
                   flow15_form["action"], params: flow15_fields, headers: {
-                    "Origin" => "https://#{flow15_base_host}", "Sec-Fetch-Site" => "same-origin",
+                    "Origin" => "https://#{visa_host_for_test_base_host(flow15_base_host)}", "Sec-Fetch-Site" => "same-origin",
                   },
                 )
               else
@@ -1810,6 +1774,10 @@ class SocialCallbackGuardTest < ActionDispatch::IntegrationTest
               scope: SocialAuth::SOCIAL_LINK_SCOPE,
             ) if flow15_intent.to_s == "link" && flow15_token
             flow15_headers = flow15_headers.merge(flow15_user_headers)
+          end
+          if flow15_entry.to_s == "sign_up" && flow15_intent.to_s != "link"
+            switch_browser_to_sign_up!(integration_session, base_browser: @base_browser)
+            host!(flow15_host)
           end
           post(flow15_continue_path, headers: flow15_headers)
           social_auth_state_from_response

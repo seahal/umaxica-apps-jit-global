@@ -90,9 +90,9 @@ module Tech
 
       def oidc_sign_host = ENV.fetch("PUBLIC_AUTH_STAFF_URL")
 
-      def oidc_base_authority_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+      def oidc_visa_authority_host = Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host
 
-      def oidc_acme_host = oidc_base_authority_host
+      def oidc_acme_host = oidc_visa_authority_host
 
       public :browser_rp_client_id, :browser_rp_resource_type
 

@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../support/oidc_auth_admission_test_helper"
 
 # The resend and cancel endpoints on the sign-up checkpoints. Every checkpoint
 # controller routes DELETE to `cancel_from_explicit_step`, and the OTP
@@ -9,6 +10,7 @@ require "test_helper"
 # happy path, so they are asserted here for the app and corporate surfaces.
 class AuthSignUpCheckpointCancellationTest < ActionDispatch::IntegrationTest
   include ActiveJob::TestHelper
+  include OidcAuthAdmissionTestHelper
 
   setup do
     @previous_forgery_protection = ActionController::Base.allow_forgery_protection
@@ -28,67 +30,9 @@ class AuthSignUpCheckpointCancellationTest < ActionDispatch::IntegrationTest
       VisitorEmailStatus::DEFAULTS.each { |id| VisitorEmailStatus.find_or_create_by!(id: id) }
     end
 
-    %w(app com).each do |surface|
-      base_host, auth_host, issuer_name =
-        if surface == "app"
-          [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"), "BASE_APP"]
-        else
-          [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"), "BASE_COM"]
-        end
-      host!(base_host)
-      https!
-      get "/sign", params: { ri: "jp" }
-
-      assert_response :success
-      csrf = response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-      post "/sign", params: { ri: "jp", authenticity_token: csrf }, headers: {
-        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-      }
-
-      assert_response :redirect
-      issuer = JitSecurityJwtRegistry.surface(issuer_name)
-      2.times do |index|
-        target = URI.parse(response.location)
-        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-        unless target.host == base_host
-          rt = Rack::Utils.parse_query(target.query).fetch("rt")
-          payload, = JWT.decode(
-            rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-            algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-            verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-          )
-          target = URI.parse(payload.fetch("url"))
-        end
-        host!(target.host)
-        get target.request_uri, params: { ri: "jp" }
-        next unless index.zero?
-
-        form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post form["action"], params: fields, headers: {
-          "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-        }
-
-        assert_response :redirect
-      end
-      current_host = auth_host
-      3.times do |index|
-        form = response.parsed_body.at_css("form")
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        post form["action"], params: fields, headers: {
-          "Origin" => "https://#{current_host}", "Sec-Fetch-Site" => "same-origin",
-        }
-
-        assert_response :see_other
-        next if index == 2
-
-        target = URI.parse(response.location)
-        current_host = target.host
-        host!(current_host)
-        get target.request_uri, params: { ri: "jp" }
-      end
-      switch_browser_to_sign_up!(integration_session, surface: surface)
-    end
+    surface = name.to_s.include?("com_") ? "com" : "app"
+    bootstrap_auth_sign_in_admission!(surface: surface)
+    switch_browser_to_sign_up!(integration_session, surface:, base_browser: @base_browser)
   end
 
   teardown do

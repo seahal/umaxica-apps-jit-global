@@ -15,6 +15,9 @@ module ConfigValues
       :base_service,
       :base_corporate,
       :base_staff,
+      :visa_service,
+      :visa_corporate,
+      :visa_staff,
       :warp_service,
       :warp_corporate,
       :warp_staff,
@@ -63,6 +66,18 @@ module ConfigValues
 
       def base_origins
         [base_service, base_corporate, base_staff]
+      end
+
+      def base_for_resource_type(resource_type)
+        case resource_type.to_s
+        when "operator", "staff" then base_staff
+        when "visitor", "customer" then base_corporate
+        else base_service
+        end
+      end
+
+      def visa_origins
+        [visa_service, visa_corporate, visa_staff]
       end
 
       def docs_origins
@@ -136,6 +151,18 @@ class << ConfigValues::HostFamilyValues
       ),
       base_staff: origin(
         env, base_key(env, "STAFF"), development_host(production, "www.umaxica.org"), production: production,
+      ),
+      visa_service: origin(
+        env, visa_key(env, "SERVICE"), development_host(production, "visa.app.localhost"),
+        production: production,
+      ),
+      visa_corporate: origin(
+        env, visa_key(env, "CORPORATE"), development_host(production, "visa.com.localhost"),
+        production: production,
+      ),
+      visa_staff: origin(
+        env, visa_key(env, "STAFF"), development_host(production, "visa.org.localhost"),
+        production: production,
       ),
     }
   end
@@ -228,6 +255,17 @@ class << ConfigValues::HostFamilyValues
     end
   end
 
+  # Resolves the Visa OP origin for a realm. Deployments may use the private
+  # style key or the public style key; the former remains authoritative when
+  # both are present, matching the existing Base contract.
+  def visa_key(env, surface)
+    if env.key?("VISA_#{surface}_URL")
+      "VISA_#{surface}_URL"
+    else
+      "PUBLIC_VISA_#{surface}_URL"
+    end
+  end
+
   # Resolves the canonical PUBLIC_WARP input for a Warp surface.
   def warp_key(_env, surface)
     "PUBLIC_WARP_#{surface}_URL"
@@ -294,5 +332,5 @@ class << ConfigValues::HostFamilyValues
 
   private :host_family_origins, :host_family_primary_origins, :host_family_secondary_origins,
           :host_family_content_origins, :host_family_utility_origins, :guid_key, :edit_key,
-          :required_origin
+          :required_origin, :visa_key
 end

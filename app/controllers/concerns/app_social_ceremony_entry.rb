@@ -5,7 +5,7 @@
 # (Auth::App::Social::SessionsController and RegistrationsController).
 #
 # Adds everything the app surface needs on top of the surface-neutral
-# SocialCeremonyEntry: sign-up entry detection and its suspension gate,
+# SocialCeremonyEntry: sign-up entry detection and its availability gate,
 # intent session state, ceremony replay grants, the ClientSignUpFlow issuance,
 # and the link/step-up intents.
 #
@@ -25,8 +25,6 @@ module AppSocialCeremonyEntry
   # FIXME: Violates Umaxica/NoConcernInclusionHooks; move the declarations in this block into each class that includes this concern.
   included do
     include SocialAuth
-    include SignUpSuspensionGuard
-
     rescue_from SocialAuth::BaseError, with: :handle_social_auth_error
     rescue_from ActiveRecord::RecordNotUnique, with: :handle_record_not_unique
   end
@@ -57,11 +55,10 @@ module AppSocialCeremonyEntry
   #     "login" is the internal continue flow: existing identities sign in,
   #     missing identities create a new account.
   def prepare_surface_ceremony_state!(intent:, provider:)
-    # Only the sign-up entry is gated: this concern also serves the sign-in
-    # ceremony, which `sign_up_suspended_app` must leave open. The check runs
-    # before any session state is prepared, so a suspended registration leaves
-    # no intent, no ceremony grant, and no ClientSignUpFlow behind.
-    return false if social_auth_entry == "sign_up" && reject_suspended_sign_up!
+    if social_auth_entry == "sign_up" && !SignEntrySentryResolver.call(surface: :app, flow: "sign_up").allowed?
+      refuse_sign_entry_sentry!(flow: "sign_up", enforcement_point: "provider_start")
+      return false
+    end
 
     auth_social_admission_binding! if intent.to_s == "login"
 

@@ -29,41 +29,48 @@ Current OP/Auth/RP responsibility decision:
 
 - [OP, Auth, and RP Authentication Responsibility Separation](op-auth-rp-authentication-responsibility-separation.md)
   — **Accepted (2026-10-22), architecture only.** Sign In uses RP → OP → Auth → OP → RP;
-  authenticated method management uses Base → Auth → Base; step-up uses RP → Auth → RP.
-  Base becomes an application RP, OP authentication sessions remain, and direct paths cannot
-  replace Sign In. Direct-path token/trust protocols and remaining implementation details are open.
+  authenticated method management uses Base → Auth → Base; step-up uses RP → Auth → RP. Base becomes
+  an application RP, OP authentication sessions remain, and direct paths cannot replace Sign In.
+  Direct-path token/trust protocols and remaining implementation details are open.
 
-Current Sign-in path and OIDC profile decisions (accepted 2026-10-23; not implemented):
+- [Visa OpenID Provider Host and Base Browser RP Boundary](visa-op-host.md) — **Accepted and
+  implemented in Rails (2026-10-24).** Visa owns the three realm OpenID Provider hosts and `VISA_*`
+  JWT namespaces; Base owns the `www` browser-RP hosts and host-local RP credentials. It supersedes
+  the same-FQDN authority portion of `base-authority-and-self-rp-separation.md`.
 
-- [Sign-in path continuation protocol](sign-in-path-continuation-protocol.md) — Design D: user
-  actions are CSRF POSTs, system hops are GET continuations under six conditions (Fetch Metadata,
-  binding before consumption, CAS, same-browser repeat within issuance + 10 s, `no-store` /
-  `no-referrer`, clean URL); amends "GET never consumes" for these endpoints only.
+Current Sign-in path and OIDC profile decisions (accepted 2026-10-23; implementation status is
+stated per record):
+
+- [Sign-in path continuation protocol](sign-in-path-continuation-protocol.md) — **implemented in
+  Rails (WU-12, 2026-10-24).** Design D: user actions are CSRF POSTs, system hops are GET
+  continuations under six conditions (Fetch Metadata, binding before consumption, CAS, same-browser
+  repeat within issuance + 10 s, `no-store` / `no-referrer`, clean URL); amends "GET never consumes"
+  for these endpoints only.
 - [OIDC authorization request profile](oidc-authorization-request-profile.md) — eight required
   parameters, exact `redirect_uri` match with no error to an invalid URI, post-validation errors
   redirected, unsupported `prompt` a direct 400, per-realm `prompt_values_supported`,
   `invalid_grant` for mismatches and PKCE failures, boot-time registration validation.
-- [RP OIDC state and return target](rp-oidc-state-and-return-target.md) — ES384 JWS `state`
-  (30 minutes), one pending entry per browser and RP, path-only `target_link_uri` replacing the RP
-  `pt`, Cancel and abnormal endings on `GET /sign/interruption`.
+- [RP OIDC state and return target](rp-oidc-state-and-return-target.md) — **RP Rails slice
+  implemented 2026-10-24 (WU-39).** ES384 JWS `state` (30 minutes), one pending entry per browser
+  and RP, path-only `target_link_uri` replacing the RP `pt`, Cancel and abnormal endings on
+  `GET /sign/interruption`; external Jump/Edge and deployment evidence remain separate.
 
 Current authentication Security Mode decision (accepted; not implemented):
 
-- [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) — **Accepted
-  (2026-10-21), design only; implementation and verification unverified.** APP/COM select an
-  Identity by effective Email or Telephone before Passkey authentication while keeping
-  `allowCredentials` empty or omitted; verified credential ownership must match the server-fixed
-  Identity. ORG Normal retains Entra binding; Standby selects by authoritative Employee Number,
-  subject to authority and non-discoverable credential privacy prerequisites. Partially supersedes
-  usernameless direct sign-in; its four-slot capacity and ORG non-discoverable compatibility are
-  superseded by the account-label ADR below (ten per Identity, ORG discoverable); preserves the
-  `ADVANCED` two-active-Passkey holding minimum.
+- [Passkey Identifier-First Sign-In](passkey-identifier-first-sign-in.md) — **Accepted (2026-10-21),
+  design and verification remain separate.** APP/COM select an Identity by effective Email or
+  Telephone before Passkey authentication while keeping `allowCredentials` empty or omitted;
+  verified credential ownership must match the server-fixed Identity. ORG Normal retains Entra
+  binding; Standby selects by authoritative Employee Number. Partially supersedes usernameless
+  direct sign-in; the account-label amendment sets ten Passkeys per Identity and requires
+  discoverable ORG credentials; preserves the `ADVANCED` two-active-Passkey holding minimum.
 
 - [Passkey Authenticator Account Label](passkey-authenticator-account-label.md) — **Accepted
-  (2026-10-23), not implemented.** Credentials stay discoverable; `user.name` / `user.displayName`
-  carry a fixed non-identifying label, never an Email, Telephone, Employee Number or handle, so a
-  lost authenticator plus PIN does not reveal the account. Amends identifier-first: ORG requires
-  discoverable credentials; capacity ten per Identity.
+  (2026-10-23); current surface label implementation recorded 2026-10-24.** Credentials stay
+  discoverable; `user.name` / `user.displayName` carry a fixed non-identifying label, never an
+  Email, Telephone, Employee Number or handle, so a lost authenticator plus PIN does not reveal the
+  account. Amends identifier-first: ORG requires discoverable credentials; capacity ten per
+  Identity.
 
 - `adr/authentication-security-mode.md` — `mfa_level_id` becomes `security_mode_id` with `NORMAL=3`
   and `ADVANCED=7`; owner-held mode with no Operator downgrade, per-mode step-up methods and
@@ -85,8 +92,8 @@ Current org federated sign-in decision:
 
 Current JWT validation and accepted key risks:
 
-- [JWT Temporal Validation and Upstream Risk Decisions](jwt-validation-and-key-risk-decisions.md)
-  — accepted fixed 30-second first-party JWT clock skew, expiration-only decoding exemption for
+- [JWT Temporal Validation and Upstream Risk Decisions](jwt-validation-and-key-risk-decisions.md) —
+  accepted fixed 30-second first-party JWT clock skew, expiration-only decoding exemption for
   logout/revocation, Apple upstream RS256/RS512 behavior with drift contracts, and session-key
   compromise response through retirement and rotation.
 
@@ -96,26 +103,31 @@ Current identity authority decision:
   session-admission boundary and completed App/Com Sign Up enters it through a trusted handoff. D11,
   D12, and D14 remain unresolved.
 
-- [Sign Entry Sentry](sign-entry-sentry.md) — **Accepted (2026-10-22), Owner decisions only; not
-  implemented.** Per-surface Flipper flags `sign_in_available_*` and `sign_up_available_*`
-  (availability polarity, fail closed), two states `ALLOWED`/`BLOCKED`, an Auth-hosted
-  `GET /sign/in/sentry` → `/sign/in` and `GET /sign/up/sentry` → `/sign/up` with 503 when blocked,
-  and no change to Admission, Guardrail, Checkpoint or Sign In First. Enforcement at every point
-  through `SignEntrySentryResolver`, callbacks refused, ORG Emergency outside, and a one-change
-  replacement of `sign_up_suspended_*`; only user-facing details and observability remain open.
+- [Sign Entry Sentry](sign-entry-sentry.md) — **Accepted (2026-10-22); implemented in the current
+  Rails slice 2026-10-24.** Per-surface Flipper flags `sign_in_available_*` and
+  `sign_up_available_*` (availability polarity, fail closed), two states `ALLOWED`/`BLOCKED`, an
+  Auth-hosted `GET /sign/in/sentry` → `/sign/in` and `GET /sign/up/sentry` → `/sign/up` with 503
+  when blocked, and no change to Admission, Guardrail, Checkpoint or Sign In First. Enforcement at
+  every point through `SignEntrySentryResolver`, callbacks refused, ORG Emergency outside, and a
+  one-change replacement of `sign_up_suspended_*`; only user-facing details and observability remain
+  open.
 
-- `adr/sign-up-flow-admission-binding-and-cardinality.md` — **Accepted (2026-10-21)**;
-  E1 APP/COM Flow-to-Admission authority, parent-scoped concurrency, status-scoped Flow cardinality,
-  restart invariants, and explicit Pending evidence/migration/deletion decisions. New association
-  and constraints are not implemented. The Base/Auth ADR's 2026-10-21 amendment separately accepts
-  Auth OIDC Result GET/POST `/sign/result`; routes remain unchanged in this ADR-only update.
+- `adr/sign-up-finalization-in-auth.md` — **Accepted (2026-10-21, written 2026-10-24; implemented
+  2026-10-24)**; Auth creates pending principals and runs the shared Finalization for all six
+  sign-up paths, the principal's registered status is the decisive commit before the curfew, and
+  Google/Apple sign-up ends in canonical Sign In First. Supersedes the social-commit-at-Base parts
+  of `adr/sign-up-authentication-handoff-and-social-rt.md`.
 
-- `adr/passkey-current-state-limit-and-chronicle-outbox.md` — **Accepted (2026-10-19)**; APP, COM,
-  and ORG owner-serialized registration, physical lifecycle deletion and common Chronicle facts
-  through principal transactional outboxes. Its ten-per-owner capacity is **partially superseded**
-  by [the 2026-10-21 four-slot target](passkey-identifier-first-sign-in.md), and that supersession
-  is itself reversed on 2026-10-23 ([account label](passkey-authenticator-account-label.md)):
-  ten per owner again; enforcement is unverified. Chronicle retention is still TBC.
+- `adr/sign-up-flow-admission-binding-and-cardinality.md` — **Accepted (2026-10-21)**; E1 APP/COM
+  Flow-to-Admission authority, parent-scoped concurrency, status-scoped Flow cardinality, restart
+  invariants, and explicit Pending evidence/migration/deletion decisions. New association and
+  constraints are not implemented. The Base/Auth ADR's 2026-10-21 amendment separately accepts Auth
+  OIDC Result GET/POST `/sign/result`; routes remain unchanged in this ADR-only update.
+
+- `adr/passkey-current-state-limit-and-chronicle-outbox.md` — **Accepted (2026-10-19), amended
+  2026-10-24 (D-116).** APP, COM, and ORG use owner-serialized registration, physical lifecycle
+  deletion and common Chronicle facts through principal transactional outboxes. Capacity is ten
+  retained Passkeys per Identity; enforcement is unverified. Chronicle retention is still TBC.
 
 - `adr/app-com-withdrawal-deadline-snapshot.md` — **Accepted (2026-10-19)**; Client and Visitor
   withdrawal deadlines use an immutable policy, persisted confirmation timestamps, and strict
@@ -179,10 +191,12 @@ Current sign-out decision (target contract; local runtime is partial):
   removal and final authority/browser acceptance remain open. The rejected design is recorded in
   `research/2026-10-13-first-party-backchannel-logout-rejected-design.md`.
 - `adr/first-party-sign-out-op-commit-and-backchannel-logout-for-separated-rp-stores.md` — Accepted
-  (2026-10-16); not implemented. For first-party RPs activated with their own session store under
-  the OP/RP separation, sign-out is established by the realm OP commit and RP sessions end by
-  durable Back-Channel Logout with a bounded residual window. It supersedes the shared-database ADR
-  above only for those separated clients.
+  (2026-10-16), amended 2026-10-24 (D-111, D-117, D-118, D-121); not implemented. For first-party
+  RPs activated with their own session store under the OP/RP separation, sign-out is established by
+  the realm OP commit and RP sessions end by durable Solid Queue Back-Channel Logout with a
+  10-minute plus 30-second residual bound. The `ActionController::API` receiver is a scoped
+  exception with explicit FQDN/rate-limit controls. It supersedes the shared-database ADR above only
+  for separated clients.
 
 Current IdP flow lifecycle decisions (target contract; runtime not yet migrated):
 
@@ -511,9 +525,9 @@ Session and token decisions:
   `org`); implementation tracked in
   `plans/backlog/token-lifetime-policy-by-surface-implementation.md`.
 - `adr/session-token-hardening-baseline.md` — accepted hardening posture for production auth cookies
-  (`__Host-`/host-only/Secure/HttpOnly/`SameSite=Strict`; `Partitioned` removed 2026-10-23, D-115), opaque-refresh + JWT-access,
-  rotation/reuse/family-revoke, re-issue on security events, server-side timeouts, HSTS, and IP/UA
-  as risk signal; implementation tracked in
+  (`__Host-`/host-only/Secure/HttpOnly/`SameSite=Strict`; `Partitioned` removed 2026-10-23, D-115),
+  opaque-refresh + JWT-access, rotation/reuse/family-revoke, re-issue on security events,
+  server-side timeouts, HSTS, and IP/UA as risk signal; implementation tracked in
   `plans/backlog/session-token-hardening-implementation.md`.
 - `adr/session-reset-on-privilege-transition.md` — superseded where it assigns session issuance or
   step-up freshness to `sign/id`.

@@ -32,7 +32,8 @@ class SocialAuthSignupFinalizerFailureTest < ActiveSupport::TestCase
       Rails.logger.stub(:error, ->(*args, &block) { recorded << (args.first || block&.call).to_s }) do
         assert_raises(SocialAuth::ProviderError) do
           SocialAuthSignupFinalizer.call(
-            principal: principal, credential_candidate: nil, birthdate: 30.years.ago.to_date,
+            user: Client.new(security_mode_id: SecurityModeConfigurable::NORMAL), principal: principal,
+            credential_candidate: nil,
             ceremony_started_at: Time.current,
           )
         end

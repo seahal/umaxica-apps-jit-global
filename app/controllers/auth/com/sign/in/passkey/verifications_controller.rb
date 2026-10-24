@@ -98,7 +98,7 @@ module Auth
             end
 
             def passkey_default_redirect_url
-              base_com_identity_url(ri: current_region_identifier, host: base_authority_host)
+              base_com_identity_url(ri: current_region_identifier, host: base_rp_host)
             end
           end
         end

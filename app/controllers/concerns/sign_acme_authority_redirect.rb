@@ -11,7 +11,7 @@ module SignAcmeAuthorityRedirect
     redirect_to_jump_url(
       URI::Generic.build(
         scheme: "https",
-        host: base_authority_host,
+        host: base_rp_host,
         path: path,
         query: base_authority_query(query),
       ).to_s,
@@ -30,13 +30,13 @@ module SignAcmeAuthorityRedirect
     query.to_query
   end
 
-  def base_authority_host
+  def base_rp_host
     case self.class.name
     when /\AAuth::App::/ then ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     when /\AAuth::Com::/ then ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
     when /\AAuth::Org::/ then ENV.fetch("PUBLIC_BASE_STAFF_URL")
     else
-      raise JumpRtConfigurationError, "No Base authority is configured for #{self.class.name}"
+      raise JumpRtConfigurationError, "No Base RP host is configured for #{self.class.name}"
     end
   end
 
@@ -45,6 +45,6 @@ module SignAcmeAuthorityRedirect
   end
 
   def acme_authority_host
-    base_authority_host
+    base_rp_host
   end
 end

@@ -2,32 +2,40 @@
 
 ## Effective admission intent
 
-At issuance, `AuthEntryIntentResolver` selects Sign In for an ordinary OIDC request, Sign Up for
-the OP's persisted `prompt=create`, or the explicit Switch target when switching. The Binding
-stores the resulting immutable `entry_intent` as `sign_in` or `sign_up`. Re-verification purposes
-store the explicit value `not_applicable`; every realm's database rejects a missing intent or a
-purpose/intent mismatch. Auth entry GETs, redemption POSTs, admitted ceremony checks and Base's
-confirmation return target use the same resolver and retained fact. Changing a route or browser
-parameter cannot change the selected intent; wrong-intent entry refuses before consumption.
+At issuance, `AuthEntryIntentResolver` selects Sign In for an ordinary OIDC request, Sign Up for the
+OP's persisted `prompt=create`, or the explicit Switch target when switching. The Binding stores the
+resulting immutable `entry_intent` as `sign_in` or `sign_up`. Re-verification purposes store the
+explicit value `not_applicable`; every realm's database rejects a missing intent or a purpose/intent
+mismatch. Auth entry GETs, redemption POSTs, admitted ceremony checks and Base's confirmation return
+target use the same resolver and retained fact. Changing a route or browser parameter cannot change
+the selected intent; wrong-intent entry refuses before consumption.
 
-Every Binding stores an immutable, required `curfew_at` from its OP writer's issuance clock plus
-30 minutes, without a database default. A Switch requires the original redeemed/cancelled Binding
-and copies that deadline; repeated Switches never extend it. The short-lived acceptance expiry
-is a separate fact. WU-24c/d add storage only: consumer deadline alignment is WU-06, so this storage
-does not yet guarantee a 30-minute end-to-end ceremony.
+Every Binding stores an immutable, required `curfew_at` from its OP writer's issuance clock plus 30
+minutes, without a database default. A Switch requires the original redeemed/cancelled Binding and
+copies that deadline; repeated Switches never extend it. The short-lived acceptance expiry is a
+separate fact. WU-24c/d add storage only: consumer deadline alignment is WU-06, so this storage does
+not yet guarantee a 30-minute end-to-end ceremony.
+
+APP Social results also resolve their Flow through the required `auth_admission_binding_id`. The
+signed result's session reference must identify a redeemed sign-up Binding that owns that Flow.
+Valid signatures and an independently valid browser proof do not substitute for this agreement. Both
+the first final commit and a committed-receipt read enforce it; the Base receiver scopes its
+completion-reference reads and writes to the same Binding. An ownership refusal consumes no fresh
+result/candidate and does not delete a durable registered identity. This protects the current legacy
+Social receiver until WU-05 replaces that transport with shared Finalization.
 
 ## Contact entry validation and replacement
 
-APP and COM email and telephone entry POSTs accept consent only as the checkbox value `"1"`
-or the JSON boolean `true`. Missing, null, empty, unchecked and unsupported values are rejected
-with the existing validation response. Telephone entry requires both policy and MFA-use consent.
-This request-boundary normalization preserves the shared contact models' other creation workflows.
+APP and COM email and telephone entry POSTs accept consent only as the checkbox value `"1"` or the
+JSON boolean `true`. Missing, null, empty, unchecked and unsupported values are rejected with the
+existing validation response. Telephone entry requires both policy and MFA-use consent. This
+request-boundary normalization preserves the shared contact models' other creation workflows.
 
 An admitted browser's replacement contact submission passes Turnstile, identifier validation and
 required consent before ending its previous sign-up flow. A rejected CAPTCHA or invalid input
-preserves the previous flow, browser locator, pending contact and principal and queues no OTP.
-An accepted replacement uses the existing HALTED lifecycle and cleanup boundary before allocating
-new artifacts; it does not silently overwrite the previous flow or reuse its proof.
+preserves the previous flow, browser locator, pending contact and principal and queues no OTP. An
+accepted replacement uses the existing HALTED lifecycle and cleanup boundary before allocating new
+artifacts; it does not silently overwrite the previous flow or reuse its proof.
 
 The reason completed App/Com registration enters the canonical Sign In admission before session
 issuance is recorded in [Sign In First: Registration Handoff](sign-in-first-registration-handoff.md)
@@ -35,14 +43,14 @@ and [ADR D13](../../adr/sign-in-first-and-sign-up-handoff.md). That system hando
 user-initiated Sign In/Sign Up switching.
 
 APP/COM artifact cleanup requires a terminal Flow. It locks that Flow before locking and re-reading
-the principal on its Zenith writer. Only a still-unfinished registration is eligible: APP checks
-the pending principal and contact; COM currently checks the pending contact. Registered principals
-are preserved. Contact retirement, pending Passkey deletion, audit outbox facts and principal
-retention share one principal transaction, with the principal written last. If any write fails,
-all those changes roll back and the OP cleanup fact remains retryable. The principal transaction
-and OP Flow transaction are separate database commits; retries re-evaluate the principal facts.
-APP telephone Passkey saving and its Secret reservation, delivery, completion and termination take
-the same Flow-before-principal lock order so they cannot deadlock with cleanup across databases.
+the principal on its Zenith writer. Only a still-unfinished registration is eligible: APP checks the
+pending principal and contact; COM currently checks the pending contact. Registered principals are
+preserved. Contact retirement, pending Passkey deletion, audit outbox facts and principal retention
+share one principal transaction, with the principal written last. If any write fails, all those
+changes roll back and the OP cleanup fact remains retryable. The principal transaction and OP Flow
+transaction are separate database commits; retries re-evaluate the principal facts. APP telephone
+Passkey saving and its Secret reservation, delivery, completion and termination take the same
+Flow-before-principal lock order so they cannot deadlock with cleanup across databases.
 
 > **Authority boundary:** `acme/www` is the Session, Token, Account, Preference, Authorization, and
 > downstream-token Authority. `sign/id` is ceremony-only. Existing sign-side physical tables/models

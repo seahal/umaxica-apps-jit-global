@@ -50,7 +50,7 @@ module Auth
           {
             key: "registration",
             label: page_t("#{scope}.links.registration"),
-            href: auth_app_sign_up_path(ri: params[:ri], pt: signed_pt_param),
+            href: auth_app_sign_up_sentry_path(ri: params[:ri], pt: signed_pt_param),
           }
         end
 

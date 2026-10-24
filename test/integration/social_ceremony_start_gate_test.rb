@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../support/oidc_auth_admission_test_helper"
 
 # `social_ceremony_app_{provider}` must stop the ceremony at its *start*, not
 # only at the callback.
@@ -12,71 +13,12 @@ require "test_helper"
 # disable" and the drain never ends, leaving a switch that looks wired and stops
 # nothing.
 class SocialCeremonyStartGateTest < ActionDispatch::IntegrationTest
+  include OidcAuthAdmissionTestHelper
+
   PROVIDERS = { "google" => :social_ceremony_app_google, "apple" => :social_ceremony_app_apple }.freeze
 
   setup do
-    ri = "jp"
-    @base_browser = open_session
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
-    auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
-    @base_browser.host!(base_host)
-    @base_browser.https!
-    @base_browser.get("/sign", params: { ri: ri, pt: "/dashboard?ri=#{ri}" })
-    form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-    fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-    @base_browser.post(
-      form["action"], params: fields, headers: {
-        "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-      },
-    )
-    issuer = JitSecurityJwtRegistry.surface("BASE_APP")
-    2.times do |index|
-      target = URI.parse(@base_browser.response.location)
-      # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-      unless target.host == base_host
-        rt = Rack::Utils.parse_query(target.query).fetch("rt")
-        payload, = JWT.decode(
-          rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-          algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
-          verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
-        )
-        target = URI.parse(payload.fetch("url"))
-      end
-      if index.zero?
-        raise RuntimeError, "Base authorization host mismatch" unless target.host == base_host
-
-        @base_browser.get(target.request_uri)
-        form = Nokogiri::HTML(@base_browser.response.body).at_css("form")
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        @base_browser.post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{base_host}", "Sec-Fetch-Site" => "same-origin",
-          },
-        )
-      else
-        raise RuntimeError, "Auth admission host mismatch" unless target.host == auth_host
-
-        host!(auth_host)
-        https!
-        get(target.request_uri)
-      end
-    end
-    3.times do |index|
-      sender = (index == 1) ? @base_browser : self
-      form = Nokogiri::HTML(sender.response.body).at_css("form")
-      fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-      sender.post(
-        form["action"], params: fields, headers: {
-          "Origin" => "https://#{(index == 1) ? base_host : auth_host}", "Sec-Fetch-Site" => "same-origin",
-        },
-      )
-      raise RuntimeError, "Social admission failed at step #{index}" unless sender.response.status == 303
-      next if index == 2
-
-      receiver = index.zero? ? @base_browser : self
-      receiver.get(URI.parse(sender.response.location).request_uri)
-    end
-    host! ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
+    bootstrap_auth_sign_in_admission!
   end
 
   teardown do

@@ -16,24 +16,17 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
     travel_back
   end
 
-  test "valid grant and result serialize and verify" do
+  test "a valid grant serializes and verifies" do
     travel_to @now do
       grant_token = IdentitySocialCeremonyGrant.issue(valid_grant_claims, issuer_id: acme_issuer_id, now: @now)
       grant = IdentitySocialCeremonyGrant.decode(grant_token, issuer_id: acme_issuer_id, now: @now)
 
       assert_equal "social_ceremony", grant["purpose"]
       assert_equal IdentitySocialCeremonyContract.sign_audience("app"), grant["aud"]
-
-      result_token = IdentitySocialCeremonyResult.issue(valid_result_claims, issuer_id: sign_issuer_id, now: @now)
-      result = IdentitySocialCeremonyResult.decode(result_token, issuer_id: sign_issuer_id, now: @now)
-
-      assert_equal "social_ceremony_result", result["purpose"]
-      assert_equal "provider_subject", result["proof_method"]
-      assert_equal IdentitySocialCeremonyContract.acme_audience("app"), result["aud"]
     end
   end
 
-  test "login operation allows candidate reference without provider token claims" do
+  test "a login grant carries no provider token claims" do
     travel_to @now do
       grant_claims = valid_grant_claims.merge("operation" => "login", "actor_ref" => "anonymous")
       grant_token = IdentitySocialCeremonyGrant.issue(grant_claims, issuer_id: acme_issuer_id, now: @now)
@@ -41,30 +34,22 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
 
       assert_equal "login", grant["operation"]
       assert_equal "anonymous", grant["actor_ref"]
-
-      result_claims = valid_result_claims.merge(
-        "operation" => "login",
-        "actor_ref" => "anonymous",
-        "candidate_ref" => "candidate-1",
-        "candidate_digest" => "candidate-digest-1",
-      )
-      result_token = IdentitySocialCeremonyResult.issue(result_claims, issuer_id: sign_issuer_id, now: @now)
-      result = IdentitySocialCeremonyResult.decode(result_token, issuer_id: sign_issuer_id, now: @now)
-
-      assert_equal "login", result["operation"]
-      assert_equal "candidate-1", result["candidate_ref"]
-      assert_equal "candidate-digest-1", result["candidate_digest"]
-      assert_not_includes result.to_json, "access_token"
-      assert_not_includes result.to_json, "refresh_token"
     end
   end
 
-  test "rejects an authentication event time from the future" do
-    assert_social_ceremony_error("auth_time must not be in the future") do
-      IdentitySocialCeremonyResult.new(
-        valid_result_claims.merge("auth_time" => (@now + 2.minutes).to_i),
-        now: @now,
+  test "a Visa issuer is accepted for the sign-up grant while Base remains the default" do
+    travel_to @now do
+      issuer_id = IdentitySocialCeremonyContract.visa_issuer_id("app")
+      claims = valid_grant_claims.merge(
+        "operation" => "signup",
+        "iss" => IdentitySocialCeremonyContract.visa_issuer("app"),
       )
+      token = IdentitySocialCeremonyGrant.issue(claims, issuer_id:, now: @now)
+      grant = IdentitySocialCeremonyGrant.decode(token, issuer_id:, now: @now)
+
+      assert_equal IdentitySocialCeremonyContract.visa_issuer("app"), grant["iss"]
+      assert_equal IdentitySocialCeremonyContract.acme_issuer("app"),
+                   IdentitySocialCeremonyContract.issuer_for_id("app", acme_issuer_id)
     end
   end
 
@@ -326,30 +311,6 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
     end
   end
 
-  test "result rejects proof, expiry, redirect, and forbidden fields" do
-    assert_social_ceremony_error("grant_jti") do
-      IdentitySocialCeremonyResult.new(valid_result_claims.except("grant_jti"), now: @now)
-    end
-    assert_social_ceremony_error("proof_method is invalid") do
-      IdentitySocialCeremonyResult.new(valid_result_claims.merge("proof_method" => "oauth_token"), now: @now)
-    end
-    assert_social_ceremony_error("expires_at is expired") do
-      IdentitySocialCeremonyResult.new(
-        valid_result_claims.merge("expires_at" => (@now - 1.second).to_i),
-        now: @now,
-      )
-    end
-    assert_social_ceremony_error("unknown claims") do
-      IdentitySocialCeremonyResult.new(valid_result_claims.merge("return_to" => "/settings"), now: @now)
-    end
-    %w(access_token id_token refresh_token session_token token recent_auth sudo step_up_freshness
-       raw_email).each do |claim|
-      assert_social_ceremony_error("forbidden claims") do
-        IdentitySocialCeremonyResult.new(valid_result_claims.merge(claim => "secret"), now: @now)
-      end
-    end
-  end
-
   test "signature verification rejects wrong key and tampering" do
     travel_to @now do
       token = IdentitySocialCeremonyGrant.issue(valid_grant_claims, issuer_id: acme_issuer_id, now: @now)
@@ -401,31 +362,6 @@ class IdentitySocialCeremonyContractTest < ActiveSupport::TestCase
       "jti" => "grant-1",
       "operation" => "link",
       "provider" => "google",
-      "iat" => @now.to_i,
-      "exp" => (@now + 10.minutes).to_i,
-    }
-  end
-
-  def valid_result_claims
-    {
-      "typ" => IdentitySocialCeremonyResult::TOKEN_TYPE,
-      "iss" => IdentitySocialCeremonyContract.sign_issuer("app"),
-      "aud" => IdentitySocialCeremonyContract.acme_audience("app"),
-      "purpose" => IdentitySocialCeremonyResult::PURPOSE,
-      "surface" => "app",
-      "actor_ref" => "actor-1",
-      "session_ref" => "session-1",
-      "transaction_id" => "txn-1",
-      "grant_jti" => "grant-1",
-      "result_jti" => "result-1",
-      "operation" => "link",
-      "provider" => "google",
-      "proof_method" => IdentitySocialCeremonyResult::PROOF_METHOD,
-      "provider_subject_ref" => "subject-digest",
-      "provider_subject_digest" => "subject-digest",
-      "verified_at" => @now.to_i,
-      "challenge_id" => "challenge-1",
-      "expires_at" => (@now + 10.minutes).to_i,
       "iat" => @now.to_i,
       "exp" => (@now + 10.minutes).to_i,
     }

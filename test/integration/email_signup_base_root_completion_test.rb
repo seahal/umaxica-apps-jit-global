@@ -300,6 +300,16 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
       2.times do |attempt|
         owner.get(completion.request_uri)
 
+        if attempt.positive?
+          # WU-27/D-104: finalization rotates the Base session. The old result
+          # continuation is terminal before a second authorization POST can be built.
+          assert_equal 400, owner.response.status
+          assert_withheld { parent.reload.base_finalized_at.present? }
+          assert_equal 1, token_model.where(owner_key => actor.id).count
+          assert_equal root_reference, parent.reload.browser_session_ref
+          next
+        end
+
         assert_equal 200, owner.response.status
         csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
         owner.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
@@ -319,7 +329,6 @@ class EmailSignupBaseRootCompletionTest < ActionDispatch::IntegrationTest
         assert_withheld("Base completion must preserve the original binding facts") {
           before_contact == contact.reload.attributes
         }
-        next unless attempt.zero?
 
         cookie_value = owner.response.cookies[cookie_name]
         if cookie_value.nil?

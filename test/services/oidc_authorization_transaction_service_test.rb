@@ -81,7 +81,12 @@ class OidcAuthorizationTransactionCoordinatorTest < ActiveSupport::TestCase
       )
 
       assert_equal first.transaction.id, restarted.transaction.id
-      assert_equal first.transaction.expires_at, restarted.transaction.expires_at
+      # WU-06: a restart keeps the parent and only extends it to the new Binding's curfew.
+      restarted_binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+        surface:, reference: restarted.handoff.reference,
+      )
+
+      assert_equal restarted_binding.curfew_at, restarted.transaction.reload.expires_at
       assert_not_equal first.handoff.reference, restarted.handoff.reference
       assert_predicate binding.reload, :retired?
     end

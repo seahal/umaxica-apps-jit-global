@@ -30,6 +30,13 @@ Applies to the Palm and Tech Browser RPs and to retired surfaces. Sign-out of ev
 - BRP-8: The dashboard is an empty tool list with a heading, empty-state text and sign-out, with
   copy under explicit translation keys. Tech is not a Jump node and has no back-channel receiver.
 
+## Shared RP entry contract
+
+- BRP-10: Every browser RP holds at most one pending OIDC Sign-in entry. The last `POST /sign` wins;
+  an earlier tab may continue through Auth/Visa but its callback is refused at
+  `GET /sign/interruption`. This behavior is per browser and RP, does not cancel another tab's
+  registration, and does not replace Rails CSRF, PKCE, nonce or state verification.
+
 ## Retired surfaces
 
 - BRP-9: The former Xper public and local hosts serve none of their former paths through Xper or
@@ -37,5 +44,5 @@ Applies to the Palm and Tech Browser RPs and to retired surfaces. Sign-out of ev
 
 Sources: [Tech and Palm participation](../../adr/tech-and-palm-browser-rp-participation.md),
 [Xper retirement](../../adr/xper-rails-surface-retirement.md). Tech capability delegation:
-[authorization](authorization.md) AUTHZ-5. Retired Device sign-in: [authentication](authentication.md)
-AUTH-6.
+[authorization](authorization.md) AUTHZ-5. Retired Device sign-in:
+[authentication](authentication.md) AUTH-6.

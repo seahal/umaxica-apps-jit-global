@@ -10,6 +10,9 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
   BASE_APP_HOST = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
   BASE_COM_HOST = ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost")
   BASE_ORG_HOST = ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost")
+  VISA_APP_HOST = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
+  VISA_COM_HOST = Rails.configuration.x.boot_config.fetch(:hosts).visa_corporate.host
+  VISA_ORG_HOST = Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host
 
   test "base authority routes accept internal origin and cloudflared public hosts" do
     {
@@ -40,6 +43,43 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "Visa protocol routes are exclusive to Visa and refuse Base, Auth, and look-alike hosts" do
+    surfaces = {
+      app: {
+        realm: "app",
+        visa: VISA_APP_HOST,
+        base: BASE_APP_HOST,
+        auth: ENV.fetch("PUBLIC_AUTH_SERVICE_URL", "auth.app.localhost"),
+      },
+      com: {
+        realm: "com",
+        visa: VISA_COM_HOST,
+        base: BASE_COM_HOST,
+        auth: ENV.fetch("PUBLIC_AUTH_CORPORATE_URL", "auth.com.localhost"),
+      },
+      org: {
+        realm: "org",
+        visa: VISA_ORG_HOST,
+        base: BASE_ORG_HOST,
+        auth: ENV.fetch("PUBLIC_AUTH_STAFF_URL", "auth.org.localhost"),
+      },
+    }
+
+    surfaces.each_value do |hosts|
+      assert_recognizes(
+        { controller: "visa/#{hosts.fetch(:realm)}/oauth/authorizations",
+          action: "show", },
+        { path: "http://#{hosts.fetch(:visa)}/oauth/authorize", method: :get },
+      )
+
+      [hosts.fetch(:base), hosts.fetch(:auth), "#{hosts.fetch(:visa)}.example"].each do |host|
+        assert_raises(ActionController::RoutingError) do
+          Rails.application.routes.recognize_path("http://#{host}/oauth/authorize", method: :get)
+        end
+      end
+    end
+  end
+
   test "base authority app static and health routes" do
     assert_recognizes(
       { controller: "base/app/roots", action: "index" },
@@ -52,8 +92,8 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "base/app/well_known/discoveries", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/.well-known/openid-configuration", method: :get },
+      { controller: "visa/app/well_known/discoveries", action: "show" },
+      { path: "http://#{VISA_APP_HOST}/.well-known/openid-configuration", method: :get },
     )
 
     assert_recognizes(
@@ -129,23 +169,23 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "base/app/sign/in/limitations", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/sign/in/limitation", method: :get },
+      { controller: "visa/app/sign/in/limitations", action: "show" },
+      { path: "http://#{VISA_APP_HOST}/sign/in/limitation", method: :get },
     )
 
     assert_recognizes(
-      { controller: "base/app/sign/in/limitations", action: "update" },
-      { path: "http://#{BASE_APP_HOST}/sign/in/limitation", method: :patch },
+      { controller: "visa/app/sign/in/limitations", action: "update" },
+      { path: "http://#{VISA_APP_HOST}/sign/in/limitation", method: :patch },
     )
 
     assert_recognizes(
-      { controller: "base/app/sign/in/limitations", action: "update" },
-      { path: "http://#{BASE_APP_HOST}/sign/in/limitation", method: :put },
+      { controller: "visa/app/sign/in/limitations", action: "update" },
+      { path: "http://#{VISA_APP_HOST}/sign/in/limitation", method: :put },
     )
 
     assert_recognizes(
-      { controller: "base/app/sign/in/limitations", action: "destroy" },
-      { path: "http://#{BASE_APP_HOST}/sign/in/limitation", method: :delete },
+      { controller: "visa/app/sign/in/limitations", action: "destroy" },
+      { path: "http://#{VISA_APP_HOST}/sign/in/limitation", method: :delete },
     )
 
     assert_recognizes(
@@ -196,47 +236,47 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     end
 
     assert_recognizes(
-      { controller: "base/app/oidc/logouts", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/oidc/logout", method: :get },
+      { controller: "visa/app/oidc/logouts", action: "show" },
+      { path: "http://#{VISA_APP_HOST}/oidc/logout", method: :get },
     )
 
     assert_recognizes(
-      { controller: "base/app/oidc/logouts", action: "create" },
-      { path: "http://#{BASE_APP_HOST}/oidc/logout", method: :post },
+      { controller: "visa/app/oidc/logouts", action: "create" },
+      { path: "http://#{VISA_APP_HOST}/oidc/logout", method: :post },
     )
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_APP_HOST}/oidc/logout", method: :delete)
+      Rails.application.routes.recognize_path("http://#{VISA_APP_HOST}/oidc/logout", method: :delete)
     end
   end
 
   test "base authority app oauth and account routes" do
     assert_recognizes(
-      { controller: "base/app/oauth/authorizations", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/oauth/authorize", method: :get },
+      { controller: "visa/app/oauth/authorizations", action: "show" },
+      { path: "http://#{VISA_APP_HOST}/oauth/authorize", method: :get },
     )
     assert_recognizes(
-      { controller: "base/app/oauth/authorizations", action: "create" },
-      { path: "http://#{BASE_APP_HOST}/oauth/authorize", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "base/app/oauth/tokens", action: "create" },
-      { path: "http://#{BASE_APP_HOST}/oauth/token", method: :post },
+      { controller: "visa/app/oauth/authorizations", action: "create" },
+      { path: "http://#{VISA_APP_HOST}/oauth/authorize", method: :post },
     )
 
     assert_recognizes(
-      { controller: "base/app/oauth/userinfos", action: "show" },
-      { path: "http://#{BASE_APP_HOST}/oauth/userinfo", method: :get },
-    )
-    assert_recognizes(
-      { controller: "base/app/oauth/userinfos", action: "create" },
-      { path: "http://#{BASE_APP_HOST}/oauth/userinfo", method: :post },
+      { controller: "visa/app/oauth/tokens", action: "create" },
+      { path: "http://#{VISA_APP_HOST}/oauth/token", method: :post },
     )
 
     assert_recognizes(
-      { controller: "base/app/oauth/revocations", action: "create" },
-      { path: "http://#{BASE_APP_HOST}/oauth/revoke", method: :post },
+      { controller: "visa/app/oauth/userinfos", action: "show" },
+      { path: "http://#{VISA_APP_HOST}/oauth/userinfo", method: :get },
+    )
+    assert_recognizes(
+      { controller: "visa/app/oauth/userinfos", action: "create" },
+      { path: "http://#{VISA_APP_HOST}/oauth/userinfo", method: :post },
+    )
+
+    assert_recognizes(
+      { controller: "visa/app/oauth/revocations", action: "create" },
+      { path: "http://#{VISA_APP_HOST}/oauth/revoke", method: :post },
     )
 
     assert_raises(ActionController::RoutingError) do
@@ -439,8 +479,8 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     )
 
     assert_recognizes(
-      { controller: "base/com/well_known/discoveries", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/.well-known/openid-configuration", method: :get },
+      { controller: "visa/com/well_known/discoveries", action: "show" },
+      { path: "http://#{VISA_COM_HOST}/.well-known/openid-configuration", method: :get },
     )
 
     assert_recognizes(
@@ -565,45 +605,45 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     end
 
     assert_recognizes(
-      { controller: "base/com/oidc/logouts", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/oidc/logout", method: :get },
+      { controller: "visa/com/oidc/logouts", action: "show" },
+      { path: "http://#{VISA_COM_HOST}/oidc/logout", method: :get },
     )
 
     assert_recognizes(
-      { controller: "base/com/oidc/logouts", action: "create" },
-      { path: "http://#{BASE_COM_HOST}/oidc/logout", method: :post },
+      { controller: "visa/com/oidc/logouts", action: "create" },
+      { path: "http://#{VISA_COM_HOST}/oidc/logout", method: :post },
     )
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_COM_HOST}/oidc/logout", method: :delete)
+      Rails.application.routes.recognize_path("http://#{VISA_COM_HOST}/oidc/logout", method: :delete)
     end
 
     assert_recognizes(
-      { controller: "base/com/oauth/authorizations", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/oauth/authorize", method: :get },
+      { controller: "visa/com/oauth/authorizations", action: "show" },
+      { path: "http://#{VISA_COM_HOST}/oauth/authorize", method: :get },
     )
     assert_recognizes(
-      { controller: "base/com/oauth/authorizations", action: "create" },
-      { path: "http://#{BASE_COM_HOST}/oauth/authorize", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "base/com/oauth/tokens", action: "create" },
-      { path: "http://#{BASE_COM_HOST}/oauth/token", method: :post },
+      { controller: "visa/com/oauth/authorizations", action: "create" },
+      { path: "http://#{VISA_COM_HOST}/oauth/authorize", method: :post },
     )
 
     assert_recognizes(
-      { controller: "base/com/oauth/userinfos", action: "show" },
-      { path: "http://#{BASE_COM_HOST}/oauth/userinfo", method: :get },
-    )
-    assert_recognizes(
-      { controller: "base/com/oauth/userinfos", action: "create" },
-      { path: "http://#{BASE_COM_HOST}/oauth/userinfo", method: :post },
+      { controller: "visa/com/oauth/tokens", action: "create" },
+      { path: "http://#{VISA_COM_HOST}/oauth/token", method: :post },
     )
 
     assert_recognizes(
-      { controller: "base/com/oauth/revocations", action: "create" },
-      { path: "http://#{BASE_COM_HOST}/oauth/revoke", method: :post },
+      { controller: "visa/com/oauth/userinfos", action: "show" },
+      { path: "http://#{VISA_COM_HOST}/oauth/userinfo", method: :get },
+    )
+    assert_recognizes(
+      { controller: "visa/com/oauth/userinfos", action: "create" },
+      { path: "http://#{VISA_COM_HOST}/oauth/userinfo", method: :post },
+    )
+
+    assert_recognizes(
+      { controller: "visa/com/oauth/revocations", action: "create" },
+      { path: "http://#{VISA_COM_HOST}/oauth/revoke", method: :post },
     )
 
     {
@@ -826,45 +866,45 @@ class BaseAuthorityRouteContractTest < ActionDispatch::IntegrationTest
     end
 
     assert_recognizes(
-      { controller: "base/org/oidc/logouts", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/oidc/logout", method: :get },
+      { controller: "visa/org/oidc/logouts", action: "show" },
+      { path: "http://#{VISA_ORG_HOST}/oidc/logout", method: :get },
     )
 
     assert_recognizes(
-      { controller: "base/org/oidc/logouts", action: "create" },
-      { path: "http://#{BASE_ORG_HOST}/oidc/logout", method: :post },
+      { controller: "visa/org/oidc/logouts", action: "create" },
+      { path: "http://#{VISA_ORG_HOST}/oidc/logout", method: :post },
     )
 
     assert_raises(ActionController::RoutingError) do
-      Rails.application.routes.recognize_path("http://#{BASE_ORG_HOST}/oidc/logout", method: :delete)
+      Rails.application.routes.recognize_path("http://#{VISA_ORG_HOST}/oidc/logout", method: :delete)
     end
 
     assert_recognizes(
-      { controller: "base/org/oauth/authorizations", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/oauth/authorize", method: :get },
+      { controller: "visa/org/oauth/authorizations", action: "show" },
+      { path: "http://#{VISA_ORG_HOST}/oauth/authorize", method: :get },
     )
     assert_recognizes(
-      { controller: "base/org/oauth/authorizations", action: "create" },
-      { path: "http://#{BASE_ORG_HOST}/oauth/authorize", method: :post },
-    )
-
-    assert_recognizes(
-      { controller: "base/org/oauth/tokens", action: "create" },
-      { path: "http://#{BASE_ORG_HOST}/oauth/token", method: :post },
+      { controller: "visa/org/oauth/authorizations", action: "create" },
+      { path: "http://#{VISA_ORG_HOST}/oauth/authorize", method: :post },
     )
 
     assert_recognizes(
-      { controller: "base/org/oauth/userinfos", action: "show" },
-      { path: "http://#{BASE_ORG_HOST}/oauth/userinfo", method: :get },
-    )
-    assert_recognizes(
-      { controller: "base/org/oauth/userinfos", action: "create" },
-      { path: "http://#{BASE_ORG_HOST}/oauth/userinfo", method: :post },
+      { controller: "visa/org/oauth/tokens", action: "create" },
+      { path: "http://#{VISA_ORG_HOST}/oauth/token", method: :post },
     )
 
     assert_recognizes(
-      { controller: "base/org/oauth/revocations", action: "create" },
-      { path: "http://#{BASE_ORG_HOST}/oauth/revoke", method: :post },
+      { controller: "visa/org/oauth/userinfos", action: "show" },
+      { path: "http://#{VISA_ORG_HOST}/oauth/userinfo", method: :get },
+    )
+    assert_recognizes(
+      { controller: "visa/org/oauth/userinfos", action: "create" },
+      { path: "http://#{VISA_ORG_HOST}/oauth/userinfo", method: :post },
+    )
+
+    assert_recognizes(
+      { controller: "visa/org/oauth/revocations", action: "create" },
+      { path: "http://#{VISA_ORG_HOST}/oauth/revoke", method: :post },
     )
 
     assert_raises(ActionController::RoutingError) do

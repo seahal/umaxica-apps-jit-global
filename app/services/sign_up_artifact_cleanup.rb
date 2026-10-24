@@ -188,8 +188,15 @@ class SignUpArtifactCleanup
   end
 
   def client_dependent_records(actor)
+    return [] unless actor&.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP
+    # WU-05d P5: a social pending Client before Finalization has no contact and no External Identity.
+    # Under the principal lock it is retired only while nothing has been linked to it.
+    if cycle.pending_contact_type == "social_identity" && cycle.pending_contact_id.nil?
+      return ClientExternalIdentity.exists?(client_id: actor.id) ? [] : [actor]
+    end
+
     contact = client_pending_contact(actor)
-    return [] unless actor&.status_id == ClientStatus::UNVERIFIED_WITH_SIGN_UP && client_pending_contact?(contact)
+    return [] unless client_pending_contact?(contact)
 
     [contact, client_pending_passkey(actor), actor].compact
   end

@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Shared controller behavior for social sign-up birthdate check steps (Apple and Google).
-# Include after SignUpExplicitStepControllerSupport and SignUpSocialBirthdateSupport.
+# Include after SignUpExplicitStepControllerSupport and SignUpSocialPendingClientSupport.
 module SignUpSocialCheckBirthdateControllerSupport
   extend ActiveSupport::Concern
 

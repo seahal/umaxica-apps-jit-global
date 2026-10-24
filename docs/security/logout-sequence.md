@@ -16,6 +16,12 @@
 > `evidence/2026-10-13-first-party-rp-completion-uri-matrix-P7V4.md` for current route and
 > registration evidence.
 
+> **Visa OP / Base RP boundary (2026-10-24):** Base's `www.umaxica.*` launcher clears its own
+> host-only RP state, then sends the browser to Visa's matching `visa.umaxica.*` `/oidc/logout`.
+> Visa commits authority revocation and renders the OP sign-out result; the browser returns to Base
+> for RP completion. Visa never clears Base cookies, and Base never treats its RP session as Visa
+> authority. See `adr/visa-op-host.md` and `docs/security/session-token-authority.md`.
+
 ## Current Browser RP Flow
 
 The accepted authority-driven flow starts at the RP's protected `POST /sign/out` and returns to its
@@ -26,7 +32,7 @@ the challenge. It does not verify the full IdP authority round trip. No DELETE c
 available during this continuation. The path, host and helper remain surface-local for Core, Warp,
 Edit, Base, Palm and Tech.
 
-Before a logout intent is staged, Base requires a live IdP session with a captured `sid` that
+Before a logout intent is staged, Base requires a live Visa OP session with a captured `sid` that
 matches the verified `id_token_hint` when one is supplied. An absent session, missing captured
 `sid`, or subject/session mismatch returns a plain localized error with no-store headers and no
 `Location`; it creates no intent, revokes no session or token, and does not redirect to the RP. A
@@ -37,7 +43,7 @@ valid hint and registered return URI do not bypass this authority check.
 > `HALTED`, and the canonical events) is defined in `docs/security/idp-flow-lifecycle.md` and
 > `adr/idp-flow-lifecycle-vocabulary.md`; it is not implemented yet.
 
-## Authority
+## Historical Acme Authority
 
 Logout is acme/www session mutation.
 
@@ -124,7 +130,7 @@ Acme app/com/org surfaces own direct session mutation. Local logout:
 
 Acme local logout must not self-redirect to `/oidc/logout` or mint `id_token_hint` for itself.
 
-## RP Logout Launch
+## Historical RP Logout Launch
 
 Sign/Core/Base browser surfaces are RPs. Their `POST /sign/out` actions:
 
@@ -138,7 +144,7 @@ Sign/Core/Base browser surfaces are RPs. Their `POST /sign/out` actions:
 The RP completion marker is session-bound and one-time. The browser may revisit completion safely,
 but the server must not re-assert a fresh logout from stale state.
 
-## Acme OIDC End-Session
+## Historical Acme OIDC End-Session
 
 `GET /oidc/logout` and `POST /oidc/logout` remain Acme-only protocol endpoints. They validate the
 OIDC request, stage exact registered redirect URIs, and use the shared `/sign/out/edit` confirmation
@@ -165,11 +171,11 @@ That URI is historical and must not be restored.
 - `docs/security/redirect-vs-ceremony-result.md`
 - `docs/security/idp-flow-lifecycle.md`
 
-## Delivered reconciliation (2026-10-06)
+## Delivered reconciliation (2026-10-24)
 
-The canonical current graph is the Base authority-first logout sequence: authenticate the logout
-request, lock and revoke the parent Browser Session at the commit point, perform authority/origin
-cleanup, revoke the initiating RP session, and finalize the local ceremony. `COMPLETED`, `CANCELLED`
-and `EXPIRED` are absorbing facts in the delivered lifecycle. The earlier “not implemented yet”
-lifecycle paragraph and Acme ownership description above are historical and superseded by
-`adr/authentication-state-machine-normalization.md`.
+The canonical current graph is the Base RP → Visa OP authority-first logout sequence: authenticate
+the logout request, clear the initiating Base RP state, lock and revoke Visa's Root Session at the
+authority commit point, perform authority cleanup, deliver the result to the RP and finalize local
+RP completion. `COMPLETED`, `CANCELLED` and `EXPIRED` are absorbing facts in the delivered
+lifecycle. The Acme ownership and same-host authority descriptions above are historical and
+superseded by `adr/visa-op-host.md`.

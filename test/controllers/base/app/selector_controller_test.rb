@@ -321,8 +321,7 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
     assert_predicate @token.reload, :selected_actor_context?
   end
 
-  test "html selector request in selector-pending sign-in does not divert to switcher" do
-    bootstrap_and_select!(@user, @token)
+  test "RP selector ignores an OP flow binding after the RP session is established" do
     nonce = "selector-pending-nonce"
     cycle = ClientSignInFlow.create!(
       principal_id: @user.id,
@@ -394,24 +393,14 @@ class Base::App::SelectorControllerTest < ActionDispatch::IntegrationTest
         end
         rp_headers
       end
-    get base_app_switcher_url(host: @host, ri: "jp"), headers: auth_headers
-
-    assert_response :success
-    session[:app_sign_in_flow_locator] = { "public_id" => cycle.public_id, "nonce" => nonce }
-
-    follow_headers = host_headers(@host).merge(
-      "X-TEST-CURRENT-USER" => @user.id.to_s,
-      "X-TEST-SESSION-PUBLIC-ID" => @token.public_id,
-    )
-
     binding = SignInFlowBindingCodec.encode(
       flow: cycle, surface: "app", phase: "SELECTOR_PENDING",
     )
-    get base_app_selector_url(host: @host, ri: "jp", fb: binding), headers: follow_headers
+    get base_app_selector_url(host: @host, ri: "jp", fb: binding), headers: auth_headers, as: :json
 
-    location = response.redirect? ? URI.parse(response.location).request_uri : nil
-
-    assert_not_equal base_app_switcher_path(ri: "jp"), location
+    assert_response :success
+    assert_equal "selected", response.parsed_body.fetch("status")
+    assert_predicate @token.reload, :selected_actor_context?
   end
 
   test "json selector request stays json when a context is already selected" do

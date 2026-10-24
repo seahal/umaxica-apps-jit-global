@@ -8,17 +8,17 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
     test "#{surface} genuine OIDC result requires missing-header CSRF fallback and finalizes one root" do
       previous_protection = ActionController::Base.allow_forgery_protection
       ActionController::Base.allow_forgery_protection = true
-      base_host, auth_host, client_id, realm, actor_model, token_model, owner_key =
+      base_host, auth_host, client_id, realm, actor_model, token_model, owner_key, actor_status_id =
         case surface
         when "app"
-          [ENV.fetch("PUBLIC_BASE_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
-           "core-app-jp", "client", Client, ClientToken, :user_id,]
+          [ENV.fetch("PUBLIC_VISA_SERVICE_URL"), ENV.fetch("PUBLIC_AUTH_SERVICE_URL"),
+           "core-app-jp", "client", Client, ClientToken, :user_id, ClientStatus::ACTIVE,]
         when "com"
-          [ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
-           "core-com-jp", "visitor", Visitor, VisitorToken, :visitor_id,]
+          [ENV.fetch("PUBLIC_VISA_CORPORATE_URL"), ENV.fetch("PUBLIC_AUTH_CORPORATE_URL"),
+           "core-com-jp", "visitor", Visitor, VisitorToken, :visitor_id, VisitorStatus::ACTIVE,]
         when "org"
-          [ENV.fetch("PUBLIC_BASE_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
-           "core-org-jp", "operator", Operator, OperatorToken, :staff_id,]
+          [ENV.fetch("PUBLIC_VISA_STAFF_URL"), ENV.fetch("PUBLIC_AUTH_STAFF_URL"),
+           "core-org-jp", "operator", Operator, OperatorToken, :staff_id, OperatorStatus::ACTIVE,]
         end
       parameters = {
         response_type: "code",
@@ -55,7 +55,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
             entry.split(";", 2).first.start_with?("#{cookie_name}=")
           end
 
-        assert_withheld("expected the actual Base session Set-Cookie") { line.present? }
+        assert_withheld("expected the actual Visa session Set-Cookie") { line.present? }
         cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
       end
       owner.cookies.delete(cookie_name)
@@ -97,6 +97,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
       # neither admission nor opaque result verification/finalization is mocked.
       actor = actor_model.create!(
         security_mode_id: SecurityModeConfigurable::NORMAL,
+        status_id: actor_status_id,
         id: SecureRandom.random_number(1 << 60),
       )
       result = BaseAuthAdmissionCoordinator.register_result_and_issue!(
@@ -130,7 +131,10 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
       assert_equal 0, token_model.where(owner_key => actor.id).count
       root_reference = nil
       2.times do |attempt|
-        owner.get("/oauth/authorize", params: submission)
+        owner.get(
+          "/oauth/authorize", params: submission,
+          headers: { "Cookie" => owner.request.headers["Cookie"], "HTTP_COOKIE" => owner.request.headers["Cookie"] },
+        )
 
         assert_equal 200, owner.response.status
         csrf = owner.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
@@ -139,13 +143,15 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
         owner.post(
           "/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: {
             "Origin" => nil, "Sec-Fetch-Site" => nil,
+            "Cookie" => owner.request.headers["Cookie"], "HTTP_COOKIE" => owner.request.headers["Cookie"],
           },
         )
 
         assert_nil owner.request.headers["Sec-Fetch-Site"]
         assert_nil owner.request.headers["Origin"]
-        assert_equal 303, owner.response.status
-        assert_withheld { parent.reload.base_finalized_at.present? }
+        expected_status = attempt.zero? ? 303 : 400
+        assert_equal expected_status, owner.response.status
+        assert_withheld { parent.reload.base_finalized_at.present? } if attempt.zero?
         root_reference ||= parent.browser_session_ref
 
         assert_equal root_reference, parent.browser_session_ref
@@ -163,7 +169,7 @@ class OidcResultCsrfTransportTest < ActionDispatch::IntegrationTest
               entry.split(";", 2).first.start_with?("#{cookie_name}=")
             end
 
-          assert_withheld("expected the actual finalized Base session Set-Cookie") { line.present? }
+          assert_withheld("expected the actual finalized Visa session Set-Cookie") { line.present? }
           cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
         end
         owner.cookies.delete(cookie_name)

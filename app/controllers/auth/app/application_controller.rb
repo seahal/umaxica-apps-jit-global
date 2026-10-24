@@ -25,6 +25,9 @@ module Auth
       include ::VerificationClient
       include ActionPolicy::Controller
       include ::AuthCeremonyContext
+      include ::AuthAdmissionCurfewGate
+      include ::SignInPathRefusal
+      include ::SignEntrySentryEnforcement
       include SurfaceRouteAliasHelper
       include ::ActorSupport
       include ::Finisher
@@ -54,7 +57,7 @@ module Auth
       helper_method :current_actor, :current_account, :current_session_public_id,
                     :signed_pt_param, :current_client, :logged_in?, :active_client?, :logged_in_client?,
                     :current_region_identifier
-      helper_method :acme_authority_host, :base_authority_host
+      helper_method :acme_authority_host, :base_rp_host
 
       # NOTE: Order matters (dependencies rely on this sequence)
       # Jump-return handling runs before rate limiting so that cross-surface
@@ -77,6 +80,8 @@ module Auth
       before_action :reset_flash
       before_action :set_preferences_cookie
       before_action :resolve_param_context
+      before_action :enforce_admission_curfew!
+      before_action :enforce_sign_entry_sentry!
       before_action :set_region
       before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor
@@ -152,7 +157,7 @@ module Auth
       end
 
       def acme_authority_host
-        base_authority_host
+        base_rp_host
       end
 
       # A protected Auth page hands sign-in off to the Base neutral /sign entry, whose POST issues the
@@ -167,8 +172,21 @@ module Auth
         )
       end
 
-      def base_authority_host
+      def base_rp_host
         ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+      end
+
+      def visa_authority_host
+        Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
+      end
+
+      # WU-06/WU-13: the post-curfew exit uses Visa's continuation resource. The Base RP
+      # browser binding is verified there before the registered redirect receives access_denied.
+      def curfew_exit_url(cancellation_ref:, transaction_ref:)
+        visa_app_oidc_cancellation_url(
+          cancellation_ref:, transaction_ref:, ri: params[:ri],
+          host: visa_authority_host, protocol: "https",
+        )
       end
     end
   end

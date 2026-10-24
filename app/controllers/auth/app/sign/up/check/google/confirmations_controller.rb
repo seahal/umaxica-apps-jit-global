@@ -9,6 +9,7 @@ module Auth
           module Google
             class ConfirmationsController < ::Auth::App::ApplicationController
               include SignUpExplicitStepControllerSupport
+              include SignUpSocialPendingClientSupport
               include ::SurfaceInertiaPage
               include ::TurnstilePageProps
 
@@ -26,7 +27,10 @@ module Auth
                   ActiveModel::Type::Boolean.new.cast(params[:confirm_new_social_identity])
                 return render_turnstile_failure unless verify_social_signup_turnstile!
 
+                bind_social_pending_client!
                 clear_current_requirement!
+              rescue IdentitySocialCeremonyContract::Error
+                render plain: I18n.t("errors.social_auth.provider_error"), status: :unprocessable_content
               end
 
               def destroy

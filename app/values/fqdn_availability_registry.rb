@@ -24,6 +24,9 @@ module FqdnAvailabilityRegistry
     base_service: ->(hosts) { [hosts.base_service.host, ENV["PUBLIC_BASE_SERVICE_URL"], "base.app.localhost"] },
     base_corporate: ->(hosts) { [hosts.base_corporate.host, ENV["PUBLIC_BASE_CORPORATE_URL"], "base.com.localhost"] },
     base_staff: ->(hosts) { [hosts.base_staff.host, ENV["PUBLIC_BASE_STAFF_URL"], "base.org.localhost"] },
+    visa_service: ->(hosts) { [hosts.visa_service.host, ENV["PUBLIC_VISA_SERVICE_URL"], "visa.app.localhost"] },
+    visa_corporate: ->(hosts) { [hosts.visa_corporate.host, ENV["PUBLIC_VISA_CORPORATE_URL"], "visa.com.localhost"] },
+    visa_staff: ->(hosts) { [hosts.visa_staff.host, ENV["PUBLIC_VISA_STAFF_URL"], "visa.org.localhost"] },
     base_network: ->(_hosts) { [ENV["PRIVATE_BASE_NETWORK_URL"], "base.net.localhost"] },
     base_developer: lambda { |_hosts|
       [ENV["PUBLIC_BASE_DEVELOPER_URL"], ENV["PRIVATE_BASE_DEVELOPER_URL"], "base.dev.localhost"]

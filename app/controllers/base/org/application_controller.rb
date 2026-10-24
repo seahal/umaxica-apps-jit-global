@@ -114,8 +114,6 @@ module Base
         handle_unverified_request
       end
 
-      def sign_in_phase_binding_surface = "org"
-
       def browser_rp_client_id
         "base-org-ww"
       end
@@ -143,8 +141,8 @@ module Base
         ENV.fetch("PUBLIC_AUTH_STAFF_URL")
       end
 
-      def oidc_base_authority_host
-        ENV.fetch("PUBLIC_BASE_STAFF_URL")
+      def oidc_visa_authority_host
+        Rails.configuration.x.boot_config.fetch(:hosts).visa_staff.host
       end
 
       private

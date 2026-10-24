@@ -9,51 +9,73 @@ class OpaqueResultTransportTest < ActionDispatch::IntegrationTest
       auth_host_env: "PUBLIC_AUTH_SERVICE_URL",
       auth_route: "auth/app/sign/oidc_handoffs",
       auth_host_fallback: "auth.app.localhost",
-      base_host_env: "PUBLIC_BASE_SERVICE_URL",
-      base_route: "base/app/oauth/authorizations",
-      base_host_fallback: "base.app.localhost",
+      visa_host_env: "PUBLIC_VISA_SERVICE_URL",
+      visa_result_route: "visa/app/oidc/results",
+      visa_cancellation_route: "visa/app/oidc/cancellations",
+      visa_switch_route: "visa/app/oidc/switches",
+      visa_host_fallback: "visa.app.localhost",
     },
     {
       auth_host_env: "PUBLIC_AUTH_CORPORATE_URL",
       auth_route: "auth/com/sign/oidc_handoffs",
       auth_host_fallback: "auth.com.localhost",
-      base_host_env: "PUBLIC_BASE_CORPORATE_URL",
-      base_route: "base/com/oauth/authorizations",
-      base_host_fallback: "base.com.localhost",
+      visa_host_env: "PUBLIC_VISA_CORPORATE_URL",
+      visa_result_route: "visa/com/oidc/results",
+      visa_cancellation_route: "visa/com/oidc/cancellations",
+      visa_switch_route: "visa/com/oidc/switches",
+      visa_host_fallback: "visa.com.localhost",
     },
     {
       auth_host_env: "PUBLIC_AUTH_STAFF_URL",
       auth_route: "auth/org/sign/oidc_handoffs",
       auth_host_fallback: "auth.org.localhost",
-      base_host_env: "PUBLIC_BASE_STAFF_URL",
-      base_route: "base/org/oauth/authorizations",
-      base_host_fallback: "base.org.localhost",
+      visa_host_env: "PUBLIC_VISA_STAFF_URL",
+      visa_result_route: "visa/org/oidc/results",
+      visa_cancellation_route: "visa/org/oidc/cancellations",
+      visa_host_fallback: "visa.org.localhost",
     },
   ].freeze
 
-  test "Auth handoff and Base result routes are POST-capable for every surface" do
+  test "Auth handoff and Visa continuation routes are GET resources for every surface" do
     SURFACES.each do |surface|
       auth_host = ENV.fetch(surface.fetch(:auth_host_env), surface.fetch(:auth_host_fallback))
-      base_host = ENV.fetch(surface.fetch(:base_host_env), surface.fetch(:base_host_fallback))
+      visa_host = ENV.fetch(surface.fetch(:visa_host_env), surface.fetch(:visa_host_fallback))
 
       assert_recognizes(
         { controller: surface.fetch(:auth_route), action: "show" },
         { path: "http://#{auth_host}/sign/oidc/handoff", method: :get },
       )
       assert_recognizes(
-        { controller: surface.fetch(:auth_route), action: "create" },
-        { path: "http://#{auth_host}/sign/oidc/handoff", method: :post },
+        { controller: surface.fetch(:visa_result_route), action: "show" },
+        { path: "http://#{visa_host}/oidc/result", method: :get },
       )
       assert_recognizes(
-        { controller: surface.fetch(:base_route), action: "create" },
-        { path: "http://#{base_host}/oauth/authorize", method: :post },
+        { controller: surface.fetch(:visa_cancellation_route), action: "show" },
+        { path: "http://#{visa_host}/oidc/cancellation", method: :get },
       )
+      if surface[:visa_switch_route]
+        assert_recognizes(
+          { controller: surface.fetch(:visa_switch_route), action: "show" },
+          { path: "http://#{visa_host}/oidc/switch", method: :get },
+        )
+      end
+
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path(
+          "http://#{auth_host}/sign/oidc/handoff", method: :post,
+        )
+      end
+      assert_raises(ActionController::RoutingError) do
+        Rails.application.routes.recognize_path(
+          "http://#{visa_host}/oidc/result", method: :post,
+        )
+      end
     end
   end
 
   test "GET result query never consumes an opaque result" do
     SURFACES.each do |surface|
-      base_host = ENV.fetch(surface.fetch(:base_host_env), surface.fetch(:base_host_fallback))
+      visa_host = ENV.fetch(surface.fetch(:visa_host_env), surface.fetch(:visa_host_fallback))
       consumed = false
 
       BaseAuthAdmissionCoordinator.stub(
@@ -65,9 +87,16 @@ class OpaqueResultTransportTest < ActionDispatch::IntegrationTest
         },
       ) do
         get(
-          "http://#{base_host}/oauth/authorize",
-          params: { result: SecureRandom.urlsafe_base64(24) },
-          headers: { "Host" => base_host },
+          "http://#{visa_host}/oidc/result",
+          params: {
+            result_ref: SecureRandom.urlsafe_base64(24),
+            transaction_ref: SecureRandom.uuid,
+          },
+          headers: {
+            "Host" => visa_host,
+            "Sec-Fetch-Mode" => "navigate",
+            "Sec-Fetch-Dest" => "document",
+          },
         )
       end
 
@@ -76,23 +105,18 @@ class OpaqueResultTransportTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "cross-site result POST is rejected by Rails forgery protection" do
-    original_forgery_protection = ActionController::Base.allow_forgery_protection
-    ActionController::Base.allow_forgery_protection = true
+  test "result continuation rejects non-navigation requests" do
+    visa_host = ENV.fetch("PUBLIC_VISA_SERVICE_URL", "visa.app.localhost")
 
-    base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost")
-    post(
-      "http://#{base_host}/oauth/authorize",
-      params: { result: SecureRandom.urlsafe_base64(24) },
-      headers: {
-        "Host" => base_host,
-        "Origin" => "https://attacker.example",
-        "Sec-Fetch-Site" => "cross-site",
+    get(
+      "http://#{visa_host}/oidc/result",
+      params: {
+        result_ref: SecureRandom.urlsafe_base64(24),
+        transaction_ref: SecureRandom.uuid,
       },
+      headers: { "Host" => visa_host },
     )
 
-    assert_response :unprocessable_content
-  ensure
-    ActionController::Base.allow_forgery_protection = original_forgery_protection
+    assert_response :bad_request
   end
 end

@@ -242,20 +242,6 @@ class BaseSocialLinkCompletionTest < ActionDispatch::IntegrationTest
     assert_operator grant.expires_at, :<=, ClientSocialCeremonyTransaction.database_now
   end
 
-  test "base completion rejects a malformed social result without committing" do
-    assert_no_difference("ClientGoogleIdentity.count") do
-      assert_no_difference("ClientOidcAuthorizationTransaction.count") do
-        post base_app_social_authentication_completion_url(id: "google", ri: "jp", host: @base_host),
-             params: { social_ceremony_result: "not-a-real-token", ri: "jp" },
-             headers: social_completion_browser_headers
-      end
-    end
-
-    assert_response :unprocessable_content
-    assert_nil response.location
-    assert_equal I18n.t("sign.app.social.sessions.create.failure"), response.body
-  end
-
   test "base social login continuation returns to passive Base admission without a provider grant" do
     assert_no_difference(["Client.count", "ClientToken.count", "ClientSocialCeremonyTransaction.count"]) do
       post base_app_social_authentication_continuation_url(id: "google", ri: "jp", host: @base_host),

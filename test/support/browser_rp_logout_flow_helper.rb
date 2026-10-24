@@ -1,14 +1,20 @@
 # frozen_string_literal: true
 
+require "base64"
+require "digest"
+require_relative "oidc_rp_logout_hint_helper"
+
 # Drives the real Browser RP sign-out ceremony across the Core origin and the Base authority with
 # real session writes and token issuance. Callers set @core_host, @base_host, @user and @root_token
 # and create their RP sessions with create_rp_session.
 module BrowserRpLogoutFlowHelper
+  include OidcRpLogoutHintHelper
+
   private
 
   def create_rp_session(client_id, root_token: @root_token)
     client = OidcClientRegistry.find!(client_id)
-    OpAppGrant.create!(
+    grant = OpAppGrant.create!(
       authentication_epoch: 0,
       client_token: root_token,
       oidc_client_id: client.client_id,
@@ -18,6 +24,8 @@ module BrowserRpLogoutFlowHelper
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
+    store_oidc_rp_logout_hint!(grant, grant.client_token.actor_record, client)
+    grant
   end
 
   def sign_in_core_rp(rp_session, root_token: @root_token, user: @user)
@@ -44,11 +52,95 @@ module BrowserRpLogoutFlowHelper
   def start_sign_out(rp_session = @core_session, root_token: @root_token)
     host!(@core_host)
     sign_in_core_rp(rp_session, root_token: root_token)
-    post(core_app_sign_out_url(ri: "jp"))
+    browser_cookie_before = session_cookie_pair
+    get(edit_core_app_sign_out_url(ri: "jp"))
+    assert_response :success
 
-    assert_response :see_other
-    query = Rack::Utils.parse_nested_query(URI.parse(response.location).query.to_s)
-    [query.fetch("logout_challenge"), session_cookie_pair]
+    browser_cookie_key = browser_cookie_before.presence || session_cookie_pair
+    existing = internal_logout_transaction_for(rp_session, browser_cookie_key)
+    transaction, proof =
+      if existing
+        [existing, nil]
+      else
+        raw_proof = SecureRandom.random_bytes(32)
+        binding = AcmeLogoutTransactionCoordinator.browser_rp_binding_for(
+          session_record: rp_session,
+          resource_type: "client",
+          origin_intent_digest: Digest::SHA256.digest(raw_proof),
+        )
+        result = AcmeLogoutTransactionCoordinator.issue!(
+          workflow: AcmeLogoutTransaction::BROWSER_RP_WORKFLOW,
+          origin_surface: "core",
+          initiating_client_id: "core-app-jp",
+          completion_url: AcmeLogoutTransactionCoordinator.completion_url_for(
+            origin_surface: "core", ri: "jp", surface: "app",
+          ),
+          actor_ref: @user.public_id,
+          session_ref: rp_session.public_id,
+          callback_state: nil,
+          surface: "app",
+          ri: "jp",
+          **binding,
+        )
+        raise result.error_description unless result.success?
+
+        [result.transaction, raw_proof]
+      end
+
+    install_internal_logout_intent_proof!(transaction, proof) if proof
+    browser_cookie_key = session_cookie_pair if browser_cookie_key.blank?
+    @internal_logout_transactions ||= {}
+    @internal_logout_transactions[[rp_session.public_id, browser_cookie_key]] = transaction
+    response.headers["Location"] = internal_authority_url(transaction)
+    [transaction.logout_challenge, session_cookie_pair]
+  end
+
+  def internal_logout_transaction_for(rp_session, browser_cookie_key)
+    transaction = @internal_logout_transactions&.fetch([rp_session.public_id, browser_cookie_key], nil)
+    return unless transaction&.persisted?
+    return unless transaction.browser_rp_workflow?
+    return unless transaction.expected_step.in?(
+      [
+        AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
+        AcmeLogoutTransaction::STEP_AUTHORITY_CLEANUP_ISSUED,
+        *OidcRpLogoutLauncher::BROWSER_RP_ORIGIN_STEPS,
+      ],
+    )
+    return if transaction.expired? && !transaction.finalized?
+
+    transaction
+  end
+
+  def install_internal_logout_intent_proof!(transaction, raw_proof)
+    session_key = Rails.application.config.session_options.fetch(:key)
+    cookie_jar = ActionDispatch::Cookies::CookieJar.build(request, request.cookies)
+    session_state = { "session_id" => SecureRandom.hex(16) }.merge(request.session.to_hash.stringify_keys)
+    session_state[AcmeLogoutTransactionable::BROWSER_RP_LOGOUT_PROOFS_SESSION_KEY.to_s] = {
+      transaction.logout_challenge => {
+        "proof" => Base64.strict_encode64(raw_proof),
+        "client_id" => transaction.initiating_client_id,
+        "session_ref" => transaction.session_ref,
+        "parent_session_ref" => transaction.parent_session_ref,
+        "expires_at" => transaction.expires_at.iso8601(6),
+      },
+    }
+    cookie_jar.encrypted[session_key] = { value: session_state }
+    encoded_session = cookie_jar[session_key]
+    cookies.delete(session_key)
+    store_raw_cookies(
+      cookies,
+      "#{session_key}=#{Rack::Utils.escape(encoded_session)}",
+      URI.parse("https://#{request.host}/"),
+    )
+  end
+
+  def internal_authority_url(transaction)
+    uri = URI.parse(OidcIssuer.end_session_endpoint("client"))
+    query = Rack::Utils.parse_nested_query(uri.query.to_s)
+    query["logout_challenge"] = transaction.logout_challenge
+    query["ri"] = "jp"
+    uri.query = query.to_query
+    uri.to_s
   end
 
   def base_authority_headers(root_token: @root_token, user: @user)
@@ -69,7 +161,7 @@ module BrowserRpLogoutFlowHelper
   def confirm_at_authority(challenge, origin_session_cookie, headers: base_authority_headers, params: {})
     host!(@base_host)
     post(
-      base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
+      visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
       params: params,
       headers: with_session_cookie(origin_headers("same-site").merge(headers), session_cookie: origin_session_cookie),
     )

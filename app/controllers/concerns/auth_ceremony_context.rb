@@ -15,13 +15,13 @@ module AuthCeremonyContext
     return render_sign_in_unavailable_while_authenticated if logged_in?
     return if auth_ceremony_matches_intent?("sign_in")
 
-    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+    refuse_sign_in_path!("ownership_mismatch")
   end
 
   def require_sign_up_ceremony_admission!
     return if auth_ceremony_matches_intent?("sign_up")
 
-    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+    refuse_sign_in_path!("ownership_mismatch")
   end
 
   def auth_social_admission_binding!
@@ -32,7 +32,9 @@ module AuthCeremonyContext
 
     binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
       .find_by!(admitted_auth_ceremony_session_id: record.id)
-    unless binding.redeemed? && !binding.retired? && !binding.expired? &&
+    # F5 (WU-06): the 60-second acceptance expiry bounded only the redemption; after it, the
+    # attempt's curfew (AuthAdmissionCurfewGate) is the limit.
+    unless binding.redeemed? && !binding.retired? && AdmissionCurfewValue.for(binding).within? &&
         (auth_ceremony_matches_intent?("sign_in") || auth_ceremony_matches_intent?("sign_up"))
       raise SocialAuth::UnauthorizedError.new("errors.social_auth.invalid_intent")
     end
@@ -56,8 +58,7 @@ module AuthCeremonyContext
   end
 
   def render_sign_up_ownership_mismatch
-    Rails.logger.info(JitLogEvent.format("sign.signup.ownership_refused", reason_code: "ownership_mismatch"))
-    render plain: I18n.t("errors.messages.invalid_request"), status: :bad_request
+    refuse_sign_in_path!("ownership_mismatch")
   end
 
   def auth_ceremony_surface

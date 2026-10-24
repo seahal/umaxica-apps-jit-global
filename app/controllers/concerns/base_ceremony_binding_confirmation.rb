@@ -12,8 +12,12 @@ module BaseCeremonyBindingConfirmation
 
   def show
     apply_base_browser_continuation_headers!
+    return render_invalid_binding! if request.head?
+
     binding = load_ceremony_binding!
     validate_binding_base_context!(binding)
+    return confirm_and_redirect!(binding) if automatic_ceremony_binding_confirmation?
+
     render "base/shared/ceremony_binding_confirmation", layout: false,
                                                         locals: {
                                                           binding_ref: params[:binding_ref],
@@ -27,6 +31,15 @@ module BaseCeremonyBindingConfirmation
   def create
     apply_base_browser_continuation_headers!
     binding = load_ceremony_binding!
+    confirm_and_redirect!(binding)
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
+         AuthAdmissionBinding::InvalidTransition
+    render_invalid_binding!
+  end
+
+  private
+
+  def confirm_and_redirect!(binding)
     BaseAuthAdmissionCoordinator.with_admission_binding_lock!(binding) do |locked_binding|
       token = validate_binding_base_context!(locked_binding)
       locked_binding.confirm_base!(
@@ -35,12 +48,11 @@ module BaseCeremonyBindingConfirmation
       )
     end
     redirect_to(auth_binding_entry_url(binding), status: :see_other, allow_other_host: true)
-  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError,
-         AuthAdmissionBinding::InvalidTransition
-    render_invalid_binding!
   end
 
-  private
+  def automatic_ceremony_binding_confirmation?
+    false
+  end
 
   def load_ceremony_binding!
     raise ArgumentError if duplicate_admission_reference?("binding_ref")
@@ -57,6 +69,11 @@ module BaseCeremonyBindingConfirmation
   end
 
   def validate_binding_base_context!(binding)
+    unless self.class.ceremony_binding_allowed_purposes.include?(binding.purpose)
+      raise BaseAuthAdmissionCoordinator::Denied.new("binding purpose is not accepted on this surface",
+                                                      code: "invalid_admission")
+    end
+
     raise BaseAuthAdmissionCoordinator::Denied.new("binding is unavailable", code: "invalid_admission") unless
       binding.live? && base_admission_browser_nonce.present? && auth_binding_session_active?(binding)
 

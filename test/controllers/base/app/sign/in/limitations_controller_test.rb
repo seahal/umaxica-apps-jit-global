@@ -6,8 +6,8 @@ require "test_helper"
 # Base app session-limit resolution. The parent ClientSignInFlow remains in
 # SESSION_ISSUANCE_PENDING; the browser carries only the opaque gate for its durable child
 # transaction (adr/root-login-establishment-boundary.md).
-class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCase
-  tests Base::App::Sign::In::LimitationsController
+class Visa::App::Sign::In::LimitationsControllerTest < ActionController::TestCase
+  tests Visa::App::Sign::In::LimitationsController
 
   setup do
     reference_now = ClientSignInFlow.database_now
@@ -19,7 +19,7 @@ class Base::App::Sign::In::LimitationsControllerTest < ActionController::TestCas
     end
     ClientSignOutFlowKind.ensure_defaults!
     ClientSignOutFlowStatus.ensure_defaults!
-    @request.host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @request.host = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
     @actor = Client.create!(
       security_mode_id: SecurityModeConfigurable::NORMAL, status_id: ClientStatus::NOTHING,
       birthdate: "2000-01-01",

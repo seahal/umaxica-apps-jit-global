@@ -71,6 +71,7 @@ require_relative "support/security_mode_test_default"
 require_relative "support/operator_passkey_test_support"
 require_relative "support/sign_up_admission_test_factory"
 require_relative "support/sign_up_switch_test_support"
+require_relative "support/session_sign_up_flow_test_support"
 require_relative "support/form_action_policy_helper"
 require_relative "support/fetch_metadata_defaults"
 require_relative "support/turnstile_verifier_stub"
@@ -264,6 +265,20 @@ module AuthenticationHarness
     CommonRedirect.normalize_host(ENV.fetch(env_key))
   end
 
+  # WU-02: the Visa OP host of the realm whose Base RP host is given.
+  def visa_host_for_test_base_host(base_host)
+    hosts = Rails.configuration.x.boot_config.fetch(:hosts)
+    realm = %i(service corporate staff).find { |name| hosts.public_send("base_#{name}").host == base_host.to_s }
+    raise ArgumentError, "unknown Base host: #{base_host}" unless realm
+
+    hosts.public_send("visa_#{realm}").host
+  end
+
+  def visa_host_for_test_surface(surface)
+    realm = { app: :service, com: :corporate, org: :staff }.fetch(surface.to_sym)
+    Rails.configuration.x.boot_config.fetch(:hosts).public_send("visa_#{realm}").host
+  end
+
   def authenticated_resource_headers(resource, host:, headers:, session_public_id:, resource_type:, session_header:)
     token_record = authentication_harness_session_token(resource, session_public_id: session_public_id)
     host_value = host || (respond_to?(:request, true) ? request&.host : nil)
@@ -384,7 +399,14 @@ module AuthenticationHarness
 
   def jwt_issuer_id_for_test_host(host, resource_type)
     normalized = host.to_s
-    service = (normalized.include?("base") || normalized.include?("www.")) ? "BASE" : "AUTH"
+    service =
+      if normalized.include?("visa")
+        "VISA"
+      elsif normalized.include?("base") || normalized.include?("www.")
+        "BASE"
+      else
+        "AUTH"
+      end
     surface =
       if resource_type == "operator" || normalized.include?(".org") || normalized.include?("org.")
         "ORG"
@@ -462,6 +484,17 @@ module ActiveSupport
     # FQDN is on by default here and a test that wants a surface switched off disables it itself.
     setup do
       FqdnAvailabilityRegistry.flag_names.each { |feature| Flipper.enable(feature) }
+    end
+
+    # Sign Entry Sentry is an availability gate, so ordinary regression tests
+    # begin with all six explicitly registered paths available. Blocked-path
+    # tests flip only their own flag.
+    setup do
+      %i(
+        sign_in_available_app sign_up_available_app
+        sign_in_available_com sign_up_available_com
+        sign_in_available_org sign_up_available_org
+      ).each { |feature| Flipper.enable(feature) }
     end
 
     # I18n.locale is thread-local and is set by controller `set_locale`

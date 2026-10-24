@@ -40,7 +40,7 @@ module Auth
 
           def after_login_path
             complete_auth_ceremony_session!
-            base_org_identity_url(ri: current_region_identifier, host: base_authority_host)
+            base_org_identity_url(ri: current_region_identifier, host: base_rp_host)
           end
         end
       end

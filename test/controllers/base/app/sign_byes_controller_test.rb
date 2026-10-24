@@ -2,11 +2,11 @@
 
 require "test_helper"
 
-class Base::App::SignByesControllerTest < ActionController::TestCase
+class Visa::App::SignByesControllerTest < ActionController::TestCase
   fixtures :clients
 
   setup do
-    @request.host = URI.parse(ENV.fetch("PUBLIC_BASE_SERVICE_URL")).host || ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @request.host = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
     @request.env["HTTPS"] = "on"
     @request.headers["Sec-Fetch-Site"] = "same-origin"
     @request.headers["Origin"] = "https://#{@request.host}"

@@ -44,7 +44,7 @@ module Auth
             cookies.delete(auth_ceremony_sid_cookie_name, path: "/")
             reset_session
             redirect_to_surface_url(
-              base_app_dashboard_url(host: base_authority_host, protocol: "https", ri: params[:ri]),
+              base_app_dashboard_url(host: base_rp_host, protocol: "https", ri: params[:ri]),
               status: :see_other,
             )
           end

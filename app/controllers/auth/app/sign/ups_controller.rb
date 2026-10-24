@@ -6,7 +6,6 @@ module Auth
     module Sign
       class UpsController < ::Auth::App::ApplicationController
         include ::SurfaceInertiaPage
-        include SignUpSuspensionGuard
         include AppSignUpEntryPage
         include ::AuthCeremonyAdmission
 
@@ -15,7 +14,6 @@ module Auth
         # authenticated browser. Matches the sibling InsController policy.
         AUTHENTICATION_MODE = :open
 
-        before_action :reject_suspended_sign_up!
         declare_authentication_mode! :open
 
         def show

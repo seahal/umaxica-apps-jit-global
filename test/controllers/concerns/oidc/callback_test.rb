@@ -79,7 +79,7 @@ class OidcCallbackTestController < ApplicationController
   end
 
   def oidc_token_url
-    host = Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
+    host = Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
     "http://#{host}:3000/oauth/token"
   end
 
@@ -99,8 +99,8 @@ class OidcCallbackTestController < ApplicationController
     initiate_oidc_session!(pt: "/")
   end
 
-  def oidc_base_authority_host
-    Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
+  def oidc_visa_authority_host
+    Rails.configuration.x.boot_config.fetch(:hosts).visa_service.host
   end
 
   def jump_rt_issuer_namespace

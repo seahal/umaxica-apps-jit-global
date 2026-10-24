@@ -1,30 +1,32 @@
 # RP return target path is readable outside the RP
 
-Status: Deferred; recorded at the user's request on 2026-10-23. No implementation change is
-authorized by this entry. Stored in `docs/backlog/` at the user's explicit request.
+Status: Deferred concern; the accepted RP Rails contract was implemented on 2026-10-24 (WU-39). This
+entry remains a backlog item for the accepted path-exposure trade-off; it does not authorize a
+different target transport.
 
 ## Concern
 
-The adopted design (owner decisions D-149 and D-151 of the 2026-10 authentication cycle) carries
-the RP's internal return target as the `target_link_uri` claim of the RP's OIDC `state`, an ES384
-JWS. A JWS is signed, not encrypted. The path is therefore readable wherever the `state` travels or
-is stored: the authorization request URL sent to the OP, the OP's stored authorization transaction,
-the Jump gateway and any log that records those URLs.
+The adopted design (owner decisions D-149 and D-151 of the 2026-10 authentication cycle) carries the
+RP's internal return target as the `target_link_uri` claim of the RP's OIDC `state`, an ES384 JWS. A
+JWS is signed, not encrypted. The path is therefore readable wherever the `state` travels or is
+stored: the authorization request URL sent to the OP, the OP's stored authorization transaction, the
+Jump gateway and any log that records those URLs.
 
 The design limits the value to a relative path with no query and no fragment, so query parameters
 are never exposed. A path segment can still carry a value that should stay on the RP, for example a
 protected page whose route contains an invitation code, a verification token or another
-capability-like identifier. If such a page requires sign-in, its path, including that value,
-reaches the OP and Jump.
+capability-like identifier. If such a page requires sign-in, its path, including that value, reaches
+the OP and Jump.
 
 The owner accepted this for the first implementation: the JWS approach is implemented as decided,
 and a different mechanism is considered after it works.
 
 ## State when recorded
 
-Not implemented. Today the RP still uses its earlier plain `pt` return path (`OidcSsoInitiator`,
-`OidcCallback`). The JWS `state` and `target_link_uri` are defined in the cycle documents as Work
-Unit WU-43 and have not been built.
+The RP Rails slice now uses the ES384 JWS `state` and path-only `target_link_uri` from
+`OidcSsoInitiator`, `OidcCallback`, and `RpTargetLinkUri`. Plain RP `pt` is no longer the browser RP
+return lane. The remaining concern is that the signed path is readable to the OP and Jump; no
+security defect was inferred from that accepted design trade-off.
 
 ## Options to evaluate when selected
 

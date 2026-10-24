@@ -15,8 +15,14 @@ Accepted (2026-10-06) as the target architecture for the `two.md` implementation
 > [OP, Auth, and RP responsibility separation](op-auth-rp-authentication-responsibility-separation.md)
 > separates the OP from application Base, which becomes an RP, and permits authenticated method
 > management and step-up directly through Auth. OP sessions and existing security contracts remain;
-> direct-path protocol details remain open. The combined-Base implementation described below is
-> not certified as migrated by this decision.
+> direct-path protocol details remain open. The combined-Base implementation described below is not
+> certified as migrated by this decision.
+
+> **Partial supersession (2026-10-24):**
+> [Visa OpenID Provider Host and Base Browser RP Boundary](visa-op-host.md) moves the OIDC authority
+> and authority-side browser flows to the Visa hosts. The role split and Base RP contracts below
+> remain useful, but the statement that Base serves the physical authority on the same FQDN is
+> historical.
 
 ## Context
 

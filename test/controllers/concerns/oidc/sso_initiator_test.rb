@@ -48,7 +48,7 @@ class OidcSsoInitiatorTestController < ApplicationController
   end
 
   # Public browser authority remains Base; cross-host authorization uses Jump even within one TLD.
-  def oidc_base_authority_host
+  def oidc_visa_authority_host
     Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
   end
 
@@ -78,7 +78,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     # Several tests below redefine these on the controller class to drive a specific
     # redirect decision. define_method is permanent, so without this the next test in the
     # process inherits the override and the file's results depend on the run order.
-    OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) do
+    OidcSsoInitiatorTestController.define_method(:oidc_visa_authority_host) do
       Rails.configuration.x.boot_config.fetch(:hosts).base_service.host
     end
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
@@ -194,7 +194,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
 
   test "the started flow keeps using jump for cross-site oidc authorize urls" do
     cross_site_acme_host = Rails.configuration.x.boot_config.fetch(:hosts).base_corporate.host
-    OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) { cross_site_acme_host }
+    OidcSsoInitiatorTestController.define_method(:oidc_visa_authority_host) { cross_site_acme_host }
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do
       OidcClientRegistry.find!(oidc_client_id).redirect_uris.first
     end
@@ -223,7 +223,7 @@ class OidcSsoInitiatorTest < ActionDispatch::IntegrationTest
     assert_not_includes io.string, "nonce"
     assert_not_includes io.string, "code_challenge"
   ensure
-    OidcSsoInitiatorTestController.define_method(:oidc_base_authority_host) do
+    OidcSsoInitiatorTestController.define_method(:oidc_visa_authority_host) do
       Rails.configuration.x.boot_config.fetch(:hosts).acme_service.host
     end
     OidcSsoInitiatorTestController.define_method(:oidc_callback_url) do

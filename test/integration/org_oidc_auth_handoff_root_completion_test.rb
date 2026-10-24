@@ -55,67 +55,58 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       browser.get("/sign", params: { ri: "jp" })
 
       assert_equal 200, browser.response.status
+      cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
       csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
       browser.post("/sign", params: { ri: "jp", authenticity_token: csrf }, headers: base_headers)
 
       assert_equal 303, browser.response.status
       issuer = JitSecurityJwtRegistry.surface("BASE_ORG")
+      base_session_cookie = browser.cookies[cookie_name]
+      visa_session_cookie = nil
       entry_reference = nil
-      2.times do |index|
-        target = URI.parse(browser.response.location)
-        # A same-origin hop moves by path; only a cross-origin hop carries a Jump rt.
-        unless target.host == base_host
+      visa_host = visa_host_for_test_base_host(base_host)
+      jump_host = URI.parse(Rails.configuration.x.boot_config.fetch(:jump).origin.to_s).host
+      current_host = base_host
+      12.times do
+        break unless browser.response.redirect?
+
+        target = URI.parse(browser.response.location.to_s)
+        target = URI.parse("https://#{current_host}#{target}") if target.host.blank?
+        if target.host == jump_host
           rt = Rack::Utils.parse_query(target.query).fetch("rt")
+          namespace = current_host == base_host ? "BASE_ORG" : "VISA_ORG"
+          issuer = JitSecurityJwtRegistry.surface(namespace)
           payload, = JWT.decode(
             rt, JitSecurityJwtRegistry.public_key_for(issuer.id, issuer.current_kid), true,
-            algorithms: ["ES384"], verify_iss: true, iss: "https://#{base_host}",
+            algorithms: ["ES384"], verify_iss: true, iss: "https://#{current_host}",
             verify_aud: true, aud: Rails.configuration.x.boot_config.fetch(:jump).audience,
           )
           target = URI.parse(payload.fetch("url"))
         end
 
+        query = Rack::Utils.parse_query(target.query.to_s)
+        entry_reference ||= query["entry_ref"] if query["entry_ref"].present?
         assert_equal "https", target.scheme
-        assert_equal(index.zero? ? base_host : auth_host, target.host)
+        assert_includes [base_host, visa_host, auth_host], target.host
         browser.host!(target.host)
-        browser.get(target.request_uri, params: { ri: "jp" })
-        if index == 1
-          entry_reference = Rack::Utils.parse_query(target.query).fetch("entry_ref")
-          next
-        end
-        form = browser.response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        browser.post(form["action"], params: fields, headers: base_headers)
-
-        assert_equal 303, browser.response.status
+        browser.get(
+          target.request_uri,
+          headers: {
+            "Sec-Fetch-Mode" => "navigate",
+            "Sec-Fetch-Dest" => "document",
+            "Sec-Fetch-Site" => current_host == target.host ? "same-origin" : "cross-site",
+          },
+        )
+        visa_session_cookie = browser.cookies[cookie_name] if target.host == visa_host
+        current_host = target.host
       end
+
+      assert_equal auth_host, browser.host
+      assert_equal 200, browser.response.status
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "org", reference: entry_reference)
       parent = authorization_transaction_for_test(binding)
       original_parent_id = parent.id
       original_binding_id = binding.id
-      3.times do |index|
-        form = browser.response.parsed_body.at_css("form")
-
-        assert_not_nil form, "Admission step #{index} must expose a real continuation form"
-        assert_nil binding.reload.base_confirmed_at if index == 1
-        fields = form.css("input[name]").to_h { |input| [input["name"], input["value"]] }
-        browser.post(
-          form["action"], params: fields, headers: {
-            "Origin" => "https://#{browser.host}", "Sec-Fetch-Site" => nil,
-          },
-        )
-
-        assert_equal 303, browser.response.status
-        assert_withheld { binding.reload.base_confirmed_at.present? } if index == 1
-        next if index == 2
-
-        target = URI.parse(browser.response.location)
-
-        assert_equal "https", target.scheme
-        assert_equal(index.zero? ? base_host : auth_host, target.host)
-        browser.host!(target.host)
-        browser.get(target.request_uri, params: { ri: "jp" })
-      end
-
       assert_withheld { binding.reload.redeemed? }
       ceremony = OperatorAuthCeremonySession.find(binding.admitted_auth_ceremony_session_id)
 
@@ -130,12 +121,17 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
         before_parent = parent.reload.attributes
         before_identity = identity.reload.attributes
         before_passkey = passkey.reload.attributes
-        browser.get("/sign/oidc/handoff", params: { ri: "jp" })
+        browser.get(
+          "/sign/oidc/handoff", params: { ri: "jp" },
+          headers: auth_headers.merge(
+            "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+          ),
+        )
 
         assert_equal 400, browser.response.status
         browser.post("/sign/oidc/handoff", params: { ri: "jp", authenticity_token: csrf }, headers: auth_headers)
 
-        assert_equal 400, browser.response.status
+        assert_equal 404, browser.response.status
         assert_withheld("Missing Entra must not authenticate or consume the parent") {
           before_parent == parent.reload.attributes
         }
@@ -277,12 +273,17 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
 
           assert_equal 422, browser.response.status
         end
-        browser.get("/sign/oidc/handoff", params: { ri: "jp" })
+        browser.get(
+          "/sign/oidc/handoff", params: { ri: "jp" },
+          headers: auth_headers.merge(
+            "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+          ),
+        )
 
         assert_equal 400, browser.response.status
         browser.post("/sign/oidc/handoff", params: { ri: "jp", authenticity_token: csrf }, headers: auth_headers)
 
-        assert_equal 400, browser.response.status
+        assert_equal 404, browser.response.status
         assert_withheld("Incomplete MFA must not authenticate or consume the parent") {
           before_parent == parent.reload.attributes
         }
@@ -327,71 +328,88 @@ class OrgOidcAuthHandoffRootCompletionTest < ActionDispatch::IntegrationTest
       assert_withheld { flow.authentication_event_at.present? }
       assert_not flow.sign_in_completed?, "Auth must hand off before Base completes the root flow"
       assert_nil parent.reload.base_finalized_at
-      browser.get(handoff.request_uri)
-
-      assert_equal 200, browser.response.status
-      form = browser.response.parsed_body.at_css("form")
-      csrf = form.at_css('input[name="authenticity_token"]')["value"]
-      browser.post(form["action"], params: { authenticity_token: csrf }, headers: auth_headers)
+      browser.get(
+        handoff.request_uri,
+        headers: auth_headers.merge(
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+        ),
+      )
 
       assert_equal 303, browser.response.status
       assert_equal 0, OperatorToken.where(staff_id: actor.id).count
-      completion = URI.parse(browser.response.location)
+      result = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
+
+      assert_equal visa_host, result.host
+      assert_equal "/oidc/result", result.path
+      browser.host!(result.host)
+      browser.get(
+        result.request_uri,
+        headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "cross-site",
+          "Origin" => "https://#{visa_host}",
+          "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
+          "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
+        },
+      )
+
+      assert_equal 303, browser.response.status
+      completion = URI.parse(jump_rt_url_from_location_for_test(browser.response.location))
 
       assert_equal "https", completion.scheme
       assert_equal base_host, completion.host
-      assert_equal "/oauth/authorize", completion.path
-      submission = Rack::Utils.parse_query(completion.query)
-
-      assert_withheld("Handoff must use the original OIDC parent") {
-        submission.fetch("transaction_ref") == parent.transaction_id
-      }
+      assert_equal "/oidc/callback", completion.path
       assert_withheld("Handoff must retain the Entra-selected Operator") { parent.reload.actor_ref == actor.public_id }
-      assert_nil parent.base_finalized_at
+      assert_withheld { parent.reload.base_finalized_at.present? }
+
+      # WU-27/D-104: the Visa result is terminal after the first browser navigation. Replaying the
+      # same result reference cannot issue another root or re-run the finalization.
+      browser.host!(visa_host)
+      browser.get(
+        result.request_uri,
+        headers: {
+          "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+          "Origin" => "https://#{visa_host}",
+          "Cookie" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
+          "HTTP_COOKIE" => "#{cookie_name}=#{Rack::Utils.escape(visa_session_cookie)}",
+        },
+      )
+      assert_equal 400, browser.response.status
+      assert_equal 1, OperatorToken.where(staff_id: actor.id).count
+      assert_withheld { parent.reload.base_finalized_at.present? }
+
       browser.host!(base_host)
-      root_reference = nil
-      2.times do |attempt|
-        browser.get(completion.request_uri)
-
-        assert_equal 200, browser.response.status
-        csrf = browser.response.parsed_body.at_css('input[name="authenticity_token"]')["value"]
-        browser.post("/oauth/authorize", params: submission.merge(authenticity_token: csrf), headers: base_headers)
-
-        assert_equal 303, browser.response.status
-        assert_withheld { parent.reload.base_finalized_at.present? }
-        root_reference ||= parent.browser_session_ref
-
-        assert_withheld("Exact replay must reuse the first root") { root_reference == parent.browser_session_ref }
-        assert_equal 1, OperatorToken.where(staff_id: actor.id).count
-        root = OperatorToken.find_by!(public_id: root_reference)
-
-        assert_equal actor.id, root.staff_id
-        assert_equal "passkey", root.established_authentication_method
-        assert_withheld { root.root_login_established_at.present? }
-        assert_equal original_parent_id, parent.id
-        assert_equal original_binding_id, binding.reload.id
-        assert_equal original_parent_id, binding.authorization_transaction_id
-        next unless attempt.zero?
-
-        # Preserve only the rotated session emitted by Base; never manufacture a browser nonce.
-        cookie_name = JitSessionCookieConfig.cookie_key(force_secure: JitSessionCookieConfig.force_secure?)
-        cookie_value = browser.response.cookies[cookie_name]
-        if cookie_value.nil?
-          raw = browser.response.headers["Set-Cookie"] || browser.response.headers["set-cookie"]
-          lines = (raw.is_a?(String) && raw.start_with?("[")) ? JSON.parse(raw) : Array(raw)
-          line =
-            lines.flat_map { |entry| entry.to_s.split("\n") }.find do |entry|
-              entry.split(";", 2).first.to_s.start_with?("#{cookie_name}=")
-            end
-
-          assert_withheld("Base must emit its rotated browser session") { line.present? }
-          cookie_value = Rack::Utils.unescape(line.split(";", 2).first.split("=", 2).last)
-        end
-        browser.cookies.delete(cookie_name)
-        _received_cookie = browser.cookies.merge(
-          "#{cookie_name}=#{Rack::Utils.escape(cookie_value)}", URI.parse("https://#{base_host}/"),
+      # Rack::Test has one active cookie value while this harness traverses the Auth and Base hosts.
+      # Restore the Base session before the RP callback; a shared/overwritten cookie would be a
+      # different browser.
+      assert_withheld("Base must retain its browser session across the Auth hop") { base_session_cookie.present? }
+      browser.cookies.delete(cookie_name)
+      browser.cookies.merge(
+        "#{cookie_name}=#{Rack::Utils.escape(base_session_cookie)}", URI.parse("https://#{base_host}/"),
+      )
+      userinfo_result = OidcOpUserInfoClient::Result.new(
+        success: true,
+        claims: { "sub" => OidcSubject.for(actor, resource_type: "operator") },
+        error: nil,
+        dependency_failure: false,
+      )
+      OidcOpUserInfoClient.stub(:call, userinfo_result) do
+        browser.get(
+          completion.request_uri,
+          headers: {
+            "Sec-Fetch-Mode" => "navigate", "Sec-Fetch-Dest" => "document", "Sec-Fetch-Site" => "same-origin",
+          },
         )
       end
+
+      assert_includes [302, 303], browser.response.status
+      assert_equal 1, OperatorToken.where(staff_id: actor.id).count
+      root = OperatorToken.find_by!(public_id: parent.reload.browser_session_ref)
+      assert_equal actor.id, root.staff_id
+      assert_equal "passkey", root.established_authentication_method
+      assert_withheld { root.root_login_established_at.present? }
+      assert_equal original_parent_id, parent.id
+      assert_equal original_binding_id, binding.reload.id
+      assert_equal original_parent_id, binding.authorization_transaction_id
     ensure
       travel_back
       ActionController::Base.allow_forgery_protection = previous_protection

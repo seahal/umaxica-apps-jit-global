@@ -362,7 +362,7 @@ module SignOidcLogout
 
   def sign_out_confirmation_form_path
     return public_send(
-      "base_#{sign_surface_name}_oidc_logout_path",
+      "visa_#{sign_surface_name}_oidc_logout_path",
       **sign_out_route_params,
       logout_challenge: logout_challenge,
     ) if oidc_logout_pending_request_present?

@@ -89,6 +89,11 @@ module OidcCallback
       end
     if oidc_rp_credentials_only?
       store_oidc_rp_credentials!(token_response)
+      bind_oidc_rp_logout_session!(
+        id_token_result.payload,
+        id_token: token_response_value(token_response, :id_token),
+        refresh_token: token_response_value(token_response, :refresh_token),
+      )
       return redirect_to(consume_oidc_pt, allow_other_host: false)
     end
 
@@ -163,7 +168,7 @@ module OidcCallback
     uri = URI.parse(token_url)
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     allowed_hosts =
-      [hosts.base_service.host, hosts.base_corporate.host, hosts.base_staff.host]
+      [hosts.visa_service.host, hosts.visa_corporate.host, hosts.visa_staff.host]
         .map { |host| host.to_s.downcase }
     local_port = Integer(ENV.fetch("PORT"), exception: false) || 3000
 
@@ -184,7 +189,7 @@ module OidcCallback
     uri = URI.parse(userinfo_url)
     hosts = Rails.configuration.x.boot_config.fetch(:hosts)
     allowed_hosts =
-      [hosts.base_service.host, hosts.base_corporate.host, hosts.base_staff.host]
+      [hosts.visa_service.host, hosts.visa_corporate.host, hosts.visa_staff.host]
         .map { |host| host.to_s.downcase }
     local_port = Integer(ENV.fetch("PORT"), exception: false) || 3000
 
@@ -210,7 +215,10 @@ module OidcCallback
 
   def complete_rp_cell_callback!(id_token_payload, token_response)
     expiries = OidcRpBrowserCredentialContract.cookie_expiries_from_response(token_response)
-    result = commit_rp_cell_callback!(id_token_payload, absolute_expires_at: expiries.fetch(:refresh_expires_at))
+    result = commit_rp_cell_callback!(
+      id_token_payload,
+      absolute_expires_at: expiries.fetch(:refresh_expires_at),
+    )
     # A logged-out sid (tombstone), a re-bound identity or a reused callback never signs in.
     return render_callback_failure("identity_resolution_failed") unless result.success?
 
@@ -447,8 +455,13 @@ module OidcCallback
     @current_oidc_flow&.[](key)
   end
 
-  def bind_oidc_rp_logout_session!(payload)
+  def bind_oidc_rp_logout_session!(payload, id_token: nil, refresh_token: nil)
     sid = payload["sid"].to_s
+
+    if oidc_rp_credentials_only? && refresh_token.present?
+      bind_oidc_rp_grant_logout_token!(payload, id_token:, refresh_token:)
+      return
+    end
     return unless oidc_callback_uuid_identifier?(sid)
 
     token_record = @current_session
@@ -462,6 +475,46 @@ module OidcCallback
     token_record_connection_owner(token_record.class).connected_to(role: :writing) do
       token_record.update!(**updates)
     end
+  end
+
+  def bind_oidc_rp_grant_logout_token!(payload, id_token:, refresh_token:)
+    return if id_token.blank?
+
+    session_class =
+      case oidc_resource_type.to_s
+      when "operator" then OpOrgGrant
+      when "visitor" then OpComGrant
+      when "client" then OpAppGrant
+      else raise ArgumentError, "unsupported OIDC RP resource type"
+      end
+    public_id, verifier = session_class.parse_refresh_token(refresh_token)
+    return if public_id.blank? || verifier.blank?
+
+    connection =
+      case oidc_resource_type.to_s
+      when "operator" then OpBaseOrgRecord
+      when "visitor" then OpBaseComRecord
+      else OpBaseAppRecord
+      end
+    connection.connected_to(role: :writing) do
+      session_record = session_class.lock.find_by(public_id:, oidc_client_id:)
+      return unless session_record&.authenticate_refresh_token(verifier)
+      return unless session_record.public_id.to_s == sid_from_payload(payload)
+
+      updates = {}
+      updates[:oidc_sid] = sid_from_payload(payload) if session_record.has_attribute?(:oidc_sid)
+      updates[:oidc_client_id] = oidc_client_id if session_record.has_attribute?(:oidc_client_id)
+      session_record.update!(**updates) if updates.any?
+      # WU-14: the latest verified ID Token of this grant is its end-session hint.
+      hint = session_record.association(:logout_hint).scope.lock.take
+      hint ? hint.update!(id_token:) : session_record.association(:logout_hint).klass.create!(
+        grant_id: session_record.id, id_token:,
+      )
+    end
+  end
+
+  def sid_from_payload(payload)
+    payload.fetch("sid").to_s
   end
 
   def oidc_resource_type

@@ -2,9 +2,11 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../support/oidc_rp_logout_hint_helper"
 # require "helpers/global_test_support"
 
 class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
+  include OidcRpLogoutHintHelper
   fixtures :operators, :operator_token_kinds
 
   setup do
@@ -30,7 +32,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_equal auth_refresh_generation, token.refresh_token_generation
   end
 
-  test "post sign out redirects to the registered base authority" do
+  test "post sign out redirects to the registered Visa end-session endpoint" do
     operator = operators(:one)
     token = OperatorToken.create!(authentication_epoch: 0, staff: operator, staff_token_kind_id: OperatorTokenKind::BROWSER_WEB)
     auth_refresh_token = token.rotate_refresh_token!
@@ -44,15 +46,8 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     location = URI.parse(response.location)
     query = Rack::Utils.parse_nested_query(location.query.to_s)
-    transaction = AcmeLogoutTransaction.find_by!(public_id: query.fetch("logout_challenge"))
-
-    assert_equal "warp", transaction.origin_surface
-
-    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL", "www.org.localhost"), location.host
-    assert_equal "/oidc/logout", location.path
-    assert_predicate query["logout_challenge"], :present?
-    assert_equal "jp", query["ri"]
-    assert_predicate @rp_session.reload, :active?
+    assert_visa_end_session_redirect(query, location, client_id: "warp-org-jp", region: "jp")
+    assert_not_predicate @rp_session.reload, :active?
     assert_predicate token.reload, :currently_usable?
     assert_equal auth_refresh_digest, token.refresh_token_digest
     assert_equal auth_refresh_generation, token.refresh_token_generation
@@ -94,6 +89,7 @@ class Warp::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
+    store_oidc_rp_logout_hint!(@rp_session, operator, oidc_client)
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
       operator,
       host: @host,

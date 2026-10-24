@@ -10,7 +10,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
 
   setup do
     @core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
-    @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @base_host = visa_host_for_test_surface(:app)
     https!
     @user = clients(:one)
     @root_token = ClientToken.create!(
@@ -95,11 +95,11 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
     challenge, origin_cookie = start_sign_out
     host!(@base_host)
 
-    get base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
+    get visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
         headers: with_session_cookie(base_authority_headers, session_cookie: origin_cookie)
 
     assert_response :ok
-    head base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
+    head visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
          headers: with_session_cookie(base_authority_headers, session_cookie: origin_cookie)
     host!(@core_host)
     head core_app_sign_out_completion_path(logout_challenge: challenge, ri: "jp")
@@ -125,7 +125,7 @@ class OidcRpLogoutBindingPartitionsTest < ActionDispatch::IntegrationTest
     host!(@base_host)
 
     post(
-      base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
+      visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"),
       headers: with_session_cookie(
         base_authority_headers.merge("Origin" => "https://attacker.invalid", "Sec-Fetch-Site" => "cross-site"),
         session_cookie: origin_cookie,

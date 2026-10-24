@@ -31,6 +31,7 @@ module SurfaceChrome
     "warp" => { family_label: "WARP", banner_domain: nil, footer_navigation: false },
     "palm" => { family_label: "PALM", banner_domain: nil, footer_navigation: false },
     "edit" => { family_label: "EDIT", banner_domain: nil, footer_navigation: false },
+    "visa" => { family_label: "VISA", banner_domain: nil, footer_navigation: false },
   }.freeze
 
   # The operational surfaces are mounted with a route prefix that does not match their controller
@@ -90,6 +91,8 @@ module SurfaceChrome
   # the server denies the unavailable operations regardless
   # (docs/security/org-emergency-access.md).
   def chrome_restricted_mode
+    return nil if chrome_configuration.fetch(:family) == "visa"
+
     return nil unless chrome_authentication_context.standby?
 
     scope = "layouts.shared.restricted_mode"
@@ -120,6 +123,14 @@ module SurfaceChrome
 
   def chrome_brand
     family = chrome_configuration.fetch(:family)
+    if family == "visa"
+      surface = chrome_configuration.fetch(:surface)
+      return {
+        name: ENV.fetch("BRAND_NAME"),
+        href: chrome_url("visa_#{surface}_oidc_logout_path"),
+      }
+    end
+
     destination = (%w(base warp).include?(family) && chrome_logged_in?) ? "dashboard" : "root"
     {
       name: ENV.fetch("BRAND_NAME"),
@@ -158,7 +169,7 @@ module SurfaceChrome
 
   def chrome_footer_navigation
     surface = chrome_configuration.fetch(:surface)
-    base_options = { ri: current_region_identifier, host: base_authority_host }
+    base_options = { ri: current_region_identifier, host: base_rp_host }
     links = []
 
     if chrome_logged_in?
@@ -209,7 +220,7 @@ module SurfaceChrome
     # Cookie preferences belong to Base even when the banner renders on another host.
     host =
       if chrome_configuration.fetch(:footer_navigation)
-        base_authority_host
+        base_rp_host
       else
         case surface
         when "app" then ENV.fetch("PUBLIC_BASE_SERVICE_URL")

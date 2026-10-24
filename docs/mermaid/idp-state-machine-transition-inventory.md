@@ -8,7 +8,8 @@ response strings with escaping. Refresh requires a matching stored session ident
 challenge issuance; malformed or mismatched identifiers leave the challenge and cookies unchanged.
 The six `idp-*-dbsc.mmd` diagrams note this transport guard without introducing a new state or
 transition. See [DBSC HTTP boundary](../architecture/dbsc.md#http-header-boundary),
-`test/controllers/dbsc_header_boundary_test.rb` and `test/services/dbsc/proof_input_validation_test.rb`.
+`test/controllers/dbsc_header_boundary_test.rb` and
+`test/services/dbsc/proof_input_validation_test.rb`.
 
 ## Root authentication epoch cutoff (2026-10-18)
 
@@ -122,9 +123,9 @@ terminal absorption, and the adjacent representable microsecond TTL values.
 | `SignUpTermination#call`                                                                                                                                                    | Commits state-machine refusal before returning; subsequent cleanup requires its actual terminal state.                                                                                       |
 | `SignUpContactOtpControllerSupport#advance_sign_up_after_contact_otp!`                                                                                                      | Maps expiry to `SignUpResult(:expired)` before further OTP progression.                                                                                                                      |
 | `SignUpSequenceControllerSupport#finalize_sign_up_from_checkpoint!`                                                                                                         | Checks liveness before side effects and maps expiry before handoff/session cleanup/success response.                                                                                         |
-| `IdentitySocialCeremonyFinalCommitter#commit_signup!` / `#complete_signup_flow!`                                                                                            | One flow lock encloses source/Ticket transactions; nested transitions share that instance. Base social completion handles the returned refusal before issuing a session.                     |
+| `SignUpSocialPendingClientSupport#bind_social_pending_client!` / `#finalize_social_sign_up_identity!`                                                                       | The confirmation binds the pending Client under the Flow lock; Finalization runs inside `finalize_sign_up_from_checkpoint!`, so the shared liveness check and expiry mapping apply.          |
 | `SignAppUpTelephoneRegistrationFinalizer#call`, `SignComUpTelephoneRegistrationFinalizer#call`, `EmailContactBinding#finalize_sign_up_binding!` / `#mark_sign_up_verified!` | Lock-only callers; perform no named lifecycle transition and cannot produce an expiry result. Their existing source/binding guards remain in effect.                                         |
-| `SignUpPhaseViolationEnforcer#call`, `SignUpTermination#ensure_cleanup_pending!`, `SignUpArtifactCleanup#call`, Base social `#record_social_signup_completion!`             | Lock-only inspection/retention/auxiliary writes; no named lifecycle transition inside these blocks.                                                                                          |
+| `SignUpPhaseViolationEnforcer#call`, `SignUpTermination#ensure_cleanup_pending!`, `SignUpArtifactCleanup#call`                                                              | Lock-only inspection/retention/auxiliary writes; no named lifecycle transition inside these blocks.                                                                                          |
 | `FlowBase#discard_cycle!`, `FlowWithdrawal#transition_withdrawal_to!`                                                                                                       | Retention or legacy withdrawal writer; neither raises the sign-flow expiry signal.                                                                                                           |
 | `ClientSecretPasskeyReservationIssuer#complete_sign_up!`, `ClientSecretLifecycleJob`                                                                                        | The similarly named method activates a reservation from an already completed signup; it is not a sign-flow transition writer.                                                                |
 
@@ -361,9 +362,10 @@ completed (the historical migration CHECK is absent from current checked-in stru
 public helper has a static constraint mismatch (not repaired).
 
 External boundaries: Auth records authentication evidence under the OIDC parent and advances
-guardrail/checkpoint/selector; Base commits the root login at authorization resume. SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity
-recheck, before successful session commit. Token/finalization evidence is an additional axis, not a
-backward edge after durable issuance.
+guardrail/checkpoint/selector; Base commits the root login at authorization resume.
+SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity recheck, before
+successful session commit. Token/finalization evidence is an additional axis, not a backward edge
+after durable issuance.
 
 Direct writes outside transitions include `authentication_sequence_gate.rb` (legacy
 state/step/status update) and `credential_security_transition.rb` (calls fail_sign_in! and directly
@@ -439,9 +441,10 @@ completed (the historical migration CHECK is absent from current checked-in stru
 public helper has a static constraint mismatch (not repaired).
 
 External boundaries: Auth records authentication evidence under the OIDC parent and advances
-guardrail/checkpoint/selector; Base commits the root login at authorization resume. SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity
-recheck, before successful session commit. Token/finalization evidence is an additional axis, not a
-backward edge after durable issuance.
+guardrail/checkpoint/selector; Base commits the root login at authorization resume.
+SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity recheck, before
+successful session commit. Token/finalization evidence is an additional axis, not a backward edge
+after durable issuance.
 
 Direct writes outside transitions include `authentication_sequence_gate.rb` (legacy
 state/step/status update) and `credential_security_transition.rb` (calls fail_sign_in! and directly
@@ -517,9 +520,10 @@ completed (the historical migration CHECK is absent from current checked-in stru
 public helper has a static constraint mismatch (not repaired).
 
 External boundaries: Auth records authentication evidence under the OIDC parent and advances
-guardrail/checkpoint/selector; Base commits the root login at authorization resume. SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity
-recheck, before successful session commit. Token/finalization evidence is an additional axis, not a
-backward edge after durable issuance.
+guardrail/checkpoint/selector; Base commits the root login at authorization resume.
+SESSION_ISSUANCE_PENDING → SESSION_LIMIT_PENDING is the explicit final capacity recheck, before
+successful session commit. Token/finalization evidence is an additional axis, not a backward edge
+after durable issuance.
 
 Direct writes outside transitions include `authentication_sequence_gate.rb` (legacy
 state/step/status update) and `credential_security_transition.rb` (calls fail_sign_in! and directly
@@ -673,11 +677,11 @@ cleanup owner reaches the purge boundary.
 
 ## idp-visitor-sign-up
 
-The email entry POST preserves its previous durable locator while resetting the session phase.
-After Turnstile, identifier and explicit consent validation, `supersede_active_sign_up_flow!`
-uses the existing halt/cleanup operation before allocating
-replacement artifacts. The HTTP restart regression verifies distinct flow IDs, an absorbing HALTED
-predecessor, and refusal of its stale signed screen without changing the replacement flow.
+The email entry POST preserves its previous durable locator while resetting the session phase. After
+Turnstile, identifier and explicit consent validation, `supersede_active_sign_up_flow!` uses the
+existing halt/cleanup operation before allocating replacement artifacts. The HTTP restart regression
+verifies distinct flow IDs, an absorbing HALTED predecessor, and refusal of its stale signed screen
+without changing the replacement flow.
 
 The binding-only recovery does not restore COM's original recovery-passcode distribution
 destination. A stricter real HTTP fault test preserves all ten credentials and the original reveal
@@ -945,25 +949,25 @@ Sources: `app/services/sign_up_artifact_cleanup.rb`, `app/services/sign_up_termi
 Tests read: `test/services/sign_up_artifact_cleanup_test.rb`,
 `test/services/sign_up_termination_idempotence_test.rb`.
 
-| Transition ID                   | Mutation kind         | From    | Event / Trigger                           | To        | Guard                                                     | Side effect                                    | Source file                              | Confidence |
-| ------------------------------- | --------------------- | ------- | ----------------------------------------- | --------- | --------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- | ---------- |
-| idp-client-sign-up-cleanup:T001 | DOCUMENTED_TRANSITION | IDLE    | SignUpTermination terminal retention      | PENDING   | Terminal sign-up reached                                  | Schedule retention and cleanup                 | app/services/sign_up_termination.rb      | CONFIRMED  |
-| idp-client-sign-up-cleanup:T002 | DOCUMENTED_TRANSITION | FAILED  | SignUpTermination replay / cleanup worker | PENDING   | Not completed; worker attempts <10                        | Increment attempts; clear error                | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-client-sign-up-cleanup:T003 | DOCUMENTED_TRANSITION | PENDING | cleanup successful                        | COMPLETED | Terminal Flow; principal locked and still unfinished; atomic principal writes                            | cleanup_completed_at; clear error              | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-client-sign-up-cleanup:T004 | DOCUMENTED_TRANSITION | PENDING | cleanup exception                         | FAILED    | ActiveRecordError or ArgumentError                        | bounded error; attempted_at                    | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-client-sign-up-cleanup:T005 | DOCUMENTED_TRANSITION | PENDING | cleanup attempt                           | PENDING   | Not completed                                             | attempt count +1                               | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-client-sign-up-cleanup:T006 | OUT_OF_BAND           | NOTHING | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-client-sign-up-cleanup:T007 | OUT_OF_BAND           | IDLE    | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-client-sign-up-cleanup:T008 | OUT_OF_BAND           | FAILED  | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| Transition ID                   | Mutation kind         | From    | Event / Trigger                           | To        | Guard                                                                         | Side effect                                    | Source file                              | Confidence |
+| ------------------------------- | --------------------- | ------- | ----------------------------------------- | --------- | ----------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- | ---------- |
+| idp-client-sign-up-cleanup:T001 | DOCUMENTED_TRANSITION | IDLE    | SignUpTermination terminal retention      | PENDING   | Terminal sign-up reached                                                      | Schedule retention and cleanup                 | app/services/sign_up_termination.rb      | CONFIRMED  |
+| idp-client-sign-up-cleanup:T002 | DOCUMENTED_TRANSITION | FAILED  | SignUpTermination replay / cleanup worker | PENDING   | Not completed; worker attempts <10                                            | Increment attempts; clear error                | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T003 | DOCUMENTED_TRANSITION | PENDING | cleanup successful                        | COMPLETED | Terminal Flow; principal locked and still unfinished; atomic principal writes | cleanup_completed_at; clear error              | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T004 | DOCUMENTED_TRANSITION | PENDING | cleanup exception                         | FAILED    | ActiveRecordError or ArgumentError                                            | bounded error; attempted_at                    | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T005 | DOCUMENTED_TRANSITION | PENDING | cleanup attempt                           | PENDING   | Not completed                                                                 | attempt count +1                               | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T006 | OUT_OF_BAND           | NOTHING | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T007 | OUT_OF_BAND           | IDLE    | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-client-sign-up-cleanup:T008 | OUT_OF_BAND           | FAILED  | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
 
 Cleanup is an independent status_id axis on the sign-up fact row, not duplicate main flow state.
-NOTHING has no identified setter/caller. Public cleanup requires a terminal main Flow and accepts any not-completed cleanup state,
-including IDLE/NOTHING if called directly; ordinary termination enqueues PENDING. Worker uses SKIP
-LOCKED, retries PENDING/FAILED only for CANCELLED/EXPIRED/FAILED main flows and stops at 10
-attempts. FAILED is retryable until that cap, then operationally stranded without a new terminal id.
-Cross-database dependent updates are not atomic with the ticket DB; tests exercise failures and
-retry. No cancellation/expiry lifecycle of cleanup itself is implemented. Direct status writes are
-the implementation, not routed through the main SignUpStateMachine.
+NOTHING has no identified setter/caller. Public cleanup requires a terminal main Flow and accepts
+any not-completed cleanup state, including IDLE/NOTHING if called directly; ordinary termination
+enqueues PENDING. Worker uses SKIP LOCKED, retries PENDING/FAILED only for CANCELLED/EXPIRED/FAILED
+main flows and stops at 10 attempts. FAILED is retryable until that cap, then operationally stranded
+without a new terminal id. Cross-database dependent updates are not atomic with the ticket DB; tests
+exercise failures and retry. No cancellation/expiry lifecycle of cleanup itself is implemented.
+Direct status writes are the implementation, not routed through the main SignUpStateMachine.
 
 The principal decision is re-read under the Zenith writer row lock after the Flow lock. Contact,
 Passkey, their audit outbox facts and actor retention commit in one principal transaction; a failure
@@ -981,25 +985,25 @@ Sources: `app/services/sign_up_artifact_cleanup.rb`, `app/services/sign_up_termi
 Tests read: `test/services/sign_up_artifact_cleanup_test.rb`,
 `test/services/sign_up_termination_idempotence_test.rb`.
 
-| Transition ID                    | Mutation kind         | From    | Event / Trigger                           | To        | Guard                                                     | Side effect                                    | Source file                              | Confidence |
-| -------------------------------- | --------------------- | ------- | ----------------------------------------- | --------- | --------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- | ---------- |
-| idp-visitor-sign-up-cleanup:T001 | DOCUMENTED_TRANSITION | IDLE    | SignUpTermination terminal retention      | PENDING   | Terminal sign-up reached                                  | Schedule retention and cleanup                 | app/services/sign_up_termination.rb      | CONFIRMED  |
-| idp-visitor-sign-up-cleanup:T002 | DOCUMENTED_TRANSITION | FAILED  | SignUpTermination replay / cleanup worker | PENDING   | Not completed; worker attempts <10                        | Increment attempts; clear error                | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-visitor-sign-up-cleanup:T003 | DOCUMENTED_TRANSITION | PENDING | cleanup successful                        | COMPLETED | Terminal Flow; principal locked and still unfinished; atomic principal writes                            | cleanup_completed_at; clear error              | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-visitor-sign-up-cleanup:T004 | DOCUMENTED_TRANSITION | PENDING | cleanup exception                         | FAILED    | ActiveRecordError or ArgumentError                        | bounded error; attempted_at                    | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-visitor-sign-up-cleanup:T005 | DOCUMENTED_TRANSITION | PENDING | cleanup attempt                           | PENDING   | Not completed                                             | attempt count +1                               | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-visitor-sign-up-cleanup:T006 | OUT_OF_BAND           | NOTHING | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-visitor-sign-up-cleanup:T007 | OUT_OF_BAND           | IDLE    | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
-| idp-visitor-sign-up-cleanup:T008 | OUT_OF_BAND           | FAILED  | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| Transition ID                    | Mutation kind         | From    | Event / Trigger                           | To        | Guard                                                                         | Side effect                                    | Source file                              | Confidence |
+| -------------------------------- | --------------------- | ------- | ----------------------------------------- | --------- | ----------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- | ---------- |
+| idp-visitor-sign-up-cleanup:T001 | DOCUMENTED_TRANSITION | IDLE    | SignUpTermination terminal retention      | PENDING   | Terminal sign-up reached                                                      | Schedule retention and cleanup                 | app/services/sign_up_termination.rb      | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T002 | DOCUMENTED_TRANSITION | FAILED  | SignUpTermination replay / cleanup worker | PENDING   | Not completed; worker attempts <10                                            | Increment attempts; clear error                | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T003 | DOCUMENTED_TRANSITION | PENDING | cleanup successful                        | COMPLETED | Terminal Flow; principal locked and still unfinished; atomic principal writes | cleanup_completed_at; clear error              | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T004 | DOCUMENTED_TRANSITION | PENDING | cleanup exception                         | FAILED    | ActiveRecordError or ArgumentError                                            | bounded error; attempted_at                    | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T005 | DOCUMENTED_TRANSITION | PENDING | cleanup attempt                           | PENDING   | Not completed                                                                 | attempt count +1                               | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T006 | OUT_OF_BAND           | NOTHING | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T007 | OUT_OF_BAND           | IDLE    | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
+| idp-visitor-sign-up-cleanup:T008 | OUT_OF_BAND           | FAILED  | SignUpArtifactCleanup public call         | PENDING   | Terminal main Flow; cleanup not completed; Flow lock                          | Increment attempt count; record attempted time | app/services/sign_up_artifact_cleanup.rb | CONFIRMED  |
 
 Cleanup is an independent status_id axis on the sign-up fact row, not duplicate main flow state.
-NOTHING has no identified setter/caller. Public cleanup requires a terminal main Flow and accepts any not-completed cleanup state,
-including IDLE/NOTHING if called directly; ordinary termination enqueues PENDING. Worker uses SKIP
-LOCKED, retries PENDING/FAILED only for CANCELLED/EXPIRED/FAILED main flows and stops at 10
-attempts. FAILED is retryable until that cap, then operationally stranded without a new terminal id.
-Cross-database dependent updates are not atomic with the ticket DB; tests exercise failures and
-retry. No cancellation/expiry lifecycle of cleanup itself is implemented. Direct status writes are
-the implementation, not routed through the main SignUpStateMachine.
+NOTHING has no identified setter/caller. Public cleanup requires a terminal main Flow and accepts
+any not-completed cleanup state, including IDLE/NOTHING if called directly; ordinary termination
+enqueues PENDING. Worker uses SKIP LOCKED, retries PENDING/FAILED only for CANCELLED/EXPIRED/FAILED
+main flows and stops at 10 attempts. FAILED is retryable until that cap, then operationally stranded
+without a new terminal id. Cross-database dependent updates are not atomic with the ticket DB; tests
+exercise failures and retry. No cancellation/expiry lifecycle of cleanup itself is implemented.
+Direct status writes are the implementation, not routed through the main SignUpStateMachine.
 
 The principal decision is re-read under the Zenith writer row lock after the Flow lock. Contact,
 Passkey, their audit outbox facts and actor retention commit in one principal transaction; a failure
@@ -1510,16 +1514,14 @@ Implementation: `SocialCeremonyTransactionable`. Storage: `client_social_ceremon
 
 Sources: `app/models/client_social_ceremony_transaction.rb`,
 `app/models/concerns/social_ceremony_transactionable.rb`,
-`app/operations/identity_social_ceremony_final_committer.rb`,
 `app/controllers/auth/app/social/link_completions_controller.rb`.
 
-Tests read: `test/models/concerns/social_ceremony_transactionable_test.rb`, UNKNOWN dedicated social
-final-committer test (path not present).
+Tests: `test/models/concerns/social_ceremony_transactionable_test.rb`.
 
-| Transition ID                   | Mutation kind         | From    | Event / Trigger                        | To                         | Guard                                                 | Side effect                                                   | Source file                                                    | Confidence |
-| ------------------------------- | --------------------- | ------- | -------------------------------------- | -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- | ---------- |
-| idp-client-social-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! / Base final committer | consumed                   | unconsumed; TTL; row lock; unique result_jti          | consumed_at and result evidence                               | app/models/concerns/social_ceremony_transactionable.rb         | CONFIRMED  |
-| idp-client-social-ceremony:T002 | DOCUMENTED_TRANSITION | pending | app link completion                    | pending with expired grant | pending; unconsumed; TTL; candidate and session match | expires_at set to current DB time after candidate consumption | app/controllers/auth/app/social/link_completions_controller.rb | CONFIRMED  |
+| Transition ID                   | Mutation kind         | From    | Event / Trigger                          | To                         | Guard                                                 | Side effect                                                   | Source file                                                    | Confidence |
+| ------------------------------- | --------------------- | ------- | ---------------------------------------- | -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- | ---------- |
+| idp-client-social-ceremony:T001 | DOCUMENTED_TRANSITION | pending | consume_result! (no writer since WU-05g) | consumed                   | unconsumed; TTL; row lock; unique result_jti          | consumed_at and result evidence                               | app/models/concerns/social_ceremony_transactionable.rb         | CONFIRMED  |
+| idp-client-social-ceremony:T002 | DOCUMENTED_TRANSITION | pending | app link completion                      | pending with expired grant | pending; unconsumed; TTL; candidate and session match | expires_at set to current DB time after candidate consumption | app/controllers/auth/app/social/link_completions_controller.rb | CONFIRMED  |
 
 These concrete machines exist only in app/client. pending default; consumed terminal; TTL 10 minutes
 is predicate-only and background purge retires rows after retention. No canceled/failed state or
@@ -1816,15 +1818,15 @@ Sources: `app/models/concerns/sign_in_flow_authentication_evidence.rb`,
 
 Tests read: `test/models/sign_in_flow_authentication_evidence_test.rb`.
 
-| Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Transition ID                         | Mutation kind         | From  | Event / Trigger                 | To       | Guard                                                          | Side effect               | Source                                                      | Status    |
+| ------------------------------------- | --------------------- | ----- | ------------------------------- | -------- | -------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------- | --------- |
 | idp-client-sign-in-flow-evidence:T001 | DOCUMENTED_TRANSITION | empty | record_authentication_evidence! | evidence | PRIMARY/MFA_PENDING; principal; expiry; supported method; lock | method/event time/context | app/models/concerns/sign_in_flow_authentication_evidence.rb | CONFIRMED |
 
 A subordinate fact on sign-in rows, not a status reference. The Local result-delivery transitions
 (`prepare_local_result_delivery!`, Base Local completion) were removed with the entry-less Local
-Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and
-`result_expires_at` on this table have no writer since then. Under the OIDC parent Auth records
-the evidence and Base issues the session at authorization resume.
+Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and `result_expires_at`
+on this table have no writer since then. Under the OIDC parent Auth records the evidence and Base
+issues the session at authorization resume.
 
 ## idp-visitor-sign-in-flow-evidence
 
@@ -1837,15 +1839,15 @@ Sources: `app/models/concerns/sign_in_flow_authentication_evidence.rb`,
 
 Tests read: `test/models/sign_in_flow_authentication_evidence_test.rb`.
 
-| Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Transition ID                          | Mutation kind         | From  | Event / Trigger                 | To       | Guard                                                          | Side effect               | Source                                                      | Status    |
+| -------------------------------------- | --------------------- | ----- | ------------------------------- | -------- | -------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------- | --------- |
 | idp-visitor-sign-in-flow-evidence:T001 | DOCUMENTED_TRANSITION | empty | record_authentication_evidence! | evidence | PRIMARY/MFA_PENDING; principal; expiry; supported method; lock | method/event time/context | app/models/concerns/sign_in_flow_authentication_evidence.rb | CONFIRMED |
 
 A subordinate fact on sign-in rows, not a status reference. The Local result-delivery transitions
 (`prepare_local_result_delivery!`, Base Local completion) were removed with the entry-less Local
-Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and
-`result_expires_at` on this table have no writer since then. Under the OIDC parent Auth records
-the evidence and Base issues the session at authorization resume.
+Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and `result_expires_at`
+on this table have no writer since then. Under the OIDC parent Auth records the evidence and Base
+issues the session at authorization resume.
 
 ## idp-operator-sign-in-flow-evidence
 
@@ -1858,15 +1860,15 @@ Sources: `app/models/concerns/sign_in_flow_authentication_evidence.rb`,
 
 Tests read: `test/models/sign_in_flow_authentication_evidence_test.rb`.
 
-| Transition ID | Mutation kind | From | Event / Trigger | To | Guard | Side effect | Source | Status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Transition ID                           | Mutation kind         | From  | Event / Trigger                 | To       | Guard                                                          | Side effect               | Source                                                      | Status    |
+| --------------------------------------- | --------------------- | ----- | ------------------------------- | -------- | -------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------- | --------- |
 | idp-operator-sign-in-flow-evidence:T001 | DOCUMENTED_TRANSITION | empty | record_authentication_evidence! | evidence | PRIMARY/MFA_PENDING; principal; expiry; supported method; lock | method/event time/context | app/models/concerns/sign_in_flow_authentication_evidence.rb | CONFIRMED |
 
 A subordinate fact on sign-in rows, not a status reference. The Local result-delivery transitions
 (`prepare_local_result_delivery!`, Base Local completion) were removed with the entry-less Local
-Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and
-`result_expires_at` on this table have no writer since then. Under the OIDC parent Auth records
-the evidence and Base issues the session at authorization resume.
+Sign-in Flow (D-60, WU-01, 2026-10-23); `result_generation`, `result_digest` and `result_expires_at`
+on this table have no writer since then. Under the OIDC parent Auth records the evidence and Base
+issues the session at authorization resume.
 
 ## idp-client-token
 
@@ -3692,10 +3694,10 @@ Tests read: `test/models/operator_lifecycle_request_test.rb`,
 `test/services/org/operator_lifecycle/execute_test.rb`,
 `test/services/org_operator_lifecycle_reject_test.rb`.
 
-| Transition ID                        | Mutation kind         | From     | Event / Trigger | To       | Guard                                                             | Side effect                                                                                  | Source file                                    | Confidence |
-| ------------------------------------ | --------------------- | -------- | --------------- | -------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
-| idp-operator-operator-lifecycle:T001 | DOCUMENTED_TRANSITION | pending  | approve         | approved | Pending; actor differs requester                                  | Approver and timestamp                                                                       | app/services/org_operator_lifecycle_approve.rb | CONFIRMED  |
-| idp-operator-operator-lifecycle:T002 | DOCUMENTED_TRANSITION | pending  | reject          | rejected | Pending; actor differs requester                                  | Rejector/time/reason                                                                         | app/services/org_operator_lifecycle_reject.rb  | CONFIRMED  |
+| Transition ID                        | Mutation kind         | From     | Event / Trigger | To       | Guard                                                             | Side effect                                                                                                                | Source file                                    | Confidence |
+| ------------------------------------ | --------------------- | -------- | --------------- | -------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------- |
+| idp-operator-operator-lifecycle:T001 | DOCUMENTED_TRANSITION | pending  | approve         | approved | Pending; actor differs requester                                  | Approver and timestamp                                                                                                     | app/services/org_operator_lifecycle_approve.rb | CONFIRMED  |
+| idp-operator-operator-lifecycle:T002 | DOCUMENTED_TRANSITION | pending  | reject          | rejected | Pending; actor differs requester                                  | Rejector/time/reason                                                                                                       | app/services/org_operator_lifecycle_reject.rb  | CONFIRMED  |
 | idp-operator-operator-lifecycle:T003 | DOCUMENTED_TRANSITION | approved | execute         | executed | Approved; actor differs requester; last active operator preserved | JOIN refused pending Bureau migration; otherwise withdraw/suspend/terminate/restore actor; revoke sessions / Entra mapping | app/services/org_operator_lifecycle_execute.rb | CONFIRMED  |
 
 New JOIN requests and issuance from approved legacy JOIN requests are refused pending Bureau
@@ -5070,17 +5072,17 @@ the `shared` transitional role does not consult it.
 ## idp-{client,visitor,operator}-security-mode (WU-30, 2026-10-23)
 
 Implementation: `SecurityModeConfigurable`, `{Client,Visitor,Operator}SecurityMode` (rows 3 and 7
-created by migration `20261023140001`). Storage: `{clients,visitors,operators}.security_mode_id`
-NOT NULL, FK, CHECK on the mode table `id IN (3, 7)`. Any other value permits neither sign-in nor
+created by migration `20261023140001`). Storage: `{clients,visitors,operators}.security_mode_id` NOT
+NULL, FK, CHECK on the mode table `id IN (3, 7)`. Any other value permits neither sign-in nor
 authorization (`AuthenticationBase#pending_sign_in_result_after_primary!`).
 
-| Transition ID | From | Event | To | Guard | Side effect | Source |
-| --- | --- | --- | --- | --- | --- | --- |
-| idp-client-security-mode:T001 | — | sign-up (email, telephone, social) | NORMAL | creation sets the mode explicitly | — | `app/operations/*sign_up_candidate_creator.rb`, `social_auth_signup_finalizer.rb` |
-| idp-client-security-mode:T002 | NORMAL | owner update | ADVANCED | two active Passkeys counted under the client lock | `CredentialSecurityTransition` `security_mode_advanced` | `app/controllers/base/app/identity/mfa/challenges_controller.rb` |
-| idp-client-security-mode:T003 | ADVANCED | owner update | NORMAL | settings Step-Up | every session revoked (`security_mode_normal`) | same |
-| idp-visitor-security-mode:T001 | — | sign-up | NORMAL | creation sets the mode explicitly | — | `app/operations/*sign_up_candidate_creator.rb` |
-| idp-operator-security-mode:T001 | — | migration backfill | ADVANCED | — | — | `db/org_zenith_migrate/20261023140001_backfill_operator_security_mode.rb` |
+| Transition ID                   | From     | Event                              | To       | Guard                                             | Side effect                                             | Source                                                                            |
+| ------------------------------- | -------- | ---------------------------------- | -------- | ------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| idp-client-security-mode:T001   | —        | sign-up (email, telephone, social) | NORMAL   | creation sets the mode explicitly                 | —                                                       | `app/operations/*sign_up_candidate_creator.rb`, `social_auth_signup_finalizer.rb` |
+| idp-client-security-mode:T002   | NORMAL   | owner update                       | ADVANCED | two active Passkeys counted under the client lock | `CredentialSecurityTransition` `security_mode_advanced` | `app/controllers/base/app/identity/mfa/challenges_controller.rb`                  |
+| idp-client-security-mode:T003   | ADVANCED | owner update                       | NORMAL   | settings Step-Up                                  | every session revoked (`security_mode_normal`)          | same                                                                              |
+| idp-visitor-security-mode:T001  | —        | sign-up                            | NORMAL   | creation sets the mode explicitly                 | —                                                       | `app/operations/*sign_up_candidate_creator.rb`                                    |
+| idp-operator-security-mode:T001 | —        | migration backfill                 | ADVANCED | —                                                 | —                                                       | `db/org_zenith_migrate/20261023140001_backfill_operator_security_mode.rb`         |
 
 COM has no owner update page yet; ORG never leaves ADVANCED. An ADVANCED actor may not delete a
 Passkey below two (`AuthMethodGuard.can_remove_passkey?`); an ORG Operator with fewer than two is

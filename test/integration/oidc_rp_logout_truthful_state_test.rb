@@ -11,7 +11,7 @@ class OidcRpLogoutTruthfulStateTest < ActionDispatch::IntegrationTest
 
   setup do
     @core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
-    @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @base_host = visa_host_for_test_surface(:app)
     https!
     host! @core_host
     @user = clients(:one)

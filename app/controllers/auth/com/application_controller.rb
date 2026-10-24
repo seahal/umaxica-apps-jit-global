@@ -24,6 +24,9 @@ module Auth
       include ::VerificationVisitor
       include ActionPolicy::Controller
       include ::AuthCeremonyContext
+      include ::AuthAdmissionCurfewGate
+      include ::SignInPathRefusal
+      include ::SignEntrySentryEnforcement
       include SignComRouteAliasHelper
       include ::ActorSupport
       include ::Finisher
@@ -53,7 +56,7 @@ module Auth
       helper_method :current_actor, :current_account, :current_session_public_id,
                     :signed_pt_param, :current_visitor, :logged_in?, :active_visitor?, :logged_in_visitor?,
                     :current_region_identifier
-      helper_method :acme_authority_host, :base_authority_host
+      helper_method :acme_authority_host, :base_rp_host
 
       helper ::Auth::Com::ApplicationHelper
       # Surface-wide default web request limit (defense-in-depth baseline).
@@ -73,6 +76,8 @@ module Auth
       before_action :reset_flash
       before_action :set_preferences_cookie
       before_action :resolve_param_context
+      before_action :enforce_admission_curfew!
+      before_action :enforce_sign_entry_sentry!
       before_action :set_region
       before_action :transparent_refresh_access_token, unless: -> { request.format.json? }
       before_action :set_current_actor
@@ -202,14 +207,27 @@ module Auth
         )
       end
 
-      def base_authority_host
+      def base_rp_host
         ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+      end
+
+      def visa_authority_host
+        Rails.configuration.x.boot_config.fetch(:hosts).visa_corporate.host
       end
 
       def oidc_authorization_after_login_path
         auth_com_sign_oidc_handoff_path(
           ri: current_region_identifier,
           protocol: URI.parse(OidcIssuer.absolute_url(auth_service_host)).scheme,
+        )
+      end
+
+      # WU-06/WU-13: the post-curfew exit uses Visa's continuation resource. The Base RP
+      # browser binding is verified there before the registered redirect receives access_denied.
+      def curfew_exit_url(cancellation_ref:, transaction_ref:)
+        visa_com_oidc_cancellation_url(
+          cancellation_ref:, transaction_ref:, ri: params[:ri],
+          host: visa_authority_host, protocol: "https",
         )
       end
     end

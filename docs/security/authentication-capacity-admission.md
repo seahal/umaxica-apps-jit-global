@@ -11,12 +11,12 @@ admissions. They are not capacity permits and must not be weakened or repurposed
 
 ## Existing entry boundary
 
-Base creates the OIDC or local admission for the routed surface. Auth consumes it through
-`AuthCeremonyAdmission` and `AuthCeremonyContext`:
+Visa creates the OIDC admission for the routed surface. Base remains the browser RP that starts the
+OIDC request; Auth consumes the admission through `AuthCeremonyAdmission` and `AuthCeremonyContext`:
 
-- `app/controllers/base/app/oauth/authorizations_controller.rb`
-- `app/controllers/base/com/oauth/authorizations_controller.rb`
-- `app/controllers/base/org/oauth/authorizations_controller.rb`
+- `app/controllers/visa/app/oauth/authorizations_controller.rb`
+- `app/controllers/visa/com/oauth/authorizations_controller.rb`
+- `app/controllers/visa/org/oauth/authorizations_controller.rb`
 - `app/controllers/concerns/auth_ceremony_admission.rb`
 - `app/services/base_auth_admission_coordinator.rb`
 
@@ -27,13 +27,13 @@ before entering the surface-local Sign In, Sign Up, or verification state machin
 
 The following existing controls remain separate:
 
-| Control                        | Current responsibility                                                                | Capacity meaning                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `AuthCeremonyAdmission`        | Redeems the Base-issued opaque admission and binds Auth ceremony continuity           | None; it proves a valid admission, not available CPU or queue capacity         |
-| `BaseAuthAdmissionCoordinator` | Creates, consumes, expires, and binds Base/Auth admission and result references       | None; it protects transaction continuity and replay                            |
-| `SignUpSuspensionGuard`        | Stops a surface's registration entry when the registered suspension switch is enabled | Registration availability only; it is not a Sign In or execution limiter       |
-| `FqdnAvailabilityGate`         | Enforces the routed surface/FQDN availability registry                                | Served-surface availability only; it is not a capacity counter                 |
-| Turnstile and rate limits      | Abuse controls at selected credential and registration requests                       | They limit abuse dimensions but do not provide a bounded expensive-work budget |
+| Control                        | Current responsibility                                                                                                 | Capacity meaning                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `AuthCeremonyAdmission`        | Redeems the Visa-issued opaque admission and binds Auth ceremony continuity                                            | None; it proves a valid admission, not available CPU or queue capacity             |
+| `BaseAuthAdmissionCoordinator` | Creates, consumes, expires, and binds Visa/Auth admission and result references                                        | None; it protects transaction continuity and replay                                |
+| `SignEntrySentryResolver`      | Stops new Sign In and Sign Up entry and continuation when the surface/flow availability flag is not explicitly enabled | Sign-entry availability only; it is not a credential execution or capacity limiter |
+| `FqdnAvailabilityGate`         | Enforces the routed surface/FQDN availability registry                                                                 | Served-surface availability only; it is not a capacity counter                     |
+| Turnstile and rate limits      | Abuse controls at selected credential and registration requests                                                        | They limit abuse dimensions but do not provide a bounded expensive-work budget     |
 
 ## Entry and execution map
 

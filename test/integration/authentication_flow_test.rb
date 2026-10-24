@@ -90,6 +90,9 @@ class AuthenticationFlowTest < ActionDispatch::IntegrationTest
                   ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                   ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                   ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                  ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                  ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                  ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                 }.fetch(fv5043)
               end
             fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(

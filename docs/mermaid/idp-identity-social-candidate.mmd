@@ -11,3 +11,8 @@ stateDiagram-v2
     available --> expired: clock reaches deadline
     consumed --> [*]
     expired --> [*]
+    note right of available
+        Auth's shared Finalization consumes the sign-up candidate once,
+        under the Flow lock, after re-checking it against the Flow's
+        evidence and its Admission; expires_at is at most the curfew.
+    end note

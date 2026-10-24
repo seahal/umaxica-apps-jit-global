@@ -33,7 +33,7 @@ module Auth
           end
         end
 
-        def auth_ceremony_admission_action_url = auth_org_ceremony_bindings_path
+        def auth_ceremony_admission_action_url(**query) = auth_org_ceremony_bindings_path(**query)
 
         def auth_ceremony_admitted_action_url = auth_org_verification_setup_path(ri: params[:ri])
 

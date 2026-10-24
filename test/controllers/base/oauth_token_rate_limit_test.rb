@@ -33,22 +33,22 @@ class BaseOauthTokenRateLimitTest < ActionDispatch::IntegrationTest
 
   test "base app oauth token endpoint rate limits repeated requests" do
     assert_token_endpoint_rate_limit(
-      host: ENV.fetch("PUBLIC_BASE_SERVICE_URL", "base.app.localhost"),
-      url_helper: ->(host:) { base_app_oauth_token_url(host: host) },
+      host: visa_host_for_test_surface(:app),
+      url_helper: ->(host:) { visa_app_oauth_token_url(host: host) },
     )
   end
 
   test "base com oauth token endpoint rate limits repeated requests" do
     assert_token_endpoint_rate_limit(
-      host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL", "base.com.localhost"),
-      url_helper: ->(host:) { base_com_oauth_token_url(host: host) },
+      host: visa_host_for_test_surface(:com),
+      url_helper: ->(host:) { visa_com_oauth_token_url(host: host) },
     )
   end
 
   test "base org oauth token endpoint rate limits repeated requests" do
     assert_token_endpoint_rate_limit(
-      host: ENV.fetch("PUBLIC_BASE_STAFF_URL", "base.org.localhost"),
-      url_helper: ->(host:) { base_org_oauth_token_url(host: host) },
+      host: visa_host_for_test_surface(:org),
+      url_helper: ->(host:) { visa_org_oauth_token_url(host: host) },
     )
   end
 

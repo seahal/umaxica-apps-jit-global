@@ -172,7 +172,7 @@ module Auth
               label: t("sign.app.settings.show.back"),
               href: (@step_up_ceremony_transaction.purpose == "bootstrap") ?
                 new_auth_app_verification_setup_path(ri: params[:ri]) :
-                base_app_identity_url(ri: params[:ri], host: base_authority_host, protocol: "https"),
+                base_app_identity_url(ri: params[:ri], host: base_rp_host, protocol: "https"),
             },
             # Without an active enrolment the page offers only the explicit start. With one, the QR
             # code carries its secret; the encrypted candidate remains on the ticket writer.

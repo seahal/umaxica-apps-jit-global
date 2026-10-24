@@ -11,7 +11,7 @@ module Auth
       def show
         authorize!(current_client, to: :show?)
         redirect_to_jump_url(
-          base_app_identity_url(ri: params[:ri], host: base_authority_host, protocol: "https"),
+          base_app_identity_url(ri: params[:ri], host: base_rp_host, protocol: "https"),
           status: :see_other,
         )
       end

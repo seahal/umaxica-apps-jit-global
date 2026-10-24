@@ -103,6 +103,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5648)
                     end
                   fv5618 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -369,6 +372,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5581)
                     end
                   fv5551 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -606,6 +612,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5514)
                     end
                   fv5484 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -846,6 +855,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5447)
                     end
                   fv5417 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1085,6 +1097,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5380)
                     end
                   fv5350 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1325,6 +1340,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5313)
                     end
                   fv5283 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1564,6 +1582,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5246)
                     end
                   fv5216 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1801,6 +1822,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5179)
                     end
                   fv5149 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -2050,6 +2074,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5112)
                     end
                   fv5082 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -2290,6 +2317,9 @@ module Auth
                         ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                         ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                         ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                        ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                        ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                        ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                       }.fetch(fv5045)
                     end
                   fv5015 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(

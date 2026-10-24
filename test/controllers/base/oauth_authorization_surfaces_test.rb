@@ -23,45 +23,45 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   setup { Rails.configuration.x.rate_limit.fetch(:store).clear }
 
   test "com authorize returns a scope that omits openid to the RP as invalid_request" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     params = authorize_params(realm: "visitor").merge(scope: "profile")
 
-    get base_com_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
+    get visa_com_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
     assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri])
   end
 
   test "org authorize returns a scope that omits openid to the RP as invalid_request" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     params = authorize_params(realm: "operator").merge(scope: "profile")
 
-    get base_org_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
+    get visa_org_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
     assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri])
   end
 
   test "com authorize returns a request with no state to the RP without a state" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     params = authorize_params(realm: "visitor").except(:state)
 
-    get base_com_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
+    get visa_com_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
     assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: nil)
   end
 
   test "org authorize returns a request with no state to the RP without a state" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     params = authorize_params(realm: "operator").except(:state)
 
-    get base_org_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
+    get visa_org_oauth_authorization_url(host: host, **params), headers: { "Host" => host }
 
     assert_oidc_error_redirect(error: "invalid_request", redirect_uri: params[:redirect_uri], state: nil)
   end
 
   test "com authorize rejects an unregistered client" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
 
-    get base_com_oauth_authorization_url(
+    get visa_com_oauth_authorization_url(
       host: host, **authorize_params(realm: "visitor").merge(client_id: "not-registered"),
     ), headers: { "Host" => host }
 
@@ -70,9 +70,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "org authorize rejects an unregistered client" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
 
-    get base_org_oauth_authorization_url(
+    get visa_org_oauth_authorization_url(
       host: host, **authorize_params(realm: "operator").merge(client_id: "not-registered"),
     ), headers: { "Host" => host }
 
@@ -83,14 +83,14 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   test "com and org authorize return login_required for prompt none without a session" do
     [
       {
-        host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"),
-        route: :base_com_oauth_authorization_url,
+        host: visa_host_for_test_surface(:com),
+        route: :visa_com_oauth_authorization_url,
         realm: "visitor",
         transaction_class: VisitorOidcAuthorizationTransaction,
       },
       {
-        host: ENV.fetch("PUBLIC_BASE_STAFF_URL"),
-        route: :base_org_oauth_authorization_url,
+        host: visa_host_for_test_surface(:org),
+        route: :visa_org_oauth_authorization_url,
         realm: "operator",
         transaction_class: OperatorOidcAuthorizationTransaction,
       },
@@ -114,9 +114,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "com authorize rejects a redirect_uri that is not registered for the corporate realm" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
 
-    get base_com_oauth_authorization_url(
+    get visa_com_oauth_authorization_url(
       host: host,
       **authorize_params(realm: "visitor").merge(redirect_uri: "https://attacker.example/callback"),
     ), headers: { "Host" => host }
@@ -129,7 +129,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   # 8192 bytes per query, refused with 400 before any transaction is allocated. Values use only
   # unreserved characters so the byte counts are exact on the wire.
   test "authorize accepts a 2048-byte parameter and refuses 2049 bytes before allocating state" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
     base = authorize_params(realm: "client").except(:state).to_query
 
     { 2047 => true, 2048 => true, 2049 => false }.each do |bytes, accepted|
@@ -148,7 +148,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "authorize accepts an 8192-byte query and refuses 8193 bytes before allocating state" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
     padding = (1..3).map { |index| "pad#{index}=#{"b" * 2000}" }.join("&")
     base = "#{authorize_params(realm: "client").to_query}&#{padding}&pad4="
 
@@ -170,7 +170,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "authorize refuses array and hash parameter values before allocating state" do
-    host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    host = visa_host_for_test_surface(:app)
     base = authorize_params(realm: "client").except(:state).to_query
 
     ["state[]=a", "state[k]=a"].each do |shaped|
@@ -416,7 +416,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   # E03: a Valkey outage while reading the result is a dependency failure, not a rejected request.
   # Only the Valkey store is replaced; transaction lookup, readiness checks, and the route are real.
   test "E03 com authorize answers 503 without consuming the transaction when Valkey is unavailable" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     visitor = visitors(:reserved_visitor)
     transaction =
       begin
@@ -503,9 +503,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5747 = fv5743
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5747)
                   end
                 fv5718 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -656,7 +662,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
 
     Valkey::AuthState::OpaqueAdmissionStore.stub(:new, unavailable_store) do
       unavailable_store.stub(:read_reference!, unavailable) do
-        post base_com_oauth_authorization_url(host: host),
+        post visa_com_oauth_authorization_url(host: host),
              params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
              headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
       end
@@ -668,9 +674,9 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "com authorize rejects an unknown result code as an invalid request" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result: "no-such-challenge", transaction_ref: "unknown" },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
@@ -679,8 +685,8 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_equal "invalid authorization request", response.parsed_body.fetch("error_description")
   end
 
-  test "com authorize reuses a finalized browser session without creating another root session" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+  test "com authorize refuses a finalized result without creating another root session" do
+    host = visa_host_for_test_surface(:com)
     visitor = visitors(:reserved_visitor)
     token_count_before = VisitorToken.where(visitor_id: visitor.id).count
     transaction =
@@ -768,9 +774,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5683 = fv5679
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5683)
                   end
                 fv5654 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -917,7 +929,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
@@ -928,17 +940,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_predicate browser_session_ref, :present?
     assert_equal token_count_before + 1, VisitorToken.where(visitor_id: visitor.id).count
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
-    assert_response :redirect
+    # WU-27/D-104: a finalized result is terminal. SSO recovery starts from the RP;
+    # the result itself is never reissued.
+    assert_response :bad_request
     assert_equal browser_session_ref, transaction.reload.browser_session_ref
     assert_equal token_count_before + 1, VisitorToken.where(visitor_id: visitor.id).count
   end
 
   test "org authorize stages session-limit resolution without issuing a second root login" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     operator = operators(:one)
     OperatorToken.where(staff_id: operator.id).delete_all
     OperatorToken.create!(authentication_epoch: 0, staff_id: operator.id, staff_token_status_id: OperatorTokenStatus::ACTIVE)
@@ -1027,9 +1041,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5619 = fv5615
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5619)
                   end
                 fv5590 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1177,19 +1197,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     )
 
     assert_no_difference(-> { OperatorToken.where(staff_id: operator.id).count }) do
-      post base_org_oauth_authorization_url(host: host),
+      post visa_org_oauth_authorization_url(host: host),
            params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
            headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
     end
 
     assert_response :see_other
-    assert_redirected_to base_org_sign_in_limitation_path(ri: "jp")
+    assert_redirected_to visa_org_sign_in_limitation_path(ri: "jp")
     assert_not_predicate transaction.reload, :consumed?
     assert_nil transaction.browser_session_ref
   end
 
-  test "org authorize reuses a finalized browser session without creating another root session" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+  test "org authorize refuses a finalized result without creating another root session" do
+    host = visa_host_for_test_surface(:org)
     operator = operators(:one)
     # The org limit is one session; start from none so the first resume can establish one.
     OperatorToken.where(staff_id: operator.id).delete_all
@@ -1279,9 +1299,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5555 = fv5551
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5555)
                   end
                 fv5526 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1428,7 +1454,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
 
-    post base_org_oauth_authorization_url(host: host),
+    post visa_org_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
@@ -1439,17 +1465,19 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     assert_predicate browser_session_ref, :present?
     assert_equal token_count_before + 1, OperatorToken.where(staff_id: operator.id).count
 
-    post base_org_oauth_authorization_url(host: host),
+    post visa_org_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
-    assert_response :redirect
+    # WU-27/D-104: a finalized result is terminal. SSO recovery starts from the RP;
+    # the result itself is never reissued.
+    assert_response :bad_request
     assert_equal browser_session_ref, transaction.reload.browser_session_ref
     assert_equal token_count_before + 1, OperatorToken.where(staff_id: operator.id).count
   end
 
   test "com authorize refuses a result whose ceremony is not ready" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     transaction =
       begin
         https!
@@ -1535,9 +1563,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5491 = fv5487
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5491)
                   end
                 fv5462 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1684,7 +1718,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       subject_ref: transaction.transaction_id,
     )
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result: result_code, transaction_ref: transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
@@ -1706,7 +1740,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "org authorize refuses a result whose ceremony is not ready" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     transaction =
       begin
         https!
@@ -1792,9 +1826,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5427 = fv5423
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5427)
                   end
                 fv5398 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -1941,7 +1981,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       subject_ref: transaction.transaction_id,
     )
 
-    post base_org_oauth_authorization_url(host: host),
+    post visa_org_oauth_authorization_url(host: host),
          params: { result: result_code, transaction_ref: transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
@@ -1963,7 +2003,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "com authorize refuses an expired result ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     transaction =
       begin
         https!
@@ -2049,9 +2089,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5363 = fv5359
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5363)
                   end
                 fv5334 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -2200,7 +2246,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     decision_time = transaction.class.database_now
     transaction.update!(login_challenge_expires_at: decision_time - 1.second)
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
@@ -2221,7 +2267,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "org authorize refuses an expired result ceremony" do
-    host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    host = visa_host_for_test_surface(:org)
     transaction =
       begin
         https!
@@ -2307,9 +2353,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5299 = fv5295
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5299)
                   end
                 fv5270 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -2458,7 +2510,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
     decision_time = transaction.class.database_now
     transaction.update!(login_challenge_expires_at: decision_time - 1.second)
 
-    post base_org_oauth_authorization_url(host: host),
+    post visa_org_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_STAFF_URL")
 
@@ -2479,7 +2531,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "com result binding mismatch does not consume the result" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     first =
       begin
         https!
@@ -2565,9 +2617,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5235 = fv5231
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5235)
                   end
                 fv5206 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -2796,9 +2854,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5171 = fv5167
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5171)
                   end
                 fv5142 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -2945,23 +3009,25 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       ceremony_session_ref: first_binding.admitted_auth_ceremony_session_id.to_s,
     )
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: second.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
     assert_response :bad_request
     assert_not_predicate first.reload, :consumed?
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: first.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
-    assert_response :redirect
-    assert_predicate first.reload, :consumed?
+    # D-155: the second Base initiation replaces the browser's pending marker, so the
+    # earlier result remains unconsumed but cannot be accepted by that browser.
+    assert_response :bad_request
+    assert_not_predicate first.reload, :consumed?
   end
 
   test "com invalid authorization parameters do not consume a valid result" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     transaction =
       begin
         https!
@@ -3049,9 +3115,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5107 = fv5103
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5107)
                   end
                 fv5078 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -3200,7 +3272,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       ceremony_session_ref: binding.admitted_auth_ceremony_session_id.to_s,
     )
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result_ref: result.reference, transaction_ref: result.transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 
@@ -3222,7 +3294,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
   end
 
   test "com authorize does not consume a result with a different purpose" do
-    host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    host = visa_host_for_test_surface(:com)
     transaction =
       begin
         https!
@@ -3308,9 +3380,15 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
                   begin
                     fv5043 = fv5039
                     {
+                      visa_host_for_test_surface(:app) => "app",
+                      visa_host_for_test_surface(:com) => "com",
+                      visa_host_for_test_surface(:org) => "org",
                       ENV.fetch("PUBLIC_BASE_SERVICE_URL") => "app",
                       ENV.fetch("PUBLIC_BASE_CORPORATE_URL") => "com",
                       ENV.fetch("PUBLIC_BASE_STAFF_URL") => "org",
+                      ENV.fetch("PUBLIC_VISA_SERVICE_URL") => "app",
+                      ENV.fetch("PUBLIC_VISA_CORPORATE_URL") => "com",
+                      ENV.fetch("PUBLIC_VISA_STAFF_URL") => "org",
                     }.fetch(fv5043)
                   end
                 fv5014 = BaseAuthAdmissionCoordinator.find_admission_binding_by_confirmation!(
@@ -3459,7 +3537,7 @@ class BaseOauthAuthorizationSurfacesTest < ActionDispatch::IntegrationTest
       reference: SecureRandom.uuid,
     )
 
-    post base_com_oauth_authorization_url(host: host),
+    post visa_com_oauth_authorization_url(host: host),
          params: { result: result_code, transaction_ref: transaction.transaction_id },
          headers: cross_surface_result_headers(host, "PUBLIC_AUTH_CORPORATE_URL")
 

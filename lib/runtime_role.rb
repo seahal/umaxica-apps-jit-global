@@ -93,18 +93,11 @@ module RuntimeRole
   # browser preference cookie, none of which reads a credential or an actor.
   ANY_ROLE = "*"
 
-  # Base paths the Base OP serves on the shared public host (one.md 591: fixed OP paths go to the
-  # OP listener). Identity, credential, Step-Up verification, withdrawal and recovery pages need the
-  # canonical actor, which only the OP may read (user decision 2026-10-17, R5-WU17). The selector
-  # records the selected account/organization on the OP root, and Welcome closes the root sign-in
-  # sequence and reads canonical credentials, so both are OP pages as well.
-  BASE_OP_PREFIXES = %w(
-    oauth/authorizations oauth/tokens oauth/userinfos oauth/revocations oauth/refresh_delivery_queries
-    oidc/logouts well_known sign_byes edge/v0/token/checks edge/v0/token/refreshes
-    identity identities verification verifications sign/in secrets secret_issuances
-    secret_presentations social ceremony_binding_confirmations sign_outs edge/v0/token/dbsc selectors welcomes
-    api/v0/identity api/v0/membership
-  ).freeze
+  # Base keeps only the protocol exceptions that still execute with the authority base: its own
+  # Jump/JWKS endpoint and the re-verification ceremony binding confirmation. OIDC authorization,
+  # token, logout, root-session and credential-management routes are owned by Visa or by the Base
+  # RP respectively; they must not become OP-owned merely because they remain under `Base::`.
+  BASE_OP_PREFIXES = %w(ceremony_binding_confirmations well_known).freeze
 
   # Base paths the Base Self-RP cell serves: its own entry, callback, Refresh, logout receivers and
   # the relay pages whose logic lives at an HTTPS owner.
@@ -112,11 +105,20 @@ module RuntimeRole
     sign/entries sign/interruptions oidc/callbacks oidc/closures sign/cookie_purges roots
     switchers accounts organizations avatars avatar_ownership_transfers dashboard_avatar_images groups
     group_avatar_memberships billing billings iam support audit configurations system
+    identity identities verification verifications secrets secret_issuances secret_presentations
+    selectors welcomes social sign_outs api/v0/identity api/v0/membership
   ).freeze
 
   BASE_ANY_PREFIXES = %w(
     health healths revisions robots sitemaps csp_violation_reports preference preferences
     api/v0/healths api/v0/revisions api/v0/preferences
+  ).freeze
+
+  VISA_OP_PREFIXES = %w(
+    ceremony_binding_confirmations oauth oidc sign_byes sign/in well_known
+  ).freeze
+  VISA_ANY_PREFIXES = %w(
+    health healths revisions robots csp_violation_reports api/v0/healths api/v0/revisions
   ).freeze
 
   # Owner APIs of the canonical domain authorities (R5-WU12/13/14).
@@ -140,6 +142,7 @@ module RuntimeRole
     when "palm" then "rp-palm-app-jp"
     when "edit", "tech" then "rp-#{family}-org-ww"
     when "base" then base_route_owner(realm, rest.to_s)
+    when "visa" then visa_route_owner(realm, rest.to_s)
     when "unknown_hosts" then ANY_ROLE
     when *CONTENT_FAMILIES then "domain-publishing"
     else raise UnownedRoute, "no runtime role owns #{controller_path.inspect}"
@@ -156,6 +159,13 @@ module RuntimeRole
     return "rp-base-#{realm}-ww" if BASE_RP_PREFIXES.any?(&matches)
 
     raise UnownedRoute, "no runtime role owns base/#{realm}/#{rest}"
+  end
+
+  def visa_route_owner(realm, rest)
+    return ANY_ROLE if VISA_ANY_PREFIXES.any? { |prefix| rest == prefix || rest.start_with?("#{prefix}/") }
+    return "op-base-#{realm}" if VISA_OP_PREFIXES.any? { |prefix| rest == prefix || rest.start_with?("#{prefix}/") }
+
+    raise UnownedRoute, "no runtime role owns visa/#{realm}/#{rest}"
   end
 
   # True when this process may serve the controller; the shared transitional role serves all. An

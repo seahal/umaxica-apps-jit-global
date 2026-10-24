@@ -5,7 +5,8 @@ require "test_helper"
 class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
   setup do
     @core_host = ENV.fetch("PUBLIC_CORE_SERVICE_URL")
-    @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @base_host = visa_host_for_test_surface(:app)
+    @base_rp_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
     https!
     host! @core_host
   end
@@ -97,15 +98,15 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_predicate sibling_session.reload, :active?
 
     host! @base_host
-    get base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp")
+    get visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp")
 
     assert_response :ok
-    assert_select "form[action=?][method=?]", base_app_oidc_logout_path, "post"
+    assert_select "form[action=?][method=?]", visa_app_oidc_logout_path, "post"
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate core_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.reload.expected_step
 
-    post base_app_oidc_logout_path(
+    post visa_app_oidc_logout_path(
       logout_challenge: challenge,
       id_token_hint: "untrusted-hint",
       ri: "jp",
@@ -189,7 +190,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
       authentication_context: other_actor_parent.authentication_context_value.to_s,
     )
 
-    post base_app_oidc_logout_path(
+    post visa_app_oidc_logout_path(
       logout_challenge: challenge,
       ri: "jp",
     ), headers: with_session_cookie(
@@ -206,7 +207,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_predicate sibling_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.reload.expected_step
 
-    post base_app_oidc_logout_path(
+    post visa_app_oidc_logout_path(
       logout_challenge: challenge,
       ri: "jp",
     ), headers: with_session_cookie(
@@ -228,7 +229,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_predicate sibling_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.reload.expected_step
 
-    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+    post visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
       {
         "Host" => @base_host,
         "Cookie" => "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(other_actor_access_token)}",
@@ -246,7 +247,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_predicate sibling_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.reload.expected_step
 
-    post base_app_oidc_logout_path(
+    post visa_app_oidc_logout_path(
       logout_challenge: challenge,
       session_ref: same_actor_other_parent.public_id,
       ri: "jp",
@@ -408,18 +409,18 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
 
     assert_predicate issue_result, :success?
     transaction = issue_result.transaction
-    base_com_host = ENV.fetch("PUBLIC_BASE_CORPORATE_URL")
+    base_com_host = visa_host_for_test_surface(:com)
     core_com_host = ENV.fetch("PUBLIC_CORE_CORPORATE_URL")
     host! base_com_host
 
-    get base_com_oidc_logout_path(logout_challenge: transaction.logout_challenge, ri: "jp")
+    get visa_com_oidc_logout_path(logout_challenge: transaction.logout_challenge, ri: "jp")
 
     assert_response :ok
     assert_predicate root_token.reload, :currently_usable?
     assert_predicate rp_session.reload, :active?
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED, transaction.reload.expected_step
 
-    post base_com_oidc_logout_path(logout_challenge: transaction.logout_challenge, ri: "jp"), headers: {
+    post visa_com_oidc_logout_path(logout_challenge: transaction.logout_challenge, ri: "jp"), headers: {
       "Origin" => "https://#{core_com_host}",
       "Sec-Fetch-Site" => "same-site",
     }
@@ -442,7 +443,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_cookie =
       "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(authority_access_token)}"
 
-    post base_com_oidc_logout_path(logout_challenge: transaction.logout_challenge, ri: "jp"), headers: {
+    post visa_com_oidc_logout_path(logout_challenge: transaction.logout_challenge, ri: "jp"), headers: {
       "Host" => base_com_host,
       "Cookie" => authority_cookie,
       "HTTP_COOKIE" => authority_cookie,
@@ -520,7 +521,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     ActionController::Base.allow_forgery_protection = true
     host!(@base_host)
     post(
-      base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
+      visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: {
         "Origin" => "https://attacker.example",
         "Sec-Fetch-Site" => "cross-site",
       },
@@ -559,14 +560,14 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         )
         [fv5014, fv5014.issue_refresh_token!]
       end
-    host! @base_host
+    host! @base_rp_host
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
       begin
         fv5009 = user
         fv5011 = root_token
         fv5010 = rp_session
         fv5013 = "base-app-ww"
-        fv5012 = @base_host
+        fv5012 = @base_rp_host
         fv5008 = OidcClientRegistry.find!(fv5013)
         AuthenticationTokenService.encode(
           fv5009,
@@ -597,13 +598,14 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_equal @base_host, authority_uri.host
     assert_equal "/oidc/logout", authority_uri.path
 
-    get base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp")
+    host! @base_host
+    get visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp")
 
     assert_response :ok
 
-    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+    post visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
       {
-        "Origin" => "https://#{@base_host}",
+        "Origin" => "https://#{@base_rp_host}",
         "Sec-Fetch-Site" => "same-origin",
       }, session_cookie: origin_session_cookie,
     )
@@ -627,12 +629,12 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_cookie =
       "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(authority_access_token)}"
 
-    post base_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+    post visa_app_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
       {
         "Host" => @base_host,
         "Cookie" => authority_cookie,
         "HTTP_COOKIE" => authority_cookie,
-        "Origin" => "https://#{@base_host}",
+        "Origin" => "https://#{@base_rp_host}",
         "Sec-Fetch-Site" => "same-origin",
       }, session_cookie: origin_session_cookie,
     )
@@ -640,16 +642,17 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     origin_uri = URI.parse(response.location)
 
-    assert_equal @base_host, origin_uri.host
+    assert_equal @base_rp_host, origin_uri.host
     assert_equal "/sign/out/completion", origin_uri.path
 
+    host! @base_rp_host
     get base_app_sign_out_completion_path(logout_challenge: challenge, ri: "jp")
 
     assert_response :ok
     form_params = response_form_params
 
     post base_app_sign_out_completion_path(logout_challenge: challenge, ri: "jp"), params: form_params, headers: {
-      "Origin" => "https://#{@base_host}",
+      "Origin" => "https://#{@base_rp_host}",
       "Sec-Fetch-Site" => "same-origin",
     }
 
@@ -685,7 +688,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
         [fv5005, fv5005.issue_refresh_token!]
       end
     edit_host = ENV.fetch("PUBLIC_EDIT_STAFF_URL")
-    base_staff_host = ENV.fetch("PUBLIC_BASE_STAFF_URL")
+    base_staff_host = visa_host_for_test_surface(:org)
     host! edit_host
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] =
       begin
@@ -724,7 +727,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_equal "/oidc/logout", authority_uri.path
 
     host! base_staff_host
-    get base_org_oidc_logout_path(logout_challenge: challenge, ri: "jp")
+    get visa_org_oidc_logout_path(logout_challenge: challenge, ri: "jp")
 
     assert_response :ok
     assert_predicate root_token.reload, :currently_usable?
@@ -732,7 +735,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     assert_equal AcmeLogoutTransaction::STEP_AUTHORITY_REVOKED,
                  AcmeLogoutTransactionCoordinator.find_by!(logout_challenge: challenge).expected_step
 
-    post base_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+    post visa_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
       {
         "Origin" => "https://#{edit_host}",
         "Sec-Fetch-Site" => "same-site",
@@ -758,7 +761,7 @@ class OidcRpAuthorityFirstLogoutTest < ActionDispatch::IntegrationTest
     authority_cookie =
       "#{AuthenticationBase::ACCESS_COOKIE_KEY}=#{Rack::Utils.escape(authority_access_token)}"
 
-    post base_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
+    post visa_org_oidc_logout_path(logout_challenge: challenge, ri: "jp"), headers: with_session_cookie(
       {
         "Host" => base_staff_host,
         "Cookie" => authority_cookie,

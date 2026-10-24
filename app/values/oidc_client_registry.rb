@@ -158,6 +158,24 @@ module OidcClientRegistry
     result
   end
 
+  # RFC 8414 describes the methods supported by the revocation endpoint separately from the token
+  # endpoint.  This application intentionally derives the set from the same registered client
+  # contract used by the revoker; advertising a method that no registered client can use would make
+  # discovery lie, while accepting an unregistered method would turn revocation into a guessing
+  # oracle.
+  def revocation_endpoint_auth_methods_for(resource_type)
+    normalized_resource_type = normalize_resource_type(resource_type)
+
+    result =
+      clients.values.filter_map do |config|
+        next unless normalize_resource_type(config[:resource_type]) == normalized_resource_type
+
+        config[:token_endpoint_auth_method].presence
+      end
+    result.uniq!
+    result
+  end
+
   def normalize_allowed_scopes(allowed_scopes)
     Array(allowed_scopes).map(&:to_s).freeze
   end
@@ -187,6 +205,7 @@ module OidcClientRegistry
       %i(
         sign_service sign_staff sign_corporate
         base_service base_staff base_corporate
+        visa_service visa_staff visa_corporate
         warp_service warp_staff warp_corporate
         core_service core_staff core_corporate
       ).map { |name| [name, hosts.public_send(name).to_s] }
@@ -195,6 +214,8 @@ module OidcClientRegistry
         PUBLIC_AUTH_SERVICE_URL PUBLIC_AUTH_STAFF_URL PUBLIC_AUTH_CORPORATE_URL
         PRIVATE_AUTH_SERVICE_URL PRIVATE_AUTH_STAFF_URL PRIVATE_AUTH_CORPORATE_URL
         BASE_SERVICE_URL BASE_STAFF_URL BASE_CORPORATE_URL
+        VISA_SERVICE_URL VISA_STAFF_URL VISA_CORPORATE_URL
+        PUBLIC_VISA_SERVICE_URL PUBLIC_VISA_STAFF_URL PUBLIC_VISA_CORPORATE_URL
         PUBLIC_WARP_SERVICE_URL PUBLIC_WARP_STAFF_URL PUBLIC_WARP_CORPORATE_URL
         PUBLIC_EDIT_STAFF_URL
         PUBLIC_CORE_SERVICE_URL PUBLIC_CORE_STAFF_URL PUBLIC_CORE_CORPORATE_URL
@@ -253,6 +274,7 @@ module OidcClientRegistry
       normalize_host(hosts.core_staff),
       normalize_host(hosts.warp_staff),
       configured_logout_host("PUBLIC_EDIT_STAFF_URL"),
+      configured_logout_host("PUBLIC_TECH_STAFF_URL"),
       configured_logout_host("PRIVATE_AUTH_STAFF_URL"),
       configured_logout_host("PUBLIC_AUTH_STAFF_URL"),
       configured_logout_host("BASE_STAFF_URL"),

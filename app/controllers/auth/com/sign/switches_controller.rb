@@ -29,8 +29,8 @@ module Auth
             transaction: transaction, ceremony_session: ceremony.reload, target: target,
           )
           redirect_to_jump_url(
-            base_com_oauth_authorization_url(
-              switch_handoff: handoff, ri: params[:ri], host: ENV.fetch("PUBLIC_BASE_CORPORATE_URL"), protocol: "https",
+            visa_com_oidc_switch_url(
+              switch_handoff: handoff, ri: params[:ri], host: visa_authority_host, protocol: "https",
             ), status: :see_other,
           )
         rescue BaseAuthAdmissionCoordinator::Denied, AuthCeremonySession::InvalidTransition, ArgumentError

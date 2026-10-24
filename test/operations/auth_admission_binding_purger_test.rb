@@ -11,7 +11,7 @@ class AuthAdmissionBindingPurgerTest < ActiveSupport::TestCase
       )
       binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface:, reference: issuance.reference)
       binding.retire!
-      parent = issuance.transaction
+      parent = issuance.transaction.reload
       early = binding.expires_at + 1.second
       boundary = parent.expires_at + 1.second
 
@@ -39,7 +39,7 @@ class AuthAdmissionBindingPurgerTest < ActiveSupport::TestCase
       continuity, = binding.class.auth_admission_session_class.issue!
       binding.attach_auth_session!(auth_session: continuity, confirmation_ref: SecureRandom.uuid)
       binding.retire!
-      parent = issuance.transaction
+      parent = issuance.transaction.reload
       boundary = [parent.expires_at, continuity.expires_at].max + 1.second
 
       assert_not AuthAdmissionBindingPurger.purge_for_parent!(

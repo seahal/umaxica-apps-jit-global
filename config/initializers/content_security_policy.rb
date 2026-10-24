@@ -19,6 +19,12 @@ Rails.application.configure do
         boot_config.fetch(:hosts).base_corporate.to_s,
         boot_config.fetch(:hosts).base_staff.to_s,
       ]
+    visa_form_hosts =
+      [
+        boot_config.fetch(:hosts).visa_service.to_s,
+        boot_config.fetch(:hosts).visa_corporate.to_s,
+        boot_config.fetch(:hosts).visa_staff.to_s,
+      ]
     sign_form_hosts =
       [
         boot_config.fetch(:hosts).sign_service.to_s,
@@ -81,6 +87,7 @@ Rails.application.configure do
       # adr/org-entra-id-sign-in-boundary.md.
       "https://login.microsoftonline.com",
       *base_form_hosts,
+      *visa_form_hosts,
       *sign_form_hosts,
       *jump_form_hosts,
     )

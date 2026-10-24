@@ -2,8 +2,10 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require_relative "../../../../support/oidc_rp_logout_hint_helper"
 
 class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
+  include OidcRpLogoutHintHelper
   fixtures :operators, :operator_statuses
 
   setup do
@@ -38,6 +40,7 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
       oidc_auth_time: 1.minute.ago,
       refresh_token_expires_at: 10.minutes.from_now,
     )
+    store_oidc_rp_logout_hint!(rp_session, @operator, client)
     cookies[OidcRpBrowserCredentialContract::ACCESS_COOKIE] = AuthenticationTokenService.encode(
       @operator,
       host: @host,
@@ -81,19 +84,10 @@ class Tech::Org::Sign::OutsControllerTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     authority_uri = URI.parse(response.location)
 
-    assert_equal ENV.fetch("PUBLIC_BASE_STAFF_URL"), authority_uri.host
-    assert_equal "/oidc/logout", authority_uri.path
-    logout_transaction = AcmeLogoutTransaction.find_by!(
-      public_id: Rack::Utils.parse_nested_query(
-        authority_uri.query,
-      ).fetch("logout_challenge"),
-    )
-
-    assert_equal "tech", logout_transaction.origin_surface
-    assert_equal client.client_id, logout_transaction.initiating_client_id
-    assert_equal rp_session.public_id, logout_transaction.session_ref
+    query = Rack::Utils.parse_nested_query(authority_uri.query.to_s)
+    assert_visa_end_session_redirect(query, authority_uri, client_id: client.client_id, region: "jp")
     assert_predicate root_token.reload, :currently_usable?
-    assert_predicate rp_session.reload, :active?
+    assert_not_predicate rp_session.reload, :active?
     assert_equal "no-store", response.headers["Cache-Control"]
   ensure
     ActionController::Base.allow_forgery_protection = previous_forgery_protection

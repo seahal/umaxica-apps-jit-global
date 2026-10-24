@@ -21,6 +21,10 @@ module IdentitySocialCeremonyContract
     "app" => "https://www.umaxica.app",
   }.freeze
 
+  VISA_ISSUERS = {
+    "app" => "https://visa.umaxica.app",
+  }.freeze
+
   SIGN_AUDIENCES = {
     "app" => "https://log.umaxica.app/social-ceremony",
   }.freeze
@@ -49,6 +53,8 @@ module IdentitySocialCeremonyContract
 
   def acme_issuer(surface) = fetch_surface_value(ACME_ISSUERS, surface)
 
+  def visa_issuer(surface) = fetch_surface_value(VISA_ISSUERS, surface)
+
   def sign_audience(surface) = fetch_surface_value(SIGN_AUDIENCES, surface)
 
   def acme_audience(surface) = fetch_surface_value(ACME_AUDIENCES, surface)
@@ -56,6 +62,12 @@ module IdentitySocialCeremonyContract
   def sign_issuer_id(surface) = "surface:AUTH_#{surface.to_s.upcase}"
 
   def acme_issuer_id(surface) = "surface:BASE_#{surface.to_s.upcase}"
+
+  def visa_issuer_id(surface) = "surface:VISA_#{surface.to_s.upcase}"
+
+  def issuer_for_id(surface, issuer_id)
+    issuer_id.to_s == visa_issuer_id(surface) ? visa_issuer(surface) : acme_issuer(surface)
+  end
 
   def provider_subject_digest(provider:, subject:)
     Digest::SHA256.hexdigest("#{SocialIdentifiable.normalize_provider(provider)}:#{subject}")
@@ -136,8 +148,8 @@ module IdentitySocialCeremonyContract
   # path the `session_ref`/`operation` used for routing and fail-safe
   # rejection). Every authentication, authorization, account-link, identity
   # creation, signup-finalization, and final-commit decision must go through the
-  # verified path (`decode_verified_payload` /
-  # `IdentitySocialCeremonyResult.decode`), which re-checks these fields against
+  # verified path (`decode_verified_payload` / `IdentitySocialCeremonyGrant.decode`),
+  # which re-checks these fields against
   # the cryptographically verified payload. See the allowlist test in
   # test/services/identity/social_ceremony_untrusted_payload_allowlist_test.rb.
   def decode_untrusted_routing_payload(token)
