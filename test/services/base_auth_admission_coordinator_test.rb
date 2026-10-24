@@ -644,7 +644,72 @@ class BaseAuthAdmissionCoordinatorTest < ActiveSupport::TestCase
     assert_nil persisted.browser_session_ref
   end
 
+  test "authentication handoff transport lifetime is capped by its curfew" do
+    @admission_nonce = SecureRandom.urlsafe_base64(32)
+    issuance = OidcTestEntry.issue!(
+      surface: "app", intent: "sign_in", base_browser_nonce: @admission_nonce, base_token: nil,
+    )
+    transaction = issuance.transaction
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: "app", reference: issuance.reference,
+    )
+    binding.update_columns(curfew_at: binding.class.database_now + 3.seconds)
+    store = PurposeCaptureStore.new
+
+    BaseAuthAdmissionCoordinator.issue_handoff!(
+      transaction:, base_browser_nonce: @admission_nonce, base_token: nil, store:,
+    )
+
+    assert_operator store.options.fetch(:ttl), :>, 0
+    assert_operator store.options.fetch(:ttl), :<=, 3.seconds
+  end
+
+  test "authentication result lifetime is capped by its redeemed binding curfew" do
+    transaction, binding = issue_redeemed_sign_in_admission!
+    binding.update_columns(curfew_at: binding.class.database_now + 3.seconds)
+    OidcAuthorizationTransactionCoordinator.register_result!(
+      surface: "app",
+      login_challenge: transaction.login_challenge,
+      actor: clients(:one),
+      session_ref: "session-ref",
+      auth_method: "passkey",
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    )
+    store = PurposeCaptureStore.new
+
+    BaseAuthAdmissionCoordinator.issue_result!(transaction: transaction.reload, store:)
+
+    assert_operator store.options.fetch(:ttl), :>, 0
+    assert_operator store.options.fetch(:ttl), :<=, 3.seconds
+    assert_operator transaction.reload.result_expires_at, :<=, binding.reload.curfew_at
+  end
+
   private
+
+  def issue_redeemed_sign_in_admission!
+    @admission_nonce = SecureRandom.urlsafe_base64(32)
+    issuance = OidcTestEntry.issue!(
+      surface: "app", intent: "sign_in", base_browser_nonce: @admission_nonce, base_token: nil,
+    )
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: issuance.reference)
+    pending, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: pending, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: binding.entry_ref, nonce: @admission_nonce,
+      ),
+    )
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: issuance.reference, surface: "app", expected_intent: "sign_in", binding:, raw_auth_sid: raw_sid,
+    )
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "authentication_handoff", previous_raw_sid: raw_sid,
+      authorization_transaction_ref: issuance.transaction.transaction_id,
+    )
+    binding.redeem!(auth_session: pending, admitted_auth_session: admitted)
+    [issuance.transaction, binding]
+  end
 
   def issue_transaction!
     OidcAuthorizationTransactionCoordinator.issue!(

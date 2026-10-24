@@ -67,7 +67,11 @@ module Auth
 
           session_record = current_auth_session(model)
           unless binding.attached?
-            session_record, raw_sid = model.issue! if session_record.nil?
+            if session_record.nil?
+              now = model.database_now
+              ttl = auth_ceremony_ttl_for_binding(binding, now, model)
+              session_record, raw_sid = model.issue!(ttl:, now:)
+            end
             binding.attach_auth_session!(auth_session: session_record, confirmation_ref: SecureRandom.uuid)
           end
           unless binding.auth_ceremony_session_id == session_record&.id
@@ -77,6 +81,17 @@ module Auth
           end
         end
         raw_sid
+      end
+
+      def auth_ceremony_ttl_for_binding(binding, now, model)
+        return model::DEFAULT_TTL unless binding.purpose == "authentication_handoff"
+
+        remaining = binding.curfew_at - now
+        raise BaseAuthAdmissionCoordinator::Denied.new(
+          "sign-in path curfew has passed", code: "expired_admission",
+        ) unless remaining.positive?
+
+        [model::DEFAULT_TTL, remaining].min
       end
 
       def entry_ref

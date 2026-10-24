@@ -4,7 +4,8 @@
 require "test_helper"
 require "support/external_identity_test_helper"
 
-# D-48 L1-L8 with D-72 (WU-08): the decision for a verified Google subject under each intent.
+# D-48 L1-L8 with D-72 (WU-08): the decision for verified Google and Apple subjects under each
+# intent.
 class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
   include ExternalIdentityTestHelper
 
@@ -72,29 +73,47 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
   end
 
   test "L7: a revoked or deleted provider account is refused in both intents" do
-    %w(consent_revoked account_deleted).each do |state|
-      identity = create_active_external_identity(
-        client: client_with(ClientStatus::ACTIVE), provider: "google",
-        state: state,
-      )
+    %w(google apple).each do |provider|
+      %w(consent_revoked account_deleted).each do |state|
+        identity = create_active_external_identity(
+          client: client_with(ClientStatus::ACTIVE), provider:,
+          state: state,
+        )
 
-      [false, true].each do |sign_up_entry|
-        assert_raises(SocialAuth::UnauthorizedError) { decide(identity.subject, sign_up_entry:) }
+        [false, true].each do |sign_up_entry|
+          assert_raises(SocialAuth::UnauthorizedError) do
+            decide(identity.subject, provider:, sign_up_entry:)
+          end
+        end
       end
     end
   end
 
-  test "L8: an in-force enforcement effect on the subject is decided before any identity state" do
-    identity = create_active_external_identity(client: client_with(ClientStatus::ACTIVE), provider: "google")
-    AppEnforcementIdentifierEffect.build_for_google_subject(
-      issuer: identity.issuer, subject: identity.subject, enforcement_case: ban_case, effective_at: 1.minute.ago,
-    ).save!
+  test "L8: an in-force enforcement effect on either social subject is decided before any identity state" do
+    %w(google apple).each do |provider|
+      identity = create_active_external_identity(client: client_with(ClientStatus::ACTIVE), provider:)
+      effect =
+        if provider == "google"
+          AppEnforcementIdentifierEffect.build_for_google_subject(
+            issuer: identity.issuer, subject: identity.subject, enforcement_case: ban_case,
+            effective_at: 1.minute.ago,
+          )
+        else
+          AppEnforcementIdentifierEffect.build_for_apple_subject(
+            issuer: identity.issuer, subject: identity.subject, enforcement_case: ban_case,
+            effective_at: 1.minute.ago,
+          )
+        end
+      effect.save!
 
-    [false, true].each do |sign_up_entry|
-      assert_raises(SocialAuth::UnauthorizedError) { decide(identity.subject, sign_up_entry:) }
-    end
-    assert_raises(SocialAuth::UnauthorizedError) do
-      decide(identity.subject, sign_up_entry: true, repository: OrphanRepository.new(nil))
+      [false, true].each do |sign_up_entry|
+        assert_raises(SocialAuth::UnauthorizedError) do
+          decide(identity.subject, provider:, sign_up_entry:)
+        end
+      end
+      assert_raises(SocialAuth::UnauthorizedError) do
+        decide(identity.subject, provider:, sign_up_entry: true, repository: OrphanRepository.new(nil))
+      end
     end
   end
 
@@ -118,14 +137,15 @@ class SocialAuthLoginHandlerTest < ActiveSupport::TestCase
     Client.create!(security_mode_id: SecurityModeConfigurable::NORMAL, status_id: status_id, birthdate: "2000-01-01")
   end
 
-  def decide(subject, sign_up_entry:,
-             repository: ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider: "google"))
+  def decide(subject, sign_up_entry:, provider: "google", repository: nil)
+    repository ||= ExternalAuthentication::ClientExternalIdentityRepositoryAdapter.new(provider:)
     principal = ExternalAuthentication::VerifiedPrincipal.new(
-      provider: "google", subject: subject, issuer: "https://accounts.google.com", audience: "google-client-id",
+      provider:, subject:, issuer: ExternalIdentityTestHelper::ISSUERS.fetch(provider),
+      audience: ExternalIdentityTestHelper::AUDIENCES.fetch(provider),
       verified_at: Time.current, verification_authority: "omniauth-google-oauth2/contract",
     )
     SocialAuthLoginHandler.call(
-      principal: principal, credential_candidate: nil, repository: repository, provider: "google", uid: subject,
+      principal:, credential_candidate: nil, repository:, provider:, uid: subject,
       sign_up_entry: sign_up_entry, ceremony_started_at: 1.minute.ago,
     )
   end

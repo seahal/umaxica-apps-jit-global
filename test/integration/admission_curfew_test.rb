@@ -75,9 +75,11 @@ class AdmissionCurfewTest < ActionDispatch::IntegrationTest
 
   [0, -1].each do |offset|
     test "the owner's browser #{offset.zero? ? "at" : "one second after"} the curfew leaves with access_denied" do
-      move_curfew!(offset.seconds)
       before_tokens = ClientToken.count
-      get "/sign/in", params: { ri: "jp" }
+
+      with_curfew_offset(offset.seconds) do
+        get "/sign/in", params: { ri: "jp" }
+      end
 
       assert_response :see_other
       target = URI.parse(jump_rt_url_from_location_for_test(response.location))
@@ -141,5 +143,16 @@ class AdmissionCurfewTest < ActionDispatch::IntegrationTest
 
   def move_curfew!(offset)
     @binding.update_columns(curfew_at: ClientAuthAdmissionBinding.database_now + offset)
+  end
+
+  def with_curfew_offset(offset)
+    unless offset.zero?
+      move_curfew!(offset)
+      return yield
+    end
+
+    decision_time = ClientAuthAdmissionBinding.database_now
+    @binding.update_columns(curfew_at: decision_time)
+    ClientAuthAdmissionBinding.stub(:database_now, decision_time) { yield }
   end
 end

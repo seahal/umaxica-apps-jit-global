@@ -3,11 +3,12 @@
 
 require "test_helper"
 
-# D05/D06/D09 on App: Cancel and Switch from the first Sign In page, through the real Base start,
-# Auth admission, Auth exit endpoint, Base continuation and Base commit.
+# D05/D06/D09 on App: Cancel and Switch from the first Sign In page, through the real Base RP start,
+# Visa OP admission, Auth exit endpoint, Base RP continuation and Base RP commit.
 class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
   setup do
     @base_host = ENV.fetch("PUBLIC_BASE_SERVICE_URL")
+    @visa_host = visa_host_for_test_surface(:app)
     @auth_host = ENV.fetch("PUBLIC_AUTH_SERVICE_URL")
     @client = OidcClientRegistry.find!("core-app-jp")
     @redirect_uri = @client.redirect_uris_by_realm.fetch("client").first
@@ -19,13 +20,13 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
     post auth_app_sign_cancellation_url(host: @auth_host, protocol: "https", ri: "jp")
 
     assert_response :see_other
-    base_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
 
-    assert_equal @base_host, base_location.host
-    assert_equal "/oauth/authorize", base_location.path
+    assert_equal @visa_host, visa_location.host
+    assert_equal "/oidc/cancellation", visa_location.path
     assert_predicate ceremony_session_for(transaction).reload, :cancelled?
 
-    location = commit_base_continuation!(base_location)
+    location = commit_visa_continuation!(visa_location)
     rp = URI.parse(location)
     query = Rack::Utils.parse_nested_query(rp.query)
 
@@ -40,15 +41,14 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
   test "replaying the committed Cancel converges on the same access_denied without a second outcome" do
     transaction = start_at_auth_sign_in!
     post auth_app_sign_cancellation_url(host: @auth_host, protocol: "https", ri: "jp")
-    base_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
-    get(base_location.to_s)
-    form = response.parsed_body.at_css("form#oidc-authorization-exit-form")
-    fields = form.css("input[type=hidden]").to_h { |input| [input["name"], input["value"]] }
+    visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    host!(visa_location.host)
+    get(visa_location.request_uri, headers: browser_navigation_headers)
 
-    post(form["action"], params: fields)
+    assert_response :see_other
     first = jump_rt_url_from_location_for_test(response.location)
     canceled_at = transaction.reload.canceled_at
-    post(form["action"], params: fields)
+    get(visa_location.request_uri, headers: browser_navigation_headers)
 
     assert_response :see_other
     assert_equal first, jump_rt_url_from_location_for_test(response.location)
@@ -58,7 +58,7 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
   test "a canceled parent refuses a later authentication result" do
     transaction = start_at_auth_sign_in!
     post auth_app_sign_cancellation_url(host: @auth_host, protocol: "https", ri: "jp")
-    commit_base_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location)))
+    commit_visa_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location)))
 
     assert_raises(ArgumentError) do
       transaction.reload.register_authentication!(
@@ -75,7 +75,7 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
 
     post auth_app_sign_cancellation_url(host: @auth_host, protocol: "https", ri: "jp")
 
-    assert_response :unprocessable_content
+    assert_response :bad_request
     assert_equal "pending", transaction.reload.status
   end
 
@@ -88,12 +88,15 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
     assert_response :see_other
     assert_predicate old_ceremony.reload, :cancelled?
 
-    location = commit_base_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location)))
+    location = commit_visa_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location)))
     target = URI.parse(jump_rt_url_from_location_for_test(location))
 
     assert_equal @auth_host, target.host
-    assert_equal "/sign/up", target.path
+    assert_equal "/sign/up/sentry", target.path
     entry_ref = Rack::Utils.parse_nested_query(target.query).fetch("entry_ref")
+    drive_to_auth_page!(target.to_s)
+
+    assert_equal "auth/app/sign_ups/new", inertia_component
     binding = BaseAuthAdmissionCoordinator.find_admission_binding!(reference: entry_ref, surface: "app")
 
     assert_equal transaction.id, binding.authorization_transaction_id
@@ -103,17 +106,20 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
   test "switching to Sign Up and back to Sign In keeps one parent" do
     transaction = start_at_auth_sign_in!
     post auth_app_sign_switch_url(host: @auth_host, protocol: "https", ri: "jp"), params: { to: "sign_up" }
-    sign_up = URI.parse(commit_base_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location))))
+    sign_up = URI.parse(commit_visa_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location))))
     drive_to_auth_page!(sign_up.to_s)
 
     assert_equal "auth/app/sign_ups/new", inertia_component
     assert_equal "sign_in", inertia_props.fetch("switch_form").fetch("to")
 
     post auth_app_sign_switch_url(host: @auth_host, protocol: "https", ri: "jp"), params: { to: "sign_in" }
-    sign_in = URI.parse(commit_base_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location))))
+    sign_in = URI.parse(commit_visa_continuation!(URI.parse(jump_rt_url_from_location_for_test(response.location))))
 
-    assert_equal "/sign/in", sign_in.path
+    assert_equal "/sign/in/sentry", sign_in.path
     entry_ref = Rack::Utils.parse_nested_query(sign_in.query).fetch("entry_ref")
+    drive_to_auth_page!(sign_in.to_s)
+
+    assert_equal "auth/app/sign_ins/new", inertia_component
 
     assert_equal transaction.id,
                  BaseAuthAdmissionCoordinator.find_admission_binding!(reference: entry_ref, surface: "app")
@@ -126,7 +132,7 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
 
     post auth_app_sign_switch_url(host: @auth_host, protocol: "https", ri: "jp"), params: { to: "sign_up" }
 
-    assert_response :unprocessable_content
+    assert_response :bad_request
     assert_not_predicate ceremony_session_for(transaction).reload, :cancelled?
     assert_equal "pending", transaction.reload.status
   end
@@ -134,7 +140,7 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
   private
 
   def start_at_auth_sign_in!(prompt: nil)
-    host!(@base_host)
+    host!(@visa_host)
     https!
     params = {
       response_type: "code",
@@ -147,14 +153,19 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
       scope: "openid profile",
     }
     params[:prompt] = prompt if prompt
-    get("/oauth/authorize", params: params)
+    get("/oauth/authorize", params: params, headers: browser_navigation_headers)
 
-    assert_response :success
-    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] })
+    sign_in =
+      if response.redirect?
+        URI.parse(jump_rt_url_from_location_for_test(response.location))
+      else
+        assert_response :success
+        form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+        post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] })
 
-    assert_response :see_other
-    sign_in = URI.parse(jump_rt_url_from_location_for_test(response.location))
+        assert_response :see_other
+        URI.parse(jump_rt_url_from_location_for_test(response.location))
+      end
     entry_ref = Rack::Utils.parse_nested_query(sign_in.query).fetch("entry_ref")
 
     drive_to_auth_page!(sign_in.to_s)
@@ -168,14 +179,16 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
   # Follows the real browser path from an Auth entry URL: redirects (unwrapping Jump) and the
   # same-origin continuation forms that Auth and Base render, until an Inertia page is reached.
   def drive_to_auth_page!(url)
-    get(url)
+    target = URI.parse(url)
+    host!(target.host)
+    get(target.request_uri, headers: browser_navigation_headers)
     12.times do
       selector = "form[id$='continuation-form'], form[id$='confirmation-form']"
       form = response.redirect? ? nil : response.parsed_body.at_css(selector)
       if response.redirect?
         target = URI.parse(jump_rt_url_from_location_for_test(response.location))
         host!(target.host)
-        get(target.to_s)
+        get(target.request_uri, headers: browser_navigation_headers)
       elsif form
         action = URI.join("https://#{host}", form["action"])
         host!(action.host)
@@ -195,14 +208,20 @@ class SignEntryExitFlowTest < ActionDispatch::IntegrationTest
     admitted_auth_ceremony_session_for_test(binding)
   end
 
-  def commit_base_continuation!(base_location)
-    get(base_location.to_s)
-
-    assert_response :success
-    form = response.parsed_body.at_css("form#oidc-authorization-exit-form")
-    post(form["action"], params: form.css("input[type=hidden]").to_h { |input| [input["name"], input["value"]] })
+  def commit_visa_continuation!(visa_location = nil)
+    assert_response :see_other if visa_location.nil?
+    visa_location ||= URI.parse(jump_rt_url_from_location_for_test(response.location))
+    host!(visa_location.host)
+    get(visa_location.request_uri, headers: browser_navigation_headers)
 
     assert_response :see_other
     jump_rt_url_from_location_for_test(response.location)
+  end
+
+  def browser_navigation_headers
+    {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+    }
   end
 end

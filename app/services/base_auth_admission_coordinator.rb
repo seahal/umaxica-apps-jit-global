@@ -122,19 +122,34 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("result browser binding is missing", code: "return_binding_mismatch")
       end
 
-      binding = admission_binding_model(surface).where.not(redeemed_at: nil)
-        .find_by!(binding_parent_attributes(transaction))
-      expected = AuthAdmissionBinding.browser_digest(surface:, entry_ref: binding.entry_ref, nonce: base_browser_nonce)
-      unless binding.redeemed? && ActiveSupport::SecurityUtils.secure_compare(binding.base_browser_digest, expected) &&
-          result_root_context_matches?(binding, transaction, base_token)
-        raise Denied.new("result browser binding mismatch", code: "return_binding_mismatch")
-      end
-      # WU-06 (A06-2): a result issued before the curfew is not accepted at or after it.
-      if !cancellation && binding.purpose == "authentication_handoff" && !AdmissionCurfewValue.for(binding).within?
-        raise Denied.new("sign-in path curfew has passed", code: "expired_admission")
-      end
+      binding_model = admission_binding_model(surface)
+      binding_model.connection_owner.connected_to(role: :writing) do
+        binding_model.transaction do
+          locked_transaction = transaction.class.lock.find(transaction.id)
+          binding =
+            redeemed_bindings_for(binding_model, locked_transaction).lock.to_a.find do |candidate|
+              expected = AuthAdmissionBinding.browser_digest(
+                surface:, entry_ref: candidate.entry_ref, nonce: base_browser_nonce,
+              )
+              ActiveSupport::SecurityUtils.secure_compare(candidate.base_browser_digest, expected) &&
+                result_root_context_matches?(candidate, locked_transaction, base_token)
+            end
+          raise ActiveRecord::RecordNotFound unless binding
 
-      binding
+          unless binding.redeemed?
+            raise Denied.new("result browser binding mismatch", code: "return_binding_mismatch")
+          end
+          # WU-06 (A06-2): a result issued before the curfew is not accepted at or after it. The
+          # binding and parent are locked before the OP clock is read, so a concurrent finalization
+          # cannot move the decision across the deadline after this check.
+          if !cancellation && binding.purpose == "authentication_handoff" &&
+              !AdmissionCurfewValue.for(binding).within?
+            raise Denied.new("sign-in path curfew has passed", code: "expired_admission")
+          end
+
+          binding
+        end
+      end
     rescue ActiveRecord::RecordNotFound
       raise Denied.new("result browser binding is unavailable", code: "return_binding_mismatch")
     end
@@ -147,6 +162,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("social result admission is unavailable", code: "return_binding_mismatch")
       end
 
+      validate_sign_in_path_curfew!(binding)
       ensure_binding_browser_matches!(binding, surface:, nonce: base_browser_nonce)
       ensure_binding_token_matches!(binding, base_token)
       validate_admission_parent!(binding)
@@ -212,6 +228,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       # The parent and root are the authority for this decision, so they are read from the
       # writer: a replica that has not caught up would refuse a sound admission.
       admission_binding_model(surface).connection_owner.connected_to(role: :writing) do
+        validate_sign_in_path_curfew!(binding)
         validate_admission_parent!(binding)
         validate_admission_root!(binding)
         validate_entry_parent_intent!(binding, expected_intent)
@@ -254,9 +271,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         purpose: purpose,
         raw_code: raw_code,
       )
-      _locked_transaction, generation = transaction.prepare_result_delivery!(
-        result_digest: result_digest,
-        ttl: OidcAuthorizationTransactionable::RESULT_TTL,
+      locked_transaction, generation, result_ttl = prepare_result_delivery_with_curfew(
+        transaction:, result_digest:, purpose:,
       )
       code = store.issue!(
         purpose: purpose,
@@ -267,8 +283,9 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         ceremony_session_ref: ceremony_session_ref,
         result_generation: generation,
         raw_code: raw_code,
+        ttl: result_ttl,
       )
-      Issuance.new(transaction: transaction, code: code, reference: reference)
+      Issuance.new(transaction: locked_transaction, code: code, reference: reference)
     end
 
     def issue_cancellation!(transaction:, ceremony_session_ref: nil, store: default_store)
@@ -277,8 +294,13 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("cancellation is unavailable", code: "transaction_unavailable")
       end
 
-      remaining = [transaction.expires_at - now, CONTINUATION_TTL].min
+      curfew_at = authentication_handoff_curfew_at(transaction)
+      remaining_bounds = [transaction.expires_at - now, CONTINUATION_TTL]
+      remaining_bounds << (curfew_at - now) if curfew_at && curfew_at > now
+      remaining = remaining_bounds.min
       remaining = 1.second if remaining <= 0
+      handoff_expires_at = transaction.expires_at
+      handoff_expires_at = curfew_at if curfew_at && curfew_at > now && curfew_at < handoff_expires_at
       reference = nil
       handoff = nil
       transaction.class.connection_owner.connected_to(role: :writing) do
@@ -297,7 +319,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
               reference = SecureRandom.uuid
               handoff = encrypt_cancellation_handoff(
                 surface: transaction.surface, transaction_ref: transaction.transaction_id,
-                reference: reference, raw_code: raw_code, expires_at: transaction.expires_at,
+                reference: reference, raw_code: raw_code, expires_at: handoff_expires_at,
               )
               transaction.prepare_cancellation_handoff!(reference:, ciphertext: handoff)
               store.issue!(
@@ -342,11 +364,16 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("switch ceremony is not ended for this parent", code: "invalid_admission")
       end
 
+      now = transaction.class.database_now
+      curfew_at = authentication_handoff_curfew_at(transaction)
+      expires_at = now + SWITCH_HANDOFF_TTL
+      expires_at = curfew_at if curfew_at && curfew_at > now && curfew_at < expires_at
+
       switch_handoff_encryptor.encrypt_and_sign(
         JSON.generate(
           "version" => SWITCH_HANDOFF_VERSION, "surface" => transaction.surface,
           "transaction_ref" => transaction.transaction_id, "ceremony_session_id" => ceremony_session.id,
-          "target" => target, "expires_at" => (transaction.class.database_now + SWITCH_HANDOFF_TTL).iso8601,
+          "target" => target, "expires_at" => expires_at.iso8601,
         ),
       )
     end
@@ -644,6 +671,56 @@ class BaseAuthAdmissionCoordinator < ApplicationService
 
     private :handoff_purpose_for, :result_purpose_for
 
+    def prepare_result_delivery_with_curfew(transaction:, result_digest:, purpose:)
+      unless purpose == "authentication_result"
+        locked_transaction, generation = transaction.prepare_result_delivery!(
+          result_digest:, ttl: OidcAuthorizationTransactionable::RESULT_TTL,
+        )
+        return [locked_transaction, generation, OidcAuthorizationTransactionable::RESULT_TTL]
+      end
+
+      binding_model = admission_binding_model(transaction.surface)
+      binding_model.connection_owner.connected_to(role: :writing) do
+        binding_model.transaction do
+          locked_transaction = transaction.class.lock.find(transaction.id)
+          binding = redeemed_authentication_bindings_for(binding_model, locked_transaction).lock.first
+          unless binding
+            prepared_transaction, generation = locked_transaction.prepare_result_delivery!(
+              result_digest:, ttl: OidcAuthorizationTransactionable::RESULT_TTL,
+            )
+            next [prepared_transaction, generation, OidcAuthorizationTransactionable::RESULT_TTL]
+          end
+
+          now = binding_model.database_now
+          remaining = binding.curfew_at - now
+          raise Denied.new("sign-in path curfew has passed", code: "expired_admission") unless remaining.positive?
+
+          ttl = [OidcAuthorizationTransactionable::RESULT_TTL, remaining].min
+          prepared_transaction, generation = locked_transaction.prepare_result_delivery!(
+            result_digest:, ttl:, now:,
+          )
+          [prepared_transaction, generation, ttl]
+        end
+      end
+    end
+
+    def redeemed_authentication_bindings_for(binding_model, transaction)
+      redeemed_bindings_for(binding_model, transaction, purpose: "authentication_handoff")
+    end
+
+    def redeemed_bindings_for(binding_model, transaction, purpose: nil)
+      attributes = binding_parent_attributes(transaction)
+      attributes[:purpose] = purpose if purpose
+      binding_model.where(attributes).where.not(redeemed_at: nil).order(redeemed_at: :desc, id: :desc)
+    end
+
+    def authentication_handoff_curfew_at(transaction)
+      binding_model = admission_binding_model(transaction.surface)
+      binding_model.connection_owner.connected_to(role: :writing) do
+        redeemed_authentication_bindings_for(binding_model, transaction).pick(:curfew_at)
+      end
+    end
+
     def reuse_cancellation_handoff!(transaction:, store:, ceremony_session_ref:, ttl:, now:)
       reference = transaction.cancellation_handoff_ref
       handoff = transaction.cancellation_handoff_ciphertext
@@ -671,14 +748,15 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       model.connection_owner.connected_to(role: :writing) do
         model.transaction do
           locked_transaction = transaction.class.lock.find(transaction.id)
+          now = model.database_now
           binding = create_or_reuse_binding!(
             transaction: locked_transaction, surface: locked_transaction.surface, purpose: purpose,
             base_browser_nonce: base_browser_nonce,
-            base_token: base_token, restart_of:, now: model.database_now, after_ended_ceremonies:, entry_intent:,
+            base_token: base_token, restart_of:, now:, after_ended_ceremonies:, entry_intent:,
           )
           code = issue_transport!(
             transaction: locked_transaction, surface: locked_transaction.surface, purpose: purpose,
-            binding: binding, base_token: base_token, store: store,
+            binding: binding, base_token: base_token, store: store, now:,
           )
           [binding, code]
         end
@@ -718,7 +796,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       curfew_at = admission_curfew_at(redeemed:, now:, after_ended_ceremonies:)
 
       entry_ref = SecureRandom.uuid
-      expiry = [transaction_expiry(transaction), now + admission_transport_ttl(purpose)].compact.min
+      expiry = admission_binding_expiry(transaction:, purpose:, curfew_at:, now:)
       digest = AuthAdmissionBinding.browser_digest(
         surface: surface, entry_ref: entry_ref, nonce: base_browser_nonce,
       )
@@ -739,6 +817,12 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       binding
     rescue ActiveRecord::RecordNotUnique
       retry
+    end
+
+    def admission_binding_expiry(transaction:, purpose:, curfew_at:, now:)
+      expiry_bounds = [transaction_expiry(transaction), now + admission_transport_ttl(purpose)]
+      expiry_bounds << curfew_at if purpose == "authentication_handoff"
+      expiry_bounds.compact.min
     end
 
     # WU-06 / REQ-CURFEW: the OIDC transaction and its login challenge never end the Sign-in path before
@@ -823,7 +907,8 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       )
     end
 
-    def issue_transport!(transaction:, surface:, purpose:, binding:, base_token:, store:)
+    def issue_transport!(transaction:, surface:, purpose:, binding:, base_token:, store:, now:)
+      ttl = admission_transport_ttl_capped_by_curfew(purpose:, binding:, now:)
       arguments = {
         purpose: purpose,
         actor_type: SURFACE_ACTOR.fetch(surface.to_s),
@@ -832,15 +917,25 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         base_session_ref: base_token&.public_id,
         reference: binding.entry_ref,
       }
-      store.issue!(**arguments, ttl: admission_transport_ttl(purpose))
+      store.issue!(**arguments, ttl:)
     rescue Umaxica::Valkey::OperationError => e
       raise unless e.message == "admission code key collision"
 
       store.reissue_reference!(
         **arguments.except(:reference).merge(
-          reference: binding.entry_ref, ttl: admission_transport_ttl(purpose),
+          reference: binding.entry_ref, ttl:,
         ),
       )
+    end
+
+    def admission_transport_ttl_capped_by_curfew(purpose:, binding:, now:)
+      ttl = admission_transport_ttl(purpose)
+      return ttl unless purpose.to_s == "authentication_handoff"
+
+      remaining = binding.curfew_at - now
+      raise Denied.new("sign-in path curfew has passed", code: "expired_admission") unless remaining.positive?
+
+      [ttl, remaining].min
     end
 
     def admission_transport_ttl(purpose)
@@ -1057,6 +1152,7 @@ class BaseAuthAdmissionCoordinator < ApplicationService
         raise Denied.new("admission purpose mismatch", code: "invalid_admission")
       end
 
+      validate_sign_in_path_curfew!(binding)
       validate_admission_parent!(binding)
       validate_admission_root!(binding)
 
@@ -1072,6 +1168,19 @@ class BaseAuthAdmissionCoordinator < ApplicationService
       auth_session
     rescue ArgumentError, ActiveRecord::RecordNotFound
       raise Denied.new("Auth ceremony session is invalid", code: "session_binding_mismatch")
+    end
+
+    def validate_sign_in_path_curfew!(binding)
+      return unless binding.purpose == "authentication_handoff"
+
+      binding.class.connection_owner.connected_to(role: :writing) do
+        binding.class.transaction do
+          locked_binding = binding.class.lock.find(binding.id)
+          unless AdmissionCurfewValue.for(locked_binding).within?
+            raise Denied.new("sign-in path curfew has passed", code: "expired_admission")
+          end
+        end
+      end
     end
 
     # A parent that cannot be loaded is an unavailable admission, not a server error: the refusal

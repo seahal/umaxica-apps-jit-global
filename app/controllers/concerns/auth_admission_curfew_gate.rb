@@ -12,12 +12,16 @@ module AuthAdmissionCurfewGate
     ceremony = admitted_auth_ceremony_session
     return unless ceremony&.admission_purpose == "authentication_handoff"
 
-    binding = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
-      .find_by(admitted_auth_ceremony_session_id: ceremony.id)
-    return if binding.nil? || binding.purpose != "authentication_handoff"
-    return if AdmissionCurfewValue.for(binding).within?
+    binding_model = BaseAuthAdmissionCoordinator.admission_binding_model(auth_ceremony_surface)
+    binding_model.connection_owner.connected_to(role: :writing) do
+      binding_model.transaction do
+        binding = binding_model.lock.find_by(admitted_auth_ceremony_session_id: ceremony.id)
+        return if binding.nil? || binding.purpose != "authentication_handoff"
+        return if AdmissionCurfewValue.for(binding).within?
 
-    exit_attempt_after_curfew!(ceremony)
+        exit_attempt_after_curfew!(ceremony)
+      end
+    end
   end
 
   def exit_attempt_after_curfew!(ceremony)

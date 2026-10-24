@@ -23,6 +23,7 @@ module SignUpFlowTicket
   included do
     before_validation :normalize_completed_requirements
     before_validation :default_cleanup_status
+    before_validation :cap_expiry_at_admission_curfew, on: :create
 
     validates :entry_method, presence: true, inclusion: { in: ->(record) { record.class::ENTRY_METHODS } }
     validates :pending_contact_type, inclusion: { in: CONTACT_TYPES }, allow_nil: true
@@ -90,6 +91,16 @@ module SignUpFlowTicket
   end
 
   private
+
+  # A sign-up Flow may be created after its Admission Binding. Its own default TTL must not carry
+  # authority beyond the Binding's fixed deadline (REQ-CURFEW 5); the registration itself remains
+  # durable when finalization crosses that deadline.
+  def cap_expiry_at_admission_curfew
+    binding = auth_admission_binding
+    return if binding.nil?
+
+    self.expires_at = [expires_at, binding.curfew_at].compact.min
+  end
 
   # APP/COM explicitly opt in at creation; ORG has no public sign-up admission.
   def sign_up_admission_is_redeemed

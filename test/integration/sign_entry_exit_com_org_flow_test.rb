@@ -3,12 +3,14 @@
 
 require "test_helper"
 
-# D05/D06/D09 on Com and Org through the real Base start, Auth admission, Auth exit endpoint, Base
-# continuation and Base commit. Org has no public Sign Up, so it offers Cancel but never Switch.
+# D05/D06/D09 on Com and Org through the real Base RP start, Visa OP admission, Auth exit endpoint,
+# Base RP continuation and Base RP commit. Org has no public Sign Up, so it offers Cancel but never
+# Switch.
 class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
   SURFACES = {
     "com" => {
       base_host: "PUBLIC_BASE_CORPORATE_URL",
+      visa_surface: :com,
       auth_host: "PUBLIC_AUTH_CORPORATE_URL",
       client_id: "core-com-jp",
       realm: "visitor",
@@ -17,6 +19,7 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
     },
     "org" => {
       base_host: "PUBLIC_BASE_STAFF_URL",
+      visa_surface: :org,
       auth_host: "PUBLIC_AUTH_STAFF_URL",
       client_id: "core-org-jp",
       realm: "operator",
@@ -29,7 +32,7 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
     transaction = start_at_auth_sign_in!("com")
 
     post "https://#{auth_host("com")}/sign/cancellation?ri=jp"
-    query = rp_query(commit_base_continuation!)
+    query = rp_query(commit_visa_continuation!)
 
     assert_equal "access_denied", query.fetch("error")
     assert_equal "state", query.fetch("state")
@@ -43,9 +46,12 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
     assert_equal "sign_up", inertia_props.fetch("switch_form").fetch("to")
 
     post "https://#{auth_host("com")}/sign/switch?ri=jp", params: { to: "sign_up" }
-    target = URI.parse(commit_base_continuation!)
+    target = URI.parse(commit_visa_continuation!)
 
-    assert_equal "/sign/up", target.path
+    assert_equal "/sign/up/sentry", target.path
+    drive_to_auth_page!(target.to_s)
+
+    assert_equal "auth/com/sign_ups/new", inertia_component
     assert_equal "pending", transaction.reload.status
   end
 
@@ -56,7 +62,7 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
     assert_nil inertia_props.fetch("switch_form")
 
     post "https://#{auth_host("org")}/sign/cancellation?ri=jp"
-    query = rp_query(commit_base_continuation!)
+    query = rp_query(commit_visa_continuation!)
 
     assert_equal "access_denied", query.fetch("error")
     assert_predicate transaction.reload, :canceled?
@@ -77,7 +83,7 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
   def start_at_auth_sign_in!(surface)
     config = SURFACES.fetch(surface)
     client = OidcClientRegistry.find!(config.fetch(:client_id))
-    host!(ENV.fetch(config.fetch(:base_host)))
+    host!(visa_host_for_test_surface(config.fetch(:visa_surface)))
     https!
     get(
       "/oauth/authorize",
@@ -91,12 +97,21 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
         nonce: "nonce",
         scope: "openid profile",
       },
+      headers: browser_navigation_headers,
     )
 
-    assert_response :success
-    form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
-    post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] })
-    sign_in = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    sign_in =
+      if response.redirect?
+        URI.parse(jump_rt_url_from_location_for_test(response.location))
+      else
+
+        assert_response :success
+        form = response.parsed_body.at_css("form#base-authorization-ceremony-start-form")
+        post(form["action"], params: form.css("input").to_h { |input| [input["name"], input["value"]] })
+
+        assert_response :see_other
+        URI.parse(jump_rt_url_from_location_for_test(response.location))
+      end
     entry_ref = Rack::Utils.parse_nested_query(sign_in.query).fetch("entry_ref")
     drive_to_auth_page!(sign_in.to_s)
 
@@ -108,14 +123,16 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
 
   # Follows redirects (unwrapping Jump) and same-origin continuation forms until a page settles.
   def drive_to_auth_page!(url)
-    get(url)
+    target = URI.parse(url)
+    host!(target.host)
+    get(target.request_uri, headers: browser_navigation_headers)
     12.times do
       selector = "form[id$='continuation-form'], form[id$='confirmation-form']"
       form = response.redirect? ? nil : response.parsed_body.at_css(selector)
       if response.redirect?
         target = URI.parse(jump_rt_url_from_location_for_test(response.location))
         host!(target.host)
-        get(target.to_s)
+        get(target.request_uri, headers: browser_navigation_headers)
       elsif form
         action = URI.join("https://#{host}", form["action"])
         host!(action.host)
@@ -129,18 +146,21 @@ class SignEntryExitComOrgFlowTest < ActionDispatch::IntegrationTest
     flunk("Auth admission did not settle on a page")
   end
 
-  def commit_base_continuation!
+  def commit_visa_continuation!
     assert_response :see_other
-    base = URI.parse(jump_rt_url_from_location_for_test(response.location))
-    host!(base.host)
-    get(base.to_s)
-
-    assert_response :success
-    form = response.parsed_body.at_css("form#oidc-authorization-exit-form")
-    post(form["action"], params: form.css("input[type=hidden]").to_h { |input| [input["name"], input["value"]] })
+    visa_location = URI.parse(jump_rt_url_from_location_for_test(response.location))
+    host!(visa_location.host)
+    get(visa_location.request_uri, headers: browser_navigation_headers)
 
     assert_response :see_other
     jump_rt_url_from_location_for_test(response.location)
+  end
+
+  def browser_navigation_headers
+    {
+      "Sec-Fetch-Mode" => "navigate",
+      "Sec-Fetch-Dest" => "document",
+    }
   end
 
   def rp_query(location) = Rack::Utils.parse_nested_query(URI.parse(location).query)

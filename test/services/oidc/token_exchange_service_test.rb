@@ -205,6 +205,48 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal 1, OpAppGrant.where(client_token_id: @user_session_token.id).count
   end
 
+  test "an admitted transaction authorization code expires at the sign-in path curfew" do
+    nonce = SecureRandom.urlsafe_base64(32)
+    admission = OidcTestEntry.issue!(surface: "app", intent: "sign_in", base_browser_nonce: nonce, base_token: nil)
+    binding = BaseAuthAdmissionCoordinator.find_admission_binding!(surface: "app", reference: admission.reference)
+    pending, raw_sid = ClientAuthCeremonySession.issue!
+    binding.attach_auth_session!(auth_session: pending, confirmation_ref: SecureRandom.uuid)
+    binding.confirm_base!(
+      base_token: nil,
+      browser_digest: AuthAdmissionBinding.browser_digest(
+        surface: "app", entry_ref: binding.entry_ref, nonce:,
+      ),
+    )
+    BaseAuthAdmissionCoordinator.consume_entry_reference!(
+      reference: admission.reference, surface: "app", expected_intent: "sign_in",
+      binding:, raw_auth_sid: raw_sid,
+    )
+    admitted, = ClientAuthCeremonySession.rotate_and_admit!(
+      admission_purpose: "authentication_handoff", previous_raw_sid: raw_sid,
+      authorization_transaction_ref: admission.transaction.transaction_id,
+    )
+    binding.redeem!(auth_session: pending, admitted_auth_session: admitted)
+    binding.update_columns(curfew_at: binding.class.database_now + 3.seconds)
+    transaction = OidcAuthorizationTransactionCoordinator.register_result!(
+      surface: "app",
+      login_challenge: admission.transaction.login_challenge,
+      actor: @user,
+      session_ref: @user_session_token.public_id,
+      auth_method: "email",
+      authentication_event_at: Time.utc(2026, 1, 2, 3, 4, 5),
+    ).transaction
+    transaction.finalize_base! do |_locked, _now|
+      { status: :success, browser_session_ref: @user_session_token.public_id }
+    end
+
+    code = issue_code_for_transaction!(transaction)
+    payload = authorization_code_store.read(code.code)
+    expires_at = Time.iso8601(payload.fetch("expires_at"))
+
+    assert_operator expires_at, :>, Time.iso8601(payload.fetch("issued_at"))
+    assert_operator expires_at, :<=, binding.reload.curfew_at
+  end
+
   test "transaction-bound grant claim rolls back when token issuance fails" do
     transaction = OidcAuthorizationTransactionCoordinator.issue!(
       surface: "app",
@@ -2799,12 +2841,15 @@ class OidcTokenExchangeCoordinatorTest < ActiveSupport::TestCase
     assert_equal "openid profile", access_token.fetch("scope")
     assert_predicate access_token.fetch("auth_time"), :present?
 
-    base_kids = JitSecurityJwtRegistry.jwks_for("surface:BASE_APP").fetch(:keys).map { |key| key.fetch("kid") }
+    issuer_kids =
+      JitSecurityJwtRegistry.jwks_for(
+        OidcIssuer.jwt_issuer_id_for_resource_type("client"),
+      ).fetch(:keys).map { |key| key.fetch("kid") }
     access_header = JitSecurityJwtKeyring.parse_header(result.token_response.fetch(:access_token))
     id_header = JitSecurityJwtKeyring.parse_header(result.token_response.fetch(:id_token))
 
-    assert_includes base_kids, access_header.fetch("kid")
-    assert_includes base_kids, id_header.fetch("kid")
+    assert_includes issuer_kids, access_header.fetch("kid")
+    assert_includes issuer_kids, id_header.fetch("kid")
   end
 
   test "issued codes keep T0 through delayed issue T1 and exchange T2" do

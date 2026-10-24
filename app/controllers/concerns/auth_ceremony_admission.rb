@@ -27,15 +27,11 @@ module AuthCeremonyAdmission
 
     return render_invalid_admission_request! if params[:admission].present?
     return render_invalid_admission_request! if multiple_admission_references? || invalid_admission_reference_params?
+
     if request.get? && admission_reference_param.present?
-      binding =
-        begin
-          BaseAuthAdmissionCoordinator.find_admission_binding!(
-            surface: auth_ceremony_surface, reference: admission_reference_param,
-          )
-        rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
-          return render_invalid_admission_request!
-        end
+      binding = admission_binding_for_reference
+      return render_invalid_admission_request! unless binding
+
       if AuthAdmissionBinding::PARENT_PURPOSES.fetch(:authorization_transaction).include?(binding.purpose)
         return redeem_admission_reference_and_redirect!(expected_intent:) if binding.attached? && binding.confirmed?
 
@@ -201,11 +197,13 @@ module AuthCeremonyAdmission
           raise AuthCeremonySession::InvalidTransition, "Auth ceremony session does not match binding"
         end
 
+        now = model.database_now
         admitted, admitted_sid = model.rotate_and_admit!(
           admission_purpose: admission_purpose,
           previous_raw_sid: raw_sid,
           authorization_transaction_ref: authorization_transaction_ref,
           step_up_ceremony_transaction_ref: step_up_ceremony_transaction_ref,
+          ttl: auth_ceremony_ttl_for_binding(admission_binding, now, model), now:,
         )
         locked_binding.redeem!(auth_session: attached_session, admitted_auth_session: admitted)
         [admitted, admitted_sid]
@@ -217,6 +215,25 @@ module AuthCeremonyAdmission
   def ceremony_admission_present?
     # Ceremony cookie is continuity only and cannot start a protected flow.
     auth_ceremony_admission_present?
+  end
+
+  def auth_ceremony_ttl_for_binding(binding, now, model)
+    return model::DEFAULT_TTL unless binding.purpose == "authentication_handoff"
+
+    remaining = binding.curfew_at - now
+    raise BaseAuthAdmissionCoordinator::Denied.new(
+      "sign-in path curfew has passed", code: "expired_admission",
+    ) unless remaining.positive?
+
+    [model::DEFAULT_TTL, remaining].min
+  end
+
+  def admission_binding_for_reference
+    BaseAuthAdmissionCoordinator.find_admission_binding!(
+      surface: auth_ceremony_surface, reference: admission_reference_param,
+    )
+  rescue BaseAuthAdmissionCoordinator::Denied, ActiveRecord::RecordNotFound, ArgumentError
+    nil
   end
 
   def admitted_ceremony_present?(expected_intent:)

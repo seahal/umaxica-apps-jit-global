@@ -33,6 +33,7 @@ class OidcAuthorizationCodeIssuer < ApplicationService
       authorization_transaction_ref: authorization_transaction_ref,
       acr: acr,
       amr: auth_method,
+      ttl: authorization_code_ttl,
     )
 
     OidcIssuedAuthorizationCode.new(
@@ -55,6 +56,33 @@ class OidcAuthorizationCodeIssuer < ApplicationService
     return authentication_event_at if authentication_event_at.present?
 
     raise ArgumentError, "authentication event time is required"
+  end
+
+  # An authorization code remains independently short-lived, but an OIDC code issued from an
+  # admitted Sign-in path must not survive that path's fixed curfew. Direct RP-session issuance has
+  # no Admission Binding and keeps the ordinary ten-second lifetime.
+  def authorization_code_ttl
+    default_ttl = Valkey::AuthState::AuthorizationCodeStore::CODE_TTL
+    return default_ttl if authorization_transaction_ref.blank?
+
+    surface = { "client" => "app", "visitor" => "com", "operator" => "org" }.fetch(resource_type)
+    transaction_model = OidcAuthorizationTransactionCoordinator.model_for(surface)
+    transaction = transaction_model.find_by(transaction_id: authorization_transaction_ref)
+    return default_ttl unless transaction
+
+    binding_model = BaseAuthAdmissionCoordinator.admission_binding_model(surface)
+    binding_model.connection_owner.connected_to(role: :writing) do
+      binding = binding_model.where(
+        authorization_transaction_id: transaction.id, purpose: "authentication_handoff",
+      ).where.not(redeemed_at: nil).order(redeemed_at: :desc, id: :desc).first
+      return default_ttl unless binding
+
+      now = binding_model.database_now
+      remaining = binding.curfew_at - now
+      raise ArgumentError, "sign-in path curfew has passed" unless remaining.positive?
+
+      [default_ttl, remaining].min
+    end
   end
 
   def validate_session_token!
